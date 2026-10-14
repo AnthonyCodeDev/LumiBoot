@@ -4,6 +4,7 @@ import { getPrimaryLaunchProfile } from '../../lib/labels';
 import {
   STEPS,
   formatSessionBytes,
+  statusMessageForSession,
   statusTextForSession,
   stepIndexForState,
 } from './statusOverlay.helpers';
@@ -34,6 +35,31 @@ export function StatusOverlay({ session, system }: StatusOverlayProps) {
             Code : <code>{session.error.code}</code>
           </p>
         ) : null}
+      </div>
+    );
+  }
+
+  if (session.state === 'stopping' || session.state === 'stopped' || session.state === 'idle') {
+    const message = statusMessageForSession(session);
+    return (
+      <div
+        className="status-overlay"
+        role="status"
+        aria-live="polite"
+        aria-busy={session.state === 'stopping'}
+      >
+        <div className="session-progress session-progress--message" data-state={session.state}>
+          <p className="session-progress-eyebrow">Session</p>
+          <h2 className="session-progress-title">{message.title}</h2>
+          {message.detail ? <p className="session-progress-detail">{message.detail}</p> : null}
+          {session.state === 'stopping' ? (
+            <span className="session-message-indicator" aria-hidden="true">
+              <span className="session-message-dot" />
+              <span className="session-message-dot" />
+              <span className="session-message-dot" />
+            </span>
+          ) : null}
+        </div>
       </div>
     );
   }

@@ -15,6 +15,60 @@
   text-align: center;
 }
 
+/* État « message » : arrêt / inactivité — ni timeline ni barre de progression. */
+.session-progress--message {
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  text-align: center;
+}
+
+.session-progress-detail {
+  margin: 0;
+  max-width: 34ch;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  text-wrap: balance;
+}
+
+.session-message-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.session-message-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--primary);
+  opacity: 0.3;
+  animation: session-message-pulse 1.2s var(--ease) infinite;
+}
+
+.session-message-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.session-message-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes session-message-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+}
+
 .status-overlay .session-progress-eyebrow {
   margin: 0;
   font-size: 0.68rem;
@@ -224,5 +278,9 @@
   }
   .session-progress-fill--indeterminate {
     animation-duration: 2.6s;
+  }
+  .session-message-dot {
+    animation: none;
+    opacity: 0.55;
   }
 }

@@ -7,6 +7,27 @@ export const STEPS = [
   'Système prêt',
 ] as const;
 
+export interface StatusMessage {
+  title: string;
+  detail?: string;
+}
+
+/**
+ * Message sobre pour les états hors progression (arrêt, inactivité).
+ * Ces états n'affichent ni timeline ni barre de progression.
+ */
+export function statusMessageForSession(session: SessionSnapshot): StatusMessage {
+  switch (session.state) {
+    case 'stopping':
+      return { title: 'Arrêt en cours…', detail: 'La session est en cours de fermeture.' };
+    case 'stopped':
+      return { title: 'Système arrêté', detail: 'La session a été arrêtée.' };
+    case 'idle':
+    default:
+      return { title: 'Session inactive', detail: 'Aucune session en cours.' };
+  }
+}
+
 export function stepIndexForState(state: SessionSnapshot['state']): number {
   switch (state) {
     case 'preparing':
