@@ -1,9 +1,4 @@
-import type {
-  NetworkDiagnostics,
-  OSDefinition,
-  SessionEvent,
-  VMState,
-} from '@lumiboot/contracts';
+import type { NetworkDiagnostics, OSDefinition, SessionEvent, VMState } from '@lumiboot/contracts';
 import { VMError, isVMError } from '../errors/VMError';
 import { createSessionId } from '../ids';
 import { SessionStateMachine } from './SessionStateMachine';
@@ -37,7 +32,14 @@ export type SessionListener = (snapshot: SessionSnapshot) => void;
  * - aucun double démarrage concurrent ;
  * - transitions d'état validées par la machine à états ;
  * - `dispose()` libère toujours les ressources, même après un échec partiel ;
- * - `running` n'est atteint que sur preuve d'un démarrage réel du système.
+ * - `running` n'est atteint que sur preuve d'un démarrage réel du système ;
+ * - une erreur fatale (téléchargement, `run()` du moteur, événement `error`
+ *   d'un moteur) libère réellement la VM, au-delà du seul passage à `error`.
+ *
+ * Le nettoyage est supervisé et idempotent : une seule libération effective est
+ * partagée par toutes les opérations concurrentes (`start`/`stop`/`dispose`),
+ * les échecs de nettoyage restent observables, et aucune exception n'est
+ * jamais laissée non gérée.
  */
 export class SessionLifecycle {
   readonly id: string;
@@ -58,6 +60,7 @@ export class SessionLifecycle {
   #starting = false;
   #runToken = 0;
   #disposed = false;
+  #cleanupPromise: Promise<void> | null = null;
   readonly #onCleanupError: ((error: unknown, context: string) => void) | undefined;
 
   constructor(
@@ -103,6 +106,9 @@ export class SessionLifecycle {
 
     const startToken = ++this.#runToken;
     this.#starting = true;
+    // Nouvelle génération : la précédente (éventuellement déjà nettoyée) ne
+    // doit pas court-circuiter la libération de la nouvelle instance.
+    this.#cleanupPromise = null;
     this.#error = undefined;
     this.#phase = undefined;
     this.#loadedBytes = undefined;
@@ -125,43 +131,33 @@ export class SessionLifecycle {
         const instance = await engine.start(this.system, mountTarget, mergedConfiguration);
         if (controller.signal.aborted || startToken !== this.#runToken) {
           await this.#disposeInstance(instance);
-          if (this.#machine.canTransition('stopping')) this.#machine.transition('stopping');
-          if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
-          this.#phase = undefined;
-          this.#loadedBytes = undefined;
-          this.#totalBytes = undefined;
-          this.#network = undefined;
-          this.#emit();
+          this.#settleCancelledStart();
           return;
         }
         this.#instance = instance;
         this.#unsubscribe = instance.subscribe((event) => this.#onEvent(event));
         if (controller.signal.aborted || startToken !== this.#runToken) {
           await this.#stopInstance();
-          if (this.#machine.canTransition('stopping')) this.#machine.transition('stopping');
-          if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
-          this.#phase = undefined;
-          this.#loadedBytes = undefined;
-          this.#totalBytes = undefined;
-          this.#network = undefined;
-          this.#emit();
+          // Un événement `error` reçu pendant `subscribe()` a déjà lancé le
+          // nettoyage supervisé : on l'attend pour ne jamais résoudre `start()`
+          // avec une instance encore vivante.
+          if (this.#cleanupPromise !== null) await this.#cleanupPromise;
+          this.#settleCancelledStart();
           return;
         }
       } catch (error) {
         if (controller.signal.aborted || startToken !== this.#runToken) {
-          if (this.#machine.canTransition('stopping')) this.#machine.transition('stopping');
-          if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
-          this.#phase = undefined;
-          this.#loadedBytes = undefined;
-          this.#totalBytes = undefined;
-          this.#network = undefined;
-          this.#emit();
+          this.#settleCancelledStart();
           return;
         }
         const vmError: VMError = isVMError(error)
           ? error
           : new VMError('START_FAILED', 'Le démarrage a échoué.', { systemId: this.system.id });
         this.#fail(vmError.code, vmError.message);
+        // L'échec libère réellement la VM : on attend le nettoyage supervisé
+        // avant de résoudre `start()`, pour que l'instance ne soit jamais
+        // orpheline au moment où l'appelant reprend la main.
+        await this.#cleanupPromise;
       } finally {
         cleanupAbortRelay();
         if (this.#runToken === startToken) {
@@ -180,6 +176,9 @@ export class SessionLifecycle {
       ++this.#runToken;
       this.#startAbortController?.abort();
       if (this.#startPromise !== null) await this.#startPromise.catch(() => undefined);
+      this.#starting = false;
+      this.#startAbortController = null;
+      this.#startPromise = null;
     }
     const state = this.#machine.state;
     if (state === 'idle' || state === 'stopped' || state === 'error') return;
@@ -187,14 +186,9 @@ export class SessionLifecycle {
       this.#machine.transition('stopping');
       this.#emit();
     }
-    try {
-      await this.#instance?.stop();
-    } catch (error) {
-      // Arrêt best-effort : on n'interrompt pas la transition, mais l'échec
-      // doit rester observable (dev + tests) plutôt que d'être avalé.
-      this.#reportCleanupError(error, 'stop');
-    }
-    await this.#stopInstance();
+    // Libération idempotente et supervisée : la même promesse est partagée avec
+    // un `dispose()`/`#fail()` concurrent, donc une seule libération effective.
+    await this.#releaseResources('stop');
     if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
     this.#phase = undefined;
     this.#loadedBytes = undefined;
@@ -212,9 +206,13 @@ export class SessionLifecycle {
       this.#machine.state !== 'stopped' &&
       this.#machine.state !== 'error'
     ) {
-      await this.stop();
+      if (this.#machine.canTransition('stopping')) {
+        this.#machine.transition('stopping');
+        this.#emit();
+      }
     }
-    await this.#stopInstance();
+    await this.#releaseResources('dispose');
+    if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
     this.#providerId = 'unavailable';
     this.#starting = false;
     this.#startAbortController = null;
@@ -232,6 +230,8 @@ export class SessionLifecycle {
   }
 
   #onEvent(event: SessionEvent): void {
+    // Un événement tardif après destruction n'a aucun effet observable.
+    if (this.#disposed) return;
     if (event.type === 'state') {
       if (this.#machine.canTransition(event.state)) {
         this.#machine.transition(event.state);
@@ -279,7 +279,72 @@ export class SessionLifecycle {
   #fail(code: string, message: string): void {
     this.#error = { code, message };
     if (this.#machine.canTransition('error')) this.#machine.transition('error');
+    // Invalide tout démarrage en vol : la session est terminale côté exécution.
+    this.#invalidateStart();
     this.#emit();
+    // Nettoyage supervisé : libère réellement la VM (et nettoie la référence à
+    // l'instance). On n'attend pas ici — `#onEvent` est synchrone — mais la
+    // promesse partagée reste observable via `dispose()` et via l'attente
+    // explicite faite dans `start()`.
+    void this.#releaseResources('error');
+  }
+
+  /**
+   * Libération supervisée et idempotente des ressources de l'instance courante.
+   *
+   * Toutes les opérations concurrentes partagent la même promesse : `stop()`,
+   * `dispose()` et `#fail()` ne déclenchent qu'un seul nettoyage effectif. La
+   * promesse ne rejette jamais ; les échecs sont rapportés via le callback
+   * `onCleanupError` (et `console.warn`).
+   */
+  #releaseResources(context: string): Promise<void> {
+    if (this.#cleanupPromise !== null) return this.#cleanupPromise;
+
+    const instance = this.#instance;
+    this.#unsubscribe?.();
+    this.#unsubscribe = null;
+    // La référence est coupée immédiatement : jamais d'instance orpheline,
+    // même si le nettoyage asynchrone échoue plus tard.
+    this.#instance = null;
+
+    const cleanup = (async () => {
+      if (!instance) return;
+      try {
+        await instance.stop();
+      } catch (error) {
+        this.#reportCleanupError(error, 'stop');
+      }
+      try {
+        await instance.dispose();
+      } catch (error) {
+        this.#reportCleanupError(error, 'dispose');
+      }
+    })().catch((error) => {
+      // Ceinture de sécurité : aucune exception non gérée, même si la
+      // supervision elle-même échoue.
+      this.#reportCleanupError(error, context);
+    });
+
+    this.#cleanupPromise = cleanup;
+    return cleanup;
+  }
+
+  #settleCancelledStart(): void {
+    if (this.#machine.canTransition('stopping')) this.#machine.transition('stopping');
+    if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
+    this.#phase = undefined;
+    this.#loadedBytes = undefined;
+    this.#totalBytes = undefined;
+    this.#network = undefined;
+    this.#emit();
+  }
+
+  #invalidateStart(): void {
+    ++this.#runToken;
+    this.#startAbortController?.abort();
+    this.#starting = false;
+    this.#startAbortController = null;
+    this.#startPromise = null;
   }
 
   async #stopInstance(): Promise<void> {

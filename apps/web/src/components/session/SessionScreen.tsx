@@ -39,8 +39,7 @@ export function SessionScreen({
   // Cible du plein écran : uniquement l'écran résultat (le VGA `.v86-screen`
   // injecté par le provider dans `.session-console`), pas la page entière.
   const getScreenElement = useCallback(
-    (): HTMLElement | null =>
-      consoleRef.current?.querySelector<HTMLElement>('.v86-screen') ?? null,
+    (): HTMLElement | null => consoleRef.current?.querySelector<HTMLElement>('.v86-screen') ?? null,
     [consoleRef],
   );
 

@@ -8,10 +8,7 @@ export function useVisibleSystems(): OSDefinition[] {
   const family = useCatalogStore((state) => state.family);
   const query = useCatalogStore((state) => state.query);
 
-  return useMemo(
-    () => filterSystems({ systems, family, query }),
-    [systems, family, query],
-  );
+  return useMemo(() => filterSystems({ systems, family, query }), [systems, family, query]);
 }
 
 export function useSelectedSystem(): OSDefinition | null {

@@ -9,28 +9,55 @@ import {
 import { NETWORK_MODES } from './modes';
 
 describe('capabilitiesForMode', () => {
-  it('offline : toutes les capacités à false', () => {
-    expect(Object.values(OFFLINE_CAPABILITIES).every((value) => value === false)).toBe(true);
+  it('offline : tous les niveaux désactivés, transport none', () => {
+    expect(Object.values(OFFLINE_CAPABILITIES.nic).every((value) => value === false)).toBe(true);
+    expect(Object.values(OFFLINE_CAPABILITIES.guestStack).every((value) => value === false)).toBe(
+      true,
+    );
+    expect(OFFLINE_CAPABILITIES.transport.kind).toBe('none');
+    expect(OFFLINE_CAPABILITIES.transport.http).toBe(false);
+    expect(OFFLINE_CAPABILITIES.fullInternet).toBe(false);
   });
 
-  it('browser-fetch : http/https true, cors true (contrainte), fullInternet false', () => {
-    expect(BROWSER_FETCH_CAPABILITIES.http).toBe(true);
-    expect(BROWSER_FETCH_CAPABILITIES.https).toBe(true);
-    expect(BROWSER_FETCH_CAPABILITIES.dhcp).toBe(true);
-    expect(BROWSER_FETCH_CAPABILITIES.dns).toBe(true);
-    expect(BROWSER_FETCH_CAPABILITIES.tcp).toBe(true);
-    expect(BROWSER_FETCH_CAPABILITIES.udp).toBe(true);
-    expect(BROWSER_FETCH_CAPABILITIES.cors).toBe(true);
+  it('browser-fetch : HTTP(S) via fetch soumis à CORS, udp/icmp false, fullInternet false', () => {
+    expect(BROWSER_FETCH_CAPABILITIES.transport.kind).toBe('fetch');
+    expect(BROWSER_FETCH_CAPABILITIES.transport.http).toBe(true);
+    expect(BROWSER_FETCH_CAPABILITIES.transport.https).toBe(true);
+    expect(BROWSER_FETCH_CAPABILITIES.transport.cors).toBe(true);
+    expect(BROWSER_FETCH_CAPABILITIES.guestStack.dhcp).toBe(true);
+    expect(BROWSER_FETCH_CAPABILITIES.guestStack.dns).toBe(true);
+    expect(BROWSER_FETCH_CAPABILITIES.guestStack.tcp).toBe(true);
+    expect(BROWSER_FETCH_CAPABILITIES.guestStack.udp).toBe(false);
+    expect(BROWSER_FETCH_CAPABILITIES.guestStack.icmp).toBe(false);
     expect(BROWSER_FETCH_CAPABILITIES.fullInternet).toBe(false);
   });
 
-  it('user-relay : fullInternet true, cors false', () => {
-    expect(USER_RELAY_CAPABILITIES.fullInternet).toBe(true);
-    expect(USER_RELAY_CAPABILITIES.cors).toBe(false);
+  it('user-relay : ne garantit pas fullInternet, cors false, udp/icmp false par défaut', () => {
+    expect(USER_RELAY_CAPABILITIES.transport.kind).toBe('wisp');
+    expect(USER_RELAY_CAPABILITIES.transport.cors).toBe(false);
+    expect(USER_RELAY_CAPABILITIES.guestStack.udp).toBe(false);
+    expect(USER_RELAY_CAPABILITIES.guestStack.icmp).toBe(false);
+    expect(USER_RELAY_CAPABILITIES.fullInternet).toBe(false);
   });
 
-  it('local-network : pas de fullInternet externe', () => {
+  it('local-network : indisponible tant que non implémenté', () => {
+    expect(Object.values(LOCAL_NETWORK_CAPABILITIES.nic).every((value) => value === false)).toBe(
+      true,
+    );
+    expect(LOCAL_NETWORK_CAPABILITIES.transport.kind).toBe('none');
     expect(LOCAL_NETWORK_CAPABILITIES.fullInternet).toBe(false);
+  });
+
+  it('aucun mode ne promet Internet complet sans vérification à l’exécution', () => {
+    for (const mode of NETWORK_MODES) {
+      expect(capabilitiesForMode(mode).fullInternet).toBe(false);
+    }
+  });
+
+  it('sépare bien NIC, pile invitée et transport', () => {
+    expect(BROWSER_FETCH_CAPABILITIES.nic.ethernet).toBe(true);
+    expect(BROWSER_FETCH_CAPABILITIES.guestStack.ip).toBe(true);
+    expect(typeof BROWSER_FETCH_CAPABILITIES.transport.kind).toBe('string');
   });
 
   it('retourne le jeu de capacités du mode', () => {
@@ -42,7 +69,10 @@ describe('capabilitiesForMode', () => {
 
   it('couvre tous les modes déclarés', () => {
     for (const mode of NETWORK_MODES) {
-      expect(Object.values(capabilitiesForMode(mode)).length).toBeGreaterThan(0);
+      const capabilities = capabilitiesForMode(mode);
+      expect(Object.values(capabilities.nic).length).toBeGreaterThan(0);
+      expect(Object.values(capabilities.guestStack).length).toBeGreaterThan(0);
+      expect(Object.values(capabilities.transport).length).toBeGreaterThan(0);
     }
   });
 });

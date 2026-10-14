@@ -1,8 +1,9 @@
-import type { NetworkCapabilities } from './capabilities';
+import type { NetworkCapabilities, NetworkTransportKind } from './capabilities';
 import { capabilitiesForMode } from './capabilities';
 import type { NetworkErrorCode } from './errors';
 import { NetworkError } from './errors';
 import type { NetworkDiagnostics, NetworkStatus } from './diagnostics';
+import type { NetworkMode } from './modes';
 import type { NetworkProfile } from './profile';
 import { validateRelayUrl } from './relay';
 
@@ -39,6 +40,19 @@ function accumulate(current: number, delta: number): number {
   return Math.min(total, MAX_COUNTER);
 }
 
+/** Backend de transport associé à un mode, purement descriptif. */
+function transportForMode(mode: NetworkMode): NetworkTransportKind {
+  switch (mode) {
+    case 'browser-fetch':
+      return 'fetch';
+    case 'user-relay':
+      return 'wisp';
+    case 'offline':
+    case 'local-network':
+      return 'none';
+  }
+}
+
 class DefaultNetworkController implements NetworkController {
   readonly #profile: NetworkProfile;
   readonly #capabilities: NetworkCapabilities;
@@ -46,6 +60,7 @@ class DefaultNetworkController implements NetworkController {
   readonly #listeners = new Set<(diagnostics: NetworkDiagnostics) => void>();
 
   #status: NetworkStatus = 'idle';
+  #verified = false;
   #txBytes = 0;
   #rxBytes = 0;
   #lastError: { code: NetworkErrorCode; message: string } | undefined;
@@ -72,6 +87,8 @@ class DefaultNetworkController implements NetworkController {
     const diagnostics: NetworkDiagnostics = {
       mode: this.#profile.mode,
       status: this.#status,
+      transport: transportForMode(this.#profile.mode),
+      verified: this.#verified,
       txBytes: this.#txBytes,
       rxBytes: this.#rxBytes,
     };
@@ -87,24 +104,29 @@ class DefaultNetworkController implements NetworkController {
     };
   }
 
+  /**
+   * Accepte la configuration et, au mieux, **configure** le transport.
+   *
+   * Un mode à transport (browser-fetch, user-relay) aboutit à `configured` :
+   * le profil est accepté mais **rien ne prouve que la connexion est établie**.
+   * Seul le provider peut faire évoluer l'état vers `connected`/`online` via
+   * `setStatus`, une fois le transport réellement opérationnel.
+   */
   async start(signal?: AbortSignal): Promise<void> {
-    if (this.#disposed) {
-      throw new NetworkError('NETWORK_CLEANUP_FAILED', 'Contrôleur réseau déjà libéré.');
-    }
+    if (this.#disposed) return;
     if (signal?.aborted === true) {
       this.#fail('NETWORK_ABORTED', 'Démarrage du réseau annulé avant établissement.');
       throw new NetworkError('NETWORK_ABORTED', 'Démarrage du réseau annulé.');
     }
 
     this.#now();
-    this.setStatus('starting');
 
     switch (this.#profile.mode) {
       case 'offline':
         this.setStatus('offline');
         return;
       case 'browser-fetch':
-        this.setStatus('connected');
+        this.setStatus('configured');
         return;
       case 'user-relay': {
         const validation = validateRelayUrl(this.#profile.relayUrl);
@@ -113,7 +135,7 @@ class DefaultNetworkController implements NetworkController {
           this.#fail('NETWORK_INVALID_RELAY_URL', message);
           throw new NetworkError('NETWORK_INVALID_RELAY_URL', message);
         }
-        this.setStatus('connected');
+        this.setStatus('configured');
         return;
       }
       case 'local-network': {
@@ -125,8 +147,10 @@ class DefaultNetworkController implements NetworkController {
   }
 
   async stop(): Promise<void> {
+    if (this.#disposed) return;
     try {
       this.#status = 'stopped';
+      this.#verified = false;
       this.#notify();
     } catch (error) {
       this.#recordCleanupFailure(error);
@@ -138,6 +162,7 @@ class DefaultNetworkController implements NetworkController {
     try {
       this.#listeners.clear();
       this.#status = 'stopped';
+      this.#verified = false;
     } catch (error) {
       this.#recordCleanupFailure(error);
     } finally {
@@ -146,6 +171,7 @@ class DefaultNetworkController implements NetworkController {
   }
 
   reportTx(bytes: number): void {
+    if (this.#disposed) return;
     const next = accumulate(this.#txBytes, bytes);
     if (next === this.#txBytes) return;
     this.#txBytes = next;
@@ -153,6 +179,7 @@ class DefaultNetworkController implements NetworkController {
   }
 
   reportRx(bytes: number): void {
+    if (this.#disposed) return;
     const next = accumulate(this.#rxBytes, bytes);
     if (next === this.#rxBytes) return;
     this.#rxBytes = next;
@@ -160,17 +187,21 @@ class DefaultNetworkController implements NetworkController {
   }
 
   reportError(code: NetworkErrorCode, message: string): void {
+    if (this.#disposed) return;
     this.#fail(code, message);
   }
 
   setStatus(status: NetworkStatus): void {
+    if (this.#disposed) return;
     this.#status = status;
+    this.#verified = status === 'online';
     this.#notify();
   }
 
   #fail(code: NetworkErrorCode, message: string): void {
     this.#lastError = { code, message: truncate(message, MAX_ERROR_MESSAGE_LENGTH) };
     this.#status = 'error';
+    this.#verified = false;
     this.#notify();
   }
 

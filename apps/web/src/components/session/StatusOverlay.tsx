@@ -1,7 +1,12 @@
 import type { OSDefinition } from '@lumiboot/contracts';
 import type { SessionSnapshot } from '@lumiboot/vm-core';
 import { getPrimaryLaunchProfile } from '../../lib/labels';
-import { STEPS, formatSessionBytes, statusTextForSession, stepIndexForState } from './statusOverlay.helpers';
+import {
+  STEPS,
+  formatSessionBytes,
+  statusTextForSession,
+  stepIndexForState,
+} from './statusOverlay.helpers';
 
 export interface StatusOverlayProps {
   session: SessionSnapshot;
@@ -39,7 +44,8 @@ export function StatusOverlay({ session, system }: StatusOverlayProps) {
   const hasTotal = totalBytes > 0;
   const ratio = hasTotal ? Math.min(Math.max(loadedBytes / totalBytes, 0), 1) : 0;
   const percent = Math.round(ratio * 100);
-  const currentStep = session.state === 'running' ? STEPS.length - 1 : stepIndexForState(session.state);
+  const currentStep =
+    session.state === 'running' ? STEPS.length - 1 : stepIndexForState(session.state);
   const progressAriaText = hasTotal
     ? `${percent} % · ${formatSessionBytes(loadedBytes)} sur ${formatSessionBytes(totalBytes)}`
     : statusText;

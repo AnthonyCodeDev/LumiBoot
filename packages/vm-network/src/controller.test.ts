@@ -6,14 +6,20 @@ describe('createNetworkController', () => {
   it('offline : start passe en offline sans transport', async () => {
     const controller = createNetworkController({ profile: { mode: 'offline' } });
     await controller.start();
-    expect(controller.snapshot().status).toBe('offline');
+    const diagnostics = controller.snapshot();
+    expect(diagnostics.status).toBe('offline');
+    expect(diagnostics.transport).toBe('none');
+    expect(diagnostics.verified).toBe(false);
     expect(controller.capabilities.fullInternet).toBe(false);
   });
 
-  it('browser-fetch : start passe en connected', async () => {
+  it('browser-fetch : start configure le transport sans prétendre connecté', async () => {
     const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
     await controller.start();
-    expect(controller.snapshot().status).toBe('connected');
+    const diagnostics = controller.snapshot();
+    expect(diagnostics.status).toBe('configured');
+    expect(diagnostics.transport).toBe('fetch');
+    expect(diagnostics.verified).toBe(false);
   });
 
   it('user-relay : start rejette sans relais valide', async () => {
@@ -23,17 +29,31 @@ describe('createNetworkController', () => {
     expect(controller.snapshot().lastError?.code).toBe('NETWORK_INVALID_RELAY_URL');
   });
 
-  it('user-relay : start avec relais valide passe en connected', async () => {
+  it('user-relay : une URL valide ne fait que configurer, pas connecter', async () => {
     const controller = createNetworkController({
       profile: { mode: 'user-relay', relayUrl: 'wss://relay.example' },
     });
     await controller.start();
-    expect(controller.snapshot().status).toBe('connected');
+    const diagnostics = controller.snapshot();
+    expect(diagnostics.status).toBe('configured');
+    expect(diagnostics.transport).toBe('wisp');
+    expect(diagnostics.verified).toBe(false);
   });
 
   it('local-network : start rejette NETWORK_UNSUPPORTED_MODE', async () => {
     const controller = createNetworkController({ profile: { mode: 'local-network' } });
     await expect(controller.start()).rejects.toMatchObject({ code: 'NETWORK_UNSUPPORTED_MODE' });
+  });
+
+  it('setStatus est le seul chemin vers connected/online', () => {
+    const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
+    expect(controller.snapshot().status).toBe('idle');
+    controller.setStatus('connected');
+    expect(controller.snapshot().status).toBe('connected');
+    expect(controller.snapshot().verified).toBe(false);
+    controller.setStatus('online');
+    expect(controller.snapshot().status).toBe('online');
+    expect(controller.snapshot().verified).toBe(true);
   });
 
   it('start respecte un AbortSignal déjà avorté', async () => {
@@ -74,6 +94,26 @@ describe('createNetworkController', () => {
     expect(lateListener).not.toHaveBeenCalled();
   });
 
+  it('après dispose, les mutations deviennent des no-op silencieux', async () => {
+    const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
+    await controller.start();
+    await controller.dispose();
+
+    const before = controller.snapshot();
+    expect(() => controller.reportTx(1000)).not.toThrow();
+    expect(() => controller.reportRx(1000)).not.toThrow();
+    expect(() => controller.reportError('NETWORK_TRANSPORT_FAILED', 'boom')).not.toThrow();
+    expect(() => controller.setStatus('online')).not.toThrow();
+    await expect(controller.start()).resolves.toBeUndefined();
+
+    const after = controller.snapshot();
+    expect(after.txBytes).toBe(before.txBytes);
+    expect(after.rxBytes).toBe(before.rxBytes);
+    expect(after.status).toBe(before.status);
+    expect(after.verified).toBe(false);
+    expect(after.lastError).toBeUndefined();
+  });
+
   it('reportTx/reportRx cumulent et bornent les valeurs', () => {
     const controller = createNetworkController({ profile: { mode: 'offline' } });
     controller.reportTx(100);
@@ -99,6 +139,7 @@ describe('createNetworkController', () => {
     expect(diagnostics.status).toBe('error');
     expect(diagnostics.lastError?.code).toBe('NETWORK_TRANSPORT_FAILED');
     expect(diagnostics.lastError?.message.length).toBe(300);
+    expect(diagnostics.verified).toBe(false);
   });
 
   it('deux contrôleurs sont indépendants', () => {

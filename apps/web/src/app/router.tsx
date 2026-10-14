@@ -3,7 +3,6 @@ import { AppLayout } from './AppLayout';
 import { HomePage } from '../pages/HomePage';
 import { SystemPage } from '../pages/SystemPage';
 import { SessionPage } from '../pages/SessionPage';
-import { SettingsPage } from '../pages/SettingsPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 
 export const router: ReturnType<typeof createBrowserRouter> = createBrowserRouter([
@@ -14,7 +13,6 @@ export const router: ReturnType<typeof createBrowserRouter> = createBrowserRoute
       { index: true, element: <HomePage /> },
       { path: 'systems/:slug', element: <SystemPage /> },
       { path: 'session/:id', element: <SessionPage /> },
-      { path: 'settings', element: <SettingsPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

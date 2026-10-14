@@ -28,9 +28,7 @@ export function CatalogueTop() {
   return (
     <div className="catalogue-top">
       <div className="catalogue-heading-group">
-        <h2 id="catalogue-heading">
-          Bibliothèque
-        </h2>
+        <h2 id="catalogue-heading">Bibliothèque</h2>
         <p>Systèmes disponibles dans votre environnement</p>
       </div>
       <div className="catalogue-tools">

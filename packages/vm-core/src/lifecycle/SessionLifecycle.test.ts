@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { OSDefinition, SessionEvent } from '@lumiboot/contracts';
+import type { OSDefinition, SessionEvent, VMState } from '@lumiboot/contracts';
 import { SessionLifecycle } from './SessionLifecycle';
 import type { SessionSnapshot } from './SessionLifecycle';
 import type { VMEngine } from '../contracts/VMEngine';
@@ -92,6 +92,113 @@ class ControlledEngine implements VMEngine {
     const instance = new ControlledInstance();
     this.instances.push(instance);
     return instance;
+  }
+}
+
+/** Instance qui rejoue un scénario fixe d'événements dès l'abonnement. */
+class ScriptedInstance implements VMInstance {
+  readonly id = 'scripted-instance';
+  readonly providerId = 'scripted';
+  readonly systemId = 'debian-12-i386';
+  readonly stop = vi.fn(async () => undefined);
+  readonly dispose = vi.fn(async () => {
+    this.listeners.clear();
+  });
+  readonly listeners = new Set<(event: SessionEvent) => void>();
+
+  constructor(private readonly script: readonly SessionEvent[]) {}
+
+  subscribe(listener: (event: SessionEvent) => void): () => void {
+    this.listeners.add(listener);
+    for (const event of this.script) listener(event);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+}
+
+class ScriptedEngine implements VMEngine {
+  readonly id = 'scripted';
+  readonly instances: ScriptedInstance[] = [];
+
+  constructor(private readonly script: readonly SessionEvent[]) {}
+
+  capabilities(): VMCapabilities {
+    return NO_CAPABILITIES;
+  }
+
+  canRun(): boolean {
+    return true;
+  }
+
+  async start(): Promise<VMInstance> {
+    const instance = new ScriptedInstance(this.script);
+    this.instances.push(instance);
+    return instance;
+  }
+}
+
+/** Échoue au premier démarrage, réussit ensuite. */
+class FlakyEngine implements VMEngine {
+  readonly id = 'flaky';
+  readonly instances: ControlledInstance[] = [];
+  calls = 0;
+
+  capabilities(): VMCapabilities {
+    return NO_CAPABILITIES;
+  }
+
+  canRun(): boolean {
+    return true;
+  }
+
+  async start(): Promise<VMInstance> {
+    this.calls += 1;
+    if (this.calls === 1) throw new Error('run boom');
+    const instance = new ControlledInstance();
+    this.instances.push(instance);
+    return instance;
+  }
+}
+
+/**
+ * Instance dont le `subscribe` renvoie un désabonnement inopérant : simule un
+ * moteur fautif qui continue d'émettre après sa libération.
+ */
+class LeakyInstance implements VMInstance {
+  readonly id = 'leaky-instance';
+  readonly providerId = 'leaky';
+  readonly systemId = 'debian-12-i386';
+  readonly stop = vi.fn(async () => undefined);
+  readonly dispose = vi.fn(async () => undefined);
+  #listener: ((event: SessionEvent) => void) | null = null;
+
+  subscribe(listener: (event: SessionEvent) => void): () => void {
+    this.#listener = listener;
+    listener({ type: 'state', state: 'running' });
+    return () => undefined;
+  }
+
+  emit(event: SessionEvent): void {
+    this.#listener?.(event);
+  }
+}
+
+class FixedEngine implements VMEngine {
+  readonly id = 'fixed';
+
+  constructor(private readonly instance: VMInstance) {}
+
+  capabilities(): VMCapabilities {
+    return NO_CAPABILITIES;
+  }
+
+  canRun(): boolean {
+    return true;
+  }
+
+  async start(): Promise<VMInstance> {
+    return this.instance;
   }
 }
 
@@ -229,13 +336,22 @@ describe('SessionLifecycle', () => {
 
     engine.instances[0]?.emit({
       type: 'network',
-      network: { mode: 'browser-fetch', status: 'connected', txBytes: 10, rxBytes: 20 },
+      network: {
+        mode: 'browser-fetch',
+        status: 'connected',
+        transport: 'fetch',
+        verified: false,
+        txBytes: 10,
+        rxBytes: 20,
+      },
     });
 
     expect(lifecycle.snapshot.state).toBe('running');
     expect(lifecycle.snapshot.network).toEqual({
       mode: 'browser-fetch',
       status: 'connected',
+      transport: 'fetch',
+      verified: false,
       txBytes: 10,
       rxBytes: 20,
     });
@@ -285,5 +401,100 @@ describe('SessionLifecycle', () => {
 
     expect(errors).toContain('stop');
     expect(errors).toContain('dispose');
+  });
+
+  it('libère l’instance après une erreur de téléchargement pendant le boot', async () => {
+    const engine = new ScriptedEngine([
+      { type: 'progress', phase: 'downloading', loadedBytes: 1, totalBytes: 10 },
+      { type: 'error', code: 'DOWNLOAD_FAILED', message: 'téléchargement interrompu' },
+    ]);
+    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-download');
+
+    await lifecycle.start(document.createElement('div'));
+
+    expect(lifecycle.snapshot.state).toBe('error');
+    expect(lifecycle.snapshot.error?.code).toBe('DOWNLOAD_FAILED');
+    expect(engine.instances[0]?.stop).toHaveBeenCalledTimes(1);
+    expect(engine.instances[0]?.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('libère l’instance après un échec de emulator.run()', async () => {
+    const engine = new ScriptedEngine([
+      { type: 'progress', phase: 'booting', loadedBytes: 1, totalBytes: 10 },
+      { type: 'error', code: 'RUN_FAILED', message: 'échec du moteur' },
+    ]);
+    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-run');
+
+    await lifecycle.start(document.createElement('div'));
+
+    expect(lifecycle.snapshot.state).toBe('error');
+    expect(lifecycle.snapshot.error?.code).toBe('RUN_FAILED');
+    expect(engine.instances[0]?.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('stop() pendant un démarrage : aucun running tardif, instance libérée', async () => {
+    const engine = new ControlledEngine();
+    const registry = new VMRegistry([engine]);
+    const lifecycle = new SessionLifecycle(makeOS(), registry, 's-stop-race');
+    const states: VMState[] = [];
+    lifecycle.subscribe((snapshot) => states.push(snapshot.state));
+
+    const startPromise = lifecycle.start(document.createElement('div'));
+    const stopPromise = lifecycle.stop();
+    engine.startBarrier.resolve();
+    await Promise.all([startPromise, stopPromise]);
+
+    expect(lifecycle.snapshot.state).toBe('stopped');
+    expect(states).not.toContain('running');
+    expect(engine.instances[0]?.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('dispose() pendant une requête réseau : libération unique', async () => {
+    const engine = new ControlledEngine();
+    const registry = new VMRegistry([engine]);
+    const lifecycle = new SessionLifecycle(makeOS(), registry, 's-dispose-race');
+
+    const startPromise = lifecycle.start(document.createElement('div'));
+    const disposePromise = lifecycle.dispose();
+    engine.startBarrier.resolve();
+    await Promise.all([startPromise, disposePromise]);
+
+    expect(lifecycle.disposed).toBe(true);
+    expect(engine.instances).toHaveLength(1);
+    expect(engine.instances[0]?.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('redémarre après une erreur en créant une nouvelle instance', async () => {
+    const engine = new FlakyEngine();
+    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-restart');
+
+    await lifecycle.start(document.createElement('div'));
+    expect(lifecycle.snapshot.state).toBe('error');
+
+    await lifecycle.start(document.createElement('div'));
+    expect(lifecycle.snapshot.state).toBe('running');
+    expect(engine.calls).toBe(2);
+    expect(engine.instances).toHaveLength(1);
+  });
+
+  it('ignore un événement tardif après dispose()', async () => {
+    const instance = new LeakyInstance();
+    const lifecycle = new SessionLifecycle(
+      makeOS(),
+      new VMRegistry([new FixedEngine(instance)]),
+      's-late',
+    );
+
+    await lifecycle.start(document.createElement('div'));
+    expect(lifecycle.snapshot.state).toBe('running');
+
+    await lifecycle.dispose();
+    expect(lifecycle.snapshot.state).toBe('stopped');
+
+    instance.emit({ type: 'state', state: 'preparing' });
+    instance.emit({ type: 'error', code: 'LATE', message: 'tardif' });
+
+    expect(lifecycle.snapshot.state).toBe('stopped');
+    expect(lifecycle.snapshot.error).toBeUndefined();
   });
 });

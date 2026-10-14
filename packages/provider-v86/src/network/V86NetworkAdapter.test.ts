@@ -3,7 +3,7 @@ import type { OSDefinition } from '@lumiboot/contracts';
 import { createNetworkController, defaultNetworkProfile } from '@lumiboot/vm-network';
 import {
   attachNetworkDiagnostics,
-  selectNetworkDeviceType,
+  resolveNetworkDevice,
   toV86NetworkDevice,
   type NetworkEventSource,
 } from './V86NetworkAdapter';
@@ -32,13 +32,13 @@ class FakeEmitter {
   }
 }
 
-function makeOS(family: OSDefinition['family'], versionLabel = '1'): OSDefinition {
+function makeOS(overrides: Partial<OSDefinition> = {}): OSDefinition {
   return {
     id: 'sample',
     slug: 'sample',
-    family,
+    family: 'linux',
     displayName: 'Sample',
-    versionLabel,
+    versionLabel: '1',
     architecture: 'i386',
     availability: 'ready',
     description: 'desc',
@@ -52,6 +52,7 @@ function makeOS(family: OSDefinition['family'], versionLabel = '1'): OSDefinitio
     accent: '#000000',
     accentRgb: '0,0,0',
     integrationNote: 'note',
+    ...overrides,
   };
 }
 
@@ -88,13 +89,33 @@ describe('toV86NetworkDevice', () => {
   });
 });
 
-describe('selectNetworkDeviceType', () => {
-  it('Linux moderne : virtio', () => {
-    expect(selectNetworkDeviceType(makeOS('linux', '12 Bookworm'))).toBe('virtio');
+describe('resolveNetworkDevice', () => {
+  it('Debian 12 (debian-12-i386) : virtio', () => {
+    expect(
+      resolveNetworkDevice(
+        makeOS({ id: 'debian-12-i386', family: 'linux', versionLabel: '12 Bookworm' }),
+      ),
+    ).toBe('virtio');
   });
 
-  it('Windows (7) : ne2k', () => {
-    expect(selectNetworkDeviceType(makeOS('windows', '7'))).toBe('ne2k');
+  it('OS ancien tabulé (windows-7-x86) : ne2k', () => {
+    expect(
+      resolveNetworkDevice(makeOS({ id: 'windows-7-x86', family: 'windows', versionLabel: '7' })),
+    ).toBe('ne2k');
+  });
+
+  it('Windows 32 bits non tabulé : heuristique legacy → ne2k', () => {
+    expect(
+      resolveNetworkDevice(makeOS({ id: 'windows-old', family: 'windows', architecture: 'i386' })),
+    ).toBe('ne2k');
+  });
+
+  it('système inconnu : virtio par défaut (adapté à v86)', () => {
+    expect(resolveNetworkDevice(makeOS({ id: 'mystery', family: 'linux' }))).toBe('virtio');
+  });
+
+  it('surcharge explicite prioritaire sur table et heuristique', () => {
+    expect(resolveNetworkDevice(makeOS({ id: 'debian-12-i386' }), 'ne2k')).toBe('ne2k');
   });
 });
 

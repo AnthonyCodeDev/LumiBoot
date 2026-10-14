@@ -1,6 +1,11 @@
 import type { SessionSnapshot } from '@lumiboot/vm-core';
 
-export const STEPS = ['Préparation', 'Téléchargement', 'Démarrage du noyau Debian', 'Système prêt'] as const;
+export const STEPS = [
+  'Préparation',
+  'Téléchargement',
+  'Démarrage du noyau Debian',
+  'Système prêt',
+] as const;
 
 export function stepIndexForState(state: SessionSnapshot['state']): number {
   switch (state) {

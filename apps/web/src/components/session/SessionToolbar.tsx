@@ -76,9 +76,7 @@ export function SessionToolbar({
             onClick={onToggleFullscreen}
             aria-pressed={isFullscreen}
             title={
-              isFullscreen
-                ? 'Quitter le plein écran (Échap)'
-                : 'Afficher la session en plein écran'
+              isFullscreen ? 'Quitter le plein écran (Échap)' : 'Afficher la session en plein écran'
             }
           >
             {isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}

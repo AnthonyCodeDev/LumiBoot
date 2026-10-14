@@ -31,21 +31,25 @@ export const networkModeSchema = z.enum([
 
 export const networkStatusSchema = z.enum([
   'idle',
-  'starting',
+  'configured',
+  'connecting',
   'connected',
+  'online',
   'offline',
   'error',
   'stopped',
 ]);
 
+export const networkTransportSchema = z.enum(['none', 'fetch', 'wisp']);
+
 export const networkDiagnosticsSchema = z.object({
   mode: networkModeSchema,
   status: networkStatusSchema,
+  transport: networkTransportSchema,
+  verified: z.boolean(),
   txBytes: z.number().nonnegative(),
   rxBytes: z.number().nonnegative(),
-  lastError: z
-    .object({ code: z.string().min(1), message: z.string().min(1) })
-    .optional(),
+  lastError: z.object({ code: z.string().min(1), message: z.string().min(1) }).optional(),
 });
 
 export const sessionEventSchema = z.discriminatedUnion('type', [
@@ -67,5 +71,6 @@ export const sessionEventSchema = z.discriminatedUnion('type', [
 export type VMState = z.infer<typeof vmStateSchema>;
 export type NetworkMode = z.infer<typeof networkModeSchema>;
 export type NetworkStatus = z.infer<typeof networkStatusSchema>;
+export type NetworkTransport = z.infer<typeof networkTransportSchema>;
 export type NetworkDiagnostics = z.infer<typeof networkDiagnosticsSchema>;
 export type SessionEvent = z.infer<typeof sessionEventSchema>;

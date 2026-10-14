@@ -13,6 +13,12 @@ export interface NetworkModeInfo {
   label: string;
   description: string;
   availability: 'ready' | 'planned';
+  /**
+   * Toujours `true` : le profil réseau v86 est fixé **avant** la construction de
+   * l'émulateur (traduction vers `net_device`). Tout changement de profil
+   * réseau — y compris vers/depuis `offline` — exige donc une **nouvelle
+   * session** ; aucun basculement à chaud n'est supporté.
+   */
   requiresRestart: boolean;
   requiresConfiguration: boolean;
 }
@@ -23,7 +29,7 @@ export const networkModes: Record<NetworkMode, NetworkModeInfo> = {
     label: 'Hors ligne',
     description: 'Aucun accès réseau : la machine invitée est totalement isolée.',
     availability: 'ready',
-    requiresRestart: false,
+    requiresRestart: true,
     requiresConfiguration: false,
   },
   'browser-fetch': {
@@ -31,24 +37,27 @@ export const networkModes: Record<NetworkMode, NetworkModeInfo> = {
     label: 'Réseau du navigateur',
     description:
       'Réseau émulé au-dessus de fetch du navigateur. Soumis aux contraintes CORS et ' +
-      "sans accès Internet complet.",
+      'sans accès Internet complet.',
     availability: 'ready',
-    requiresRestart: false,
+    requiresRestart: true,
     requiresConfiguration: false,
   },
   'user-relay': {
     id: 'user-relay',
     label: 'Relais personnel (WISP)',
     description:
-      "Accès Internet complet via un serveur WISP fourni et administré par l'utilisateur.",
+      "Internet via un serveur WISP personnel fourni et administré par l'utilisateur ; " +
+      "l'accès complet n'est jamais garanti par défaut.",
     availability: 'ready',
-    requiresRestart: false,
+    requiresRestart: true,
     requiresConfiguration: true,
   },
   'local-network': {
     id: 'local-network',
     label: 'Réseau local',
-    description: "Accès au réseau local de la machine hôte. Fonctionnalité non implémentée.",
+    description:
+      'Réseau virtuel entre invités du navigateur (segment local partagé), et non un accès ' +
+      "au réseau LAN physique de l'hôte. Fonctionnalité non implémentée.",
     availability: 'planned',
     requiresRestart: true,
     requiresConfiguration: true,

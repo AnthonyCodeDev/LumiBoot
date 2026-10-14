@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "network": {
+    "defaultProfile": { "mode": "browser-fetch" },
+    "systems": { "debian-12-i386": { "mode": "browser-fetch" } }
+  }
+}

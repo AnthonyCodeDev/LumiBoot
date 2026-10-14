@@ -3,7 +3,9 @@ export function Footer() {
   return (
     <footer className="footer">
       <span className="footer-brand">
-        Lumi<span className="wordmark-dot" aria-hidden="true" />Boot
+        Lumi
+        <span className="wordmark-dot" aria-hidden="true" />
+        Boot
       </span>
       <span className="footer-copy">© {year} LumiBoot</span>
     </footer>

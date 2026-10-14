@@ -14,7 +14,10 @@ const IMAGE_REF = /^[a-z0-9-]+$/;
  * incohérente.
  */
 export const imageFileRefSchema = z.object({
-  url: z.string().min(1).regex(/^\/images\//, 'URL relative attendue sous « /images/ »'),
+  url: z
+    .string()
+    .min(1)
+    .regex(/^\/images\//, 'URL relative attendue sous « /images/ »'),
   sha256: z.string().regex(HEX64, 'SHA-256 hexadécimal de 64 caractères attendu'),
   size: z.number().int().positive(),
   version: z.string().min(1).optional(),
@@ -75,10 +78,7 @@ export async function ensureImageManifest(
   return task;
 }
 
-export async function loadImageManifest(
-  ref: string,
-  signal?: AbortSignal,
-): Promise<ImageManifest> {
+export async function loadImageManifest(ref: string, signal?: AbortSignal): Promise<ImageManifest> {
   if (!IMAGE_REF.test(ref)) {
     throw new AssetError('ASSET_INVALID_MANIFEST', 'Référence d’image invalide.', { ref });
   }
@@ -91,7 +91,10 @@ export async function loadImageManifest(
     });
   } catch (error) {
     if (signal?.aborted) {
-      throw new AssetError('ASSET_ABORTED', 'Chargement du manifeste annulé.', { ref, cause: error });
+      throw new AssetError('ASSET_ABORTED', 'Chargement du manifeste annulé.', {
+        ref,
+        cause: error,
+      });
     }
     throw new AssetError('ASSET_NOT_FOUND', 'Manifeste inaccessible.', { ref, cause: error });
   }
@@ -104,7 +107,10 @@ export async function loadImageManifest(
   try {
     json = await response.json();
   } catch (error) {
-    throw new AssetError('ASSET_INVALID_MANIFEST', 'Manifeste JSON illisible.', { ref, cause: error });
+    throw new AssetError('ASSET_INVALID_MANIFEST', 'Manifeste JSON illisible.', {
+      ref,
+      cause: error,
+    });
   }
 
   const parsed = imageManifestSchema.safeParse(json);
@@ -117,9 +123,13 @@ export async function loadImageManifest(
 
   const manifest = parsed.data as unknown as ImageManifest;
   if (manifest.ref !== ref) {
-    throw new AssetError('ASSET_INVALID_MANIFEST', 'La référence du manifeste diffère de la demande.', {
-      ref,
-    });
+    throw new AssetError(
+      'ASSET_INVALID_MANIFEST',
+      'La référence du manifeste diffère de la demande.',
+      {
+        ref,
+      },
+    );
   }
 
   registerImageManifest(manifest);

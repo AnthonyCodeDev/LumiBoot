@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { getSystemById } from '@lumiboot/catalog';
 import { SessionLifecycle, VMError, type SessionSnapshot } from '@lumiboot/vm-core';
 import { createRegistry } from './registry';
-import { useNetworkStore } from '../settings/network.store';
+import { resolveNetworkProfile } from '../../config/runtime';
 
 const registry = createRegistry();
 const lifecycles = new Map<string, SessionLifecycle>();
@@ -43,9 +43,11 @@ export const useSessionsStore = create<SessionsState>((set) => ({
   boot: async (id, mountElement) => {
     const lifecycle = lifecycles.get(id);
     if (!lifecycle) return;
-    // Le profil réseau est lu au démarrage : les modes ne changent pas à chaud
+    // Le profil réseau est résolu au démarrage puis reste figé pour la session
     // (tout changement de mode exige un redémarrage de la session).
-    await lifecycle.start(mountElement, { network: useNetworkStore.getState().profile });
+    await lifecycle.start(mountElement, {
+      network: resolveNetworkProfile(lifecycle.system.id),
+    });
   },
   stop: async (id) => {
     await lifecycles.get(id)?.stop();

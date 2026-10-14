@@ -3,6 +3,8 @@ import { validateCatalog } from './validation';
 import { families, type OSFamilyDefinition } from './families';
 import { images, type SystemImageDefinition } from './images';
 import { launchProfiles, type LaunchProfileDefinition } from './profiles';
+import { getEffectiveAvailability } from './availability';
+import { isEngineIntegrated } from './engines';
 
 const familyIndex = new Map<string, OSFamilyDefinition>(
   families.map((family) => [family.id, family] as const),
@@ -23,6 +25,21 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
     throw new Error(`Image ou profil de lancement invalide : ${image.id}`);
   }
 
+  // La disponibilité n'est jamais déclarée par une image ou un profil : elle
+  // est DÉRIVÉE des faits (image présente, profil compatible, moteur intégré,
+  // fonctionnement validé). Un système ne devient donc pas disponible parce que
+  // son image existe.
+  const availability = getEffectiveAvailability({
+    hasImage: image.imageRef !== undefined,
+    hasCompatibleProfile: launchProfilesForImage.some(
+      (launchProfile) => launchProfile.executionMode === 'browser',
+    ),
+    engineIntegrated: launchProfilesForImage.some((launchProfile) =>
+      isEngineIntegrated(launchProfile.engineId),
+    ),
+    validated: launchProfilesForImage.some((launchProfile) => launchProfile.validated),
+  });
+
   return {
     id: launchProfilesForImage[0]!.id,
     slug: launchProfilesForImage[0]!.slug,
@@ -30,7 +47,7 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
     displayName: launchProfilesForImage[0]!.displayName,
     versionLabel: launchProfilesForImage[0]!.versionLabel,
     architecture: image.architecture,
-    availability: image.availability,
+    availability,
     description: launchProfilesForImage[0]!.description,
     iconUrl: family.iconUrl,
     minMemoryMiB: launchProfilesForImage[0]!.minMemoryMiB,
@@ -55,10 +72,11 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
 /**
  * Catalogue LumiBoot — source unique de vérité.
  *
- * RÈGLE : aucune entrée ne passe à `availability: 'ready'` tant que le moteur
- * associé n'a pas réellement démarré le système et exécuté une commande
- * vérifiable. Les images de systèmes propriétaires ne sont jamais incluses ni
- * récupérées automatiquement (voir docs/LICENSES.md).
+ * RÈGLE UNIQUE DE DISPONIBILITÉ : `availability` est dérivée par
+ * `getEffectiveAvailability` et vaut `ready` uniquement si l'image est présente
+ * (`imageRef`), qu'un profil compatible existe, que le moteur est intégré et
+ * que le fonctionnement est validé. Les images de systèmes propriétaires ne
+ * sont jamais incluses ni récupérées automatiquement (voir docs/LICENSES.md).
  *
  * Les définitions sont validées par Zod au chargement : un manifeste invalide
  * fait échouer immédiatement l'application au lieu de produire une UI incohérente.

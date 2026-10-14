@@ -1,5 +1,12 @@
-import type { Availability, EngineId, ExecutionMode, VMConfiguration } from '@lumiboot/contracts';
+import type { EngineId, ExecutionMode, VMConfiguration } from '@lumiboot/contracts';
 
+/**
+ * Description factuelle d'un profil de lancement (image + moteur + paramètres).
+ *
+ * Ce fichier ne déclare AUCUN statut de disponibilité : la disponibilité est
+ * calculée une seule fois, dans `systems.ts`. `validated` atteste uniquement
+ * qu'un boot réel a été prouvé pour ce couple image/moteur.
+ */
 export interface LaunchProfileDefinition {
   readonly id: string;
   readonly imageId: string;
@@ -11,7 +18,8 @@ export interface LaunchProfileDefinition {
   readonly displayName: string;
   readonly versionLabel: string;
   readonly description: string;
-  readonly availability: Availability;
+  /** Boot réel prouvé pour ce profil (tests E2E). */
+  readonly validated: boolean;
   readonly featured?: boolean;
 }
 
@@ -33,7 +41,7 @@ export const launchProfiles = [
     slug: 'debian-12-i386',
     displayName: 'Debian',
     versionLabel: '12 Bookworm',
-    availability: 'planned',
+    validated: true,
     featured: true,
     description:
       "Une distribution Linux stable, flexible et idéale pour découvrir un véritable système d'exploitation en navigateur.",
@@ -52,7 +60,7 @@ export const launchProfiles = [
     slug: 'ubuntu-18-i386',
     displayName: 'Ubuntu',
     versionLabel: '18.04 LTS',
-    availability: 'planned',
+    validated: false,
     description:
       'Une version 32 bits historique d’Ubuntu envisageable avec un émulateur x86 en navigateur.',
   },
@@ -69,7 +77,7 @@ export const launchProfiles = [
     slug: 'fedora-workstation',
     displayName: 'Fedora',
     versionLabel: 'Workstation · x64',
-    availability: 'planned',
+    validated: false,
     description: 'Un environnement Linux de bureau moderne prévu pour un moteur navigateur adapté.',
   },
   {
@@ -85,7 +93,7 @@ export const launchProfiles = [
     slug: 'mint-x64',
     displayName: 'Linux Mint',
     versionLabel: 'Cinnamon · x64',
-    availability: 'planned',
+    validated: false,
     description: 'Un bureau Linux classique et accessible, à lancer dans le navigateur.',
   },
   {
@@ -101,7 +109,7 @@ export const launchProfiles = [
     slug: 'windows-7-x86',
     displayName: 'Windows 7',
     versionLabel: 'Édition x86',
-    availability: 'planned',
+    validated: false,
     description:
       'Une session Windows classique dans le navigateur, sous réserve d’une licence valide et d’un moteur compatible.',
   },
@@ -118,7 +126,7 @@ export const launchProfiles = [
     slug: 'windows-10-x64',
     displayName: 'Windows 10',
     versionLabel: '64 bits',
-    availability: 'planned',
+    validated: false,
     description: 'Une version moderne de Windows pensée pour un moteur navigateur adapté.',
   },
   {
@@ -134,7 +142,7 @@ export const launchProfiles = [
     slug: 'windows-11-x64',
     displayName: 'Windows 11',
     versionLabel: '64 bits',
-    availability: 'planned',
+    validated: false,
     description:
       'Une machine virtuelle Windows moderne pensée pour une exécution locale dans le navigateur.',
   },
@@ -151,7 +159,7 @@ export const launchProfiles = [
     slug: 'macos-sequoia',
     displayName: 'macOS',
     versionLabel: 'Sequoia · Apple Silicon',
-    availability: 'planned',
+    validated: false,
     description: 'Une session macOS pensée pour un futur moteur navigateur compatible ARM.',
   },
 ] as const satisfies readonly LaunchProfileDefinition[];

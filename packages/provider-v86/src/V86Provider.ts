@@ -188,10 +188,14 @@ export class V86Provider implements VMEngine {
     } catch (error) {
       consoleAdapter.detach();
       await networkController.dispose().catch(() => undefined);
-      throw new VMError('START_FAILED', `Le moteur v86 n'a pas pu s'initialiser pour « ${os.id} ».`, {
-        systemId: os.id,
-        cause: error,
-      });
+      throw new VMError(
+        'START_FAILED',
+        `Le moteur v86 n'a pas pu s'initialiser pour « ${os.id} ».`,
+        {
+          systemId: os.id,
+          cause: error,
+        },
+      );
     }
 
     if (signal?.aborted) {
