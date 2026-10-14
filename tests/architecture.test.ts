@@ -8,6 +8,7 @@ const repoRoot = process.cwd();
 /** Packages qui ne doivent dépendre d'aucun framework d'UI ni de `apps/web`. */
 const ISOLATED_PACKAGES = [
   'packages/vm-core',
+  'packages/vm-network',
   'packages/provider-v86',
   'packages/vm-assets',
   'packages/vm-storage',

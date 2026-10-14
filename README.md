@@ -53,6 +53,7 @@ packages/vm-core         Cœur : contrats (VMEngine, VMInstance, VMCapabilities�
                          registre, compatibilité, repli honnête
 packages/vm-assets       Manifestes, téléchargement, cache et intégrité SHA-256 des images
 packages/vm-storage      Stockage persistant versionné, quotas et export/import
+packages/vm-network      Réseau commun agnostique (modes, capacités, profil, cycle de vie, diagnostics)
 packages/provider-v86    Moteur v86 réel : WASM, BIOS, disque HTTP Range, console VGA/série
 images/debian-12-i386    Script de build Debian + manifeste (image à construire puis publier)
 infra                    Docker Compose, Nginx, notes de déploiement local
@@ -88,6 +89,10 @@ par le `UnavailableProvider` — jamais par une progression simulée.
    (`images/debian-12-i386/build.sh`), la publier (`apps/web/public/images/debian-12-i386/`),
    exécuter le smoke test (`VM_E2E_ASSETS=1 pnpm test:e2e`), puis passer Debian à
    `availability:'ready'` **et** `engines.v86.integrated` à `true`.
-3. **Lot 2 — Persistance** : snapshots de disque vs RAM/CPU, continuité après refresh.
-4. **Lot 3 — Autres moteurs locaux** : deuxième Linux et Windows historique, sans modifier le cœur ni l'UI.
-5. **Lot 4 — Extension navigateur** : moteurs WASM additionnels, toujours sans backend de virtualisation.
+3. **Réseau — validation invitée et réseau local** : le socle `@lumiboot/vm-network` est en place
+   (modes `offline`, `browser-fetch`, `user-relay`). Il reste à valider le réseau réel de l'invité
+   (DHCP, DNS, HTTP compatible CORS, relais WISP) et à implémenter `local-network` (switch virtuel),
+   toujours sans backend réseau LumiBoot — voir `docs/network.md`.
+4. **Lot 2 — Persistance** : snapshots de disque vs RAM/CPU, continuité après refresh.
+5. **Lot 3 — Autres moteurs locaux** : deuxième Linux et Windows historique, sans modifier le cœur ni l'UI.
+6. **Lot 4 — Extension navigateur** : moteurs WASM additionnels, toujours sans backend de virtualisation.

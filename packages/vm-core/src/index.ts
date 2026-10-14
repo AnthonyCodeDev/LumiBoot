@@ -1,6 +1,8 @@
 export * from './errors/VMError';
 export * from './ids';
 
+export type { NetworkProfile } from '@lumiboot/vm-network';
+
 export * from './contracts/VMCapabilities';
 export * from './contracts/VMConfiguration';
 export * from './contracts/VMEvents';

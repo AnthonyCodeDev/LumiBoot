@@ -17,6 +17,37 @@ export const vmStateSchema = z.enum([
   'error',
 ]);
 
+/**
+ * Diagnostic réseau d'une session. Ces valeurs sont volontairement dupliquées
+ * depuis `@lumiboot/vm-network` : `contracts` est la couche la plus basse et ne
+ * peut pas dépendre du sous-système réseau (qui, lui, dépend de `contracts`).
+ */
+export const networkModeSchema = z.enum([
+  'offline',
+  'browser-fetch',
+  'user-relay',
+  'local-network',
+]);
+
+export const networkStatusSchema = z.enum([
+  'idle',
+  'starting',
+  'connected',
+  'offline',
+  'error',
+  'stopped',
+]);
+
+export const networkDiagnosticsSchema = z.object({
+  mode: networkModeSchema,
+  status: networkStatusSchema,
+  txBytes: z.number().nonnegative(),
+  rxBytes: z.number().nonnegative(),
+  lastError: z
+    .object({ code: z.string().min(1), message: z.string().min(1) })
+    .optional(),
+});
+
 export const sessionEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('state'), state: vmStateSchema }),
   z.object({
@@ -30,7 +61,11 @@ export const sessionEventSchema = z.discriminatedUnion('type', [
     code: z.string().min(1),
     message: z.string().min(1),
   }),
+  z.object({ type: z.literal('network'), network: networkDiagnosticsSchema }),
 ]);
 
 export type VMState = z.infer<typeof vmStateSchema>;
+export type NetworkMode = z.infer<typeof networkModeSchema>;
+export type NetworkStatus = z.infer<typeof networkStatusSchema>;
+export type NetworkDiagnostics = z.infer<typeof networkDiagnosticsSchema>;
 export type SessionEvent = z.infer<typeof sessionEventSchema>;

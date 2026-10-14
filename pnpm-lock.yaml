@@ -80,6 +80,9 @@ importers:
       '@lumiboot/vm-core':
         specifier: workspace:*
         version: link:../../packages/vm-core
+      '@lumiboot/vm-network':
+        specifier: workspace:*
+        version: link:../../packages/vm-network
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -140,6 +143,9 @@ importers:
       '@lumiboot/vm-core':
         specifier: workspace:*
         version: link:../vm-core
+      '@lumiboot/vm-network':
+        specifier: workspace:*
+        version: link:../vm-network
       v86:
         specifier: 0.5.471
         version: 0.5.471
@@ -166,6 +172,22 @@ importers:
       '@lumiboot/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@lumiboot/vm-network':
+        specifier: workspace:*
+        version: link:../vm-network
+    devDependencies:
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
+  packages/vm-network:
+    dependencies:
+      '@lumiboot/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: ^5.6.3

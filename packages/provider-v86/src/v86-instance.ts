@@ -1,8 +1,10 @@
 import type { Event as V86Event, V86 } from 'v86';
 import type { SessionEvent } from '@lumiboot/contracts';
+import type { NetworkController } from '@lumiboot/vm-network';
 import { createSessionId, type VMInstance } from '@lumiboot/vm-core';
 import type { V86ConsoleAdapter } from './console-adapter';
 import { GuestReadyDetector } from './guest-ready-detector';
+import { attachNetworkDiagnostics } from './network/V86NetworkAdapter';
 
 export interface V86InstanceDeps {
   readonly providerId: string;
@@ -12,6 +14,8 @@ export interface V86InstanceDeps {
   readonly detector?: GuestReadyDetector;
   readonly id?: string;
   readonly onCleanupError?: (error: unknown) => void;
+  /** Contrôleur réseau optionnel : ses diagnostics sont relayés en événements. */
+  readonly network?: NetworkController;
 }
 
 /**
@@ -33,9 +37,12 @@ export class V86Instance implements VMInstance {
   readonly #emulator: V86;
   readonly #console: V86ConsoleAdapter;
   readonly #detector: GuestReadyDetector;
+  readonly #network: NetworkController | undefined;
   readonly #onCleanupError: ((error: unknown) => void) | undefined;
   readonly #listeners = new Set<(event: SessionEvent) => void>();
 
+  #detachNetwork: (() => void) | null = null;
+  #unsubscribeNetwork: (() => void) | null = null;
   #pending: SessionEvent[] = [];
   #hasSubscriber = false;
   #cleanupPromise: Promise<void> | null = null;
@@ -50,6 +57,7 @@ export class V86Instance implements VMInstance {
     this.#emulator = deps.emulator;
     this.#console = deps.console;
     this.#detector = deps.detector ?? new GuestReadyDetector();
+    this.#network = deps.network;
     this.#onCleanupError = deps.onCleanupError;
   }
 
@@ -61,6 +69,18 @@ export class V86Instance implements VMInstance {
     emulator.add_listener('download-progress', this.#onDownloadProgress);
     emulator.add_listener('download-error', this.#onDownloadError);
     emulator.add_listener('serial0-output-byte', this.#onSerialByte);
+    this.#wireNetwork();
+  }
+
+  #wireNetwork(): void {
+    const network = this.#network;
+    if (network === undefined) return;
+    this.#detachNetwork = attachNetworkDiagnostics(this.#emulator, network);
+    this.#unsubscribeNetwork = network.subscribe((diagnostics) => {
+      this.#emit({ type: 'network', network: diagnostics });
+    });
+    // État initial rejoué au premier abonné, même sans changement ultérieur.
+    this.#emit({ type: 'network', network: network.snapshot() });
   }
 
   subscribe(listener: (event: SessionEvent) => void): () => void {
@@ -153,6 +173,10 @@ export class V86Instance implements VMInstance {
     if (this.#cleanupPromise !== null) return this.#cleanupPromise;
     this.#cleanupPromise = (async () => {
       this.#removeListeners();
+      this.#unsubscribeNetwork?.();
+      this.#unsubscribeNetwork = null;
+      this.#detachNetwork?.();
+      this.#detachNetwork = null;
       try {
         await this.#emulator.stop();
       } catch (error) {
@@ -164,6 +188,13 @@ export class V86Instance implements VMInstance {
         this.#onCleanupError?.(error);
       }
       this.#console.detach();
+      if (this.#network !== undefined) {
+        try {
+          await this.#network.dispose();
+        } catch (error) {
+          this.#onCleanupError?.(error);
+        }
+      }
     })();
     return this.#cleanupPromise;
   }

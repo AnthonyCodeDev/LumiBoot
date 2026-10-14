@@ -1,4 +1,9 @@
-import type { OSDefinition, SessionEvent, VMState } from '@lumiboot/contracts';
+import type {
+  NetworkDiagnostics,
+  OSDefinition,
+  SessionEvent,
+  VMState,
+} from '@lumiboot/contracts';
 import { VMError, isVMError } from '../errors/VMError';
 import { createSessionId } from '../ids';
 import { SessionStateMachine } from './SessionStateMachine';
@@ -19,6 +24,7 @@ export interface SessionSnapshot {
   phase?: string;
   loadedBytes?: number;
   totalBytes?: number;
+  network?: NetworkDiagnostics;
   error?: SessionError;
 }
 
@@ -43,6 +49,7 @@ export class SessionLifecycle {
   #phase: string | undefined;
   #loadedBytes: number | undefined;
   #totalBytes: number | undefined;
+  #network: NetworkDiagnostics | undefined;
   #error: SessionError | undefined;
   #instance: VMInstance | null = null;
   #unsubscribe: (() => void) | null = null;
@@ -74,6 +81,7 @@ export class SessionLifecycle {
       ...(this.#phase === undefined ? {} : { phase: this.#phase }),
       ...(this.#loadedBytes === undefined ? {} : { loadedBytes: this.#loadedBytes }),
       ...(this.#totalBytes === undefined ? {} : { totalBytes: this.#totalBytes }),
+      ...(this.#network === undefined ? {} : { network: this.#network }),
       ...(this.#error === undefined ? {} : { error: this.#error }),
     };
   }
@@ -99,6 +107,7 @@ export class SessionLifecycle {
     this.#phase = undefined;
     this.#loadedBytes = undefined;
     this.#totalBytes = undefined;
+    this.#network = undefined;
     this.#machine.transition('preparing');
     this.#emit();
 
@@ -121,6 +130,7 @@ export class SessionLifecycle {
           this.#phase = undefined;
           this.#loadedBytes = undefined;
           this.#totalBytes = undefined;
+          this.#network = undefined;
           this.#emit();
           return;
         }
@@ -133,6 +143,7 @@ export class SessionLifecycle {
           this.#phase = undefined;
           this.#loadedBytes = undefined;
           this.#totalBytes = undefined;
+          this.#network = undefined;
           this.#emit();
           return;
         }
@@ -143,6 +154,7 @@ export class SessionLifecycle {
           this.#phase = undefined;
           this.#loadedBytes = undefined;
           this.#totalBytes = undefined;
+          this.#network = undefined;
           this.#emit();
           return;
         }
@@ -187,6 +199,7 @@ export class SessionLifecycle {
     this.#phase = undefined;
     this.#loadedBytes = undefined;
     this.#totalBytes = undefined;
+    this.#network = undefined;
     this.#emit();
   }
 
@@ -209,6 +222,7 @@ export class SessionLifecycle {
     this.#phase = undefined;
     this.#loadedBytes = undefined;
     this.#totalBytes = undefined;
+    this.#network = undefined;
     this.#disposed = true;
     this.#listeners.clear();
   }
@@ -249,6 +263,13 @@ export class SessionLifecycle {
       } else {
         this.#totalBytes = event.totalBytes;
       }
+      this.#emit();
+      return;
+    }
+    if (event.type === 'network') {
+      // Les diagnostics réseau sont purement observables : ils rafraîchissent
+      // le snapshot sans provoquer ni transition d'état ni échec de session.
+      this.#network = event.network;
       this.#emit();
       return;
     }

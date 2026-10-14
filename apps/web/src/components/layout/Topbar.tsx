@@ -38,6 +38,11 @@ export function Topbar() {
           Boot
         </span>
       </Link>
+      <nav className="topbar-nav" aria-label="Navigation principale">
+        <Link to="/settings" className="topbar-link">
+          Paramètres
+        </Link>
+      </nav>
     </header>
   );
 }

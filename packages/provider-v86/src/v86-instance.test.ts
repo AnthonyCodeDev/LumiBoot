@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { V86 } from 'v86';
 import type { SessionEvent } from '@lumiboot/contracts';
+import { createNetworkController, defaultNetworkProfile } from '@lumiboot/vm-network';
 import { V86Instance } from './v86-instance';
 import type { V86ConsoleAdapter } from './console-adapter';
 import { GUEST_READY_MARKER } from './guest-ready-detector';
@@ -140,5 +141,43 @@ describe('V86Instance', () => {
     emitMarker(emulator);
 
     expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(false);
+  });
+
+  it('relaie les diagnostics réseau et détache tout à dispose', async () => {
+    const emulator = new FakeV86();
+    const controller = createNetworkController({ profile: defaultNetworkProfile });
+    await controller.start();
+    const instance = new V86Instance({
+      providerId: 'v86',
+      systemId: 'debian-12-i386',
+      emulator: emulator as unknown as V86,
+      console: createConsoleStub(),
+      network: controller,
+    });
+    instance.wire();
+
+    const events: SessionEvent[] = [];
+    instance.subscribe((event) => events.push(event));
+
+    // L'état initial est rejoué au premier abonné (statut offline).
+    expect(events.some((event) => event.type === 'network')).toBe(true);
+
+    emulator.emit('net0-send', new Uint8Array(64));
+    const networkEvents = events.filter((event) => event.type === 'network');
+    expect(networkEvents.at(-1)).toEqual({
+      type: 'network',
+      network: expect.objectContaining({ txBytes: 64 }),
+    });
+
+    await instance.dispose();
+    const afterDispose = events.length;
+
+    emulator.emit('net0-send', new Uint8Array(64));
+    controller.reportTx(32);
+
+    expect(events.length).toBe(afterDispose);
+    expect(emulator.listenerCount('net0-send')).toBe(0);
+    expect(emulator.listenerCount('eth-transmit-end')).toBe(0);
+    expect(emulator.listenerCount('eth-receive-end')).toBe(0);
   });
 });

@@ -16,6 +16,7 @@
     "@lumiboot/contracts": "workspace:*",
     "@lumiboot/provider-v86": "workspace:*",
     "@lumiboot/vm-core": "workspace:*",
+    "@lumiboot/vm-network": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.27.0",

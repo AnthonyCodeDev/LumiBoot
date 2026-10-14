@@ -1,15 +1,26 @@
 import type { OSDefinition } from '@lumiboot/contracts';
 import {
   VMError,
+  isVMError,
   type VMConfiguration,
   type VMCapabilities,
   type VMEngine,
   type VMInstance,
 } from '@lumiboot/vm-core';
+import {
+  createNetworkController,
+  defaultNetworkProfile,
+  isNetworkError,
+} from '@lumiboot/vm-network';
 import { ensureImageManifest, type ImageManifest } from '@lumiboot/vm-assets';
 import type { V86Options } from 'v86';
 import { createBrowserV86, type V86Factory } from './browser-v86';
 import { DomConsoleAdapter, type V86ConsoleAdapter } from './console-adapter';
+import {
+  selectNetworkDeviceType,
+  toV86NetworkDevice,
+  type V86NetworkDevice,
+} from './network/V86NetworkAdapter';
 import { V86Instance } from './v86-instance';
 
 export const V86_PROVIDER_ID = 'v86';
@@ -134,6 +145,23 @@ export class V86Provider implements VMEngine {
       manifest.vgaMemoryMiB ??
       8;
 
+    // Réseau fixé AVANT la construction de l'émulateur : changer d'interface
+    // réseau exige un redémarrage complet de v86. Chaque session possède son
+    // propre contrôleur (jamais partagé entre sessions).
+    const networkProfile = configuration?.network ?? defaultNetworkProfile;
+    const networkController = createNetworkController({ profile: networkProfile });
+    let netDevice: V86NetworkDevice | undefined;
+    try {
+      const transport = toV86NetworkDevice(networkProfile);
+      if (transport !== undefined) {
+        netDevice = { ...transport, type: selectNetworkDeviceType(os) };
+      }
+      await networkController.start(signal);
+    } catch (error) {
+      await networkController.dispose().catch(() => undefined);
+      throw toStartFailure(error, os.id);
+    }
+
     const consoleAdapter = this.#createConsole();
     const mounted = consoleAdapter.attach(mountTarget);
 
@@ -151,6 +179,7 @@ export class V86Provider implements VMEngine {
       screen: { container: mounted.screenContainer },
       serial_console: { type: 'textarea', container: mounted.serialTextarea },
       autostart: false,
+      ...(netDevice === undefined ? {} : { net_device: netDevice }),
     };
 
     let emulator: Awaited<ReturnType<V86Factory>>;
@@ -158,6 +187,7 @@ export class V86Provider implements VMEngine {
       emulator = await this.#createEngine(options);
     } catch (error) {
       consoleAdapter.detach();
+      await networkController.dispose().catch(() => undefined);
       throw new VMError('START_FAILED', `Le moteur v86 n'a pas pu s'initialiser pour « ${os.id} ».`, {
         systemId: os.id,
         cause: error,
@@ -171,6 +201,7 @@ export class V86Provider implements VMEngine {
         /* nettoyage best-effort */
       }
       consoleAdapter.detach();
+      await networkController.dispose().catch(() => undefined);
       throw new VMError('START_FAILED', `Démarrage annulé pour « ${os.id} ».`, {
         systemId: os.id,
       });
@@ -181,6 +212,7 @@ export class V86Provider implements VMEngine {
       systemId: os.id,
       emulator,
       console: consoleAdapter,
+      network: networkController,
     });
     instance.wire();
     return instance;
@@ -226,4 +258,21 @@ function assertPowerOfTwoMiB(value: number, label: string, systemId: string): vo
       { systemId },
     );
   }
+}
+
+/**
+ * Convertit toute défaillance de la couche réseau en `VMError` de démarrage :
+ * un profil invalide (`user-relay` sans URL `wss://`, `local-network`) doit faire
+ * échouer la session au démarrage, jamais silencieusement.
+ */
+function toStartFailure(error: unknown, systemId: string): VMError {
+  if (isVMError(error)) return error;
+  if (isNetworkError(error)) {
+    return new VMError('START_FAILED', error.message, { systemId, cause: error });
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return new VMError('START_FAILED', `Le réseau n'a pas pu être initialisé : ${message}`, {
+    systemId,
+    cause: error,
+  });
 }

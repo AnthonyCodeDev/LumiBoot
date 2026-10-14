@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { OSDefinition, SessionEvent } from '@lumiboot/contracts';
 import { SessionLifecycle } from './SessionLifecycle';
+import type { SessionSnapshot } from './SessionLifecycle';
 import type { VMEngine } from '../contracts/VMEngine';
 import type { VMInstance } from '../contracts/VMInstance';
 import { NO_CAPABILITIES, type VMCapabilities } from '../contracts/VMCapabilities';
@@ -212,6 +213,36 @@ describe('SessionLifecycle', () => {
     await lifecycle.stop();
     expect(lifecycle.snapshot.loadedBytes).toBeUndefined();
     expect(lifecycle.snapshot.totalBytes).toBeUndefined();
+  });
+
+  it('recopie les diagnostics réseau et ne change pas l’état', async () => {
+    const engine = new ControlledEngine();
+    const registry = new VMRegistry([engine]);
+    const lifecycle = new SessionLifecycle(makeOS(), registry, 's-network');
+    const snapshots: SessionSnapshot[] = [];
+    lifecycle.subscribe((snapshot) => snapshots.push(snapshot));
+
+    const started = lifecycle.start(document.createElement('div'));
+    engine.startBarrier.resolve();
+    await started;
+    expect(lifecycle.snapshot.state).toBe('running');
+
+    engine.instances[0]?.emit({
+      type: 'network',
+      network: { mode: 'browser-fetch', status: 'connected', txBytes: 10, rxBytes: 20 },
+    });
+
+    expect(lifecycle.snapshot.state).toBe('running');
+    expect(lifecycle.snapshot.network).toEqual({
+      mode: 'browser-fetch',
+      status: 'connected',
+      txBytes: 10,
+      rxBytes: 20,
+    });
+    expect(snapshots.some((s) => s.network?.txBytes === 10 && s.network.rxBytes === 20)).toBe(true);
+
+    await lifecycle.stop();
+    expect(lifecycle.snapshot.network).toBeUndefined();
   });
 
   it('signale les erreurs de nettoyage via le callback fourni', async () => {

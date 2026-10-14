@@ -163,4 +163,49 @@ describe('V86Provider', () => {
       code: 'IMAGE_MISSING',
     });
   });
+
+  it('par défaut (profil offline) : aucune carte réseau injectée', async () => {
+    const { provider, captured } = setup();
+    await provider.start(makeOS(), document.createElement('div'));
+    expect(captured[0]?.net_device).toBeUndefined();
+  });
+
+  it('user-relay valide : injecte un net_device avec relay_url et la NIC adaptée', async () => {
+    const { provider, captured } = setup();
+    await provider.start(makeOS(), document.createElement('div'), {
+      network: { mode: 'user-relay', relayUrl: 'wss://relay.example.com:8443/wisp' },
+    });
+    expect(captured[0]?.net_device).toEqual({
+      relay_url: 'wisps://relay.example.com:8443/wisp',
+      type: 'virtio',
+    });
+  });
+
+  it('browser-fetch : injecte le backend fetch', async () => {
+    const { provider, captured } = setup();
+    await provider.start(makeOS(), document.createElement('div'), {
+      network: { mode: 'browser-fetch' },
+    });
+    expect(captured[0]?.net_device).toEqual({ relay_url: 'fetch', type: 'virtio' });
+  });
+
+  it('user-relay sans URL valide : échoue au démarrage sans construire v86', async () => {
+    const { provider, captured } = setup();
+    await expect(
+      provider.start(makeOS(), document.createElement('div'), {
+        network: { mode: 'user-relay' },
+      }),
+    ).rejects.toMatchObject({ code: 'START_FAILED' });
+    expect(captured).toHaveLength(0);
+  });
+
+  it('local-network : échoue au démarrage', async () => {
+    const { provider, captured } = setup();
+    await expect(
+      provider.start(makeOS(), document.createElement('div'), {
+        network: { mode: 'local-network' },
+      }),
+    ).rejects.toMatchObject({ code: 'START_FAILED' });
+    expect(captured).toHaveLength(0);
+  });
 });
