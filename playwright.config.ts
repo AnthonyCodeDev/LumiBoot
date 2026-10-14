@@ -7,12 +7,12 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [['list']],
   use: {
-    baseURL: 'http://127.0.0.1:5173',
+    baseURL: 'http://127.0.0.1:5200',
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'pnpm --filter @lumiboot/web dev',
-    url: 'http://127.0.0.1:5173',
+    command: 'pnpm --filter @lumiboot/web dev --port 5200',
+    url: 'http://127.0.0.1:5200',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

@@ -48,10 +48,10 @@ export function SessionPage() {
   if (!session || !system) {
     return (
       <main className="not-found">
-        <h1>Session introuvable</h1>
+        <h1>Session expirée</h1>
         <p>
-          Aucune session ne correspond à cet identifiant. Créez une session depuis la bibliothèque
-          pour continuer.
+          Cette session n'est plus accessible (rechargement de la page ou session fermée). Recréez
+          une session pour continuer.
         </p>
         <Button variant="primary" type="button" onClick={() => navigate('/')}>
           Retour à la bibliothèque

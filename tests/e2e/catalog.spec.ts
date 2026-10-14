@@ -5,7 +5,6 @@ test.describe('Bibliothèque', () => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Bibliothèque' })).toBeVisible();
     await expect(page.locator('.os-card')).toHaveCount(8);
-    await expect(page.locator('.count')).toHaveText('08');
   });
 
   test('recherche un système et filtre par famille', async ({ page }) => {

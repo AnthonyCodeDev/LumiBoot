@@ -56,7 +56,6 @@ packages/vm-storage      Stockage persistant versionné, quotas et export/import
 packages/provider-v86    Moteur v86 réel : WASM, BIOS, disque HTTP Range, console VGA/série
 images/debian-12-i386    Script de build Debian + manifeste (image à construire puis publier)
 infra                    Docker Compose, Nginx, notes de déploiement local
-docs                     Brief, architecture, ADR, sécurité, licences
 prototype                Référence statique d'origine (référence visuelle)
 ```
 
@@ -66,9 +65,6 @@ L'UI ne connaît **jamais** `new V86(...)` : elle parle à un `VMEngine` résolu
 Le cycle de vie (démarrage, arrêt, destruction) est centralisé dans `SessionLifecycle` ; le
 front-end ne fait que refléter l'état. Un moteur absent ou non intégré est signalé **honnêtement**
 par le `UnavailableProvider` — jamais par une progression simulée.
-
-Voir [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/AGENT_BRIEF.md`](docs/AGENT_BRIEF.md) et
-les ADR dans [`docs/adr/`](docs/adr/).
 
 ## Contrats
 
@@ -95,17 +91,3 @@ les ADR dans [`docs/adr/`](docs/adr/).
 3. **Lot 2 — Persistance** : snapshots de disque vs RAM/CPU, continuité après refresh.
 4. **Lot 3 — Autres moteurs locaux** : deuxième Linux et Windows historique, sans modifier le cœur ni l'UI.
 5. **Lot 4 — Extension navigateur** : moteurs WASM additionnels, toujours sans backend de virtualisation.
-
-## Avertissements
-
-- Windows 10/11 64 bits et les macOS récents **ne sont pas encore pris en charge** par les moteurs
-  locaux actuels.
-- Les licences Microsoft et Apple doivent être respectées. Ne jamais intégrer ni redistribuer
-  d'images de systèmes propriétaires sans autorisation (voir [`docs/LICENSES.md`](docs/LICENSES.md)).
-
-## Documentation
-
-- [`docs/AGENT_BRIEF.md`](docs/AGENT_BRIEF.md) — pitch, périmètre, lots, critères d'acceptation
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — arborescence cible, contrats, sécurité
-- [`docs/SECURITY.md`](docs/SECURITY.md) — règles de sécurité
-- [`docs/LICENSES.md`](docs/LICENSES.md) — licences et gestion des images

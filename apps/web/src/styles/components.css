@@ -127,19 +127,6 @@
     sans-serif;
   box-shadow: 0 1px 0 #050609;
 }
-.mode-select {
-  height: 42px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-}
-
 /* Filter tabs */
 .filter-row {
   display: flex;
@@ -540,9 +527,12 @@
 
 /* Session */
 .session-screen {
-  width: min(100%, 1180px);
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   padding: 36px clamp(24px, 4vw, 56px) 52px;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - 64px);
 }
 .session-toolbar {
   display: flex;
@@ -607,18 +597,112 @@
 }
 .session-viewport {
   position: relative;
-  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: min(620px, calc(100dvh - 260px));
   margin-top: 16px;
   overflow: hidden;
-  aspect-ratio: 4/3;
   border: 1px solid #282c33;
   border-radius: var(--radius-lg);
   background: #0b0d10;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
 }
 .session-console {
-  position: absolute;
-  inset: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+/* Logs masqués par défaut : l'écran VGA occupe alors toute la place. */
+.session-console.logs-hidden .v86-serial {
+  display: none;
+}
+/* Console v86 injectée dans .session-console par le provider (classes
+   conservées telles quelles : l'E2E s'accroche à .v86-serial). */
+.v86-console {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+/* Écran VGA : le résultat, dominant — prend l'essentiel de la hauteur. */
+.v86-screen {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  margin: 0 auto;
+  background: #000;
+  border-bottom: 1px solid #282c33;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+}
+.v86-screen canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.v86-screen-text {
+  width: 100%;
+  box-sizing: border-box;
+}
+/* Logs série : plus petits, en dessous de l'écran, style terminal. */
+.v86-serial {
+  display: block;
+  visibility: visible;
+  flex: 0 0 auto;
+  width: 100%;
+  height: 180px;
+  min-height: 140px;
+  max-height: 220px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 12px 16px;
+  border: 0;
+  border-top: 1px solid #1c2026;
+  border-radius: 0;
+  background: #0b0d10;
+  color: #d5dbe3;
+  font-family:
+    ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
+  overflow-y: auto;
+  resize: none;
+  scrollbar-width: thin;
+  scrollbar-color: #2c333e transparent;
+}
+.v86-serial::-webkit-scrollbar {
+  width: 10px;
+}
+.v86-serial::-webkit-scrollbar-track {
+  background: transparent;
+}
+.v86-serial::-webkit-scrollbar-thumb {
+  border: 2px solid #0b0d10;
+  border-radius: 8px;
+  background: #2c333e;
+}
+.v86-serial::-webkit-scrollbar-thumb:hover {
+  background: #39414e;
+}
+.v86-serial:focus {
+  outline: none;
+}
+.v86-serial:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 .status-overlay {
   position: absolute;
@@ -665,13 +749,6 @@
   background: #2b171b;
   color: #f0bac2;
 }
-.session-note {
-  margin-top: 13px;
-  color: var(--text-tertiary);
-  font-size: 10px;
-  line-height: 1.7;
-}
-
 /* Detail and 404 pages */
 .not-found {
   max-width: 620px;
@@ -754,6 +831,33 @@
   border-top: 1px solid var(--line-soft);
 }
 
+/* Footer */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  flex-wrap: wrap;
+  margin-top: 48px;
+  padding: 28px 0 36px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.footer-copy {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -786,9 +890,6 @@
   .search {
     min-width: 0;
     flex: 1;
-  }
-  .mode-select {
-    display: none;
   }
   .filter-row {
     flex-wrap: nowrap;
@@ -835,7 +936,14 @@
     margin-right: auto;
   }
   .session-viewport {
-    min-height: 260px;
+    min-height: 420px;
+  }
+  .v86-serial {
+    height: 140px;
+    min-height: 120px;
+    max-height: 160px;
+    padding: 10px 12px;
+    font-size: 12px;
   }
   .system-detail {
     padding: 24px 18px 46px;
@@ -852,5 +960,12 @@
   }
   .system-detail-hero h1 {
     font-size: 29px;
+  }
+  .footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 36px;
+    padding: 24px 0 30px;
   }
 }

@@ -17,6 +17,8 @@ export interface SessionSnapshot {
   providerId: string;
   state: VMState;
   phase?: string;
+  loadedBytes?: number;
+  totalBytes?: number;
   error?: SessionError;
 }
 
@@ -39,6 +41,8 @@ export class SessionLifecycle {
   readonly #listeners = new Set<SessionListener>();
   #providerId = 'pending';
   #phase: string | undefined;
+  #loadedBytes: number | undefined;
+  #totalBytes: number | undefined;
   #error: SessionError | undefined;
   #instance: VMInstance | null = null;
   #unsubscribe: (() => void) | null = null;
@@ -68,6 +72,8 @@ export class SessionLifecycle {
       providerId: this.#providerId,
       state: this.#machine.state,
       ...(this.#phase === undefined ? {} : { phase: this.#phase }),
+      ...(this.#loadedBytes === undefined ? {} : { loadedBytes: this.#loadedBytes }),
+      ...(this.#totalBytes === undefined ? {} : { totalBytes: this.#totalBytes }),
       ...(this.#error === undefined ? {} : { error: this.#error }),
     };
   }
@@ -91,6 +97,8 @@ export class SessionLifecycle {
     this.#starting = true;
     this.#error = undefined;
     this.#phase = undefined;
+    this.#loadedBytes = undefined;
+    this.#totalBytes = undefined;
     this.#machine.transition('preparing');
     this.#emit();
 
@@ -111,6 +119,8 @@ export class SessionLifecycle {
           if (this.#machine.canTransition('stopping')) this.#machine.transition('stopping');
           if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
           this.#phase = undefined;
+          this.#loadedBytes = undefined;
+          this.#totalBytes = undefined;
           this.#emit();
           return;
         }
@@ -121,6 +131,8 @@ export class SessionLifecycle {
           if (this.#machine.canTransition('stopping')) this.#machine.transition('stopping');
           if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
           this.#phase = undefined;
+          this.#loadedBytes = undefined;
+          this.#totalBytes = undefined;
           this.#emit();
           return;
         }
@@ -129,6 +141,8 @@ export class SessionLifecycle {
           if (this.#machine.canTransition('stopping')) this.#machine.transition('stopping');
           if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
           this.#phase = undefined;
+          this.#loadedBytes = undefined;
+          this.#totalBytes = undefined;
           this.#emit();
           return;
         }
@@ -171,6 +185,8 @@ export class SessionLifecycle {
     await this.#stopInstance();
     if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
     this.#phase = undefined;
+    this.#loadedBytes = undefined;
+    this.#totalBytes = undefined;
     this.#emit();
   }
 
@@ -191,6 +207,8 @@ export class SessionLifecycle {
     this.#startAbortController = null;
     this.#startPromise = null;
     this.#phase = undefined;
+    this.#loadedBytes = undefined;
+    this.#totalBytes = undefined;
     this.#disposed = true;
     this.#listeners.clear();
   }
@@ -221,6 +239,16 @@ export class SessionLifecycle {
         this.#machine.transition(event.phase);
       }
       this.#phase = event.phase;
+      if (event.loadedBytes === undefined) {
+        this.#loadedBytes = undefined;
+      } else {
+        this.#loadedBytes = event.loadedBytes;
+      }
+      if (event.totalBytes === undefined) {
+        this.#totalBytes = undefined;
+      } else {
+        this.#totalBytes = event.totalBytes;
+      }
       this.#emit();
       return;
     }

@@ -1,8 +1,11 @@
 export function Footer() {
+  const year = new Date().getFullYear();
   return (
     <footer className="footer">
-      <span>LumiBoot</span>
-      <span>Interface de lancement d&apos;OS · moteurs intégrés à mesure des lots</span>
+      <span className="footer-brand">
+        Lumi<span className="wordmark-dot" aria-hidden="true" />Boot
+      </span>
+      <span className="footer-copy">© {year} LumiBoot</span>
     </footer>
   );
 }

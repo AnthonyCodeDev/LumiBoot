@@ -1,7 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { useCatalogStore } from '../../features/catalog/catalog.store';
-import { useVisibleSystems } from '../../features/catalog/catalog.selectors';
-import { padCount } from '../../lib/format';
 
 function useSearchShortcut(inputRef: React.RefObject<HTMLInputElement>) {
   useEffect(() => {
@@ -23,7 +21,6 @@ function useSearchShortcut(inputRef: React.RefObject<HTMLInputElement>) {
 export function CatalogueTop() {
   const query = useCatalogStore((state) => state.query);
   const setQuery = useCatalogStore((state) => state.setQuery);
-  const visibleCount = useVisibleSystems().length;
   const inputRef = useRef<HTMLInputElement>(null);
 
   useSearchShortcut(inputRef);
@@ -32,7 +29,7 @@ export function CatalogueTop() {
     <div className="catalogue-top">
       <div className="catalogue-heading-group">
         <h2 id="catalogue-heading">
-          Bibliothèque <span className="count">{padCount(visibleCount)}</span>
+          Bibliothèque
         </h2>
         <p>Systèmes disponibles dans votre environnement</p>
       </div>
@@ -54,9 +51,6 @@ export function CatalogueTop() {
           />
           <kbd>/</kbd>
         </label>
-        <span className="mode-select" aria-hidden="true">
-          Navigateur uniquement
-        </span>
       </div>
     </div>
   );

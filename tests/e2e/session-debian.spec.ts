@@ -28,6 +28,10 @@ test.describe('Session Debian 12 i386 (v86, boot réel)', () => {
     // Le conteneur de console reste monté pendant tout le démarrage.
     await expect(page.locator('.session-console')).toBeVisible();
 
+    // Les logs série sont masqués par défaut : on les affiche pour pouvoir
+    // lire/taper dans `.v86-serial` pendant le reste du test.
+    await page.getByRole('button', { name: 'Logs' }).click();
+
     const state = page.locator('.session-state');
     // `running` = marqueur émis par le Debian invité sur ttyS0, pas un timer.
     await expect(state).toHaveAttribute('data-state', 'running', { timeout: 180_000 });
@@ -45,6 +49,26 @@ test.describe('Session Debian 12 i386 (v86, boot réel)', () => {
     // Preuves produites par l'invité, jamais par React.
     await expect(serial).toHaveValue(/Debian GNU\/Linux 12 \(bookworm\)/, { timeout: 30_000 });
     await expect(serial).toHaveValue(/LumiBootOK/, { timeout: 30_000 });
+
+    // Autologin VGA (tty1) : l'utilisateur ne doit jamais taper son login.
+    // La console VGA en mode texte (vgacon, pas de framebuffer bochs-drm)
+    // doit afficher un shell connecté `lumiboot@lumiboot` avec la bannière
+    // `automatic login`, et ne doit PAS rester bloquée sur une invite
+    // `login:` en attente de saisie (timeout généreux : l'émulation
+    // logicielle met ~1-2 min à stabiliser l'écran texte).
+    // Note : la bannière d'autologin elle-même contient la chaîne
+    // `login:`, donc on vérifie l'absence d'invite *en attente* (écran se
+    // terminant par `login:`) plutôt qu'une absence naïve de la sous-chaîne.
+    const vga = page.locator('.v86-screen-text');
+    await expect(vga).toContainText(/lumiboot@lumiboot/, { timeout: 180_000 });
+    const vgaText = (await vga.textContent()) ?? '';
+    expect(vgaText).toContain('lumiboot@lumiboot');
+    expect(vgaText).toContain('automatic login');
+    expect(vgaText.trim()).not.toMatch(/login:\s*$/);
+
+    // sudo NOPASSWD pour lumiboot depuis la console série.
+    await serial.pressSequentially('sudo -n whoami\n', { delay: 25 });
+    await expect(serial).toHaveValue(/root/, { timeout: 30_000 });
 
     await page.getByRole('button', { name: 'Arrêter' }).click();
     await expect(state).toHaveAttribute('data-state', 'stopped', { timeout: 60_000 });

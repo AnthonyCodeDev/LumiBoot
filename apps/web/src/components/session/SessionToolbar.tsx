@@ -23,6 +23,10 @@ export interface SessionToolbarProps {
   onStop: () => void;
   onRestart: () => void;
   transitioning?: boolean;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: (() => void) | undefined;
+  logsOpen?: boolean;
+  onToggleLogs?: (() => void) | undefined;
 }
 
 export function SessionToolbar({
@@ -31,9 +35,23 @@ export function SessionToolbar({
   onStop,
   onRestart,
   transitioning = false,
+  isFullscreen = false,
+  onToggleFullscreen,
+  logsOpen = false,
+  onToggleLogs,
 }: SessionToolbarProps) {
   const launchProfile = getPrimaryLaunchProfile(system);
   const canStop = STOPPABLE.includes(session.state);
+  const totalBytes = session.totalBytes ?? 0;
+  const loadedBytes = session.loadedBytes ?? 0;
+  const hasProgress = session.state === 'downloading' && totalBytes > 0;
+  const progressPercent = hasProgress
+    ? Math.round(Math.min(Math.max(loadedBytes / totalBytes, 0), 1) * 100)
+    : null;
+  const stateLabel =
+    progressPercent !== null
+      ? `${STATE_LABELS[session.state]} · ${progressPercent} %`
+      : STATE_LABELS[session.state];
 
   return (
     <div className="session-toolbar">
@@ -49,8 +67,34 @@ export function SessionToolbar({
       </div>
       <div className="session-actions">
         <span className="session-state" data-state={session.state}>
-          {STATE_LABELS[session.state]}
+          {stateLabel}
         </span>
+        {onToggleFullscreen ? (
+          <Button
+            variant="outline"
+            type="button"
+            onClick={onToggleFullscreen}
+            aria-pressed={isFullscreen}
+            title={
+              isFullscreen
+                ? 'Quitter le plein écran (Échap)'
+                : 'Afficher la session en plein écran'
+            }
+          >
+            {isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
+          </Button>
+        ) : null}
+        {onToggleLogs ? (
+          <Button
+            variant="outline"
+            type="button"
+            onClick={onToggleLogs}
+            aria-pressed={logsOpen}
+            title={logsOpen ? 'Masquer les logs' : 'Afficher les logs'}
+          >
+            Logs
+          </Button>
+        ) : null}
         <Button
           variant="outline"
           type="button"

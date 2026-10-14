@@ -188,6 +188,32 @@ describe('SessionLifecycle', () => {
     expect(lifecycle.snapshot.state).toBe('running');
   });
 
+  it('recopie loadedBytes/totalBytes des événements progress dans le snapshot', async () => {
+    const engine = new ControlledEngine();
+    const registry = new VMRegistry([engine]);
+    const lifecycle = new SessionLifecycle(makeOS(), registry, 's-bytes');
+
+    const snapshots: Array<{ loadedBytes?: number; totalBytes?: number }> = [];
+    lifecycle.subscribe((snapshot) => {
+      const entry: { loadedBytes?: number; totalBytes?: number } = {};
+      if (snapshot.loadedBytes !== undefined) entry.loadedBytes = snapshot.loadedBytes;
+      if (snapshot.totalBytes !== undefined) entry.totalBytes = snapshot.totalBytes;
+      snapshots.push(entry);
+    });
+
+    const started = lifecycle.start(document.createElement('div'));
+    engine.startBarrier.resolve();
+    await started;
+
+    expect(lifecycle.snapshot.loadedBytes).toBe(1);
+    expect(lifecycle.snapshot.totalBytes).toBe(2);
+    expect(snapshots.some((s) => s.loadedBytes === 1 && s.totalBytes === 2)).toBe(true);
+
+    await lifecycle.stop();
+    expect(lifecycle.snapshot.loadedBytes).toBeUndefined();
+    expect(lifecycle.snapshot.totalBytes).toBeUndefined();
+  });
+
   it('signale les erreurs de nettoyage via le callback fourni', async () => {
     const instance: VMInstance = {
       id: 'instance-flaky',

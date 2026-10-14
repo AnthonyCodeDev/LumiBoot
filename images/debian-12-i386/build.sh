@@ -21,7 +21,7 @@ set -euo pipefail
 RELEASE="bookworm"
 ARCH="i386"
 DEBIAN_MIRROR="${DEBIAN_MIRROR:-https://deb.debian.org/debian}"
-DISK_SIZE="${DISK_SIZE:-2G}"
+DISK_SIZE="${DISK_SIZE:-3G}"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$HERE/build"
@@ -71,6 +71,29 @@ cat > "$ROOTFS/etc/fstab" <<EOF
 /dev/sda   /   ext4   defaults,noatime   0 1
 EOF
 
+# Clavier français AZERTY : écrit AVANT l'installation pour que console-setup /
+# keyboard-configuration le reprennent, et réécrit APRÈS (leur postinst peut
+# régénérer ce fichier depuis debconf) pour garantir XKBLAYOUT="fr".
+write_keyboard_config() {
+  cat > "$1/etc/default/keyboard" <<'EOF'
+XKBMODEL="pc105"
+XKBLAYOUT="fr"
+XKBVARIANT=""
+XKBOPTIONS=""
+BACKSPACE="guess"
+EOF
+}
+write_keyboard_config "$ROOTFS"
+
+# Pré-réponses debconf : évite tout prompt clavier/locale en noninteractif.
+cat > "$ROOTFS/tmp/lumiboot-preseed.txt" <<'EOF'
+keyboard-configuration keyboard-configuration/modelcode string pc105
+keyboard-configuration keyboard-configuration/layoutcode string fr
+keyboard-configuration keyboard-configuration/variantcode string
+keyboard-configuration keyboard-configuration/optionscode string
+console-setup console-setup/charmap47 select UTF-8
+EOF
+
 cat > "$ROOTFS/etc/apt/apt.conf.d/99lumiboot" <<EOF
 APT::Install-Recommends "false";
 APT::Install-Suggests "false";
@@ -95,14 +118,41 @@ mount_pseudo /dev/pts "$ROOTFS/dev/pts"
 mount -t proc proc "$ROOTFS/proc"
 mount -t sysfs sys "$ROOTFS/sys"
 
-echo "== 4. Installation des paquets (versions consignées) =="
+echo "== 4. Installation des paquets (socle utilisable + clavier + locale) =="
 chroot "$ROOTFS" bash -e -c '
   export DEBIAN_FRONTEND=noninteractive
+  if command -v debconf-set-selections >/dev/null 2>&1; then
+    debconf-set-selections /tmp/lumiboot-preseed.txt
+  fi
   apt-get update
   apt-get install -y --no-install-recommends \
+    -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
     linux-image-686 initramfs-tools systemd-sysv udev kmod \
-    bash coreutils util-linux mount login passwd
+    bash coreutils util-linux mount login passwd sudo \
+    curl wget ca-certificates gnupg openssl \
+    tar gzip bzip2 xz-utils zstd zip unzip \
+    less nano vim-tiny file tree rsync git \
+    bash-completion gawk sed grep findutils procps psmisc man-db manpages htop \
+    iproute2 iputils-ping dnsutils \
+    python3 perl \
+    console-setup kbd locales
 '
+rm -f "$ROOTFS/tmp/lumiboot-preseed.txt"
+
+echo "== 4b. Clavier fr + locales fr_FR/en_US =="
+# Réécriture ferme après install (postinst console-setup peut l'avoir régénéré).
+write_keyboard_config "$ROOTFS"
+sed -i 's/^# *\(fr_FR.UTF-8 UTF-8\)/\1/' "$ROOTFS/etc/locale.gen"
+sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' "$ROOTFS/etc/locale.gen"
+grep -qxF 'fr_FR.UTF-8 UTF-8' "$ROOTFS/etc/locale.gen" || echo 'fr_FR.UTF-8 UTF-8' >> "$ROOTFS/etc/locale.gen"
+grep -qxF 'en_US.UTF-8 UTF-8' "$ROOTFS/etc/locale.gen" || echo 'en_US.UTF-8 UTF-8' >> "$ROOTFS/etc/locale.gen"
+chroot "$ROOTFS" locale-gen
+printf 'LANG=fr_FR.UTF-8\n' > "$ROOTFS/etc/default/locale"
+
+echo "== 4c. vim : exposer /usr/bin/vim (vim-tiny ne fournit que vim.tiny) =="
+if [ -x "$ROOTFS/usr/bin/vim.tiny" ] && [ ! -e "$ROOTFS/usr/bin/vim" ]; then
+  chroot "$ROOTFS" update-alternatives --install /usr/bin/vim vim /usr/bin/vim.tiny 10
+fi
 
 echo "== 5. initramfs : pilotes stockage/FS émulés =="
 cat > "$ROOTFS/etc/initramfs-tools/modules" <<EOF
@@ -123,12 +173,38 @@ chroot "$ROOTFS" bash -e -c '
 
 install -D -m 0644 "$HERE/guest/serial-getty-autologin.conf" \
   "$ROOTFS/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf"
+install -D -m 0644 "$HERE/guest/getty-autologin.conf" \
+  "$ROOTFS/etc/systemd/system/getty@tty1.service.d/autologin.conf"
 install -D -m 0644 "$HERE/guest/lumiboot-ready.service" \
   "$ROOTFS/etc/systemd/system/lumiboot-ready.service"
+install -D -m 0644 "$HERE/guest/no-drm.conf" \
+  "$ROOTFS/etc/modprobe.d/lumiboot-no-drm.conf"
 
 chroot "$ROOTFS" bash -e -c '
   systemctl enable serial-getty@ttyS0.service
+  systemctl enable getty@tty1.service
   systemctl enable lumiboot-ready.service
+  if [ -f /lib/systemd/system/keyboard-setup.service ]; then
+    systemctl enable keyboard-setup.service
+  fi
+  if [ -f /lib/systemd/system/console-setup.service ]; then
+    systemctl enable console-setup.service
+  fi
+'
+
+# Debian active keyboard-setup.service via sysinit.target.wants (WantedBy
+# =sysinit.target) ; on ajoute aussi le lien multi-user.target.wants attendu
+# par la vérification d'acceptation. Sans effet double : unité oneshot.
+ln -sf /lib/systemd/system/keyboard-setup.service \
+  "$ROOTFS/etc/systemd/system/multi-user.target.wants/keyboard-setup.service"
+
+echo "== 6b. sudo NOPASSWD pour lumiboot =="
+printf "%s\n" "lumiboot ALL=(ALL) NOPASSWD:ALL" > "$ROOTFS/etc/sudoers.d/90-lumiboot"
+chmod 0440 "$ROOTFS/etc/sudoers.d/90-lumiboot"
+chroot "$ROOTFS" bash -e -c '
+  if command -v visudo >/dev/null 2>&1; then
+    visudo -cf /etc/sudoers.d/90-lumiboot
+  fi
 '
 
 echo "== 7. Régénération de l'initramfs =="
@@ -138,8 +214,36 @@ echo "== 8. Extraction noyau + initrd (même version) =="
 # Format par défaut de `dpkg-query -W` = "Paquet<TAB>Version" : pas de -f,
 # donc aucun `$` à échapper à travers les couches de shell/chroot.
 chroot "$ROOTFS" dpkg-query -W \
-  linux-image-686 initramfs-tools systemd-sysv udev bash coreutils util-linux mount login \
+  linux-image-686 initramfs-tools systemd-sysv udev kmod \
+  bash coreutils util-linux mount login passwd sudo \
+  curl wget ca-certificates gnupg openssl \
+  tar gzip bzip2 xz-utils zstd zip unzip \
+  less nano vim-tiny file tree rsync git \
+  bash-completion gawk sed grep findutils procps psmisc man-db manpages htop \
+  iproute2 iputils-ping dnsutils \
+  python3 perl console-setup kbd locales \
   > "$BUILD_DIR/packages.tsv" 2>/dev/null || true
+
+echo "== 8b. Vérification in-rootfs (outils, clavier, locale) =="
+chroot "$ROOTFS" bash -c '
+  for tool in curl wget git vim nano ping dig python3 perl htop tree rsync zstd unzip less file; do
+    if command -v "$tool" >/dev/null 2>&1; then
+      echo "OK   $tool -> $(command -v "$tool")"
+    else
+      echo "MISS $tool"
+    fi
+  done
+  echo "--- /etc/default/keyboard"; cat /etc/default/keyboard
+  if systemctl is-enabled keyboard-setup.service 2>/dev/null | grep -qx enabled; then
+    echo "keyboard-setup.service: ENABLED"
+  else
+    echo "keyboard-setup.service: NOT ENABLED"
+  fi
+  ls -l /etc/systemd/system/sysinit.target.wants/keyboard-setup.service \
+        /etc/systemd/system/multi-user.target.wants/keyboard-setup.service 2>/dev/null || true
+  echo "--- locales générées"; locale -a | grep -iE "fr_FR|en_US" || echo "(aucune)"
+  echo "--- os-release"; grep PRETTY_NAME /etc/os-release
+'
 
 KERNEL_VERSION="$(ls "$ROOTFS/boot" | sed -n 's/^vmlinuz-\(.*\)$/\1/p' | head -n1)"
 [ -n "${KERNEL_VERSION:-}" ] || { echo "Noyau introuvable dans $ROOTFS/boot." >&2; exit 1; }
