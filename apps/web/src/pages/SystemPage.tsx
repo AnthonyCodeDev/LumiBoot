@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { getSystemBySlug } from '@lumiboot/catalog';
 import { Button } from '../components/ui/Button';
 import { useSessionsStore } from '../features/sessions/sessions.store';
+import { getLaunchReadiness } from '../lib/launch';
 import {
   availabilityLabels,
   familyLabels,
@@ -25,6 +26,7 @@ export function SystemPage() {
     '--accent-rgb': system.accentRgb,
   } as CSSProperties;
   const launchProfile = getPrimaryLaunchProfile(system);
+  const readiness = getLaunchReadiness(system);
 
   return (
     <main className="system-detail">
@@ -75,13 +77,20 @@ export function SystemPage() {
             <Button
               variant="primary"
               type="button"
+              disabled={!readiness.canLaunch}
               onClick={() => {
+                if (!readiness.canLaunch) return;
                 const id = createSession(system.id);
                 navigate(`/session/${id}`);
               }}
             >
-              Préparer le lancement
+              Lancer une session
             </Button>
+            {!readiness.canLaunch && readiness.reason ? (
+              <p className="drawer-bodytext" role="status">
+                {readiness.reason}
+              </p>
+            ) : null}
           </div>
         </div>
       </div>

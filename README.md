@@ -4,18 +4,24 @@ Bibliothèque et lanceur de **systèmes d'exploitation dans le navigateur**, ins
 jeux et des services de cloud gaming. Interface unique, **plusieurs moteurs d'exécution
 interchangeables**.
 
-> **État : fondations (P0) consolidées.** L'interface React/TypeScript est réelle et data-driven,
-> le cœur `vm-core` expose des contrats complets (moteurs, cycle de vie, compatibilité) et le
-> catalogue est validé par Zod. Les lots d'exécution réelle arrivent ensuite, à commencer par
-> Debian via v86. Aucun bouton ne simule une machine virtuelle. Prochaines étapes : **P1
-> (vm-assets, vm-storage)** puis **Lot 1 — Debian 12 i386 via v86**.
+> **État : intégration v86 (Lot 1) implémentée.** Le moteur v86 est réellement branché derrière
+> `VMProvider` (WASM, BIOS, disque lu par HTTP Range, console VGA/série, marqueur `ttyS0`),
+> le cycle de vie gère arrêt/redémarrage/annulation, le manifeste d'image est validé par un
+> schéma Zod strict. Aucun bouton ne simule une machine virtuelle. Il reste à **construire et
+> publier l'image Debian 12 i386** (`images/debian-12-i386/build.sh`) puis à passer Debian à
+> `ready` après le smoke test réel dans le navigateur.
 
 ## Démarrage
 
 ```bash
 pnpm install
-pnpm dev         # http://127.0.0.1:5173
+pnpm assets:prepare   # copie v86.wasm + BIOS dans apps/web/public/v86/
+pnpm dev              # http://127.0.0.1:5173
 ```
+
+Les binaires du moteur (`v86.wasm`, `seabios.bin`, `vgabios.bin`) sont préparés par
+`scripts/prepare-v86-assets.mjs` (version et SHA verrouillés dans
+`scripts/v86-assets.lock.json`) ; `pnpm assets:check` vérifie leur intégrité.
 
 Autres commandes :
 
@@ -47,8 +53,8 @@ packages/vm-core         Cœur : contrats (VMEngine, VMInstance, VMCapabilities�
                          registre, compatibilité, repli honnête
 packages/vm-assets       Manifestes, téléchargement, cache et intégrité SHA-256 des images
 packages/vm-storage      Stockage persistant versionné, quotas et export/import
-packages/provider-v86    Moteur v86 (paresseux) — intégration réelle au Lot 1
-images/debian-12-i386    Manifeste + script de build + smoke test (non construit)
+packages/provider-v86    Moteur v86 réel : WASM, BIOS, disque HTTP Range, console VGA/série
+images/debian-12-i386    Script de build Debian + manifeste (image à construire puis publier)
 infra                    Docker Compose, Nginx, notes de déploiement local
 docs                     Brief, architecture, ADR, sécurité, licences
 prototype                Référence statique d'origine (référence visuelle)
@@ -82,8 +88,10 @@ les ADR dans [`docs/adr/`](docs/adr/).
 1. **P1 — Fiabilité** : `packages/vm-assets` (téléchargement, progression, annulation, reprise,
    SHA-256, cache, requêtes HTTP Range) et `packages/vm-storage` (stockage persistant versionné,
    quotas, export/import, backend mémoire et navigateur).
-2. **Lot 1 — Debian 12 i386 réel via v86** : construire l'image, l'enregistrer, brancher
-   `V86Provider`, tester `uname -a`, `cat /etc/os-release`, écriture de fichier, reboot.
+2. **Lot 1 — Debian 12 i386 réel via v86** : le code est en place ; il reste à construire l'image
+   (`images/debian-12-i386/build.sh`), la publier (`apps/web/public/images/debian-12-i386/`),
+   exécuter le smoke test (`VM_E2E_ASSETS=1 pnpm test:e2e`), puis passer Debian à
+   `availability:'ready'` **et** `engines.v86.integrated` à `true`.
 3. **Lot 2 — Persistance** : snapshots de disque vs RAM/CPU, continuité après refresh.
 4. **Lot 3 — Autres moteurs locaux** : deuxième Linux et Windows historique, sans modifier le cœur ni l'UI.
 5. **Lot 4 — Extension navigateur** : moteurs WASM additionnels, toujours sans backend de virtualisation.

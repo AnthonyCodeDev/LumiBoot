@@ -46,11 +46,19 @@ export class SessionLifecycle {
   #startAbortController: AbortController | null = null;
   #starting = false;
   #runToken = 0;
+  #disposed = false;
+  readonly #onCleanupError: ((error: unknown, context: string) => void) | undefined;
 
-  constructor(system: OSDefinition, registry: VMRegistry, id: string = createSessionId()) {
+  constructor(
+    system: OSDefinition,
+    registry: VMRegistry,
+    id: string = createSessionId(),
+    onCleanupError?: (error: unknown, context: string) => void,
+  ) {
     this.system = system;
     this.#registry = registry;
     this.id = id;
+    this.#onCleanupError = onCleanupError;
   }
 
   get snapshot(): SessionSnapshot {
@@ -72,6 +80,8 @@ export class SessionLifecycle {
   }
 
   async start(mountTarget: unknown, configuration?: VMConfiguration): Promise<void> {
+    // Une session détruite est terminale : aucune réactivation silencieuse.
+    if (this.#disposed) return;
     const current = this.#machine.state;
     if (this.#starting && this.#startPromise !== null) return this.#startPromise;
     if (this.#instance !== null) return;
@@ -153,8 +163,10 @@ export class SessionLifecycle {
     }
     try {
       await this.#instance?.stop();
-    } catch {
-      /* arrêt best-effort : ne pas masquer l'état final */
+    } catch (error) {
+      // Arrêt best-effort : on n'interrompt pas la transition, mais l'échec
+      // doit rester observable (dev + tests) plutôt que d'être avalé.
+      this.#reportCleanupError(error, 'stop');
     }
     await this.#stopInstance();
     if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
@@ -179,12 +191,25 @@ export class SessionLifecycle {
     this.#startAbortController = null;
     this.#startPromise = null;
     this.#phase = undefined;
+    this.#disposed = true;
     this.#listeners.clear();
+  }
+
+  get disposed(): boolean {
+    return this.#disposed;
   }
 
   #onEvent(event: SessionEvent): void {
     if (event.type === 'state') {
-      if (this.#machine.canTransition(event.state)) this.#machine.transition(event.state);
+      if (this.#machine.canTransition(event.state)) {
+        this.#machine.transition(event.state);
+      } else if (event.state === 'running' && this.#machine.canTransition('booting')) {
+        // Preuve de démarrage reçue sans phase « booting » explicite : on
+        // traverse `booting` pour respecter l'invariant de la machine à états
+        // tout en honorant la preuve réelle (`running`).
+        this.#machine.transition('booting');
+        this.#machine.transition('running');
+      }
       this.#emit();
       return;
     }
@@ -216,21 +241,28 @@ export class SessionLifecycle {
     if (!instance) return;
     try {
       await instance.dispose();
-    } catch {
-      /* libération best-effort */
+    } catch (error) {
+      this.#reportCleanupError(error, 'dispose');
     }
   }
 
   async #disposeInstance(instance: VMInstance): Promise<void> {
     try {
       await instance.stop();
-    } catch {
-      /* arrêt best-effort avant nettoyage */
+    } catch (error) {
+      this.#reportCleanupError(error, 'stop');
     }
     try {
       await instance.dispose();
-    } catch {
-      /* libération best-effort */
+    } catch (error) {
+      this.#reportCleanupError(error, 'dispose');
+    }
+  }
+
+  #reportCleanupError(error: unknown, context: string): void {
+    this.#onCleanupError?.(error, context);
+    if (typeof console !== 'undefined') {
+      console.warn(`[SessionLifecycle ${this.id}] échec de nettoyage (${context}).`, error);
     }
   }
 

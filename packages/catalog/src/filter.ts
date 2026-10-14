@@ -1,11 +1,10 @@
 import type { OSDefinition, OSFamily } from '@lumiboot/contracts';
 
-export type FamilyFilter = OSFamily | 'all' | 'favorites';
+export type FamilyFilter = OSFamily | 'all';
 
 export interface CatalogFilterCriteria {
   family: FamilyFilter;
   query: string;
-  favoriteIds?: Iterable<string>;
   systems: readonly OSDefinition[];
 }
 
@@ -17,13 +16,8 @@ export function normalizeText(value: string): string {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
-export function matchesFamily(
-  os: OSDefinition,
-  family: FamilyFilter,
-  favoriteIds: ReadonlySet<string>,
-): boolean {
+export function matchesFamily(os: OSDefinition, family: FamilyFilter): boolean {
   if (family === 'all') return true;
-  if (family === 'favorites') return favoriteIds.has(os.id);
   return os.family === family;
 }
 
@@ -40,11 +34,10 @@ function haystack(os: OSDefinition): string {
 }
 
 export function filterSystems(criteria: CatalogFilterCriteria): OSDefinition[] {
-  const favorites = new Set(criteria.favoriteIds ?? []);
   const query = normalizeText(criteria.query.trim());
 
   return criteria.systems.filter((os) => {
-    const familyOk = matchesFamily(os, criteria.family, favorites);
+    const familyOk = matchesFamily(os, criteria.family);
     const queryOk = query.length === 0 || haystack(os).includes(query);
     return familyOk && queryOk;
   });

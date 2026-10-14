@@ -109,10 +109,22 @@ LumiBoot-source.zip
 
 # ==========================================
 # Environment files
-# Never commit real credentials or secrets.
-# Keep only examples under version control.
+# Ignorer tous les secrets, y compris dans les sous-dossiers.
+# Seuls les exemples sont versionnés.
 # ==========================================
+.env
+.env.*
 **/.env
 **/.env.*
 !.env.example
+!**/.env.example
 !.env.*.example
+!**/.env.*.example
+
+# ==========================================
+# v86 engine binaries and system disk images
+# Prepared by scripts/prepare-v86-assets.mjs and images/*/build.sh.
+# Served at runtime, obtained from approved storage in CI/CD — never committed.
+# ==========================================
+/apps/web/public/v86/
+/apps/web/public/images/

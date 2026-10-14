@@ -140,6 +140,9 @@ importers:
       '@lumiboot/vm-core':
         specifier: workspace:*
         version: link:../vm-core
+      v86:
+        specifier: 0.5.471
+        version: 0.5.471
     devDependencies:
       typescript:
         specifier: ^5.6.3
@@ -150,6 +153,9 @@ importers:
       '@lumiboot/contracts':
         specifier: workspace:*
         version: link:../contracts
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: ^5.6.3
@@ -1577,6 +1583,9 @@ packages:
 
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
+
+  v86@0.5.471:
+    resolution: {integrity: sha512-2TuNIpJU6sYYKnq/xR6F9Epi59DVBYpmkcV1LzLgNwHWxs/uFPB4szeYdsbhn6P8kV5YOlC6+7xSHEOQ2UiYdQ==}
 
   vite-node@2.1.9:
     resolution: {integrity: sha512-AM9aQ/IPrW/6ENLQg3AGY4K1N2TGZdR5e4gu/MmmR2xR3Ll1+dib+nook92g4TV3PXVyeyxdWwtaCAiUL0hMxA==}
@@ -3062,6 +3071,8 @@ snapshots:
   uri-js@4.4.1:
     dependencies:
       punycode: 2.3.1
+
+  v86@0.5.471: {}
 
   vite-node@2.1.9(@types/node@22.20.5):
     dependencies:

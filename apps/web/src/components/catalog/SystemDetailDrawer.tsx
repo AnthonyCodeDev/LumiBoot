@@ -2,9 +2,9 @@ import { useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCatalogStore } from '../../features/catalog/catalog.store';
 import { useSelectedSystem } from '../../features/catalog/catalog.selectors';
-import { useFavoritesStore } from '../../features/favorites/favorites.store';
 import { useSessionsStore } from '../../features/sessions/sessions.store';
 import { Button } from '../ui/Button';
+import { getLaunchReadiness } from '../../lib/launch';
 import {
   availabilityLabels,
   familyLabels,
@@ -24,8 +24,6 @@ function accentStyle(system: OSDefinition): CSSProperties {
 export function SystemDetailDrawer() {
   const system = useSelectedSystem();
   const closeDetails = useCatalogStore((state) => state.closeDetails);
-  const favorites = useFavoritesStore((state) => state.ids);
-  const toggleFavorite = useFavoritesStore((state) => state.toggle);
   const createSession = useSessionsStore((state) => state.create);
   const navigate = useNavigate();
 
@@ -72,11 +70,11 @@ export function SystemDetailDrawer() {
     };
   }, [open, closeDetails]);
 
-  const favorite = system ? favorites.has(system.id) : false;
   const launchProfile = system ? getPrimaryLaunchProfile(system) : null;
+  const readiness = system ? getLaunchReadiness(system) : null;
 
   const launch = () => {
-    if (!system) return;
+    if (!system || (readiness && !readiness.canLaunch)) return;
     const id = createSession(system.id);
     closeDetails();
     navigate(`/session/${id}`);
@@ -147,17 +145,19 @@ export function SystemDetailDrawer() {
               <h3>État de l&apos;intégration</h3>
               <p className="drawer-bodytext">{system.integrationNote}</p>
               <div className="drawer-actions">
-                <Button variant="primary" type="button" onClick={launch}>
-                  {system.featured ? 'Préparer le lancement' : 'Voir la disponibilité'}
-                </Button>
                 <Button
-                  variant="outline"
-                  className="drawer-fav"
+                  variant="primary"
                   type="button"
-                  onClick={() => toggleFavorite(system.id)}
+                  onClick={launch}
+                  disabled={readiness ? !readiness.canLaunch : false}
                 >
-                  {favorite ? '★ En favoris' : '☆ Ajouter aux favoris'}
+                  Lancer une session
                 </Button>
+                {readiness && !readiness.canLaunch && readiness.reason ? (
+                  <p className="drawer-bodytext" role="status">
+                    {readiness.reason}
+                  </p>
+                ) : null}
                 <Link
                   className="btn btn-outline drawer-fav"
                   to={`/systems/${system.slug}`}

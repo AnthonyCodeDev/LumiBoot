@@ -12,12 +12,10 @@ describe('normalizeText', () => {
 });
 
 describe('matchesFamily', () => {
-  it('gère all, famille et favoris', () => {
-    expect(matchesFamily(debian, 'all', new Set())).toBe(true);
-    expect(matchesFamily(debian, 'linux', new Set())).toBe(true);
-    expect(matchesFamily(debian, 'windows', new Set())).toBe(false);
-    expect(matchesFamily(debian, 'favorites', new Set())).toBe(false);
-    expect(matchesFamily(debian, 'favorites', new Set([debian.id]))).toBe(true);
+  it('gère all et famille', () => {
+    expect(matchesFamily(debian, 'all')).toBe(true);
+    expect(matchesFamily(debian, 'linux')).toBe(true);
+    expect(matchesFamily(debian, 'windows')).toBe(false);
   });
 });
 
@@ -32,12 +30,6 @@ describe('filterSystems', () => {
     expect(filterSystems({ ...base, family: 'windows' })).toHaveLength(3);
     expect(filterSystems({ ...base, query: 'fedora' })).toHaveLength(1);
     expect(filterSystems({ ...base, query: 'ubuntu x64' })).toHaveLength(0);
-  });
-
-  it('filtre par favoris', () => {
-    expect(filterSystems({ ...base, family: 'favorites', favoriteIds: [debian.id] })).toEqual([
-      debian,
-    ]);
   });
 });
 

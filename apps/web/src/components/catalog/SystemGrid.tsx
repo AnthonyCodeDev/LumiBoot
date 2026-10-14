@@ -1,6 +1,5 @@
 import { useCatalogStore } from '../../features/catalog/catalog.store';
 import { useVisibleSystems } from '../../features/catalog/catalog.selectors';
-import { useFavoritesStore } from '../../features/favorites/favorites.store';
 import { Button } from '../ui/Button';
 import { SystemCard } from './SystemCard';
 
@@ -8,8 +7,6 @@ export function SystemGrid() {
   const visible = useVisibleSystems();
   const openDetails = useCatalogStore((state) => state.openDetails);
   const resetFilters = useCatalogStore((state) => state.resetFilters);
-  const favorites = useFavoritesStore((state) => state.ids);
-  const toggleFavorite = useFavoritesStore((state) => state.toggle);
 
   if (visible.length === 0) {
     return (
@@ -30,9 +27,7 @@ export function SystemGrid() {
         <SystemCard
           key={system.id}
           system={system}
-          favorite={favorites.has(system.id)}
           onOpen={(target) => openDetails(target.id)}
-          onToggleFavorite={toggleFavorite}
         />
       ))}
     </div>

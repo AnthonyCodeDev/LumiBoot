@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Adapter v86 (WebAssembly) — squelette chargé paresseusement, intégration réelle au Lot 1",
+  "description": "Moteur v86 (WebAssembly) x86 i386 : WASM, BIOS, disque HTTP Range, console VGA/série",
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -18,7 +18,8 @@
   "dependencies": {
     "@lumiboot/contracts": "workspace:*",
     "@lumiboot/vm-assets": "workspace:*",
-    "@lumiboot/vm-core": "workspace:*"
+    "@lumiboot/vm-core": "workspace:*",
+    "v86": "0.5.471"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

@@ -5,6 +5,9 @@ import { createRegistry } from './registry';
 
 const registry = createRegistry();
 const lifecycles = new Map<string, SessionLifecycle>();
+const unsubscribers = new Map<string, () => void>();
+/** Ids détruits : interdit toute réinsertion par un snapshot tardif. */
+const disposedIds = new Set<string>();
 
 export interface SessionsState {
   sessions: Record<string, SessionSnapshot>;
@@ -27,9 +30,12 @@ export const useSessionsStore = create<SessionsState>((set) => ({
     }
     const lifecycle = new SessionLifecycle(system, registry);
     lifecycles.set(lifecycle.id, lifecycle);
-    lifecycle.subscribe((snapshot) =>
-      set((state) => ({ sessions: { ...state.sessions, [lifecycle.id]: snapshot } })),
-    );
+    const unsubscribe = lifecycle.subscribe((snapshot) => {
+      // Un listener conservé ne doit jamais réinsérer une session détruite.
+      if (disposedIds.has(lifecycle.id)) return;
+      set((state) => ({ sessions: { ...state.sessions, [lifecycle.id]: snapshot } }));
+    });
+    unsubscribers.set(lifecycle.id, unsubscribe);
     set((state) => ({ sessions: { ...state.sessions, [lifecycle.id]: lifecycle.snapshot } }));
     return lifecycle.id;
   },
@@ -42,12 +48,18 @@ export const useSessionsStore = create<SessionsState>((set) => ({
   dispose: async (id) => {
     const lifecycle = lifecycles.get(id);
     if (!lifecycle) return;
-    await lifecycle.dispose();
-    lifecycles.delete(id);
-    set((state) => {
-      const sessions = { ...state.sessions };
-      delete sessions[id];
-      return { sessions };
-    });
+    disposedIds.add(id);
+    try {
+      await lifecycle.dispose();
+    } finally {
+      unsubscribers.get(id)?.();
+      unsubscribers.delete(id);
+      lifecycles.delete(id);
+      set((state) => {
+        const sessions = { ...state.sessions };
+        delete sessions[id];
+        return { sessions };
+      });
+    }
   },
 }));

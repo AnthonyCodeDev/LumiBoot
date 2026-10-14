@@ -22,10 +22,13 @@ export const launchProfiles = [
     engineId: 'v86',
     executionMode: 'browser',
     minMemoryMiB: 128,
+    // Le choix du moteur et les paramètres d'exécution vivent dans le PROFIL,
+    // jamais dans l'image : un même disque Debian peut ainsi être associé à
+    // plusieurs profils (v86, puis un autre émulateur) sans dupliquer l'image.
     configuration: {
-      memoryMiB: 768,
+      memoryMiB: 512,
       vgaMemoryMiB: 16,
-      bootDevice: 'cdrom',
+      bootDevice: 'disk',
     },
     slug: 'debian-12-i386',
     displayName: 'Debian',

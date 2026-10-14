@@ -156,4 +156,77 @@ describe('SessionLifecycle', () => {
     expect(lifecycle.snapshot.state).toBe('error');
     expect(lifecycle.snapshot.error?.code).toBe('START_FAILED');
   });
+
+  it('atteint running même si le moteur ne signale pas la phase booting', async () => {
+    const instance: VMInstance = {
+      id: 'instance-only-running',
+      providerId: 'only-running',
+      systemId: 'debian-12-i386',
+      async stop() {},
+      async dispose() {},
+      subscribe(listener) {
+        listener({ type: 'state', state: 'running' });
+        return () => undefined;
+      },
+    };
+    const engine: VMEngine = {
+      id: 'only-running',
+      capabilities(): VMCapabilities {
+        return NO_CAPABILITIES;
+      },
+      canRun(): boolean {
+        return true;
+      },
+      async start(): Promise<VMInstance> {
+        return instance;
+      },
+    };
+
+    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's4');
+    await lifecycle.start(document.createElement('div'));
+
+    expect(lifecycle.snapshot.state).toBe('running');
+  });
+
+  it('signale les erreurs de nettoyage via le callback fourni', async () => {
+    const instance: VMInstance = {
+      id: 'instance-flaky',
+      providerId: 'flaky',
+      systemId: 'debian-12-i386',
+      async stop() {
+        throw new Error('stop boom');
+      },
+      async dispose() {
+        throw new Error('dispose boom');
+      },
+      subscribe() {
+        return () => undefined;
+      },
+    };
+    const engine: VMEngine = {
+      id: 'flaky',
+      capabilities(): VMCapabilities {
+        return NO_CAPABILITIES;
+      },
+      canRun(): boolean {
+        return true;
+      },
+      async start(): Promise<VMInstance> {
+        return instance;
+      },
+    };
+
+    const errors: string[] = [];
+    const lifecycle = new SessionLifecycle(
+      makeOS(),
+      new VMRegistry([engine]),
+      's5',
+      (_error, context) => errors.push(context),
+    );
+    await lifecycle.start(document.createElement('div'));
+    await lifecycle.stop();
+
+    expect(errors).toContain('stop');
+    expect(errors).toContain('dispose');
+  });
 });

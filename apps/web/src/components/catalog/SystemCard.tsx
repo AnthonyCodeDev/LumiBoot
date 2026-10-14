@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import type { OSDefinition } from '@lumiboot/contracts';
 import {
   architectureLabels,
+  availabilityLabels,
   familyLabels,
   getPrimaryLaunchProfile,
   launchProfileShortLabel,
@@ -9,9 +10,7 @@ import {
 
 export interface SystemCardProps {
   system: OSDefinition;
-  favorite: boolean;
   onOpen: (system: OSDefinition) => void;
-  onToggleFavorite: (id: string) => void;
 }
 
 function accentStyle(system: OSDefinition): CSSProperties {
@@ -21,7 +20,7 @@ function accentStyle(system: OSDefinition): CSSProperties {
   } as CSSProperties;
 }
 
-export function SystemCard({ system, favorite, onOpen, onToggleFavorite }: SystemCardProps) {
+export function SystemCard({ system, onOpen }: SystemCardProps) {
   const launchProfile = getPrimaryLaunchProfile(system);
 
   return (
@@ -29,23 +28,22 @@ export function SystemCard({ system, favorite, onOpen, onToggleFavorite }: Syste
       className="os-card"
       style={accentStyle(system)}
       data-id={system.id}
+      tabIndex={0}
+      aria-label={`Ouvrir les détails de ${system.displayName}`}
       onClick={() => onOpen(system)}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpen(system);
+        }
+      }}
     >
       <div className="card-cover">
+        <span className="card-status" data-state={system.availability}>
+          {availabilityLabels[system.availability]}
+        </span>
         <img className="os-logo" src={system.iconUrl} alt="" loading="lazy" />
-        <button
-          className={`favorite-button${favorite ? ' is-favorite' : ''}`}
-          type="button"
-          data-action="favorite"
-          aria-label={favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-          aria-pressed={favorite}
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleFavorite(system.id);
-          }}
-        >
-          {favorite ? '★' : '☆'}
-        </button>
       </div>
       <div className="card-info">
         <h3>{system.displayName}</h3>

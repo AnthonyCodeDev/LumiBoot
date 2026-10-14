@@ -30,9 +30,12 @@ export function CatalogueTop() {
 
   return (
     <div className="catalogue-top">
-      <h2 id="catalogue-heading">
-        Bibliothèque <span className="count">{padCount(visibleCount)}</span>
-      </h2>
+      <div className="catalogue-heading-group">
+        <h2 id="catalogue-heading">
+          Bibliothèque <span className="count">{padCount(visibleCount)}</span>
+        </h2>
+        <p>Systèmes disponibles dans votre environnement</p>
+      </div>
       <div className="catalogue-tools">
         <label className="search" htmlFor="search-input">
           <svg viewBox="0 0 24 24" aria-hidden="true">

@@ -1,5 +1,5 @@
 import type { OSDefinition } from '@lumiboot/contracts';
-import type { SessionSnapshot } from '@lumiboot/vm-core';
+import type { SessionSnapshot, VMState } from '@lumiboot/vm-core';
 import { Button } from '../ui/Button';
 import { getPrimaryLaunchProfile, launchProfileLabel } from '../../lib/labels';
 
@@ -14,17 +14,26 @@ const STATE_LABELS: Record<SessionSnapshot['state'], string> = {
   error: 'Erreur',
 };
 
+/** États pendant lesquels une demande d'arrêt a du sens. */
+const STOPPABLE: readonly VMState[] = ['preparing', 'downloading', 'booting', 'running'];
+
 export interface SessionToolbarProps {
   session: SessionSnapshot;
   system: OSDefinition;
   onStop: () => void;
   onRestart: () => void;
+  transitioning?: boolean;
 }
 
-export function SessionToolbar({ session, system, onStop, onRestart }: SessionToolbarProps) {
-  const busy =
-    session.state === 'preparing' || session.state === 'booting' || session.state === 'running';
+export function SessionToolbar({
+  session,
+  system,
+  onStop,
+  onRestart,
+  transitioning = false,
+}: SessionToolbarProps) {
   const launchProfile = getPrimaryLaunchProfile(system);
+  const canStop = STOPPABLE.includes(session.state);
 
   return (
     <div className="session-toolbar">
@@ -46,11 +55,11 @@ export function SessionToolbar({ session, system, onStop, onRestart }: SessionTo
           variant="outline"
           type="button"
           onClick={onStop}
-          disabled={!busy && session.state !== 'booting'}
+          disabled={transitioning || !canStop}
         >
           Arrêter
         </Button>
-        <Button variant="primary" type="button" onClick={onRestart}>
+        <Button variant="primary" type="button" onClick={onRestart} disabled={transitioning}>
           Redémarrer
         </Button>
       </div>

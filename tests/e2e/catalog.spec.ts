@@ -28,22 +28,4 @@ test.describe('Bibliothèque', () => {
     await expect(drawer).not.toHaveClass(/open/);
     await expect(page.getByRole('dialog')).toBeHidden();
   });
-
-  test('persiste un favori après rechargement', async ({ page }) => {
-    await page.goto('/');
-    const firstCard = page.locator('.os-card').first();
-    await firstCard.getByRole('button', { name: /favoris/ }).click();
-    await expect(firstCard.getByRole('button', { name: /favoris/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-
-    await page.reload();
-    await expect(
-      page
-        .locator('.os-card')
-        .first()
-        .getByRole('button', { name: /favoris/ }),
-    ).toHaveAttribute('aria-pressed', 'true');
-  });
 });

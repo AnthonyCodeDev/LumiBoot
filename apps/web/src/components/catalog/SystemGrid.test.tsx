@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event';
 import { systems } from '@lumiboot/catalog';
 import { SystemGrid } from './SystemGrid';
 import { useCatalogStore } from '../../features/catalog/catalog.store';
-import { useFavoritesStore } from '../../features/favorites/favorites.store';
 
 beforeEach(() => {
   useCatalogStore.setState({
@@ -13,7 +12,6 @@ beforeEach(() => {
     query: '',
     selectedId: null,
   });
-  useFavoritesStore.setState({ ids: new Set<string>() });
 });
 
 describe('SystemGrid', () => {
@@ -41,11 +39,18 @@ describe('SystemGrid', () => {
     expect(screen.getAllByRole('article')).toHaveLength(8);
   });
 
-  it('bascule un favori sur la première carte', async () => {
-    const user = userEvent.setup();
+  it('affiche le badge de statut de disponibilité sur chaque carte', () => {
     render(<SystemGrid />);
-    const firstCard = screen.getAllByRole('article')[0]!;
-    await user.click(within(firstCard).getByRole('button', { name: /favoris/i }));
-    expect(useFavoritesStore.getState().ids.has('debian-12-i386')).toBe(true);
+    const cards = screen.getAllByRole('article');
+    expect(cards).toHaveLength(8);
+    for (const card of cards) {
+      // Debian 12 i386 a prouvé un vrai boot (Lot 2) : badge « Disponible ».
+      // Tous les autres systèmes restent « En préparation ».
+      const name = card.getAttribute('aria-label') ?? '';
+      const expected = name.includes('Debian') ? 'Disponible' : 'En préparation';
+      const badge = within(card).getByText(expected);
+      expect(badge.getAttribute('data-state')).toBe(name.includes('Debian') ? 'ready' : 'planned');
+      expect(badge.className).toContain('card-status');
+    }
   });
 });

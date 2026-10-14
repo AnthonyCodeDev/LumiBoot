@@ -8,6 +8,18 @@ export interface ImageFileRef {
   version?: string;
 }
 
+/**
+ * Paramètres de démarrage propres à une image, optionnels. Ils permettent de
+ * faire varier les chemins des binaires du moteur et la ligne de commande du
+ * noyau sans modifier le code du provider.
+ */
+export interface ImageBootOptions {
+  cmdline?: string;
+  wasmPath?: string;
+  biosUrl?: string;
+  vgaBiosUrl?: string;
+}
+
 export interface ImageManifest {
   ref: string;
   architecture: Architecture;
@@ -15,6 +27,7 @@ export interface ImageManifest {
   vgaMemoryMiB?: number;
   files: Record<string, ImageFileRef>;
   license: string;
+  boot?: ImageBootOptions;
 }
 
 const manifests = new Map<string, ImageManifest>();

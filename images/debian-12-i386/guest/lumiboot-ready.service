@@ -1,0 +1,14 @@
+[Unit]
+Description=LumiBoot guest boot readiness marker
+# Émis uniquement quand le système multi-utilisateur est atteint.
+After=systemd-user-sessions.service
+Wants=systemd-user-sessions.service
+
+[Service]
+Type=oneshot
+# La balise provient du système invité réel, jamais de JavaScript.
+ExecStart=/bin/sh -c 'printf "LUMIBOOT_GUEST_READY:debian-12-i386\n" > /dev/ttyS0'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

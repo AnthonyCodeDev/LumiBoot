@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSystemById } from '@lumiboot/catalog';
 import { SessionScreen } from '../components/session/SessionScreen';
@@ -15,6 +15,9 @@ export function SessionPage() {
   const createSession = useSessionsStore((state) => state.create);
   const navigate = useNavigate();
   const consoleRef = useRef<HTMLDivElement>(null);
+  const mountedRef = useRef(true);
+  const activeIdRef = useRef<string | null>(null);
+  const [restarting, setRestarting] = useState(false);
 
   const system = session ? getSystemById(session.systemId) : null;
   const sessionId = session?.id;
@@ -23,9 +26,22 @@ export function SessionPage() {
     if (!sessionId || !system) return;
     const element = consoleRef.current;
     if (!element) return;
+
+    mountedRef.current = true;
+    activeIdRef.current = sessionId;
     void boot(sessionId, element);
+
     return () => {
-      void dispose(sessionId);
+      mountedRef.current = false;
+      // React StrictMode démonte puis remonte de façon synchrone. On repousse
+      // la libération dans une macrotâche : si la même session est réactivée
+      // immédiatement (montage double), on l'annule ; sinon (navigation ou
+      // démontage réel) on libère la session pour ne laisser aucun orphelin.
+      window.setTimeout(() => {
+        const superseded = activeIdRef.current === sessionId && mountedRef.current;
+        if (superseded) return;
+        void dispose(sessionId);
+      }, 0);
     };
   }, [sessionId, system, boot, dispose]);
 
@@ -44,17 +60,31 @@ export function SessionPage() {
     );
   }
 
+  const restart = async (): Promise<void> => {
+    if (restarting) return;
+    setRestarting(true);
+    try {
+      // Arrêter ET libérer l'ancienne session avant d'en créer une nouvelle.
+      await stop(session.id);
+      await dispose(session.id);
+      const nextId = createSession(system.id);
+      navigate(`/session/${nextId}`, { replace: true });
+    } finally {
+      setRestarting(false);
+    }
+  };
+
   return (
     <SessionScreen
       session={session}
       system={system}
       consoleRef={consoleRef}
+      transitioning={restarting}
       onStop={() => {
         void stop(session.id);
       }}
       onRestart={() => {
-        const nextId = createSession(system.id);
-        navigate(`/session/${nextId}`, { replace: true });
+        void restart();
       }}
     />
   );

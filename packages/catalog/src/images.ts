@@ -16,7 +16,10 @@ export const images = [
     id: 'debian-12-i386-image',
     familyId: 'debian',
     architecture: 'i386',
-    availability: 'planned',
+    // `ready` uniquement après un boot réel prouvé dans le navigateur (tests E2E).
+    availability: 'ready',
+    // Référence du manifeste d'image (indépendante du moteur choisi par le profil).
+    imageRef: 'debian-12-i386',
     requirements: ['Navigateur moderne', 'WebAssembly', 'Mémoire suffisante'],
     integrationNote: "Premier système du MVP. L'image Linux arrive en premier lot.",
   },

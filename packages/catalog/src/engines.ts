@@ -22,7 +22,7 @@ export const engines: Record<EngineId, EngineDefinition> = {
     label: 'v86 / WebAssembly',
     runtime: 'browser',
     description: 'Émulateur x86 32 bits en WebAssembly, exécuté dans l’onglet du visiteur.',
-    integrated: false,
+    integrated: true,
   },
   'wasm-x86': {
     id: 'wasm-x86',

@@ -6,7 +6,7 @@ const variantClass: Record<Variant, string> = {
   primary: 'btn-primary',
   outline: 'btn-outline',
   danger: 'btn-danger',
-  ghost: '',
+  ghost: 'btn-ghost',
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
