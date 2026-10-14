@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+  color-scheme: dark;
+  font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background: #0b0c0e;
+  color: #f2f3f5;
+  font-synthesis: none;
+
+  --bg: #0b0c0e;
+  --panel: #131417;
+  --panel-2: #17191d;
+  --line: #24262b;
+  --line-soft: #1a1c20;
+  --text: #f2f3f5;
+  --muted: #8b9099;
+  --muted-2: #5e636b;
+  --accent: #cdeed6;
+  --accent-ink: #10231a;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--bg);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+svg {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+::selection {
+  background: #cdeed655;
+  color: #fff;
+}
+
+[hidden] {
+  display: none !important;
+}

@@ -1,0 +1,70 @@
+import type { OSDefinition, SessionEvent } from '@lumiboot/contracts';
+import { VMError } from '../errors/VMError';
+import { createSessionId } from '../ids';
+import { NO_CAPABILITIES, type VMCapabilities } from '../contracts/VMCapabilities';
+import type { VMEngine } from '../contracts/VMEngine';
+import type { VMInstance } from '../contracts/VMInstance';
+
+export const UNAVAILABLE_PROVIDER_ID = 'unavailable';
+
+/**
+ * Construit une instance qui signale honnêtement qu'aucun moteur ne peut
+ * démarrer le système : le premier abonné reçoit une erreur typée. Aucune
+ * progression simulée n'est jamais émise.
+ */
+export function createErrorHandle(
+  providerId: string,
+  systemId: string,
+  error: VMError,
+  id: string = createSessionId(),
+): VMInstance {
+  const listeners = new Set<(event: SessionEvent) => void>();
+  const emit = (event: SessionEvent): void => {
+    for (const listener of listeners) listener(event);
+  };
+
+  return {
+    id,
+    providerId,
+    systemId,
+    async stop(): Promise<void> {
+      emit({ type: 'state', state: 'stopped' });
+    },
+    async dispose(): Promise<void> {
+      listeners.clear();
+    },
+    subscribe(listener): () => void {
+      listeners.add(listener);
+      listener({ type: 'error', code: error.code, message: error.message });
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+/**
+ * Moteur de repli : il ne calcule rien et n'affiche jamais de fausse VM. Il
+ * existe pour que l'interface reste honnête quand aucun moteur réel n'est
+ * disponible pour un système donné.
+ */
+export class UnavailableProvider implements VMEngine {
+  readonly id = UNAVAILABLE_PROVIDER_ID;
+
+  capabilities(): VMCapabilities {
+    return NO_CAPABILITIES;
+  }
+
+  canRun(_os: OSDefinition): boolean {
+    return true;
+  }
+
+  async start(os: OSDefinition): Promise<VMInstance> {
+    const error = new VMError(
+      'ENGINE_NOT_INTEGRATED',
+      `Le moteur « ${os.engineId} » n'est pas encore intégré. Aucun système n'a été démarré.`,
+      { systemId: os.id },
+    );
+    return createErrorHandle(this.id, os.id, error);
+  }
+}

@@ -1,0 +1,114 @@
+
+# ==========================================
+# LumiBoot - Git Ignore
+# ==========================================
+
+# Dependencies
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Build outputs
+dist/
+build/
+out/
+.output/
+.next/
+.nuxt/
+.svelte-kit/
+.angular/
+storybook-static/
+*.tsbuildinfo
+
+# Caches
+.cache/
+.turbo/
+.vite/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.rspack-cache/
+.temp/
+.tmp/
+tmp/
+temp/
+
+# Test results and coverage
+coverage/
+.nyc_output/
+.vitest/
+playwright-report/
+test-results/
+blob-report/
+junit.xml
+
+# Logs
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Disk images and virtual machines
+*.img
+*.iso
+*.qcow
+*.qcow2
+*.vhd
+*.vhdx
+*.vmdk
+*.vdi
+*.ext2
+*.ext3
+*.ext4
+
+# Large generated binary artifacts
+*.dump
+*.core
+*.pid
+
+# IDE and editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.iml
+*.swp
+*.swo
+*~
+
+# Operating system
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+
+# Deployment artifacts
+.vercel/
+.netlify/
+
+# Generated project reports
+architecture.txt
+architecture-clean.txt
+
+# Local archives and backups
+LumiBoot-source.zip
+*.bak
+*.backup
+*.old
+*.orig
+
+# Keep placeholder files
+!*.keep
+
+# ==========================================
+# Environment files
+# .env files are intentionally versioned
+# Never commit real credentials or secrets
+# ==========================================

@@ -1,0 +1,174 @@
+.shell {
+  min-height: 100vh;
+  display: flex;
+  background: var(--bg);
+}
+
+/* --- Barre latérale --- */
+.sidebar {
+  width: 76px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  border-right: 1px solid var(--line-soft);
+  background: #0e0f12;
+}
+
+.brand {
+  margin: 22px 0 40px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  background: var(--accent);
+  border-radius: 11px;
+  color: var(--accent-ink);
+  font: 700 22px 'Space Grotesk', sans-serif;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.side-link {
+  border: 0;
+  background: transparent;
+  color: #6b7079;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  transition: 0.16s ease;
+}
+
+.side-link svg {
+  width: 19px;
+  height: 19px;
+}
+
+.side-link:hover {
+  background: var(--panel-2);
+  color: #dfe3e6;
+}
+
+.side-link.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.sidebar-bottom {
+  margin-top: auto;
+  padding-bottom: 22px;
+}
+
+/* --- Zone principale --- */
+.workarea {
+  flex: 1;
+  min-width: 0;
+}
+
+.topbar {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 0 clamp(24px, 4vw, 56px);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.wordmark {
+  font: 600 15px 'Space Grotesk', sans-serif;
+  letter-spacing: -0.3px;
+}
+
+.wordmark-dot {
+  color: #8fbf9d;
+}
+
+.content {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 52px clamp(24px, 4vw, 56px) 0;
+}
+
+/* --- Hero --- */
+.hero {
+  max-width: 760px;
+  margin-bottom: 60px;
+}
+
+.hero h1 {
+  font: 600 clamp(32px, 4.4vw, 54px) / 1.06 'Space Grotesk', sans-serif;
+  letter-spacing: -1.8px;
+  margin: 0;
+}
+
+.hero h1 span {
+  color: #7c848d;
+}
+
+.hero p {
+  margin: 20px 0 0;
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* --- Bibliothèque --- */
+.catalogue {
+  padding-top: 4px;
+}
+
+.catalogue-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 22px;
+}
+
+.catalogue-top h2 {
+  font: 600 22px 'Space Grotesk', sans-serif;
+  letter-spacing: -0.4px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.count {
+  font: 600 11px 'DM Sans', sans-serif;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+.catalogue-tools {
+  display: flex;
+  gap: 10px;
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line-soft);
+  margin-top: 24px;
+  padding: 22px 0 36px;
+  color: var(--muted-2);
+  font-size: 11px;
+}

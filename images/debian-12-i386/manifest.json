@@ -1,0 +1,20 @@
+{
+  "$comment": "Manifeste PLACEHOLDER — à compléter au Lot 1. Aucun checksum réel tant que l'image n'est pas construite et validée.",
+  "ref": "debian-12-i386",
+  "os": "Debian GNU/Linux",
+  "release": "12 Bookworm",
+  "architecture": "i386",
+  "engine": "v86",
+  "engineVersion": "à figer au Lot 1",
+  "memoryMiB": 128,
+  "vgaMemoryMiB": 8,
+  "license": "Debian Free Software Guidelines (logiciels libres)",
+  "provenance": "à documenter (http://cdimage.debian.org/ ou archive i386 officielle)",
+  "files": {},
+  "status": "not-built",
+  "notes": [
+    "Ne jamais committer le binaire de l'image dans le dépôt.",
+    "Renseigner sha256 et size pour chaque fichier après construction.",
+    "Passer status à 'ready' uniquement après le smoke test complet."
+  ]
+}
