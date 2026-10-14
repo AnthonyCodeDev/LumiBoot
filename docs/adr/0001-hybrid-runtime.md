@@ -1,22 +1,22 @@
-# ADR 0001 — Exécution navigateur uniquement
+# ADR 0001 — Exécution locale exclusive
 
 - **Statut :** accepté
 - **Date :** 2026-10-14
-- **Contexte :** LumiBoot doit exécuter des systèmes directement dans le navigateur de l'utilisateur,
-  avec des moteurs WebAssembly interchangeables.
+- **Contexte :** LumiBoot doit rester un client Web pur, sans infrastructure de virtualisation distante,
+  sans service backend pour démarrer les machines et sans dépendance à un hôte de calcul externe.
 
 ## Décision
 
-Toute exécution passe par une interface stable `VMProvider` (`canRun`, `start`) résolue par un
-`VMRegistry`. Les moteurs sont chargés paresseusement et exécutent tout le calcul sur le CPU du
-visiteur via WebAssembly.
+LumiBoot exécute les systèmes d'exploitation directement dans le navigateur de l'utilisateur via des
+moteurs WebAssembly. L'interface d'exécution est centralisée dans `VMProvider`, résolue par un
+`VMRegistry`, et les moteurs sont chargés de façon paresseuse uniquement au besoin.
 
-L'UI ne connaît jamais `new V86(...)` : elle ne parle qu'à un `VMHandle`.
+Aucune API distante, aucun worker d'hyperviseur, aucun service PostgreSQL et aucune passerelle de console
+ne font partie de la conception de l'application. Le runtime reste entièrement local.
 
 ## Conséquences
 
-- Le catalogue attribue explicitement un `engineId` et un `executionMode` à chaque système ;
-  la compatibilité n'est jamais déduite d'un nom ou d'un numéro de version.
-- Un moteur non intégré ne peut pas être « implicitement » compatible : le repli
-  `UnavailableProvider` signale honnêtement l'indisponibilité.
-- L'ajout futur d'un nouveau moteur WASM n'implique aucune réécriture des composants UI.
+- Le catalogue définit l'`engineId` et le mode d'exécution au niveau du profil de lancement, pas au niveau du disque.
+- La compatibilité est explicite et vérifiée par le moteur disponible dans le navigateur du visiteur.
+- L'UI n'accède jamais à un environnement de calcul distant : elle n'interagit qu'avec un handle de session local.
+- Toute extension future doit rester compatible avec un modèle navigateur-only, sans infrastructure serveur fictive.

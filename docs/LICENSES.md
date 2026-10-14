@@ -11,8 +11,6 @@ dépôt.** Seuls des **manifestes** (URL, taille, `sha256`, licence, provenance)
 |---|---|
 | Code LumiBoot | à définir par le mainteneur |
 | v86 | BSD-2-Clause |
-| QEMU / KVM | GPL-2.0 / LGPL-2.1 |
-| noVNC / Apache Guacamole | BSD / Apache-2.0 |
 | React, Vite, Fastify, Zod, Zustand | MIT |
 
 ## Images de systèmes

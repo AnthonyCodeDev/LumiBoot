@@ -11,14 +11,14 @@ import type { VMInstance } from './VMInstance';
  * l'appareil sont gérés séparément par `EngineCompatibility`.
  */
 export interface VMEngine {
-    readonly id: string;
-    capabilities(): VMCapabilities;
-    canRun(os: OSDefinition): boolean;
-    start(
-        os: OSDefinition,
-        mountTarget: unknown,
-        configuration?: VMConfiguration,
-    ): Promise<VMInstance>;
+  readonly id: string;
+  capabilities(): VMCapabilities;
+  canRun(os: OSDefinition): boolean;
+  start(
+    os: OSDefinition,
+    mountTarget: unknown,
+    configuration?: VMConfiguration,
+  ): Promise<VMInstance>;
 }
 
 /** @deprecated Utiliser `VMEngine`. Conservé pour la compatibilité des imports. */

@@ -7,7 +7,10 @@ test.describe('Session Debian (honnête, non intégrée)', () => {
     await page.getByRole('button', { name: 'Préparer le lancement' }).click();
 
     await expect(page).toHaveURL(/\/session\//);
-    await expect(page.getByRole('heading', { name: /Aucune machine/i })).toBeVisible();
-    await expect(page.getByText(/n'est pas encore intégré|n’est pas encore intégré/)).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /Session non disponible pour le moment/i }),
+    ).toBeVisible();
+    await expect(page.getByText(/Le démarrage a échoué/i)).toBeVisible();
+    await expect(page.getByText(/START_FAILED/)).toBeVisible();
   });
 });

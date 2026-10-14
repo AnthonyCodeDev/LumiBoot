@@ -2,209 +2,242 @@ import { StorageError } from './errors';
 import { MemoryStorageBackend, type StorageBackend } from './backend';
 
 export interface StoredRecord<T = string> {
-    key: string;
-    value: T;
-    createdAt: number;
-    updatedAt: number;
-    sizeBytes: number;
+  key: string;
+  value: T;
+  createdAt: number;
+  updatedAt: number;
+  sizeBytes: number;
 }
 
 export interface StorageSnapshot<T = string> {
-    version: 1;
-    namespace: string;
-    quotaBytes: number | null;
-    records: StoredRecord<T>[];
+  version: 1;
+  namespace: string;
+  kind: 'metadata' | 'disk';
+  quotaBytes: number | null;
+  records: StoredRecord<T>[];
 }
 
+export type VmStorageKind = 'metadata' | 'disk';
+
 export interface VmStorageOptions {
-    namespace?: string;
-    quotaBytes?: number;
-    backend?: StorageBackend | null;
+  namespace?: string;
+  quotaBytes?: number;
+  backend?: StorageBackend | null;
+  kind?: VmStorageKind;
 }
 
 const SNAPSHOT_VERSION = 1;
 
 export class VmStorage {
-    readonly #namespace: string;
-    readonly #quotaBytes: number | null;
-    readonly #backend: StorageBackend | null;
+  readonly #namespace: string;
+  readonly #quotaBytes: number | null;
+  readonly #backend: StorageBackend | null;
+  readonly #kind: VmStorageKind;
 
-    constructor(options: VmStorageOptions = {}) {
-        this.#namespace = options.namespace ?? 'lumiboot';
-        this.#quotaBytes = options.quotaBytes ?? null;
-        this.#backend = options.backend ?? new MemoryStorageBackend();
+  constructor(options: VmStorageOptions = {}) {
+    this.#kind = options.kind ?? 'metadata';
+    this.#namespace = options.namespace ?? `lumiboot:${this.#kind}`;
+    this.#quotaBytes = options.quotaBytes ?? null;
+    this.#backend = options.backend ?? new MemoryStorageBackend();
+  }
+
+  getItem(key: string): string | null {
+    return this.#backend?.getItem(this.#key(key)) ?? null;
+  }
+
+  setItem(key: string, value: string): void {
+    const nextSize = this.#projectedUsage(key, value);
+    if (this.#quotaBytes !== null && nextSize > this.#quotaBytes) {
+      throw new StorageError('STORAGE_QUOTA_EXCEEDED', 'Quota de stockage dépassée.', { key });
     }
-
-    getItem(key: string): string | null {
-        return this.#backend?.getItem(this.#key(key)) ?? null;
+    try {
+      this.#backend?.setItem(this.#key(key), value);
+    } catch (error) {
+      throw new StorageError('STORAGE_WRITE_FAILED', `Échec de l'écriture de « ${key} ».`, {
+        key,
+        cause: error,
+      });
     }
+  }
 
-    setItem(key: string, value: string): void {
-        const nextSize = this.#projectedUsage(key, value);
-        if (this.#quotaBytes !== null && nextSize > this.#quotaBytes) {
-            throw new StorageError('STORAGE_QUOTA_EXCEEDED', 'Quota de stockage dépassée.', { key });
+  removeItem(key: string): void {
+    try {
+      this.#backend?.removeItem(this.#key(key));
+    } catch (error) {
+      throw new StorageError('STORAGE_WRITE_FAILED', `Échec de la suppression de « ${key} ».`, {
+        key,
+        cause: error,
+      });
+    }
+  }
+
+  key(index: number): string | null {
+    const keys = this.#keys();
+    return keys[index] ?? null;
+  }
+
+  get length(): number {
+    return this.#keys().length;
+  }
+
+  clear(): void {
+    for (const key of this.#keys()) this.removeItem(key);
+  }
+
+  listRecords(): StoredRecord[] {
+    const records: StoredRecord[] = [];
+    for (const key of this.#keys()) {
+      const raw = this.getItem(key);
+      if (raw === null) continue;
+      try {
+        const parsed = JSON.parse(raw) as StoredRecord;
+        if (typeof parsed.key !== 'string' || typeof parsed.value !== 'string') {
+          throw new Error('record format');
         }
-        try {
-            this.#backend?.setItem(this.#key(key), value);
-        } catch (error) {
-            throw new StorageError('STORAGE_WRITE_FAILED', `Échec de l'écriture de « ${key} ».`, {
-                key,
-                cause: error,
-            });
-        }
+        records.push(parsed);
+      } catch (error) {
+        throw new StorageError('STORAGE_CORRUPTED', `Enregistrement corrompu pour « ${key} ».`, {
+          key,
+          cause: error,
+        });
+      }
     }
+    return records.sort((left, right) => left.key.localeCompare(right.key));
+  }
 
-    removeItem(key: string): void {
-        try {
-            this.#backend?.removeItem(this.#key(key));
-        } catch (error) {
-            throw new StorageError('STORAGE_WRITE_FAILED', `Échec de la suppression de « ${key} ».`, {
-                key,
-                cause: error,
-            });
-        }
+  read(key: string): string | null {
+    const raw = this.getItem(key);
+    if (raw === null) return null;
+    try {
+      const record = JSON.parse(raw) as StoredRecord;
+      return typeof record.value === 'string' ? record.value : null;
+    } catch (error) {
+      throw new StorageError('STORAGE_CORRUPTED', `Valeur corrompue pour « ${key} ».`, {
+        key,
+        cause: error,
+      });
     }
+  }
 
-    key(index: number): string | null {
-        const keys = this.#keys();
-        return keys[index] ?? null;
-    }
+  write(key: string, value: string): StoredRecord<string> {
+    const now = Date.now();
+    const existing = this.readRecord(key);
+    const record: StoredRecord<string> = {
+      key,
+      value,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      sizeBytes: byteLength(value),
+    };
+    this.setItem(key, JSON.stringify(record));
+    return record;
+  }
 
-    get length(): number {
-        return this.#keys().length;
-    }
+  delete(key: string): boolean {
+    const present = this.getItem(key) !== null;
+    this.removeItem(key);
+    return present;
+  }
 
-    clear(): void {
-        for (const key of this.#keys()) this.removeItem(key);
+  readRecord(key: string): StoredRecord<string> | null {
+    const raw = this.getItem(key);
+    if (raw === null) return null;
+    try {
+      const parsed = JSON.parse(raw) as StoredRecord<string>;
+      if (
+        typeof parsed.key !== 'string' ||
+        typeof parsed.value !== 'string' ||
+        typeof parsed.createdAt !== 'number' ||
+        typeof parsed.updatedAt !== 'number' ||
+        typeof parsed.sizeBytes !== 'number'
+      ) {
+        throw new Error('record format');
+      }
+      return parsed;
+    } catch (error) {
+      throw new StorageError('STORAGE_CORRUPTED', `Enregistrement corrompu pour « ${key} ».`, {
+        key,
+        cause: error,
+      });
     }
+  }
 
-    listRecords(): StoredRecord[] {
-        const records: StoredRecord[] = [];
-        for (const key of this.#keys()) {
-            const raw = this.getItem(key);
-            if (raw === null) continue;
-            try {
-                const parsed = JSON.parse(raw) as StoredRecord;
-                if (typeof parsed.key !== 'string' || typeof parsed.value !== 'string') {
-                    throw new Error('record format');
-                }
-                records.push(parsed);
-            } catch (error) {
-                throw new StorageError('STORAGE_CORRUPTED', `Enregistrement corrompu pour « ${key} ».`, {
-                    key,
-                    cause: error,
-                });
-            }
-        }
-        return records.sort((left, right) => left.key.localeCompare(right.key));
-    }
+  exportSnapshot(): StorageSnapshot<string> {
+    return {
+      version: SNAPSHOT_VERSION,
+      namespace: this.#namespace,
+      kind: this.#kind,
+      quotaBytes: this.#quotaBytes,
+      records: this.listRecords(),
+    };
+  }
 
-    read(key: string): string | null {
-        const raw = this.getItem(key);
-        if (raw === null) return null;
-        try {
-            const record = JSON.parse(raw) as StoredRecord;
-            return typeof record.value === 'string' ? record.value : null;
-        } catch (error) {
-            throw new StorageError('STORAGE_CORRUPTED', `Valeur corrompue pour « ${key} ».`, {
-                key,
-                cause: error,
-            });
-        }
+  importSnapshot(snapshot: StorageSnapshot<string>): void {
+    if (snapshot.version !== SNAPSHOT_VERSION) {
+      throw new StorageError(
+        'STORAGE_VERSION_MISMATCH',
+        'Version de snapshot non prise en charge.',
+      );
     }
+    const previous = this.exportSnapshot();
+    try {
+      this.clear();
+      for (const record of snapshot.records) {
+        this.write(record.key, record.value);
+      }
+    } catch (error) {
+      this.clear();
+      for (const record of previous.records) {
+        this.write(record.key, record.value);
+      }
+      throw new StorageError('STORAGE_WRITE_FAILED', 'Importation transactionnelle échouée.', {
+        cause: error,
+      });
+    }
+  }
 
-    write(key: string, value: string): StoredRecord<string> {
-        const now = Date.now();
-        const existing = this.readRecord(key);
-        const record: StoredRecord<string> = {
-            key,
-            value,
-            createdAt: existing?.createdAt ?? now,
-            updatedAt: now,
-            sizeBytes: byteLength(value),
-        };
-        this.setItem(key, JSON.stringify(record));
-        return record;
-    }
+  estimateUsageBytes(): number {
+    let total = 0;
+    for (const record of this.listRecords()) total += record.sizeBytes;
+    return total;
+  }
 
-    delete(key: string): boolean {
-        const present = this.getItem(key) !== null;
-        this.removeItem(key);
-        return present;
-    }
+  #key(key: string): string {
+    return `${this.#namespace}:${key}`;
+  }
 
-    readRecord(key: string): StoredRecord<string> | null {
-        const raw = this.getItem(key);
-        if (raw === null) return null;
-        try {
-            const parsed = JSON.parse(raw) as StoredRecord<string>;
-            if (
-                typeof parsed.key !== 'string' ||
-                typeof parsed.value !== 'string' ||
-                typeof parsed.createdAt !== 'number' ||
-                typeof parsed.updatedAt !== 'number' ||
-                typeof parsed.sizeBytes !== 'number'
-            ) {
-                throw new Error('record format');
-            }
-            return parsed;
-        } catch (error) {
-            throw new StorageError('STORAGE_CORRUPTED', `Enregistrement corrompu pour « ${key} ».`, {
-                key,
-                cause: error,
-            });
-        }
+  #keys(): string[] {
+    if (!this.#backend) return [];
+    const keys: string[] = [];
+    for (let index = 0; index < this.#backend.length; index += 1) {
+      const key = this.#backend.key(index);
+      if (key !== null && key.startsWith(`${this.#namespace}:`)) {
+        keys.push(key.slice(this.#namespace.length + 1));
+      }
     }
+    return keys;
+  }
 
-    exportSnapshot(): StorageSnapshot<string> {
-        return {
-            version: SNAPSHOT_VERSION,
-            namespace: this.#namespace,
-            quotaBytes: this.#quotaBytes,
-            records: this.listRecords(),
-        };
-    }
-
-    importSnapshot(snapshot: StorageSnapshot<string>): void {
-        if (snapshot.version !== SNAPSHOT_VERSION) {
-            throw new StorageError('STORAGE_VERSION_MISMATCH', 'Version de snapshot non prise en charge.');
-        }
-        this.clear();
-        for (const record of snapshot.records) {
-            this.write(record.key, record.value);
-        }
-    }
-
-    estimateUsageBytes(): number {
-        let total = 0;
-        for (const record of this.listRecords()) total += record.sizeBytes;
-        return total;
-    }
-
-    #key(key: string): string {
-        return `${this.#namespace}:${key}`;
-    }
-
-    #keys(): string[] {
-        if (!this.#backend) return [];
-        const keys: string[] = [];
-        for (let index = 0; index < this.#backend.length; index += 1) {
-            const key = this.#backend.key(index);
-            if (key !== null && key.startsWith(`${this.#namespace}:`)) {
-                keys.push(key.slice(this.#namespace.length + 1));
-            }
-        }
-        return keys;
-    }
-
-    #projectedUsage(key: string, value: string): number {
-        const existing = this.readRecord(key);
-        const current = this.estimateUsageBytes();
-        const next = byteLength(value);
-        return current - (existing?.sizeBytes ?? 0) + next;
-    }
+  #projectedUsage(key: string, value: string): number {
+    const existing = this.readRecord(key);
+    const current = this.estimateUsageBytes();
+    const next = byteLength(value);
+    return current - (existing?.sizeBytes ?? 0) + next;
+  }
 }
 
 function byteLength(value: string): number {
-    return new TextEncoder().encode(value).byteLength;
+  return new TextEncoder().encode(value).byteLength;
+}
+
+export class VmMetadataStorage extends VmStorage {
+  constructor(options: Omit<VmStorageOptions, 'kind'> = {}) {
+    super({ ...options, kind: 'metadata' });
+  }
+}
+
+export class VmDiskStorage extends VmStorage {
+  constructor(options: Omit<VmStorageOptions, 'kind'> = {}) {
+    super({ ...options, kind: 'disk' });
+  }
 }

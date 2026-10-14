@@ -1,6 +1,11 @@
 import type { CSSProperties } from 'react';
 import type { OSDefinition } from '@lumiboot/contracts';
-import { architectureLabels, executionShortLabel, familyLabels } from '../../lib/labels';
+import {
+  architectureLabels,
+  familyLabels,
+  getPrimaryLaunchProfile,
+  launchProfileShortLabel,
+} from '../../lib/labels';
 
 export interface SystemCardProps {
   system: OSDefinition;
@@ -17,6 +22,8 @@ function accentStyle(system: OSDefinition): CSSProperties {
 }
 
 export function SystemCard({ system, favorite, onOpen, onToggleFavorite }: SystemCardProps) {
+  const launchProfile = getPrimaryLaunchProfile(system);
+
   return (
     <article
       className="os-card"
@@ -47,7 +54,7 @@ export function SystemCard({ system, favorite, onOpen, onToggleFavorite }: Syste
           <span>
             {familyLabels[system.family]} · {architectureLabels[system.architecture]}
           </span>
-          <span className="card-mode">{executionShortLabel(system.executionMode)}</span>
+          <span className="card-mode">{launchProfileShortLabel(launchProfile)}</span>
         </div>
       </div>
     </article>

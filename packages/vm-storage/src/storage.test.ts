@@ -1,44 +1,85 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryStorageBackend } from './backend';
 import { StorageError } from './errors';
-import { VmStorage } from './storage';
+import { VmDiskStorage, VmMetadataStorage, VmStorage } from './storage';
 
 describe('VmStorage', () => {
-    it('persiste des enregistrements et exporte un snapshot', () => {
-        const storage = new VmStorage({ backend: new MemoryStorageBackend(), namespace: 'test' });
-        storage.write('session-1', JSON.stringify({ state: 'running' }));
+  it('persiste des enregistrements et exporte un snapshot', () => {
+    const storage = new VmMetadataStorage({
+      backend: new MemoryStorageBackend(),
+      namespace: 'test',
+    });
+    storage.write('session-1', JSON.stringify({ state: 'running' }));
 
-        expect(storage.read('session-1')).toContain('running');
-        expect(storage.listRecords()).toHaveLength(1);
-        const snapshot = storage.exportSnapshot();
-        expect(snapshot.namespace).toBe('test');
-        expect(snapshot.records[0]?.key).toBe('session-1');
+    expect(storage.read('session-1')).toContain('running');
+    expect(storage.listRecords()).toHaveLength(1);
+    const snapshot = storage.exportSnapshot();
+    expect(snapshot.namespace).toBe('test');
+    expect(snapshot.kind).toBe('metadata');
+    expect(snapshot.records[0]?.key).toBe('session-1');
+  });
+
+  it('applique une quota et rejette les écritures trop volumineuses', () => {
+    const storage = new VmDiskStorage({ backend: new MemoryStorageBackend(), quotaBytes: 128 });
+    expect(() => storage.write('small', '1234')).not.toThrow();
+    expect(() => storage.write('large', 'x'.repeat(1024))).toThrow(StorageError);
+  });
+
+  it('importe un snapshot compatible de manière transactionnelle', () => {
+    const backend = new MemoryStorageBackend();
+    const storage = new VmStorage({ backend, namespace: 'test', kind: 'metadata' });
+    storage.importSnapshot({
+      version: 1,
+      namespace: 'test',
+      kind: 'metadata',
+      quotaBytes: null,
+      records: [
+        {
+          key: 'session-2',
+          value: '{"state":"stopped"}',
+          createdAt: 1,
+          updatedAt: 1,
+          sizeBytes: 19,
+        },
+      ],
     });
 
-    it('applique une quota et rejette les écritures trop volumineuses', () => {
-        const storage = new VmStorage({ backend: new MemoryStorageBackend(), quotaBytes: 128 });
-        expect(() => storage.write('small', '1234')).not.toThrow();
-        expect(() => storage.write('large', 'x'.repeat(1024))).toThrow(StorageError);
-    });
+    expect(storage.read('session-2')).toContain('stopped');
+  });
 
-    it('importe un snapshot compatible', () => {
-        const backend = new MemoryStorageBackend();
-        const storage = new VmStorage({ backend, namespace: 'test' });
-        storage.importSnapshot({
-            version: 1,
-            namespace: 'test',
-            quotaBytes: null,
-            records: [
-                {
-                    key: 'session-2',
-                    value: '{"state":"stopped"}',
-                    createdAt: 1,
-                    updatedAt: 1,
-                    sizeBytes: 19,
-                },
-            ],
-        });
+  it('restaure le contenu en cas d importation interrompue', () => {
+    class FlakyBackend extends MemoryStorageBackend {
+      override setItem(key: string, value: string): void {
+        if (key.endsWith(':restored')) {
+          throw new Error('boom');
+        }
+        super.setItem(key, value);
+      }
+    }
 
-        expect(storage.read('session-2')).toContain('stopped');
-    });
+    const backend = new FlakyBackend();
+    const storage = new VmStorage({ backend, namespace: 'test', kind: 'metadata' });
+    storage.write('existing', 'value');
+
+    expect(() =>
+      storage.importSnapshot({
+        version: 1,
+        namespace: 'test',
+        kind: 'metadata',
+        quotaBytes: null,
+        records: [
+          {
+            key: 'restored',
+            value: 'ok',
+            createdAt: 1,
+            updatedAt: 1,
+            sizeBytes: 2,
+          },
+        ],
+      }),
+    ).toThrow(StorageError);
+
+    expect(storage.read('existing')).toBe('value');
+    expect(storage.read('restored')).toBeNull();
+  });
 });

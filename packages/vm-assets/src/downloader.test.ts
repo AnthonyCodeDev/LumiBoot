@@ -3,46 +3,164 @@ import { MemoryAssetCache } from './cache';
 import { AssetError } from './errors';
 import { downloadAsset } from './downloader';
 
+vi.mock('./hash', () => ({
+  sha256Hex: async (bytes: Uint8Array) => {
+    const text = new TextDecoder().decode(bytes);
+    if (text === 'ok') return 'sha-ok';
+    if (text === 'hello world') return 'sha-hello-world';
+    if (text === 'abcdef') return 'sha-abcdef';
+    return `sha-${text}`;
+  },
+}));
+
+function responseFromBody(body: string, init: ResponseInit): Response {
+  return new Response(body, init);
+}
+
+function getRangeHeader(init?: RequestInit): string | null {
+  const headers = init?.headers;
+  if (!headers) return null;
+  if (typeof headers === 'object') {
+    const record = headers as Record<string, unknown>;
+    for (const [key, value] of Object.entries(record)) {
+      if (key.toLowerCase() === 'range' && typeof value === 'string') return value;
+    }
+    if (typeof record.get === 'function') {
+      const value = record.get.call(headers, 'Range');
+      if (typeof value === 'string') return value;
+    }
+    if (typeof record.forEach === 'function') {
+      let range: string | null = null;
+      record.forEach.call(headers, (value: unknown, key: unknown) => {
+        if (typeof key === 'string' && key.toLowerCase() === 'range' && typeof value === 'string') {
+          range = value;
+        }
+      });
+      if (range !== null) return range;
+    }
+  }
+  if (headers instanceof Headers) return headers.get('Range');
+  if (Array.isArray(headers)) return new Headers(headers).get('Range');
+  return new Headers(headers as HeadersInit).get('Range');
+}
+
 describe('downloadAsset', () => {
-    it('retourne une entrée mise en cache lorsque le checksum concorde', async () => {
-        const cache = new MemoryAssetCache();
-        const bytes = new TextEncoder().encode('ok');
-        await cache.set({
-            ref: 'asset-1',
-            bytes,
-            sha256:
-                '2689367b205c16ce32ed44438a1bf8f7d3b8f0f5f94d8d0e8f7f0f0d9e0f2f7b',
-            size: bytes.byteLength,
-            downloadedAt: Date.now(),
-        });
-
-        const result = await downloadAsset(
-            {
-                ref: 'asset-1',
-                url: 'https://example.test/asset-1',
-                sha256:
-                    '2689367b205c16ce32ed44438a1bf8f7d3b8f0f5f94d8d0e8f7f0f0d9e0f2f7b',
-                size: bytes.byteLength,
-            },
-            { cache, fetchImpl: vi.fn() as unknown as typeof fetch },
-        );
-
-        expect(new TextDecoder().decode(result)).toBe('ok');
+  it('retourne une entree mise en cache lorsque le checksum, la taille et la version concordent', async () => {
+    const cache = new MemoryAssetCache();
+    const bytes = new TextEncoder().encode('ok');
+    await cache.set({
+      ref: 'asset-1',
+      bytes,
+      sha256: 'sha-ok',
+      size: bytes.byteLength,
+      version: 'v1',
+      downloadedAt: Date.now(),
     });
 
-    it('rejette un checksum invalide', async () => {
-        await expect(
-            downloadAsset(
-                {
-                    ref: 'asset-2',
-                    url: 'https://example.test/asset-2',
-                    sha256: 'deadbeef',
-                    size: 2,
-                },
-                {
-                    fetchImpl: async () => new Response('ok', { status: 200 }),
-                },
-            ),
-        ).rejects.toBeInstanceOf(AssetError);
+    const result = await downloadAsset(
+      {
+        ref: 'asset-1',
+        url: 'https://example.test/asset-1',
+        sha256: 'sha-ok',
+        size: bytes.byteLength,
+        version: 'v1',
+      },
+      { cache, fetchImpl: vi.fn() as unknown as typeof fetch },
+    );
+
+    expect(new TextDecoder().decode(result)).toBe('ok');
+  });
+
+  it('reprend un téléchargement par blocs avec Content-Range valide', async () => {
+    const cache = new MemoryAssetCache();
+    const cachedBytes = new TextEncoder().encode('hello ');
+    await cache.set({
+      ref: 'asset-2',
+      bytes: cachedBytes,
+      sha256: 'sha-partial',
+      size: 11,
+      version: 'v2',
+      downloadedAt: Date.now(),
     });
+
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      const range = getRangeHeader(init);
+      expect(range).toBe('bytes=6-10');
+      return responseFromBody('world', {
+        status: 206,
+        headers: {
+          'Content-Range': 'bytes 6-10/11',
+        },
+      });
+    }) as unknown as typeof fetch;
+
+    const result = await downloadAsset(
+      {
+        ref: 'asset-2',
+        url: 'https://example.test/asset-2',
+        sha256: 'sha-hello-world',
+        size: 11,
+        version: 'v2',
+      },
+      {
+        cache,
+        fetchImpl,
+        allowResume: true,
+        chunkSizeBytes: 5,
+      },
+    );
+
+    expect(new TextDecoder().decode(result)).toBe('hello world');
+  });
+
+  it('rejette un Content-Range incoherent lors d une reprise', async () => {
+    const cache = new MemoryAssetCache();
+    await cache.set({
+      ref: 'asset-3',
+      bytes: new TextEncoder().encode('abc'),
+      sha256: 'sha-partial',
+      size: 6,
+      version: 'v3',
+      downloadedAt: Date.now(),
+    });
+
+    await expect(
+      downloadAsset(
+        {
+          ref: 'asset-3',
+          url: 'https://example.test/asset-3',
+          sha256: 'sha-abcdef',
+          size: 6,
+          version: 'v3',
+        },
+        {
+          cache,
+          fetchImpl: async () =>
+            responseFromBody('def', {
+              status: 206,
+              headers: {
+                'Content-Range': 'bytes 2-4/6',
+              },
+            }),
+          allowResume: true,
+        },
+      ),
+    ).rejects.toBeInstanceOf(AssetError);
+  });
+
+  it('rejette un checksum invalide', async () => {
+    await expect(
+      downloadAsset(
+        {
+          ref: 'asset-4',
+          url: 'https://example.test/asset-4',
+          sha256: 'deadbeef',
+          size: 2,
+        },
+        {
+          fetchImpl: async () => responseFromBody('ok', { status: 200 }),
+        },
+      ),
+    ).rejects.toBeInstanceOf(AssetError);
+  });
 });

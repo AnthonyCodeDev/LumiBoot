@@ -40,7 +40,10 @@ test.describe('Bibliothèque', () => {
 
     await page.reload();
     await expect(
-      page.locator('.os-card').first().getByRole('button', { name: /favoris/ }),
+      page
+        .locator('.os-card')
+        .first()
+        .getByRole('button', { name: /favoris/ }),
     ).toHaveAttribute('aria-pressed', 'true');
   });
 });

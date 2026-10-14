@@ -29,7 +29,13 @@ export function matchesFamily(
 
 function haystack(os: OSDefinition): string {
   return normalizeText(
-    [os.displayName, os.versionLabel, os.architecture, os.family, os.engineId].join(' '),
+    [
+      os.displayName,
+      os.versionLabel,
+      os.architecture,
+      os.family,
+      ...os.launchProfiles.flatMap((profile) => [profile.engineId, profile.executionMode]),
+    ].join(' '),
   );
 }
 

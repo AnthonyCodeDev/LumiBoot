@@ -1,7 +1,7 @@
 import type { OSDefinition } from '@lumiboot/contracts';
 import type { SessionSnapshot } from '@lumiboot/vm-core';
 import { Button } from '../ui/Button';
-import { engineLabels } from '../../lib/labels';
+import { getPrimaryLaunchProfile, launchProfileLabel } from '../../lib/labels';
 
 const STATE_LABELS: Record<SessionSnapshot['state'], string> = {
   idle: 'Inactif',
@@ -22,7 +22,9 @@ export interface SessionToolbarProps {
 }
 
 export function SessionToolbar({ session, system, onStop, onRestart }: SessionToolbarProps) {
-  const busy = session.state === 'preparing' || session.state === 'booting' || session.state === 'running';
+  const busy =
+    session.state === 'preparing' || session.state === 'booting' || session.state === 'running';
+  const launchProfile = getPrimaryLaunchProfile(system);
 
   return (
     <div className="session-toolbar">
@@ -31,7 +33,8 @@ export function SessionToolbar({ session, system, onStop, onRestart }: SessionTo
         <div className="session-title">
           <h1>{system.displayName}</h1>
           <p>
-            {system.versionLabel} · {engineLabels[system.engineId]} · provider « {session.providerId} »
+            {system.versionLabel} · {launchProfileLabel(launchProfile)} · provider «{' '}
+            {session.providerId} »
           </p>
         </div>
       </div>
@@ -39,7 +42,12 @@ export function SessionToolbar({ session, system, onStop, onRestart }: SessionTo
         <span className="session-state" data-state={session.state}>
           {STATE_LABELS[session.state]}
         </span>
-        <Button variant="outline" type="button" onClick={onStop} disabled={!busy && session.state !== 'booting'}>
+        <Button
+          variant="outline"
+          type="button"
+          onClick={onStop}
+          disabled={!busy && session.state !== 'booting'}
+        >
           Arrêter
         </Button>
         <Button variant="primary" type="button" onClick={onRestart}>

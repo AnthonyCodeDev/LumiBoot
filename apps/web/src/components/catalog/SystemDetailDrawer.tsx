@@ -5,7 +5,12 @@ import { useSelectedSystem } from '../../features/catalog/catalog.selectors';
 import { useFavoritesStore } from '../../features/favorites/favorites.store';
 import { useSessionsStore } from '../../features/sessions/sessions.store';
 import { Button } from '../ui/Button';
-import { availabilityLabels, engineLabels, familyLabels } from '../../lib/labels';
+import {
+  availabilityLabels,
+  familyLabels,
+  getPrimaryLaunchProfile,
+  launchProfileLabel,
+} from '../../lib/labels';
 import type { CSSProperties } from 'react';
 import type { OSDefinition } from '@lumiboot/contracts';
 
@@ -68,6 +73,7 @@ export function SystemDetailDrawer() {
   }, [open, closeDetails]);
 
   const favorite = system ? favorites.has(system.id) : false;
+  const launchProfile = system ? getPrimaryLaunchProfile(system) : null;
 
   const launch = () => {
     if (!system) return;
@@ -125,7 +131,9 @@ export function SystemDetailDrawer() {
                 </div>
                 <div>
                   <span>Moteur envisagé</span>
-                  <strong>{engineLabels[system.engineId]}</strong>
+                  <strong>
+                    {launchProfile ? launchProfileLabel(launchProfile) : 'Navigateur local'}
+                  </strong>
                 </div>
                 <div>
                   <span>État actuel</span>
@@ -150,7 +158,11 @@ export function SystemDetailDrawer() {
                 >
                   {favorite ? '★ En favoris' : '☆ Ajouter aux favoris'}
                 </Button>
-                <Link className="btn btn-outline drawer-fav" to={`/systems/${system.slug}`} onClick={closeDetails}>
+                <Link
+                  className="btn btn-outline drawer-fav"
+                  to={`/systems/${system.slug}`}
+                  onClick={closeDetails}
+                >
                   Ouvrir la fiche complète ↗
                 </Link>
               </div>

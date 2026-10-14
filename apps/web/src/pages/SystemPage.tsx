@@ -5,9 +5,10 @@ import { Button } from '../components/ui/Button';
 import { useSessionsStore } from '../features/sessions/sessions.store';
 import {
   availabilityLabels,
-  engineLabels,
-  executionLabels,
   familyLabels,
+  getPrimaryLaunchProfile,
+  launchProfileLabel,
+  engineLabels,
 } from '../lib/labels';
 import { NotFoundPage } from './NotFoundPage';
 
@@ -23,6 +24,7 @@ export function SystemPage() {
     '--accent': system.accent,
     '--accent-rgb': system.accentRgb,
   } as CSSProperties;
+  const launchProfile = getPrimaryLaunchProfile(system);
 
   return (
     <main className="system-detail">
@@ -46,11 +48,11 @@ export function SystemPage() {
             </div>
             <div>
               <span>Mode d&apos;exécution</span>
-              <strong>{executionLabels[system.executionMode]}</strong>
+              <strong>{launchProfileLabel(launchProfile)}</strong>
             </div>
             <div>
               <span>Moteur envisagé</span>
-              <strong>{engineLabels[system.engineId]}</strong>
+              <strong>{engineLabels[launchProfile.engineId]}</strong>
             </div>
             <div>
               <span>État actuel</span>

@@ -60,9 +60,11 @@ export class UnavailableProvider implements VMEngine {
   }
 
   async start(os: OSDefinition): Promise<VMInstance> {
+    const launchProfile = os.launchProfiles[0];
+    const engineLabel = launchProfile ? launchProfile.engineId : 'inconnu';
     const error = new VMError(
       'ENGINE_NOT_INTEGRATED',
-      `Le moteur « ${os.engineId} » n'est pas encore intégré. Aucun système n'a été démarré.`,
+      `Le moteur « ${engineLabel} » n'est pas encore intégré. Aucun système n'a été démarré.`,
       { systemId: os.id },
     );
     return createErrorHandle(this.id, os.id, error);

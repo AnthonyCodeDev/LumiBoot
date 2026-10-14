@@ -44,5 +44,10 @@ export const useSessionsStore = create<SessionsState>((set) => ({
     if (!lifecycle) return;
     await lifecycle.dispose();
     lifecycles.delete(id);
+    set((state) => {
+      const sessions = { ...state.sessions };
+      delete sessions[id];
+      return { sessions };
+    });
   },
 }));

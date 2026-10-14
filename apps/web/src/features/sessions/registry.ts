@@ -19,10 +19,16 @@ class LazyV86Provider implements VMEngine {
   }
 
   canRun(os: OSDefinition): boolean {
-    return os.executionMode === 'browser' && os.engineId === 'v86';
+    return os.launchProfiles.some(
+      (profile) => profile.executionMode === 'browser' && profile.engineId === 'v86',
+    );
   }
 
-  async start(os: OSDefinition, mountTarget: unknown, configuration?: Parameters<VMEngine['start']>[2]): Promise<VMInstance> {
+  async start(
+    os: OSDefinition,
+    mountTarget: unknown,
+    configuration?: Parameters<VMEngine['start']>[2],
+  ): Promise<VMInstance> {
     const { V86Provider } = await import('@lumiboot/provider-v86');
     const provider = new V86Provider();
     const mountElement = mountTarget as HTMLElement;

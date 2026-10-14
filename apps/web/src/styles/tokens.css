@@ -2,7 +2,12 @@
 
 :root {
   color-scheme: dark;
-  font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family:
+    'DM Sans',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
   background: #0b0c0e;
   color: #f2f3f5;
   font-synthesis: none;

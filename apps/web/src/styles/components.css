@@ -94,7 +94,9 @@
 }
 
 .search kbd {
-  font: 11px 'DM Sans', sans-serif;
+  font:
+    11px 'DM Sans',
+    sans-serif;
   color: var(--muted-2);
   border: 1px solid var(--line);
   border-radius: 5px;
@@ -232,7 +234,9 @@
 }
 
 .card-info h3 {
-  font: 600 15px 'Space Grotesk', sans-serif;
+  font:
+    600 15px 'Space Grotesk',
+    sans-serif;
   letter-spacing: -0.2px;
   margin: 0;
 }
@@ -352,8 +356,8 @@
   align-items: center;
   justify-content: center;
   position: relative;
-  background: radial-gradient(circle at 50% 45%, rgba(var(--accent-rgb), 0.22), transparent 70%),
-    #14161a;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(var(--accent-rgb), 0.22), transparent 70%), #14161a;
   border: 1px solid var(--line);
   border-radius: 14px;
 }
@@ -391,7 +395,9 @@
 }
 
 .drawer-overview h2 {
-  font: 600 28px 'Space Grotesk', sans-serif;
+  font:
+    600 28px 'Space Grotesk',
+    sans-serif;
   letter-spacing: -0.8px;
   margin: 8px 0 0;
 }
@@ -525,7 +531,9 @@
 }
 
 .session-title h1 {
-  font: 600 18px 'Space Grotesk', sans-serif;
+  font:
+    600 18px 'Space Grotesk',
+    sans-serif;
   margin: 0;
   letter-spacing: -0.4px;
 }
@@ -597,7 +605,9 @@
 }
 
 .status-overlay h2 {
-  font: 600 20px 'Space Grotesk', sans-serif;
+  font:
+    600 20px 'Space Grotesk',
+    sans-serif;
   margin: 0;
 }
 
@@ -647,7 +657,9 @@
 }
 
 .not-found h1 {
-  font: 600 30px 'Space Grotesk', sans-serif;
+  font:
+    600 30px 'Space Grotesk',
+    sans-serif;
   letter-spacing: -0.8px;
   margin: 0 0 12px;
 }
@@ -673,8 +685,8 @@
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 28px;
-  background: radial-gradient(circle at 82% 18%, rgba(var(--accent-rgb), 0.14), transparent 60%),
-    var(--panel);
+  background:
+    radial-gradient(circle at 82% 18%, rgba(var(--accent-rgb), 0.14), transparent 60%), var(--panel);
 }
 
 .system-detail-hero img {
@@ -685,7 +697,9 @@
 }
 
 .system-detail-hero h1 {
-  font: 600 34px 'Space Grotesk', sans-serif;
+  font:
+    600 34px 'Space Grotesk',
+    sans-serif;
   letter-spacing: -1px;
   margin: 8px 0 0;
 }

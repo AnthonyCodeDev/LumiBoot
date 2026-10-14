@@ -31,7 +31,9 @@
   background: var(--accent);
   border-radius: 11px;
   color: var(--accent-ink);
-  font: 700 22px 'Space Grotesk', sans-serif;
+  font:
+    700 22px 'Space Grotesk',
+    sans-serif;
 }
 
 .sidebar-nav {
@@ -87,7 +89,9 @@
 }
 
 .wordmark {
-  font: 600 15px 'Space Grotesk', sans-serif;
+  font:
+    600 15px 'Space Grotesk',
+    sans-serif;
   letter-spacing: -0.3px;
 }
 
@@ -108,7 +112,9 @@
 }
 
 .hero h1 {
-  font: 600 clamp(32px, 4.4vw, 54px) / 1.06 'Space Grotesk', sans-serif;
+  font:
+    600 clamp(32px, 4.4vw, 54px) / 1.06 'Space Grotesk',
+    sans-serif;
   letter-spacing: -1.8px;
   margin: 0;
 }
@@ -139,7 +145,9 @@
 }
 
 .catalogue-top h2 {
-  font: 600 22px 'Space Grotesk', sans-serif;
+  font:
+    600 22px 'Space Grotesk',
+    sans-serif;
   letter-spacing: -0.4px;
   margin: 0;
   display: flex;
@@ -148,7 +156,9 @@
 }
 
 .count {
-  font: 600 11px 'DM Sans', sans-serif;
+  font:
+    600 11px 'DM Sans',
+    sans-serif;
   color: var(--muted);
   background: var(--panel-2);
   border: 1px solid var(--line);

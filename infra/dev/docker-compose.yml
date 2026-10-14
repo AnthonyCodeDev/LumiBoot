@@ -11,32 +11,11 @@ services:
     image: node:22-bookworm
     working_dir: /work
     command: sh -lc "corepack enable && pnpm install && pnpm --filter @lumiboot/web dev --host 0.0.0.0"
-    environment:
-      VITE_API_BASE_URL: http://localhost:8787
     ports:
       - '5173:5173'
     volumes:
       - ../..:/work
       - lumiboot_node_modules:/work/node_modules
 
-  # --- Lot 4 uniquement : ne pas activer pour le MVP ---
-  # api:
-  #   image: node:22-bookworm
-  #   working_dir: /work
-  #   command: sh -lc "corepack enable && pnpm install && pnpm --filter @lumiboot/api start"
-  #   environment:
-  #     DATABASE_URL: postgres://lumiboot:lumiboot@db:5432/lumiboot
-  #   depends_on: [db]
-  #
-  # db:
-  #   image: postgres:16
-  #   environment:
-  #     POSTGRES_USER: lumiboot
-  #     POSTGRES_PASSWORD: lumiboot
-  #     POSTGRES_DB: lumiboot
-  #   volumes:
-  #     - lumiboot_pgdata:/var/lib/postgresql/data
-
 volumes:
   lumiboot_node_modules:
-  # lumiboot_pgdata:

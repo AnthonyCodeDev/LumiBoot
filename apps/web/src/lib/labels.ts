@@ -1,4 +1,12 @@
-import type { Architecture, Availability, EngineId, ExecutionMode, OSFamily } from '@lumiboot/contracts';
+import type {
+  Architecture,
+  Availability,
+  EngineId,
+  ExecutionMode,
+  LaunchProfile,
+  OSDefinition,
+  OSFamily,
+} from '@lumiboot/contracts';
 
 export const familyLabels: Record<OSFamily, string> = {
   linux: 'Linux',
@@ -28,6 +36,20 @@ export const availabilityLabels: Record<Availability, string> = {
 
 export const executionShortLabel = (mode: ExecutionMode): string =>
   mode === 'browser' ? 'Local · WASM' : 'Local · WASM';
+
+export function getPrimaryLaunchProfile(
+  system: Pick<OSDefinition, 'launchProfiles'>,
+): LaunchProfile {
+  return system.launchProfiles.find((profile) => profile.featured) ?? system.launchProfiles[0]!;
+}
+
+export function launchProfileLabel(profile: LaunchProfile): string {
+  return `${engineLabels[profile.engineId]} · ${executionLabels[profile.executionMode]}`;
+}
+
+export function launchProfileShortLabel(profile: LaunchProfile): string {
+  return `${engineLabels[profile.engineId]} · ${executionShortLabel(profile.executionMode)}`;
+}
 
 export const architectureLabels: Record<Architecture, string> = {
   i386: 'i386',

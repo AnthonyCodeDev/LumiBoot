@@ -38,12 +38,18 @@ export function getCompatibility(os: OSDefinition, caps: BrowserCapabilities): C
     reasons.push('Système marqué comme indisponible dans le catalogue.');
   }
 
-  if (os.executionMode === 'browser' && !caps.webAssembly) {
+  if (
+    os.launchProfiles.some((profile) => profile.executionMode === 'browser') &&
+    !caps.webAssembly
+  ) {
     reasons.push('Ce navigateur ne fournit pas WebAssembly.');
   }
 
-  if (!isEngineIntegrated(os.engineId)) {
-    reasons.push(`Moteur « ${os.engineId} » non intégré.`);
+  const integratedProfiles = os.launchProfiles.filter((profile) =>
+    isEngineIntegrated(profile.engineId),
+  );
+  if (integratedProfiles.length === 0) {
+    reasons.push('Aucun moteur de lancement compatible n’est intégré.');
   }
 
   return { supported: reasons.length === 0, reasons };

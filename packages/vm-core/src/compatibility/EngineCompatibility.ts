@@ -37,7 +37,10 @@ export function checkEngineCompatibility(
     reasons.push(`Architecture ${os.architecture} non prise en charge par « ${engine.id} ».`);
   }
 
-  if (os.executionMode === 'browser' && !env.webAssembly) {
+  if (
+    os.launchProfiles.some((profile) => profile.executionMode === 'browser') &&
+    !env.webAssembly
+  ) {
     reasons.push('WebAssembly indisponible dans ce navigateur.');
   }
 

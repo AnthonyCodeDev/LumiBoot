@@ -109,6 +109,10 @@ LumiBoot-source.zip
 
 # ==========================================
 # Environment files
-# .env files are intentionally versioned
-# Never commit real credentials or secrets
+# Never commit real credentials or secrets.
+# Keep only examples under version control.
 # ==========================================
+**/.env
+**/.env.*
+!.env.example
+!.env.*.example

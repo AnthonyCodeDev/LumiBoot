@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { OSDefinition } from '@lumiboot/contracts';
+import type { OSDefinition, SessionEvent } from '@lumiboot/contracts';
 import { SessionLifecycle } from './SessionLifecycle';
+import type { VMEngine } from '../contracts/VMEngine';
+import type { VMInstance } from '../contracts/VMInstance';
+import { NO_CAPABILITIES, type VMCapabilities } from '../contracts/VMCapabilities';
 import { VMRegistry } from '../registry/VMRegistry';
 
 function makeOS(overrides: Partial<OSDefinition> = {}): OSDefinition {
@@ -11,11 +14,19 @@ function makeOS(overrides: Partial<OSDefinition> = {}): OSDefinition {
     displayName: 'Debian',
     versionLabel: '12 Bookworm',
     architecture: 'i386',
-    executionMode: 'browser',
-    engineId: 'v86',
     availability: 'planned',
     description: 'desc',
     iconUrl: '/icons/os/debian.svg',
+    minMemoryMiB: 128,
+    imageRef: 'debian-12-i386-image',
+    launchProfiles: [
+      {
+        id: 'default',
+        engineId: 'v86',
+        executionMode: 'browser',
+        minMemoryMiB: 128,
+      },
+    ],
     requirements: ['WebAssembly'],
     accent: '#ec4264',
     accentRgb: '236,66,100',
@@ -24,38 +35,125 @@ function makeOS(overrides: Partial<OSDefinition> = {}): OSDefinition {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
+class ControlledInstance implements VMInstance {
+  readonly id = 'instance-1';
+  readonly providerId = 'controlled';
+  readonly systemId = 'debian-12-i386';
+  readonly stop = vi.fn(async () => {
+    this.emit({ type: 'state', state: 'stopped' });
+  });
+  readonly dispose = vi.fn(async () => {
+    this.listeners.clear();
+  });
+  readonly listeners = new Set<(event: SessionEvent) => void>();
+
+  subscribe(listener: (event: SessionEvent) => void): () => void {
+    this.listeners.add(listener);
+    listener({ type: 'progress', phase: 'booting', loadedBytes: 1, totalBytes: 2 });
+    listener({ type: 'state', state: 'running' });
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  emit(event: SessionEvent): void {
+    for (const listener of this.listeners) listener(event);
+  }
+}
+
+class ControlledEngine implements VMEngine {
+  readonly id = 'controlled';
+  readonly instances: ControlledInstance[] = [];
+  readonly startBarrier = deferred<void>();
+  readonly startCalls: number[] = [];
+
+  capabilities(): VMCapabilities {
+    return NO_CAPABILITIES;
+  }
+
+  canRun(): boolean {
+    return true;
+  }
+
+  async start(): Promise<VMInstance> {
+    this.startCalls.push(this.startCalls.length + 1);
+    await this.startBarrier.promise;
+    const instance = new ControlledInstance();
+    this.instances.push(instance);
+    return instance;
+  }
+}
+
 describe('SessionLifecycle', () => {
-  it('se termine en erreur honnête quand aucun moteur n’est intégré', async () => {
-    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry(), 's1');
-    const listener = vi.fn();
-    lifecycle.subscribe(listener);
+  it('passe de idle a preparing puis running et peut redemarrer apres stop', async () => {
+    const engine = new ControlledEngine();
+    const registry = new VMRegistry([engine]);
+    const lifecycle = new SessionLifecycle(makeOS(), registry, 's1');
 
-    await lifecycle.start(document.createElement('div'));
+    const firstStart = lifecycle.start(document.createElement('div'));
+    expect(lifecycle.snapshot.state).toBe('preparing');
+    engine.startBarrier.resolve();
+    await firstStart;
+    expect(lifecycle.snapshot.state).toBe('running');
+    expect(lifecycle.snapshot.phase).toBe('booting');
 
-    expect(lifecycle.snapshot.state).toBe('error');
-    expect(lifecycle.snapshot.error?.code).toBe('ENGINE_NOT_INTEGRATED');
-    expect(listener).toHaveBeenCalled();
-  });
-
-  it('ne démarre pas deux fois la même session', async () => {
-    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry(), 's2');
-    const mount = document.createElement('div');
-    await lifecycle.start(mount);
-    await lifecycle.start(mount);
-    expect(lifecycle.snapshot.state).toBe('error');
-  });
-
-  it('ne fait rien à l’arrêt dans un état terminal', async () => {
-    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry(), 's3');
-    await lifecycle.start(document.createElement('div'));
     await lifecycle.stop();
-    expect(lifecycle.snapshot.state).toBe('error');
+    expect(lifecycle.snapshot.state).toBe('stopped');
+    expect(engine.instances[0]?.stop).toHaveBeenCalledTimes(1);
+    expect(engine.instances[0]?.dispose).toHaveBeenCalledTimes(1);
+
+    const secondStart = lifecycle.start(document.createElement('div'));
+    expect(lifecycle.snapshot.state).toBe('preparing');
+    await secondStart;
+    expect(lifecycle.snapshot.state).toBe('running');
+    expect(engine.startCalls).toHaveLength(2);
   });
 
-  it('libère les ressources au dispose', async () => {
-    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry(), 's4');
+  it('annule proprement un demarrage concurrent et nettoie l instance creee', async () => {
+    const engine = new ControlledEngine();
+    const registry = new VMRegistry([engine]);
+    const lifecycle = new SessionLifecycle(makeOS(), registry, 's2');
+    const mount = document.createElement('div');
+
+    const startPromise = lifecycle.start(mount);
+    const stopPromise = lifecycle.stop();
+    engine.startBarrier.resolve();
+
+    await Promise.all([startPromise, stopPromise]);
+
+    expect(lifecycle.snapshot.state).toBe('stopped');
+    expect(engine.instances).toHaveLength(1);
+    expect(engine.instances[0]?.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('libere les ressources meme si le moteur echoue', async () => {
+    const failingEngine: VMEngine = {
+      id: 'failing',
+      capabilities(): VMCapabilities {
+        return NO_CAPABILITIES;
+      },
+      canRun(): boolean {
+        return true;
+      },
+      async start(): Promise<VMInstance> {
+        throw new Error('boom');
+      },
+    };
+
+    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([failingEngine]), 's3');
     await lifecycle.start(document.createElement('div'));
-    await lifecycle.dispose();
-    expect(lifecycle.snapshot.providerId).toBe('unavailable');
+
+    expect(lifecycle.snapshot.state).toBe('error');
+    expect(lifecycle.snapshot.error?.code).toBe('START_FAILED');
   });
 });

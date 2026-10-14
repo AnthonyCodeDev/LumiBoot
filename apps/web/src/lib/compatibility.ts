@@ -5,7 +5,4 @@ export {
   getEngine,
 } from '@lumiboot/catalog';
 
-export type {
-  BrowserCapabilities,
-  CompatibilityResult,
-} from '@lumiboot/catalog';
+export type { BrowserCapabilities, CompatibilityResult } from '@lumiboot/catalog';

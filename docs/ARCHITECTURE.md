@@ -97,7 +97,7 @@ interface VMHandle {
   dispose(): Promise<void>;
   subscribe(listener: (event: SessionEvent) => void): () => void;
   // Une UI console est proposée par un adapter séparé :
-  // Browser v86 -> VGA/serial DOM ; remote -> WebSocket/WebRTC.
+  // Browser v86 -> VGA/serial DOM.
 }
 
 interface VMProvider {
@@ -140,10 +140,10 @@ La session navigateur peut avoir un ID généré localement. Elle n'a pas besoin
 |---|---|---|
 | Debian 12 i386 | Navigateur avec v86 | Premier système à réaliser et tester |
 | Ubuntu historique i386 | Navigateur avec v86 | Étude de compatibilité, version par version |
-| Fedora, Ubuntu et Mint modernes x64 | QEMU/KVM distant | Prévu, nécessite des serveurs |
-| Windows anciens x86 | v86 éventuellement, sinon QEMU | Comportement et licence à vérifier |
-| Windows 10/11 x64 | QEMU/KVM distant | Pas de support v86 x64 |
-| macOS modernes | Hôtes Mac + Virtualization.framework | Licences et compatibilités Apple spécifiques |
+| Fedora, Ubuntu et Mint modernes x64 | Navigateur avec moteur compatible local | Support local uniquement, sans backend de virtualisation |
+| Windows anciens x86 | Navigateur avec moteur compatible local | Comportement et licence à vérifier |
+| Windows 10/11 x64 | Non prioritaire | Aucun support direct par v86 ; dépend d'un moteur compatible local |
+| macOS modernes | Navigateur avec moteur compatible local | Étude de faisabilité, sans infrastructure distante |
 | macOS historiques Intel | Étude séparée par version | Ne pas promettre « toutes les versions » |
 
 **Debian 13 n'est pas la bonne base pour le premier noyau i386 :** Debian a supprimé l'installateur et le noyau i386 natifs à partir de Trixie. Debian 12 i386 est donc une cible de démarrage plus réaliste pour v86.
@@ -167,4 +167,4 @@ La session navigateur peut avoir un ID généré localement. Elle n'a pas besoin
 - Les composants UI ne font jamais `new V86(...)` directement.
 - Tests automatiques de la state machine, des erreurs de lancement, des favoris, de la recherche et de l'accessibilité.
 - Chargement lazy du moteur v86 et des assets système.
-- Ajouter des en-têtes de sécurité compatibles avec les exigences réelles du WASM et de ses workers (vérifier COOP/COEP selon la version intégrée).
+- Ajouter des en-têtes de sécurité compatibles avec les exigences réelles du WASM et de ses workers locaux (vérifier COOP/COEP selon la version intégrée).
