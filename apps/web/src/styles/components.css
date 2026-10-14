@@ -619,7 +619,7 @@
 }
 /* Logs masqués par défaut : l'écran VGA occupe alors toute la place. */
 .session-console.logs-hidden .v86-serial {
-  display: none;
+  display: none !important;
 }
 /* Console v86 injectée dans .session-console par le provider (classes
    conservées telles quelles : l'E2E s'accroche à .v86-serial). */

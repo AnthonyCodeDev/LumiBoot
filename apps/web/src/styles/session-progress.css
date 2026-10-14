@@ -155,6 +155,7 @@
 }
 
 .session-progress-track {
+  position: relative;
   height: 0.4rem;
   overflow: hidden;
   border-radius: 999px;
@@ -169,16 +170,11 @@
 }
 
 .session-progress-fill--indeterminate {
-  width: 100%;
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--primary) 50%,
-    transparent 100%
-  );
-  background-size: 40% 100%;
-  background-repeat: no-repeat;
-  animation: session-progress-shimmer 1.4s linear infinite;
+  width: 40%;
+  background: linear-gradient(90deg, var(--primary), var(--primary-hover));
+  transform: translateX(-110%);
+  animation: session-progress-slide 1.3s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  will-change: transform;
 }
 
 .session-progress-meta {
@@ -212,12 +208,12 @@
   }
 }
 
-@keyframes session-progress-shimmer {
+@keyframes session-progress-slide {
   0% {
-    background-position: -40% 0;
+    transform: translateX(-110%);
   }
   100% {
-    background-position: 140% 0;
+    transform: translateX(260%);
   }
 }
 
@@ -227,6 +223,6 @@
     opacity: 0.35;
   }
   .session-progress-fill--indeterminate {
-    animation: none;
+    animation-duration: 2.6s;
   }
 }
