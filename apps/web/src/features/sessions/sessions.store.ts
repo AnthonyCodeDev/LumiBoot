@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { getSystemById } from '@lumiboot/catalog';
 import { SessionLifecycle, VMError, type SessionSnapshot } from '@lumiboot/vm-core';
-import { selectEffectiveNetworkProfile } from '@lumiboot/vm-network';
+import { selectEffectiveNetworkProfile, type NetworkMode } from '@lumiboot/vm-network';
 import { createRegistry } from './registry';
 import { resolveCompanionConfig, resolveNetworkProfile } from '../../config/runtime';
 import { getCompanionRuntimeCredentials } from '../companion/store';
@@ -14,6 +14,13 @@ const disposedIds = new Set<string>();
 
 export interface SessionsState {
   sessions: Record<string, SessionSnapshot>;
+  /**
+   * Mode réseau **effectivement utilisé** au démarrage de chaque session
+   * (résolu par `selectEffectiveNetworkProfile`, potentiellement
+   * `local-companion` via l'appairage automatique). Distinct du mode
+   * configuré : sert au badge de la barre d'outils.
+   */
+  networkModes: Record<string, NetworkMode>;
   create: (systemId: string) => string;
   boot: (id: string, mountElement: HTMLElement) => Promise<void>;
   stop: (id: string) => Promise<void>;
@@ -26,6 +33,7 @@ export interface SessionsState {
  */
 export const useSessionsStore = create<SessionsState>((set) => ({
   sessions: {},
+  networkModes: {},
   create: (systemId) => {
     const system = getSystemById(systemId);
     if (!system) {
@@ -60,6 +68,9 @@ export const useSessionsStore = create<SessionsState>((set) => ({
       companionUrl: credentials.companionUrl,
       ...(credentials.companionToken === null ? {} : { companionToken: credentials.companionToken }),
     });
+    // Mémorise le mode effectif avant le démarrage : la barre d'outils affiche
+    // ce qui tourne réellement, pas le mode configuré.
+    set((s) => ({ networkModes: { ...s.networkModes, [id]: network.mode } }));
     await lifecycle.start(mountElement, { network });
   },
   stop: async (id) => {
@@ -78,7 +89,9 @@ export const useSessionsStore = create<SessionsState>((set) => ({
       set((state) => {
         const sessions = { ...state.sessions };
         delete sessions[id];
-        return { sessions };
+        const networkModes = { ...state.networkModes };
+        delete networkModes[id];
+        return { sessions, networkModes };
       });
     }
   },

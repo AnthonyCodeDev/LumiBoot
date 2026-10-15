@@ -10,9 +10,8 @@ import type { FetchLike } from '../../config/load-config';
  * - `POST /api/pair/exchange` `{pairingId}` (même origine) → `{token, expiresAt}` ;
  * - `POST /api/session/revoke` `{token}` → `{revoked: true}`.
  *
- * L'approbation elle-même (`POST /api/pair/approve|deny`) se fait depuis la
- * page d'admin locale du compagnon (jeton d'admin affiché en console), jamais
- * depuis LumiBoot web.
+ * L'approbation elle-même (`approve`/`deny`) se fait depuis la console du
+ * compagnon (terminal), jamais depuis LumiBoot web.
  */
 
 export type PairingStatusValue = 'pending' | 'approved' | 'denied';
@@ -218,7 +217,7 @@ export async function exchangeToken(
     if (result.status === 403) {
       throw new CompanionPairingError(
         'PAIRING_NOT_APPROVED',
-        'Échange impossible : approuvez d’abord la demande depuis la page d’admin locale du compagnon (même origine requise).',
+        'Échange impossible : approuvez d’abord la demande depuis la console du compagnon (même origine requise).',
       );
     }
     if (result.status === 404) {

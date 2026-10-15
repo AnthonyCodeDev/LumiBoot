@@ -1,6 +1,5 @@
 // Package platform isole les détails par OS : emplacement du fichier de
-// configuration et ouverture de la page d'admin dans le navigateur.
-// Aucune élévation de privilèges n'est jamais demandée.
+// configuration. Aucune élévation de privilèges n'est jamais demandée.
 package platform
 
 import (

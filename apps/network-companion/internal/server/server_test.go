@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -90,29 +89,6 @@ func TestCORS(t *testing.T) {
 	}
 }
 
-func TestAdminProtection(t *testing.T) {
-	s, ts := newTestServer(t)
-	if resp, err := http.Get(ts.URL + "/"); err != nil {
-		t.Fatal(err)
-	} else {
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusForbidden {
-			t.Fatalf("admin sans token: %d", resp.StatusCode)
-		}
-	}
-	resp, err := http.Get(ts.URL + "/?admin=" + s.AdminToken())
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("admin avec token: %d", resp.StatusCode)
-	}
-	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/html") {
-		t.Fatalf("type de contenu: %s", ct)
-	}
-}
-
 func TestPairingAPI(t *testing.T) {
 	s, ts := newTestServer(t)
 	client := ts.Client()
@@ -164,18 +140,9 @@ func TestPairingAPI(t *testing.T) {
 		t.Fatalf("échange pré-approbation: %d", resp.StatusCode)
 	}
 
-	// Approbation admin.
-	approve, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/pair/approve",
-		strings.NewReader(`{"pairingId":"`+created.PairingID+`"}`))
-	approve.Header.Set("Content-Type", "application/json")
-	approve.Header.Set("X-Admin-Token", s.AdminToken())
-	resp, err = client.Do(approve)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("approbation: %d", resp.StatusCode)
+	// Approbation depuis la console (appel direct à l'authentificateur).
+	if err := s.Authenticator().Approve(created.PairingID, true); err != nil {
+		t.Fatalf("approbation: %v", err)
 	}
 
 	// Échange : token émis une seule fois.
@@ -204,33 +171,6 @@ func TestPairingAPI(t *testing.T) {
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("révocation: %d", resp.StatusCode)
-	}
-}
-
-func TestPairDeny(t *testing.T) {
-	s, ts := newTestServer(t)
-	client := ts.Client()
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/pair/request", nil)
-	req.Header.Set("Origin", testOrigin)
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var created struct {
-		PairingID string `json:"pairingId"`
-	}
-	decodeJSON(t, resp, &created)
-	deny, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/pair/deny",
-		bytes.NewBufferString(`{"pairingId":"`+created.PairingID+`"}`))
-	deny.Header.Set("Content-Type", "application/json")
-	deny.Header.Set("X-Admin-Token", s.AdminToken())
-	resp, err = client.Do(deny)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("refus: %d", resp.StatusCode)
 	}
 }
 

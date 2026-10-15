@@ -25,28 +25,41 @@ administrateur demandé. Téléchargez l'artefact de votre plateforme depuis le 
 | macOS universel (Intel + Apple Silicon) | `LumiBoot-Network-macos-universal.tar.gz` | `tar -xzf … && ./lumiboot-network` ; au premier lancement non signé, Gatekeeper bloque : clic droit → Ouvrir, ou `xattr -d com.apple.quarantine lumiboot-network`. Binaire universel assemblé avec `lipo -create` (V1 : tar.gz uniquement, pas encore d'app `.app` signée/notarisée). |
 
 Options utiles : `--config CHEMIN` (fichier JSON), `--listen 127.0.0.1:37892` (doit rester
-loopback sauf `allowNonLoopback: true` explicite), `--no-browser` (ne pas ouvrir la page
-d'admin), `--version`. La configuration peut aussi passer par fichier JSON et variables
-`LUMIBOOT_COMPANION_*` (voir `apps/network-companion/README.md`).
+loopback sauf `allowNonLoopback: true` explicite), `--version`. La configuration peut aussi
+passer par fichier JSON et variables `LUMIBOOT_COMPANION_*` (voir
+`apps/network-companion/README.md`). Aucun navigateur n'est ouvert : tout se pilote depuis la
+console du terminal.
 
 ## Flux d'appairage (pas à pas)
 
-1. **Téléchargez et lancez** le compagnon (tableau ci-dessus). Une page d'admin locale
-   s'ouvre (`http://127.0.0.1:37892/`) ; le **jeton d'admin** généré au démarrage s'affiche
-   dans la console — gardez-le.
+1. **Téléchargez et lancez** le compagnon (tableau ci-dessus). Il affiche une bannière et une
+   **console interactive** dans le terminal ; tapez `help` pour la liste des commandes.
 2. **Revenez sur LumiBoot** et choisissez le réseau **« Companion »** (`local-companion`).
    LumiBoot envoie une **demande d'appairage** au compagnon (`POST /api/pair/request`) et
    affiche un code utilisateur.
-3. **Autorisez** la demande depuis la page d'admin locale (bouton Approuver, jeton d'admin ;
-   TTL 10 min). Refusez toute demande que vous n'avez pas initiée.
+3. **Autorisez** la demande **depuis la console du compagnon** : à l'apparition, la console
+   affiche l'origine, le code et l'expiration, puis demande `Approuver ? [y/N]`. Tapez `y`
+   (ou `oui`) pour approuver, toute autre touche refuse (TTL 10 min). Vous pouvez aussi
+   utiliser `approve <id|code>` / `deny <id|code>`. Refusez toute demande que vous n'avez pas
+   initiée.
 4. **Connectez** : LumiBoot échange l'approbation contre un **token de session à usage
    unique** (`POST /api/pair/exchange`) et compose `ws://127.0.0.1:37892/wisp/?token=…`
    pour v86.
 5. **WISP établi** : l'invité obtient DHCP/DNS et son trafic TCP sort par votre connexion.
    Vérifiez depuis l'invité : `getent hosts deb.debian.org`, `curl -I https://deb.debian.org/`.
 
-Pour révoquer : page d'admin → Révoquer la session, ou `POST /api/session/revoke`. Changer
-de mode réseau exige un **redémarrage** de la session (profil fixé avant démarrage).
+Pour révoquer : depuis la console du compagnon, `revoke <id|all>` (les sessions actives sont
+listées à l'apparition et via `list`/`status`), ou `POST /api/session/revoke` par possession
+du token. Changer de mode réseau exige un **redémarrage** de la session (profil fixé avant
+démarrage).
+
+**Le jeton de session est persisté** (clé `localStorage` `lumiboot.companion.session`) :
+l'appairage **survit à un rechargement de page** (F5) sans repasser par
+`pairing-required`. À la relecture, le jeton n'est réutilisé que si l'URL du compagnon
+correspond **et** que sa date d'expiration n'est pas dépassée ; sinon il est supprimé. Le
+jeton est également **supprimé à la révocation**. Compromis sécurité : le jeton reste
+**loopback uniquement**, **lié à l'origine** qui sert LumiBoot, à **TTL** et **révocable**,
+ce qui limite le risque XSS à cette seule origine (voir [Sécurité](#sécurité)).
 
 ## Sélection automatique
 
@@ -67,6 +80,12 @@ de l'émulateur, tout changement de mode exige un **redémarrage de la session**
   strictement vérifiée (match exact) sur `/wisp/` et endpoints sensibles.
 - **Révocation** : sessions révocables à tout moment (TTL 24 h par défaut, réglable via
   `SESSION_TOKEN_TTL`).
+- **Persistance du jeton** : pour survivre au rechargement de page (F5), le jeton de
+  session est stocké dans `localStorage` (`lumiboot.companion.session`). Compromis assumé :
+  le jeton est **loopback uniquement**, **lié à l'origine** LumiBoot, à **TTL** (expiration
+  revérifiée à la relecture, puis nettoyage) et **révocable** ; il est **supprimé à la
+  révocation ou à l'expiration**. Le risque XSS est ainsi circonscrit à l'origine qui sert
+  LumiBoot.
 - **Blocage après résolution DNS** : loopback, link-local, réseaux privés (10/8,
   172.16/12, 192.168/16, fc00::/7), 0.0.0.0/8, multicast/broadcast, 240/4 et **endpoints de
   métadonnées cloud** (169.254.169.254, 100.100.100.200, …) refusés ; le dial utilise l'IP

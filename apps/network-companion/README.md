@@ -13,16 +13,17 @@ défaut).
 
 ```
 apps/network-companion/
-├── cmd/lumiboot-network/main.go   # binaire : flags, bannière, arrêt gracieux
+├── cmd/lumiboot-network/main.go   # binaire : flags, bannière, console, arrêt gracieux
 ├── internal/
 │   ├── config/       # défauts sûrs, fichier JSON, env LUMIBOOT_COMPANION_*, validation
-│   ├── server/       # HTTP + WebSocket : santé, appairage, admin, /wisp/
+│   ├── console/      # console interactive : appairage (accepter/refuser), sessions, révocation
+│   ├── server/       # HTTP + WebSocket : santé, appairage, /wisp/
 │   ├── wisp/         # cadrage V1 (wisp.go) + session (handler.go)
 │   ├── auth/         # origines, appairage, tokens de session hachés
 │   ├── security/     # politique de destinations après résolution DNS
 │   ├── connections/  # suivi des flux, quotas, timeouts, bande passante
 │   ├── diagnostics/  # compteurs thread-safe
-│   └── platform/     # config OS + ouverture navigateur (windows/darwin/linux)
+│   └── platform/     # emplacement du fichier de config par OS
 └── tests/            # intégration bout en bout (httptest + écho TCP)
 ```
 
@@ -79,26 +80,26 @@ Conforme au client embarqué dans v86@0.5.471 (V1 uniquement) :
 6. **CORS strict** : origine reflétée uniquement si autorisée, jamais `*` ;
    en-têtes `X-Content-Type-Options`, `X-Frame-Options: DENY`,
    `Referrer-Policy`, CSP restrictive.
-7. **Page d'admin** (`GET /`, sombre et sobre) protégée par un **jeton généré au
-   démarrage et affiché en console** (en-tête `X-Admin-Token` ou `?admin=`) :
-   santé, appairages en attente (Approuver/Refuser), sessions (Révoquer),
-   flux actifs. Corps JSON bornés à 64 Kio.
+7. **Console interactive** (terminal) : à l'apparition d'une demande
+   d'appairage, approuver/refuser en tapant `y`/`N` ; commandes `list`/`status`,
+   `approve`, `deny`, `revoke <id|all>`, `quit`. Plus aucune page web d'admin ni
+   ouverture de navigateur. Corps JSON bornés à 64 Kio.
 
 ## Flux d'appairage
 
 1. LumiBoot (origine autorisée) appelle `POST /api/pair/request` → reçoit
    `{pairingId, userCode, expiresAt}` (TTL 10 min) ;
-2. l'utilisateur approuve depuis la page d'admin locale
-   (`POST /api/pair/approve`, jeton d'admin) — ou refuse (`.../deny`) ;
+2. la console du compagnon affiche la demande (origine, code, expiration) et
+   invite à décider : taper `y` (approbation) ou une autre touche (refus) — ou
+   `approve <id|code>` / `deny <id|code>` ;
 3. LumiBoot échange (`POST /api/pair/exchange`, même origine) → reçoit
    `{token, expiresAt}` (usage unique) et compose
    `ws://127.0.0.1:37892/wisp/?token=...` pour v86 ;
 4. `GET /api/pair/status?id=...` suit l'état ; `POST /api/session/revoke`
-   révoque (possession du token, ou `{id}` + jeton d'admin).
+   révoque par possession du token, ou `revoke <id|all>` depuis la console.
 
 Autres routes : `GET /health` → `{status, version, wispVersion: 1, uptimeSeconds,
-activeConnections, counters}` ; `GET /api/sessions` (admin : sessions,
-appairages en attente, flux).
+activeConnections, counters}`.
 
 ## Build / exécution / tests
 
@@ -114,7 +115,7 @@ gofmt -l .
 Lancer :
 
 ```sh
-go run ./cmd/lumiboot-network [--config PATH] [--listen 127.0.0.1:37892] [--no-browser] [--version]
+go run ./cmd/lumiboot-network [--config PATH] [--listen 127.0.0.1:37892] [--version]
 ```
 
 Configuration : fichier JSON (défaut :
@@ -127,8 +128,7 @@ Configuration : fichier JSON (défaut :
 
 ## Plateformes
 
-Windows / Linux / macOS, amd64 + arm64 (stdlib + `gorilla/websocket` ; tags de
-build pour l'ouverture du navigateur : `rundll32`, `open`, `xdg-open`). Aucun
+Windows / Linux / macOS, amd64 + arm64 (stdlib + `gorilla/websocket`). Aucun
 droit admin demandé.
 
 ## Limitations connues

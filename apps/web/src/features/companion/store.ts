@@ -4,6 +4,11 @@ import type { FetchLike } from '../../config/load-config';
 import { resolveCompanionConfig } from '../../config/runtime';
 import { checkCompanion } from './detect';
 import {
+  clearCompanionSession,
+  loadCompanionSession,
+  saveCompanionSession,
+} from './persistence';
+import {
   CompanionPairingError,
   exchangeToken,
   getPairingStatus,
@@ -14,7 +19,7 @@ import {
 export interface CompanionStoreState {
   /** État réel : `connected` exige `/health` OK **et** un token obtenu. */
   state: CompanionState;
-  /** Jeton de session : mémoire uniquement, jamais persisté. */
+  /** Jeton de session en mémoire (source de vérité runtime). */
   token: string | null;
   pairingId: string | null;
   userCode: string | null;
@@ -33,12 +38,21 @@ function messageOf(error: unknown): string {
 }
 
 /**
- * Store compagnon (mémoire uniquement).
+ * Store compagnon.
  *
  * Garantie : `connected` n'est déclaré qu'après une vraie réponse `/health`
- * (`wispVersion` compatible) **et** un token obtenu par `exchangeToken`.
- * Un `/health` OK sans token donne `pairing-required` (compagnon joint mais
- * pas appairé). Le token n'est jamais écrit dans `localStorage`.
+ * (`wispVersion` compatible) **et** un token obtenu par `exchangeToken` (ou
+ * restauré depuis le stockage, revérifié par `/health`). Un `/health` OK sans
+ * token donne `pairing-required` (compagnon joint mais pas appairé).
+ *
+ * Persistance : le token de session est conservé dans `localStorage`
+ * (`lumiboot.companion.session`) afin de survivre à un rechargement de page
+ * (F5), au lieu de retomber en `pairing-required`. Compromis sécurité assumé :
+ * le token est **loopback uniquement**, **lié à l'origine** LumiBoot, à **TTL**
+ * (expiration vérifiée à la relecture) et **révocable** ; il est **supprimé à
+ * la révocation ou à l'expiration**. Le risque XSS est circonscrit à l'origine
+ * qui sert LumiBoot. `getCompanionRuntimeCredentials()` continue de lire le
+ * token mémoire, jamais le stockage.
  */
 export const useCompanionStore = create<CompanionStoreState>((set, get) => ({
   state: 'not-running',
@@ -56,9 +70,16 @@ export const useCompanionStore = create<CompanionStoreState>((set, get) => ({
     }
     if (get().token) {
       set({ state: 'connected', error: null });
-    } else {
-      set({ state: 'pairing-required', error: null });
+      return;
     }
+    // Aucun token mémoire : tenter une restauration persistée (survie au F5).
+    // Le jeton restauré n'est accepté que parce que `/health` répond déjà.
+    const restored = loadCompanionSession(url);
+    if (restored) {
+      set({ token: restored.token, state: 'connected', error: null });
+      return;
+    }
+    set({ state: 'pairing-required', error: null });
   },
 
   startPairing: async (fetchImpl: FetchLike = fetch) => {
@@ -84,18 +105,20 @@ export const useCompanionStore = create<CompanionStoreState>((set, get) => ({
       if (status.status === 'denied') {
         set({
           state: 'error',
-          error: 'Appairage refusé depuis la page d’admin locale du compagnon.',
+          error: 'Appairage refusé depuis la console du compagnon.',
         });
         return;
       }
       if (status.status === 'pending') {
         set({
           state: 'pairing-required',
-          error: 'En attente d’approbation : validez le code depuis la page d’admin locale.',
+          error: 'En attente d’approbation : validez le code depuis la console du compagnon.',
         });
         return;
       }
-      const { token } = await exchangeToken(url, id, fetchImpl);
+      const { token, expiresAt } = await exchangeToken(url, id, fetchImpl);
+      // Persiste le jeton pour survivre à un rechargement de page (F5).
+      saveCompanionSession({ token, expiresAt, companionUrl: url });
       // Le token est obtenu : on re-sonde `/health` avant d'affirmer `connected`.
       const health = await checkCompanion(url, fetchImpl);
       if (health.state !== 'connected') {
@@ -119,6 +142,7 @@ export const useCompanionStore = create<CompanionStoreState>((set, get) => ({
         return;
       }
     }
+    clearCompanionSession();
     set({ token: null, pairingId: null, userCode: null, error: null });
     const health = await checkCompanion(url, fetchImpl);
     set({ state: health.state === 'connected' ? 'pairing-required' : health.state });
@@ -129,7 +153,7 @@ export const useCompanionStore = create<CompanionStoreState>((set, get) => ({
   },
 }));
 
-/** Jeton runtime pour le profil réseau de la session (jamais persisté). */
+/** Jeton runtime pour le profil réseau de la session (lu en mémoire). */
 export function getCompanionRuntimeCredentials(): {
   companionUrl: string;
   companionToken: string | null;

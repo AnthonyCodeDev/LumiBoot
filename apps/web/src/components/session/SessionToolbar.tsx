@@ -3,6 +3,7 @@ import type { SessionSnapshot, VMState } from '@lumiboot/vm-core';
 import { Button } from '../ui/Button';
 import { getPrimaryLaunchProfile, launchProfileLabel } from '../../lib/labels';
 import { resolveNetworkProfile } from '../../config/runtime';
+import { useSessionsStore } from '../../features/sessions/sessions.store';
 
 const STATE_LABELS: Record<SessionSnapshot['state'], string> = {
   idle: 'Inactif',
@@ -53,13 +54,17 @@ export function SessionToolbar({
     progressPercent !== null
       ? `${STATE_LABELS[session.state]} · ${progressPercent} %`
       : STATE_LABELS[session.state];
-  // Mode réseau figé à la création de la session (profil résolu au `boot`).
-  // Repli silencieux hors runtime chargé (tests unitaires) : aucun crash.
+  // Mode réseau **effectivement utilisé au démarrage** de la session (mémorisé
+  // par le store au `boot`, ex. `local-companion` par sélection automatique),
+  // et non le mode configuré. Repli sur le mode configuré si la session n'est
+  // pas encore enregistrée, puis silencieux hors runtime chargé (tests
+  // unitaires) : aucun crash.
+  const effectiveMode = useSessionsStore((s) => s.networkModes[session.id]);
   let networkMode: string | null = null;
   try {
-    networkMode = resolveNetworkProfile(system.id).mode;
+    networkMode = effectiveMode ?? resolveNetworkProfile(system.id).mode;
   } catch {
-    networkMode = null;
+    networkMode = effectiveMode ?? null;
   }
 
   return (

@@ -75,6 +75,24 @@ describe('NetworkCompanionStatus', () => {
     expect(screen.getByRole('button', { name: 'Réessayer' })).toBeTruthy();
   });
 
+  it('pairing-required sans userCode : « Lancer l’appairage » seul, pas « Connecter »', async () => {
+    stubHealth({ status: 'ok', version: '0.1.0', wispVersion: 1 });
+    useCompanionStore.setState({ state: 'pairing-required', token: null, userCode: null });
+    render(<NetworkCompanionStatus />);
+    expect(await screen.findByText('En attente d’appairage')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Connecter' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Lancer l’appairage' })).toBeTruthy();
+  });
+
+  it('pairing-required avec userCode : « Connecter » seul, pas « Lancer l’appairage »', async () => {
+    stubHealth({ status: 'ok', version: '0.1.0', wispVersion: 1 });
+    useCompanionStore.setState({ state: 'pairing-required', token: null, userCode: 'ABCD-1234' });
+    render(<NetworkCompanionStatus />);
+    expect(await screen.findByText('En attente d’appairage')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Connecter' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Lancer l’appairage' })).toBeNull();
+  });
+
   it('n’affiche « Connecté » que sur état connected + token', async () => {
     stubHealth({ status: 'ok', version: '0.1.0', wispVersion: 1 });
     useCompanionStore.setState({ state: 'connected', token: 'tok' });

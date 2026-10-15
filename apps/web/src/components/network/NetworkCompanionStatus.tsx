@@ -64,7 +64,7 @@ export function NetworkCompanionStatus() {
         ) : null}
         {state === 'pairing-required' && userCode ? (
           <p>
-            Code d’appairage : <code>{userCode}</code> — validez-le depuis la page d’admin locale du
+            Code d’appairage : <code>{userCode}</code> — validez-le depuis la console du
             compagnon, puis cliquez sur « Connecter ».
           </p>
         ) : null}
@@ -88,7 +88,7 @@ export function NetworkCompanionStatus() {
             Révoquer
           </Button>
         ) : null}
-        {state === 'pairing-required' ? (
+        {state === 'pairing-required' && userCode ? (
           <Button variant="primary" type="button" onClick={() => void connect()}>
             Connecter
           </Button>

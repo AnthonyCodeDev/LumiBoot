@@ -6,7 +6,7 @@
 // temps constant, combiné à un contrôle strict de l'en-tête Origin.
 //
 // Flux : la page web demande un appairage (RequestPairing), l'utilisateur
-// approuve depuis la page d'admin locale (Approve), puis la page échange
+// approuve depuis la console du compagnon (Approve), puis la page échange
 // l'appairage contre un token de session (Exchange). Le token brut n'est
 // stocké que sous forme hachée (SHA-256), avec TTL et origine liée.
 package auth
@@ -57,7 +57,7 @@ type Pairing struct {
 
 // SessionInfo décrit une session active (sans secret).
 // ID est l'empreinte SHA-256 hex du token : non réversible, affichable à
-// l'admin local et utilisable pour révoquer (AdminRevoke).
+// la console locale et utilisable pour révoquer (AdminRevoke).
 type SessionInfo struct {
 	ID        string
 	Origin    string
@@ -300,7 +300,7 @@ func (a *Authenticator) ListSessions() []SessionInfo {
 }
 
 // AdminRevoke révoque une session par son empreinte (ID de ListSessions).
-// Réservé à la page d'admin locale.
+// Réservé à la console locale du compagnon.
 func (a *Authenticator) AdminRevoke(id string) bool {
 	if id == "" {
 		return false
@@ -333,7 +333,7 @@ func (a *Authenticator) CleanupExpired() {
 	}
 }
 
-// PendingPairings liste les appairages en attente non expirés (page d'admin).
+// PendingPairings liste les appairages en attente non expirés (console).
 func (a *Authenticator) PendingPairings() []Pairing {
 	a.mu.Lock()
 	defer a.mu.Unlock()

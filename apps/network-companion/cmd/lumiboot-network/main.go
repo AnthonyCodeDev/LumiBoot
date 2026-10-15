@@ -1,7 +1,8 @@
 // Binaire lumiboot-network : serveur local « Network Companion » de LumiBoot.
 //
-// Ce programme démarre UNIQUEMENT le serveur WebSocket WISP local (pont réseau
-// vers Internet pour l'OS virtualisé). Il n'exécute AUCUNE machine virtuelle.
+// Ce programme démarre le serveur WebSocket WISP local (pont réseau vers
+// Internet pour l'OS virtualisé) et une console interactive d'administration
+// (appairage, sessions). Il n'exécute AUCUNE machine virtuelle.
 package main
 
 import (
@@ -10,9 +11,11 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/lumiboot/network-companion/internal/config"
+	"github.com/lumiboot/network-companion/internal/console"
 	"github.com/lumiboot/network-companion/internal/platform"
 	"github.com/lumiboot/network-companion/internal/server"
 )
@@ -28,7 +31,6 @@ func run() error {
 	var (
 		configPath = flag.String("config", "", "chemin du fichier config JSON (défaut : dossier config de l'OS)")
 		listen     = flag.String("listen", "", "surcharge de l'adresse d'écoute (doit rester loopback)")
-		noBrowser  = flag.Bool("no-browser", false, "ne pas ouvrir la page d'admin au démarrage")
 		showVer    = flag.Bool("version", false, "affiche la version et quitte")
 	)
 	flag.Parse()
@@ -62,30 +64,55 @@ func run() error {
 		return err
 	}
 
-	// Bannière de démarrage.
-	fmt.Println("===============================================================")
-	fmt.Println(" LumiBoot Network Companion " + server.Version)
-	fmt.Println("===============================================================")
-	fmt.Println(" Écoute (loopback uniquement) : " + cfg.ListenAddr)
-	fmt.Println(" Page d'admin locale          : " + srv.AdminURL())
-	fmt.Println()
-	fmt.Println(" Appairage : dans LumiBoot, choisissez le réseau « Companion »,")
-	fmt.Println(" puis approuvez la demande depuis la page d'admin ci-dessus.")
-	fmt.Println(" Ce programme n'exécute AUCUNE machine virtuelle.")
-	fmt.Println(" Arrêt propre : Ctrl+C.")
-	fmt.Println("===============================================================")
-
-	if !*noBrowser {
-		if err := platform.OpenBrowser(srv.AdminURL()); err != nil {
-			fmt.Fprintln(os.Stderr, "note: ouverture du navigateur impossible: "+err.Error())
-		}
-	}
+	printBanner(cfg.ListenAddr)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := srv.Run(ctx); err != nil {
-		return err
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Serveur HTTP/WS et console interactive en parallèle : dès que l'un
+	// s'arrête, on annule le contexte et on laisse l'autre se terminer.
+	errCh := make(chan error, 2)
+	go func() { errCh <- srv.Run(ctx) }()
+	go func() { errCh <- console.New(srv.Authenticator(), os.Stdin, os.Stdout).Run(ctx) }()
+
+	pending := 2
+	var firstErr error
+	select {
+	case <-ctx.Done():
+	case err := <-errCh:
+		pending--
+		if err != nil {
+			firstErr = err
+		}
+	}
+	cancel()
+	for pending > 0 {
+		if err := <-errCh; err != nil && firstErr == nil {
+			firstErr = err
+		}
+		pending--
+	}
+
+	if firstErr != nil {
+		return firstErr
 	}
 	fmt.Println("Arrêt du compagnon : au revoir.")
 	return nil
+}
+
+// printBanner affiche la bannière de démarrage (sobre, alignée).
+func printBanner(listenAddr string) {
+	rule := strings.Repeat("─", 60)
+	fmt.Println(rule)
+	fmt.Printf(" LumiBoot Network Companion — v%s\n", server.Version)
+	fmt.Println(rule)
+	fmt.Printf(" Endpoint WISP local : ws://%s/wisp/\n", listenAddr)
+	fmt.Printf(" Écoute              : %s (loopback uniquement)\n", listenAddr)
+	fmt.Println(" Sécurité            : réseaux privés / loopback / métadonnées bloqués")
+	fmt.Println(" Appairage           : automatique côté LumiBoot ; à approuver ci-dessous")
+	fmt.Println(rule)
+	fmt.Println(" Tapez « help » pour les commandes — Ctrl+C pour arrêter.")
+	fmt.Println(" Ce programme n'exécute AUCUNE machine virtuelle.")
 }

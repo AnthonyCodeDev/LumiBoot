@@ -1,6 +1,6 @@
 // Test d'intégration : session WISP V1 complète contre un vrai serveur TCP
 // d'écho local, en passant par tout le cycle HTTP (appairage -> approbation
-// admin -> échange -> WebSocket authentifié).
+// console -> échange -> WebSocket authentifié).
 package companion_test
 
 import (
@@ -87,17 +87,9 @@ func pair(t *testing.T, srv *server.Server, ts *httptest.Server) string {
 		t.Fatalf("pair/request: %d", resp.StatusCode)
 	}
 
-	approve, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/pair/approve",
-		strings.NewReader(`{"pairingId":"`+created.PairingID+`"}`))
-	approve.Header.Set("Content-Type", "application/json")
-	approve.Header.Set("X-Admin-Token", srv.AdminToken())
-	resp, err = client.Do(approve)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("pair/approve: %d", resp.StatusCode)
+	// Approbation depuis la console (appel direct à l'authentificateur).
+	if err := srv.Authenticator().Approve(created.PairingID, true); err != nil {
+		t.Fatalf("pair/approve: %v", err)
 	}
 
 	exchange, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/pair/exchange",
