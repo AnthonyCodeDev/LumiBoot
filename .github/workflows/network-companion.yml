@@ -96,7 +96,7 @@ jobs:
           fi
           ls -la dist
       - name: Upload artefact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: LumiBoot-Network-${{ matrix.goos }}-${{ matrix.goarch }}
           path: apps/network-companion/dist/LumiBoot-Network-*
@@ -114,8 +114,8 @@ jobs:
         include:
           - { os: ubuntu-latest, ext: "" }
           - { os: windows-latest, ext: ".exe" }
-          - { os: macos-13, ext: "" }
-          - { os: macos-14, ext: "" }
+          - { os: macos-15-intel, ext: "" }
+          - { os: macos-15, ext: "" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -143,15 +143,15 @@ jobs:
     # fichier non produit : `macos` pointe vers cet universel.
     name: package macOS universel (lipo)
     needs: build
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Télécharger darwin/amd64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: LumiBoot-Network-darwin-amd64
           path: darwin-amd64
       - name: Télécharger darwin/arm64
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: LumiBoot-Network-darwin-arm64
           path: darwin-arm64
@@ -167,7 +167,7 @@ jobs:
           rm dist/lumiboot-network
           ls -la dist
       - name: Upload artefact universel
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: LumiBoot-Network-macos-universal
           path: dist/LumiBoot-Network-macos-universal.tar.gz
@@ -182,7 +182,7 @@ jobs:
       contents: write
     steps:
       - name: Télécharger tous les artefacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           merge-multiple: true
           path: dist
@@ -274,7 +274,7 @@ jobs:
     steps:
       - name: Télécharger les .exe
         if: env.HAS_WIN_CERT == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: LumiBoot-Network-windows-*
           merge-multiple: true
@@ -306,7 +306,7 @@ jobs:
           }
       - name: Upload .exe signés
         if: env.HAS_WIN_CERT == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: LumiBoot-Network-windows-signed
           path: dist/*.exe
@@ -318,13 +318,13 @@ jobs:
     name: signature macOS (optionnel)
     needs: [build]
     if: startsWith(github.ref, 'refs/tags/network-v')
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERT_P12_BASE64 != '' && secrets.APPLE_CERT_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_PASSWORD != '' }}
     steps:
       - name: Télécharger les archives darwin
         if: env.HAS_APPLE_CERT == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: LumiBoot-Network-darwin-*
           merge-multiple: true
@@ -367,7 +367,7 @@ jobs:
           ls -la signed
       - name: Upload archives signées/notarisées
         if: env.HAS_APPLE_CERT == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: LumiBoot-Network-darwin-signed
           path: signed/*
