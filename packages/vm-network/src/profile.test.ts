@@ -39,6 +39,40 @@ describe('normalizeNetworkProfile', () => {
     ).toEqual({ mode: 'browser-fetch' });
   });
 
+  it('conserve companionUrl/companionToken uniquement en mode local-companion', () => {
+    expect(
+      normalizeNetworkProfile({
+        mode: 'local-companion',
+        companionUrl: 'http://127.0.0.1:37892',
+        companionToken: 'abc',
+      }),
+    ).toEqual({
+      mode: 'local-companion',
+      companionUrl: 'http://127.0.0.1:37892',
+      companionToken: 'abc',
+    });
+
+    expect(
+      normalizeNetworkProfile({ mode: 'local-companion', relayUrl: 'wss://relay.example' }),
+    ).toEqual({ mode: 'local-companion' });
+
+    expect(
+      normalizeNetworkProfile({
+        mode: 'offline',
+        companionUrl: 'http://127.0.0.1:37892',
+        companionToken: 'abc',
+      }),
+    ).toEqual({ mode: 'offline' });
+
+    expect(
+      normalizeNetworkProfile({
+        mode: 'user-relay',
+        relayUrl: 'wss://relay.example',
+        companionUrl: 'http://127.0.0.1:37892',
+      }),
+    ).toEqual({ mode: 'user-relay', relayUrl: 'wss://relay.example' });
+  });
+
   it('lève une NetworkError sur une entrée invalide', () => {
     expect(() => normalizeNetworkProfile({ mode: 'nope' })).toThrow(NetworkError);
     expect(() => normalizeNetworkProfile(null)).toThrow(NetworkError);

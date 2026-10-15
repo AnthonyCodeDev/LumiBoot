@@ -56,6 +56,58 @@ describe('loadConfig', () => {
     expect(config.version).toBe(1);
     expect(config.network.defaultProfile).toEqual({ mode: 'browser-fetch' });
     expect(config.network.systems?.['debian-12-i386']).toEqual({ mode: 'browser-fetch' });
+    expect(config.companion.enabled).toBe(true);
+    expect(config.companion.url).toContain('127.0.0.1:37892');
+  });
+
+  it('applique les défauts compagnon en l’absence de section dédiée', async () => {
+    const config = await loadConfig(fetchReturningJson(VALID_CONFIG));
+    expect(config.companion).toEqual({
+      enabled: true,
+      url: 'http://127.0.0.1:37892/',
+    });
+  });
+
+  it('rejette une companion.url non loopback', async () => {
+    const error = await loadAndCatch(
+      fetchReturningJson({
+        ...VALID_CONFIG,
+        companion: { url: 'http://example.com:37892' },
+      }),
+    );
+    expect(error.code).toBe('CONFIG_INVALID_COMPANION_URL');
+  });
+
+  it('rejette une companion.url mal formée', async () => {
+    const error = await loadAndCatch(
+      fetchReturningJson({
+        ...VALID_CONFIG,
+        companion: { url: 'pas-une-url' },
+      }),
+    );
+    expect(error.code).toBe('CONFIG_INVALID_COMPANION_URL');
+  });
+
+  it('rejette tout companionToken persisté dans le fichier public', async () => {
+    const error = await loadAndCatch(
+      fetchReturningJson({
+        version: 1,
+        network: {
+          defaultProfile: { mode: 'local-companion', companionToken: 'secret' },
+        },
+      }),
+    );
+    expect(error.code).toBe('CONFIG_FORBIDDEN_TOKEN');
+  });
+
+  it('rejette un companionToken niché dans la section companion', async () => {
+    const error = await loadAndCatch(
+      fetchReturningJson({
+        ...VALID_CONFIG,
+        companion: { enabled: true, url: 'http://127.0.0.1:37892', companionToken: 'x' },
+      }),
+    );
+    expect(error.code).toBe('CONFIG_FORBIDDEN_TOKEN');
   });
 
   it('cible bien le fichier public avec cache désactivé', async () => {
@@ -165,6 +217,7 @@ describe('resolveNetworkProfile', () => {
     const config: LumibootConfig = {
       version: 1,
       network: { defaultProfile: { mode: 'user-relay', relayUrl: 'wss://relay.example:4000' } },
+      companion: { enabled: true, url: 'http://127.0.0.1:37892/' },
     };
     setRuntimeConfig(config);
     expect(resolveNetworkProfile('autre')).toEqual({

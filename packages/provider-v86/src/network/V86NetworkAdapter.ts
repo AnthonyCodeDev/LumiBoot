@@ -1,6 +1,8 @@
 import type { OSDefinition } from '@lumiboot/contracts';
 import {
+  DEFAULT_COMPANION_URL,
   NetworkError,
+  buildCompanionWispUrl,
   validateRelayUrl,
   type NetworkController,
   type NetworkProfile,
@@ -41,22 +43,40 @@ export interface NetworkEventSource {
 }
 
 /**
- * Mapping LumiBoot -> v86, vérifié dans la version installée `v86@0.5.471`.
+ * Mapping LumiBoot -> v86, vérifié dans la version installée
+ * `v86@0.5.471+g94faf3d` (`node_modules/v86/build/libv86.mjs`).
  *
- * `libv86.mjs` résout `relay_url` (`V86Options.net_device.relay_url`) ainsi :
+ * v86 résout `options.network_relay_url || options.net_device.relay_url` ainsi :
  *   - `"fetch"`      -> backend fetch natif du navigateur (classe `Xb`) ;
  *   - `"inbrowser"`  -> backend réseau en mémoire (classe `rc`) ;
- *   - `"wisp://..."` -> client Wisp au-dessus de `ws://` (classe `$b`) ;
- *   - `"wisps://..."`-> client Wisp au-dessus de `wss://` (classe `$b`) ;
+ *   - `"wisp://…"`   -> client Wisp au-dessus de `ws://` (classe `$b`) ;
+ *   - `"wisps://…"`  -> client Wisp au-dessus de `wss://` (classe `$b`) ;
  *   - tout autre     -> relais WebSocket historique (classe `pb`).
  *
- * Le client Wisp de v86 réécrit `wisp://` en `ws://` et `wisps://` en `wss://`
- * (`register_ws`). LumiBoot valide ses relais en `wss://` (seul `ws://` localhost
- * est toléré en développement), on convertit donc fidèlement :
- *   - `wss://host:port/path[...]` -> `wisps://host:port/path[...]` ;
- *   - `ws://host:port/path[...]`  -> `wisp://host:port/path[...]`.
+ * Modes LumiBoot :
+ *   - `offline` / `browser-fetch` / `user-relay` : voir
+ *     {@link toV86NetworkDevice} ;
+ *   - `local-companion` : relais WISP local du compagnon
+ *     (`wisp://127.0.0.1:37892/wisp/`), dérivé de `companionUrl` (+ token
+ *     runtime `companionToken`) via `buildCompanionWispUrl`, puis converti par
+ *     `toWispRelayUrl` comme les autres relais.
  *
- * Aucune constante magique : tout ce que v86 comprend est accepté tel quel.
+ * `network_relay_url` est marqué `@deprecated` dans `v86.d.ts` au profit de
+ * `net_device` : LumiBoot n'utilise donc que `net_device.relay_url`.
+ *
+ * Le client Wisp construit son WebSocket via `$b.prototype.register_ws` :
+ *   `new WebSocket(url.replace("wisp://","ws://").replace("wisps://","wss://"))`
+ * `wisps://` est donc le schéma d'un relais Wisp **TLS** (`wss://`), et une URL
+ * `wss://…` brute n'est PAS reconnue comme Wisp (elle tomberait sur le relais
+ * historique `pb`). LumiBoot valide ses relais en `wss://`
+ * ({@link validateRelayUrl}), on convertit donc fidèlement :
+ *   - `wss://host:port/path[…]` -> `wisps://host:port/path[…]` ;
+ *   - `ws://host:port/path[…]`  -> `wisp://host:port/path[…]` (uniquement si la
+ *     validation a explicitement toléré le `ws:` localhost ; le provider ne
+ *     l'active jamais, donc ce cas reste hors du chemin nominal).
+ *
+ * `validation.url` provient de `URL.href` : port et chemin sont déjà normalisés
+ * et préservés tels quels, v86 ne réclame aucune retouche supplémentaire.
  */
 function toWispRelayUrl(relayUrl: string): string {
   return relayUrl.replace(/^wss:/i, 'wisps:').replace(/^ws:/i, 'wisp:');
@@ -69,7 +89,9 @@ function toWispRelayUrl(relayUrl: string): string {
  * fusionné par le provider via {@link selectNetworkDeviceType}.
  *
  * @throws NetworkError `NETWORK_INVALID_RELAY_URL` en mode `user-relay` sans
- *   adresse `wss://` valide, `NETWORK_UNSUPPORTED_MODE` en mode `local-network`.
+ *   adresse `wss://` valide, `NETWORK_INVALID_COMPANION_URL` en mode
+ *   `local-companion` sans adresse loopback valide, `NETWORK_UNSUPPORTED_MODE`
+ *   en mode `local-network`.
  */
 export function toV86NetworkDevice(profile: NetworkProfile): V86NetworkDevice | undefined {
   switch (profile.mode) {
@@ -86,6 +108,21 @@ export function toV86NetworkDevice(profile: NetworkProfile): V86NetworkDevice | 
         );
       }
       return { relay_url: toWispRelayUrl(validation.url) };
+    }
+    case 'local-companion': {
+      let url: string;
+      try {
+        url = buildCompanionWispUrl(
+          profile.companionUrl ?? DEFAULT_COMPANION_URL,
+          profile.companionToken,
+        );
+      } catch (error) {
+        throw new NetworkError(
+          'NETWORK_INVALID_COMPANION_URL',
+          error instanceof Error ? error.message : 'Adresse du compagnon invalide.',
+        );
+      }
+      return { relay_url: toWispRelayUrl(url) };
     }
     case 'local-network':
       throw new NetworkError(

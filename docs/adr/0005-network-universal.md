@@ -26,12 +26,17 @@ Le package fournit :
 
 - **Modes** (`modes.ts`) :
   - `offline` — **implémenté** : isolation totale.
-  - `browser-fetch` — **implémenté** : réseau émulé au-dessus du backend `fetch` natif de v86 ;
-    soumis à CORS, **sans Internet complet garanti**.
-  - `user-relay` — **implémenté** : Internet complet via un **relais WISP personnel** en `wss://`
-    fourni par l'utilisateur, validation stricte, **aucun relais public par défaut**.
-  - `local-network` — **prévu**, **non implémenté** : switch virtuel local absent ; le mode est refusé
-    au démarrage et ne doit pas être activé artificiellement.
+  - `browser-fetch` — **implémenté** : réseau émulé au-dessus du backend `fetch` natif de v86. De fait
+    **HTTP (port 80) uniquement** : le backend `fetch` de `v86@0.5.471` n'enregistre pas le TCP 443,
+    donc **HTTPS échoue** ; **soumis à CORS** (hôtes sans `Access-Control-Allow-Origin` refusés) ;
+    **sans Internet complet garanti**.
+  - `user-relay` — **implémenté** : réseau émulé via un **relais WISP personnel** en `wss://` fourni
+    par l'utilisateur, validation stricte, **aucun relais public par défaut**. Ne **garantit pas**
+    Internet complet : TCP (dont 443) passe **seulement via un vrai relais WISP compatible v86**, UDP
+    est **optionnel**, ICMP **non garanti**.
+  - `local-network` — **prévu**, **non implémenté** : désigne un **réseau virtuel entre invités**, **pas**
+    le LAN physique de l'hôte ; switch virtuel absent, le mode est refusé au démarrage et ne doit pas
+    être activé artificiellement.
 - **Capacités** (`capabilities.ts`) dérivées par `capabilitiesForMode(mode)`.
 - **Profil** (`profile.ts`) validé par Zod, conservant `relayUrl` uniquement en `user-relay`, défaut
   `offline`.
@@ -43,6 +48,19 @@ Le package fournit :
 Côté moteur, un adaptateur (`provider-v86/src/network/V86NetworkAdapter.ts`) traduit le profil en
 `net_device` v86 : backend `fetch` en `browser-fetch`, relais WISP `wisps://` en `user-relay`, aucune
 NIC en `offline`.
+
+### Trois niveaux de confiance
+
+Pour éviter toute promesse mensongère, l'ADR distingue explicitement :
+
+- **Configuré** : le mode est sélectionné et le profil validé (`lumiboot.config.json` →
+  `runtime.resolveNetworkProfile`). Cela ne prouve **rien** sur la connectivité.
+- **Techniquement supporté** : capacités déclarées par `capabilitiesForMode(mode)`.
+- **Réellement vérifié** : connectivité **constatée à l'exécution** par des sondes `dns`/`http`/
+  `https`/`tcp`, jamais déduites des compteurs `txBytes`/`rxBytes`.
+
+**`fullInternet` n'est jamais vrai par simple sélection de mode** : il vaut `false` pour tous les
+modes et ne peut devenir vrai qu'après vérification à l'exécution.
 
 ## Alternatives écartées
 
@@ -60,7 +78,16 @@ NIC en `offline`.
   de la session. Chaque session possède **son propre** contrôleur (aucune interférence entre VM).
 - L'UI peut afficher les **mêmes** capacités et diagnostics quel que soit le moteur, sans supposer
   Ethernet.
-- Les limitations restent **honnêtes et visibles** : `browser-fetch` ne garantit pas Internet complet,
-  `local-network` n'est pas disponible, et les relais sont strictement fournis par l'utilisateur.
-- Le détail des modes, de la fiabilité et de la sécurité est documenté dans
-  [`../network.md`](../network.md).
+- Les limitations restent **honnêtes et visibles** :
+  - `browser-fetch` ne garantit pas Internet complet : en pratique **HTTP seul** (pas de HTTPS),
+    **CORS appliqué** (p. ex. `security.debian.org` refusé, donc `apt` échoue).
+  - `user-relay` ne garantit rien seul : TCP (dont 443) **si** le relais est un **vrai serveur WISP
+    compatible v86**, **UDP optionnel**, **ICMP non garanti**, **aucun relais public par défaut**.
+  - `local-network` n'est pas disponible (réseau **entre invités**, pas le LAN de l'hôte).
+  - Les relais sont strictement fournis par l'utilisateur et deviennent l'**IP de sortie** de
+    l'invité (confiance/confidentialité à la charge de l'utilisateur).
+- Aucun mode ne promet « Internet complet » : seul un état **vérifié à l'exécution** peut l'attester,
+  et la vérification automatique reste **prévue**.
+- Le détail des modes, de la fiabilité, de la sécurité et de l'activation WISP est documenté dans
+  [`../network.md`](../network.md). Un futur transport TCP/UDP brut (Isolated Web App) est étudié
+  dans [`0006-direct-sockets-iwa.md`](0006-direct-sockets-iwa.md) (**non disponible aujourd'hui**).

@@ -1,12 +1,16 @@
 import {
+  DEFAULT_COMPANION_URL,
   normalizeNetworkProfile,
+  validateCompanionUrl,
   validateRelayUrl,
   type NetworkProfile,
 } from '@lumiboot/vm-network';
 import {
   lumibootConfigSchema,
+  type CompanionConfig,
   type LumibootConfig,
   type NetworkConfig,
+  type ParsedCompanionFileConfig,
   type ParsedNetworkConfig,
 } from './schema';
 
@@ -19,7 +23,9 @@ export type ConfigLoadErrorCode =
   | 'CONFIG_INVALID'
   | 'CONFIG_VERSION_UNSUPPORTED'
   | 'CONFIG_INVALID_MODE'
-  | 'CONFIG_INVALID_RELAY';
+  | 'CONFIG_INVALID_RELAY'
+  | 'CONFIG_INVALID_COMPANION_URL'
+  | 'CONFIG_FORBIDDEN_TOKEN';
 
 /** Erreur typée : tout échec de chargement porte un code exploitable. */
 export class ConfigLoadError extends Error {
@@ -58,10 +64,77 @@ function assertRelay(profile: NetworkProfile, label: string): void {
   }
 }
 
+/**
+ * Refuse tout jeton persisté dans le fichier public : `companionToken` est
+ * runtime uniquement (mémoire, jamais `lumiboot.config.json`). Balaye
+ * récursivement le JSON brut car le schéma strict le rejetterait sinon en
+ * `CONFIG_INVALID` générique, sans message de sécurité explicite.
+ */
+function assertNoCompanionToken(raw: unknown): void {
+  const seen = new Set<unknown>();
+  const visit = (value: unknown): boolean => {
+    if (value === null || typeof value !== 'object') return false;
+    if (seen.has(value)) return false;
+    seen.add(value);
+    if (Array.isArray(value)) return value.some(visit);
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (key === 'companionToken') return true;
+      if (visit(entry)) return true;
+    }
+    return false;
+  };
+  if (visit(raw)) {
+    throw new ConfigLoadError(
+      'CONFIG_FORBIDDEN_TOKEN',
+      'Configuration invalide : « companionToken » ne doit jamais figurer dans le fichier public « /lumiboot.config.json » (jeton runtime uniquement, obtenu par appairage).',
+    );
+  }
+}
+
+/** Valide l'URL d'un profil `local-companion` (loopback uniquement). */
+function assertCompanionUrl(companionUrl: string | undefined, label: string): void {
+  if (companionUrl === undefined) return;
+  const validation = validateCompanionUrl(companionUrl);
+  if (!validation.ok) {
+    throw new ConfigLoadError(
+      'CONFIG_INVALID_COMPANION_URL',
+      `Configuration invalide : adresse du compagnon rejetée pour ${label} — ${
+        validation.error ?? 'adresse invalide'
+      }.`,
+    );
+  }
+}
+
+/** Normalise la section `companion` (défauts appliqués, URL validée). */
+function toCompanionConfig(parsed: ParsedCompanionFileConfig | undefined): CompanionConfig {
+  const url = parsed?.url ?? DEFAULT_COMPANION_URL;
+  const validation = validateCompanionUrl(url);
+  if (!validation.ok || validation.url === undefined) {
+    throw new ConfigLoadError(
+      'CONFIG_INVALID_COMPANION_URL',
+      `Configuration invalide : adresse du compagnon rejetée — ${
+        validation.error ?? 'adresse invalide'
+      }.`,
+    );
+  }
+  const config: CompanionConfig = {
+    enabled: parsed?.enabled ?? true,
+    url: validation.url,
+  };
+  if (parsed?.downloadManifestUrl !== undefined) {
+    config.downloadManifestUrl = parsed.downloadManifestUrl;
+  }
+  return config;
+}
+
 /** Nettoie les profils validés et vérifie les relais avant exposition. */
 function toNetworkConfig(parsed: ParsedNetworkConfig): NetworkConfig {
   const defaultProfile = normalizeNetworkProfile(parsed.defaultProfile);
   assertRelay(defaultProfile, 'le profil réseau par défaut');
+  assertCompanionUrl(
+    defaultProfile.mode === 'local-companion' ? defaultProfile.companionUrl : undefined,
+    'le profil réseau par défaut',
+  );
 
   const parsedSystems = parsed.systems;
   if (parsedSystems === undefined) {
@@ -72,6 +145,10 @@ function toNetworkConfig(parsed: ParsedNetworkConfig): NetworkConfig {
   for (const [id, rawProfile] of Object.entries(parsedSystems)) {
     const profile = normalizeNetworkProfile(rawProfile);
     assertRelay(profile, `le système « ${id} »`);
+    assertCompanionUrl(
+      profile.mode === 'local-companion' ? profile.companionUrl : undefined,
+      `le système « ${id} »`,
+    );
     systems[id] = profile;
   }
   return { defaultProfile, systems };
@@ -147,6 +224,8 @@ export async function loadConfig(fetchImpl: FetchLike = fetch): Promise<Lumiboot
     );
   }
 
+  assertNoCompanionToken(raw);
+
   const result = lumibootConfigSchema.safeParse(raw);
   if (!result.success) {
     const first = result.error.issues[0];
@@ -167,5 +246,6 @@ export async function loadConfig(fetchImpl: FetchLike = fetch): Promise<Lumiboot
   return {
     version: 1,
     network: toNetworkConfig(result.data.network),
+    companion: toCompanionConfig(result.data.companion),
   };
 }

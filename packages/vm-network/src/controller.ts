@@ -2,9 +2,15 @@ import type { NetworkCapabilities, NetworkTransportKind } from './capabilities';
 import { capabilitiesForMode } from './capabilities';
 import type { NetworkErrorCode } from './errors';
 import { NetworkError } from './errors';
-import type { NetworkDiagnostics, NetworkStatus } from './diagnostics';
+import type {
+  NetworkDiagnostics,
+  NetworkProbeKind,
+  NetworkProbeResult,
+  NetworkStatus,
+} from './diagnostics';
 import type { NetworkMode } from './modes';
 import type { NetworkProfile } from './profile';
+import { DEFAULT_COMPANION_URL, validateCompanionUrl } from './companion';
 import { validateRelayUrl } from './relay';
 
 const MAX_COUNTER = Number.MAX_SAFE_INTEGER;
@@ -27,6 +33,7 @@ export interface NetworkController {
   reportRx(bytes: number): void;
   reportError(code: NetworkErrorCode, message: string): void;
   setStatus(status: NetworkStatus): void;
+  recordProbe(kind: NetworkProbeKind, result: NetworkProbeResult): void;
 }
 
 function truncate(value: string, max: number): string {
@@ -45,6 +52,7 @@ function transportForMode(mode: NetworkMode): NetworkTransportKind {
   switch (mode) {
     case 'browser-fetch':
       return 'fetch';
+    case 'local-companion':
     case 'user-relay':
       return 'wisp';
     case 'offline':
@@ -64,12 +72,19 @@ class DefaultNetworkController implements NetworkController {
   #txBytes = 0;
   #rxBytes = 0;
   #lastError: { code: NetworkErrorCode; message: string } | undefined;
+  #probes: Partial<Record<NetworkProbeKind, NetworkProbeResult>> = {};
   #disposed = false;
 
   constructor(options: NetworkControllerOptions) {
     this.#profile = Object.freeze({
       mode: options.profile.mode,
       ...(options.profile.relayUrl === undefined ? {} : { relayUrl: options.profile.relayUrl }),
+      ...(options.profile.companionUrl === undefined
+        ? {}
+        : { companionUrl: options.profile.companionUrl }),
+      ...(options.profile.companionToken === undefined
+        ? {}
+        : { companionToken: options.profile.companionToken }),
     });
     this.#capabilities = capabilitiesForMode(options.profile.mode);
     this.#now = options.now ?? (() => Date.now());
@@ -92,8 +107,12 @@ class DefaultNetworkController implements NetworkController {
       txBytes: this.#txBytes,
       rxBytes: this.#rxBytes,
     };
-    if (this.#lastError === undefined) return diagnostics;
-    return { ...diagnostics, lastError: { ...this.#lastError } };
+    const withProbes =
+      Object.keys(this.#probes).length === 0
+        ? diagnostics
+        : { ...diagnostics, probes: { ...this.#probes } };
+    if (this.#lastError === undefined) return withProbes;
+    return { ...withProbes, lastError: { ...this.#lastError } };
   }
 
   subscribe(listener: (diagnostics: NetworkDiagnostics) => void): () => void {
@@ -107,7 +126,7 @@ class DefaultNetworkController implements NetworkController {
   /**
    * Accepte la configuration et, au mieux, **configure** le transport.
    *
-   * Un mode à transport (browser-fetch, user-relay) aboutit à `configured` :
+   * Un mode à transport (browser-fetch, user-relay, local-companion) aboutit à `configured` :
    * le profil est accepté mais **rien ne prouve que la connexion est établie**.
    * Seul le provider peut faire évoluer l'état vers `connected`/`online` via
    * `setStatus`, une fois le transport réellement opérationnel.
@@ -134,6 +153,18 @@ class DefaultNetworkController implements NetworkController {
           const message = validation.error ?? 'Adresse de relais invalide.';
           this.#fail('NETWORK_INVALID_RELAY_URL', message);
           throw new NetworkError('NETWORK_INVALID_RELAY_URL', message);
+        }
+        this.setStatus('configured');
+        return;
+      }
+      case 'local-companion': {
+        const validation = validateCompanionUrl(
+          this.#profile.companionUrl ?? DEFAULT_COMPANION_URL,
+        );
+        if (!validation.ok || validation.url === undefined) {
+          const message = validation.error ?? 'Adresse du compagnon invalide.';
+          this.#fail('NETWORK_INVALID_COMPANION_URL', message);
+          throw new NetworkError('NETWORK_INVALID_COMPANION_URL', message);
         }
         this.setStatus('configured');
         return;
@@ -194,8 +225,35 @@ class DefaultNetworkController implements NetworkController {
   setStatus(status: NetworkStatus): void {
     if (this.#disposed) return;
     this.#status = status;
-    this.#verified = status === 'online';
+    this.#recomputeVerified();
     this.#notify();
+  }
+
+  /**
+   * Enregistre le résultat d'une **sonde réelle** fournie par le provider.
+   * `verified` est **recalculé** : il ne devient vrai que si une sonde `tcp` ou
+   * `https` est `ok`, jamais à partir du mode. No-op silencieux après `dispose`.
+   */
+  recordProbe(kind: NetworkProbeKind, result: NetworkProbeResult): void {
+    if (this.#disposed) return;
+    const stored: NetworkProbeResult = {
+      ok: result.ok,
+      at: result.at,
+      ...(result.detail === undefined ? {} : { detail: result.detail }),
+    };
+    this.#probes = { ...this.#probes, [kind]: stored };
+    this.#recomputeVerified();
+    this.#notify();
+  }
+
+  /**
+   * `verified` reflète une **preuve réelle** : uniquement une sonde `tcp` ou
+   * `https` réussie. `dns`/`http` et le mode lui-même ne suffisent pas.
+   */
+  #recomputeVerified(): void {
+    const tcp = this.#probes.tcp;
+    const https = this.#probes.https;
+    this.#verified = tcp?.ok === true || https?.ok === true;
   }
 
   #fail(code: NetworkErrorCode, message: string): void {

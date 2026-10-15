@@ -6,6 +6,13 @@ import { NetworkError } from './errors';
 export interface NetworkProfile {
   mode: NetworkMode;
   relayUrl?: string;
+  companionUrl?: string;
+  /**
+   * Jeton de session du compagnon (RUNTIME uniquement). Ne doit JAMAIS provenir
+   * du fichier de config public (la validation web le refusera) : il est fourni
+   * à l'exécution (appairage) et n'est jamais persisté dans la config publique.
+   */
+  companionToken?: string;
 }
 
 export const defaultNetworkProfile: NetworkProfile = Object.freeze({
@@ -16,6 +23,8 @@ export const networkProfileSchema = z
   .object({
     mode: z.enum(NETWORK_MODES),
     relayUrl: z.string().min(1).optional(),
+    companionUrl: z.string().min(1).optional(),
+    companionToken: z.string().min(1).optional(),
   })
   .strict();
 
@@ -28,9 +37,19 @@ export interface NetworkProfileValidation {
 type ParsedProfile = z.infer<typeof networkProfileSchema>;
 
 function cleanProfile(parsed: ParsedProfile): NetworkProfile {
-  const { mode, relayUrl } = parsed;
+  const { mode, relayUrl, companionUrl, companionToken } = parsed;
   if (mode === 'user-relay' && typeof relayUrl === 'string' && relayUrl.length > 0) {
     return { mode, relayUrl };
+  }
+  if (mode === 'local-companion') {
+    const cleaned: NetworkProfile = { mode };
+    if (typeof companionUrl === 'string' && companionUrl.length > 0) {
+      cleaned.companionUrl = companionUrl;
+    }
+    if (typeof companionToken === 'string' && companionToken.length > 0) {
+      cleaned.companionToken = companionToken;
+    }
+    return cleaned;
   }
   return { mode };
 }
@@ -42,7 +61,7 @@ function formatIssues(error: z.ZodError): string[] {
   });
 }
 
-/** Valide puis nettoie un profil : `relayUrl` n'est conservé qu'en mode `user-relay`. */
+/** Valide puis nettoie un profil : `relayUrl` n'est conservé qu'en mode `user-relay`, `companionUrl`/`companionToken` qu'en mode `local-companion`. */
 export function normalizeNetworkProfile(input: unknown): NetworkProfile {
   const result = networkProfileSchema.safeParse(input);
   if (!result.success) {

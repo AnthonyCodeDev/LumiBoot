@@ -4,7 +4,7 @@
  * du système invité.
  */
 
-export const NETWORK_MODES = ['offline', 'browser-fetch', 'user-relay', 'local-network'] as const;
+export const NETWORK_MODES = ['offline', 'browser-fetch', 'local-companion', 'user-relay', 'local-network'] as const;
 
 export type NetworkMode = (typeof NETWORK_MODES)[number];
 
@@ -41,6 +41,15 @@ export const networkModes: Record<NetworkMode, NetworkModeInfo> = {
     availability: 'ready',
     requiresRestart: true,
     requiresConfiguration: false,
+  },
+  'local-companion': {
+    id: 'local-companion',
+    label: 'Companion réseau local',
+    description:
+      "Internet via le LumiBoot Network Companion installé localement : les connexions TCP sortent par la vraie connexion de l'utilisateur (WISP local sur 127.0.0.1).",
+    availability: 'ready',
+    requiresRestart: true,
+    requiresConfiguration: true,
   },
   'user-relay': {
     id: 'user-relay',

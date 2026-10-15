@@ -73,6 +73,39 @@ describe('toV86NetworkDevice', () => {
     expect(device).toEqual({ relay_url: 'wisps://relay.example.com:8443/wisp' });
   });
 
+  it('user-relay : préserve le port et le chemin lors de la conversion wss->wisps', () => {
+    const device = toV86NetworkDevice({
+      mode: 'user-relay',
+      relayUrl: 'wss://relay.example.com:9443/a/b?x=1',
+    });
+    expect(device).toEqual({
+      relay_url: 'wisps://relay.example.com:9443/a/b?x=1',
+    });
+  });
+
+  it('user-relay : sans port ni chemin, URL.href normalise en « / » (schéma wisps)', () => {
+    const device = toV86NetworkDevice({
+      mode: 'user-relay',
+      relayUrl: 'wss://relay.example.com',
+    });
+    expect(device).toEqual({ relay_url: 'wisps://relay.example.com/' });
+  });
+
+  it('user-relay : le schéma wisps:// résultant n’est jamais un wss:// brut', () => {
+    const device = toV86NetworkDevice({
+      mode: 'user-relay',
+      relayUrl: 'wss://relay.example.com/wisp',
+    });
+    expect(device?.relay_url).toBe('wisps://relay.example.com/wisp');
+    expect(device?.relay_url?.startsWith('wss://')).toBe(false);
+  });
+
+  it('user-relay : ws:// localhost reste refusé (le provider n’active pas l’insecure)', () => {
+    expect(() =>
+      toV86NetworkDevice({ mode: 'user-relay', relayUrl: 'ws://localhost:8080' }),
+    ).toThrowError(expect.objectContaining({ code: 'NETWORK_INVALID_RELAY_URL' }));
+  });
+
   it('user-relay sans URL valide : rejette avec NETWORK_INVALID_RELAY_URL', () => {
     expect(() => toV86NetworkDevice({ mode: 'user-relay' })).toThrowError(
       expect.objectContaining({ code: 'NETWORK_INVALID_RELAY_URL' }),
@@ -86,6 +119,37 @@ describe('toV86NetworkDevice', () => {
     expect(() => toV86NetworkDevice({ mode: 'local-network' })).toThrowError(
       expect.objectContaining({ code: 'NETWORK_UNSUPPORTED_MODE' }),
     );
+  });
+
+  it('local-companion sans token : relais WISP local par défaut', () => {
+    expect(toV86NetworkDevice({ mode: 'local-companion' })).toEqual({
+      relay_url: 'wisp://127.0.0.1:37892/wisp/',
+    });
+  });
+
+  it('local-companion avec token : query ?token conservée', () => {
+    expect(toV86NetworkDevice({ mode: 'local-companion', companionToken: 'abc' })).toEqual({
+      relay_url: 'wisp://127.0.0.1:37892/wisp/?token=abc',
+    });
+  });
+
+  it('local-companion avec URL loopback personnalisée : host/port conservés', () => {
+    expect(
+      toV86NetworkDevice({
+        mode: 'local-companion',
+        companionUrl: 'http://127.0.0.1:40000',
+        companionToken: 'abc',
+      }),
+    ).toEqual({ relay_url: 'wisp://127.0.0.1:40000/wisp/?token=abc' });
+  });
+
+  it('local-companion avec URL non loopback : rejette avec NETWORK_INVALID_COMPANION_URL', () => {
+    expect(() =>
+      toV86NetworkDevice({
+        mode: 'local-companion',
+        companionUrl: 'http://example.com:37892',
+      }),
+    ).toThrowError(expect.objectContaining({ code: 'NETWORK_INVALID_COMPANION_URL' }));
   });
 });
 

@@ -40,12 +40,32 @@ describe('createNetworkController', () => {
     expect(diagnostics.verified).toBe(false);
   });
 
+  it('local-companion : start configure le transport avec companionUrl par défaut', async () => {
+    const controller = createNetworkController({ profile: { mode: 'local-companion' } });
+    await controller.start();
+    const diagnostics = controller.snapshot();
+    expect(diagnostics.status).toBe('configured');
+    expect(diagnostics.transport).toBe('wisp');
+    expect(diagnostics.verified).toBe(false);
+  });
+
+  it('local-companion : companionUrl invalide rejette NETWORK_INVALID_COMPANION_URL', async () => {
+    const controller = createNetworkController({
+      profile: { mode: 'local-companion', companionUrl: 'https://relay.example' },
+    });
+    await expect(controller.start()).rejects.toMatchObject({
+      code: 'NETWORK_INVALID_COMPANION_URL',
+    });
+    expect(controller.snapshot().status).toBe('error');
+    expect(controller.snapshot().lastError?.code).toBe('NETWORK_INVALID_COMPANION_URL');
+  });
+
   it('local-network : start rejette NETWORK_UNSUPPORTED_MODE', async () => {
     const controller = createNetworkController({ profile: { mode: 'local-network' } });
     await expect(controller.start()).rejects.toMatchObject({ code: 'NETWORK_UNSUPPORTED_MODE' });
   });
 
-  it('setStatus est le seul chemin vers connected/online', () => {
+  it('setStatus est le seul chemin vers connected/online mais ne prouve rien', () => {
     const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
     expect(controller.snapshot().status).toBe('idle');
     controller.setStatus('connected');
@@ -53,7 +73,52 @@ describe('createNetworkController', () => {
     expect(controller.snapshot().verified).toBe(false);
     controller.setStatus('online');
     expect(controller.snapshot().status).toBe('online');
+    // `online` est une déclaration de transport : sans sonde tcp/https réussie,
+    // `verified` reste faux (jamais déduit du statut ni du mode).
+    expect(controller.snapshot().verified).toBe(false);
+  });
+
+  it('recordProbe expose les sondes et ne prouve verified que via tcp/https', () => {
+    const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
+    expect(controller.snapshot().probes).toBeUndefined();
+
+    controller.recordProbe('dns', { ok: true, at: 1000 });
+    controller.recordProbe('http', { ok: true, at: 1001 });
+    expect(controller.snapshot().verified).toBe(false);
+
+    controller.recordProbe('https', { ok: false, at: 1002, detail: 'CORS' });
+    expect(controller.snapshot().verified).toBe(false);
+    expect(controller.snapshot().probes?.https).toEqual({ ok: false, at: 1002, detail: 'CORS' });
+
+    controller.recordProbe('tcp', { ok: true, at: 1003 });
     expect(controller.snapshot().verified).toBe(true);
+    expect(controller.snapshot().probes?.tcp).toEqual({ ok: true, at: 1003 });
+  });
+
+  it('recordProbe recalcule verified à la baisse et notifie', () => {
+    const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
+    const listener = vi.fn();
+    controller.subscribe(listener);
+
+    controller.recordProbe('tcp', { ok: true, at: 1 });
+    expect(controller.snapshot().verified).toBe(true);
+    expect(listener).toHaveBeenCalled();
+
+    controller.recordProbe('tcp', { ok: false, at: 2 });
+    expect(controller.snapshot().verified).toBe(false);
+    expect(controller.snapshot().probes?.tcp?.at).toBe(2);
+  });
+
+  it('recordProbe est un no-op après dispose', async () => {
+    const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
+    controller.recordProbe('tcp', { ok: true, at: 1 });
+    await controller.dispose();
+
+    const before = controller.snapshot();
+    expect(() => controller.recordProbe('tcp', { ok: false, at: 2 })).not.toThrow();
+    const after = controller.snapshot();
+    expect(after.probes).toEqual(before.probes);
+    expect(after.verified).toBe(false);
   });
 
   it('start respecte un AbortSignal déjà avorté', async () => {

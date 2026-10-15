@@ -15,16 +15,26 @@ export const networkConfigSchema = z
   })
   .strict();
 
+export const companionFileSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    url: z.string().min(1).optional(),
+    downloadManifestUrl: z.string().min(1).optional(),
+  })
+  .strict();
+
 export const lumibootConfigSchema = z
   .object({
     version: z.literal(1),
     network: networkConfigSchema,
+    companion: companionFileSchema.optional(),
   })
   .strict();
 
 /** Sortie brute du schéma (avant nettoyage / normalisation). */
 export type ParsedLumibootConfig = z.infer<typeof lumibootConfigSchema>;
 export type ParsedNetworkConfig = z.infer<typeof networkConfigSchema>;
+export type ParsedCompanionFileConfig = z.infer<typeof companionFileSchema>;
 
 /** Configuration réseau normalisée (profils nettoyés, relayUrl cohérent). */
 export interface NetworkConfig {
@@ -32,8 +42,16 @@ export interface NetworkConfig {
   systems?: Record<string, NetworkProfile>;
 }
 
+/** Configuration compagnon normalisée (valeurs par défaut appliquées). */
+export interface CompanionConfig {
+  enabled: boolean;
+  url: string;
+  downloadManifestUrl?: string;
+}
+
 /** Configuration runtime immuable consommée par l'application. */
 export interface LumibootConfig {
   version: 1;
   network: NetworkConfig;
+  companion: CompanionConfig;
 }

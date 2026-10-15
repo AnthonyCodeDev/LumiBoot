@@ -10,7 +10,10 @@ type Listener = (arg: unknown) => void;
 
 class FakeV86 {
   readonly calls = { run: 0, stop: 0, destroy: 0 };
+  /** Événements passés à `remove_listener` (vérifie le détachement). */
+  readonly removed: string[] = [];
   destroyError: Error | null = null;
+  runError: Error | null = null;
   readonly #listeners = new Map<string, Set<Listener>>();
 
   add_listener(event: string, listener: Listener): void {
@@ -20,11 +23,13 @@ class FakeV86 {
   }
 
   remove_listener(event: string, listener: Listener): void {
+    this.removed.push(event);
     this.#listeners.get(event)?.delete(listener);
   }
 
   async run(): Promise<void> {
     this.calls.run += 1;
+    if (this.runError) throw this.runError;
   }
 
   async stop(): Promise<void> {
@@ -179,5 +184,85 @@ describe('V86Instance', () => {
     expect(emulator.listenerCount('net0-send')).toBe(0);
     expect(emulator.listenerCount('eth-transmit-end')).toBe(0);
     expect(emulator.listenerCount('eth-receive-end')).toBe(0);
+    // `remove_listener` a bien été appelé pour les trois événements réseau.
+    expect(emulator.removed).toEqual(
+      expect.arrayContaining(['eth-transmit-end', 'eth-receive-end', 'net0-send']),
+    );
+  });
+
+  it('échec de run() : émet une erreur et libère le contrôleur réseau', async () => {
+    const emulator = new FakeV86();
+    emulator.runError = new Error('wasm cassé');
+    const controller = createNetworkController({ profile: defaultNetworkProfile });
+    await controller.start();
+    const disposeSpy = vi.spyOn(controller, 'dispose');
+
+    const instance = new V86Instance({
+      providerId: 'v86',
+      systemId: 'debian-12-i386',
+      emulator: emulator as unknown as V86,
+      console: createConsoleStub(),
+      network: controller,
+    });
+    instance.wire();
+
+    const events: SessionEvent[] = [];
+    instance.subscribe((event) => events.push(event));
+
+    emulator.emit('emulator-ready', undefined);
+    await flushMicrotasks();
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'progress', phase: 'booting' },
+        expect.objectContaining({ type: 'error', code: 'START_FAILED' }),
+      ]),
+    );
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(emulator.listenerCount('net0-send')).toBe(0);
+    expect(emulator.removed).toEqual(
+      expect.arrayContaining(['eth-transmit-end', 'eth-receive-end', 'net0-send']),
+    );
+  });
+
+  it('erreur de téléchargement : émet une erreur et libère le contrôleur réseau', async () => {
+    const emulator = new FakeV86();
+    const controller = createNetworkController({ profile: defaultNetworkProfile });
+    await controller.start();
+    const disposeSpy = vi.spyOn(controller, 'dispose');
+
+    const instance = new V86Instance({
+      providerId: 'v86',
+      systemId: 'debian-12-i386',
+      emulator: emulator as unknown as V86,
+      console: createConsoleStub(),
+      network: controller,
+    });
+    instance.wire();
+
+    const events: SessionEvent[] = [];
+    instance.subscribe((event) => events.push(event));
+
+    emulator.emit('download-error', {
+      file_index: 0,
+      file_count: 1,
+      file_name: 'rootfs.img',
+      lengthComputable: true,
+      total: 10,
+      loaded: 0,
+    });
+    await flushMicrotasks();
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'error', code: 'ASSET_DOWNLOAD_FAILED' }),
+      ]),
+    );
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(emulator.listenerCount('net0-send')).toBe(0);
   });
 });
+
+function flushMicrotasks(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}

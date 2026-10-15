@@ -1,9 +1,31 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OSDefinition } from '@lumiboot/contracts';
 import type { V86, V86Options } from 'v86';
 import type { ImageManifest } from '@lumiboot/vm-assets';
 import { V86Provider } from './V86Provider';
 import type { V86ConsoleAdapter } from './console-adapter';
+
+/**
+ * Capture les contrôleurs réseau réellement créés par le provider et espionne
+ * leur `dispose()`, sans altérer le comportement (le vrai contrôleur est
+ * appelé). Sert à prouver qu'aucun chemin d'échec ne fuit de contrôleur.
+ */
+const { createdControllers } = vi.hoisted(() => ({
+  createdControllers: [] as Array<import('@lumiboot/vm-network').NetworkController>,
+}));
+
+vi.mock('@lumiboot/vm-network', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@lumiboot/vm-network')>();
+  return {
+    ...actual,
+    createNetworkController: (options: import('@lumiboot/vm-network').NetworkControllerOptions) => {
+      const controller = actual.createNetworkController(options);
+      vi.spyOn(controller, 'dispose');
+      createdControllers.push(controller);
+      return controller;
+    },
+  };
+});
 
 const MiB = 1024 * 1024;
 
@@ -106,6 +128,10 @@ function setup(manifest: ImageManifest = makeManifest()) {
 }
 
 describe('V86Provider', () => {
+  beforeEach(() => {
+    createdControllers.length = 0;
+  });
+
   it('transmet 512 MiB, un disque asynchrone et sa taille réelle à v86', async () => {
     const { provider, captured } = setup();
     await provider.start(makeOS(), document.createElement('div'));
@@ -189,6 +215,32 @@ describe('V86Provider', () => {
     expect(captured[0]?.net_device).toEqual({ relay_url: 'fetch', type: 'virtio' });
   });
 
+  it('relais injoignable : le démarrage aboutit sans bloquer le cycle de vie', async () => {
+    const { provider, captured } = setup();
+    const instance = await provider.start(makeOS(), document.createElement('div'), {
+      network: { mode: 'user-relay', relayUrl: 'wss://127.0.0.1:9/' },
+    });
+
+    // La traduction vers v86 reste correcte : un vrai relais WISP TLS est visé.
+    expect(captured[0]?.net_device).toEqual({ relay_url: 'wisps://127.0.0.1:9/', type: 'virtio' });
+
+    // L'injoignabilité est constatée à l'exécution par v86, jamais pendant
+    // `start()` : le contrôleur reste « configured » (jamais « error »), donc
+    // un relais mort n'empêche pas l'émulateur de démarrer.
+    const controller = createdControllers[0];
+    expect(controller?.snapshot().status).toBe('configured');
+    expect(controller?.snapshot().status).not.toBe('error');
+
+    // Arrêter puis libérer reste possible et idempotent : aucune ressource
+    // bloquante ne survit au relais injoignable. Le détachement des écouteurs
+    // v86 (eth-transmit-end/eth-receive-end/net0-send) est couvert par
+    // `v86-instance.test.ts`.
+    await instance.stop();
+    await instance.dispose();
+    await instance.dispose();
+    expect(controller?.dispose).toHaveBeenCalledTimes(1);
+  });
+
   it('user-relay sans URL valide : échoue au démarrage sans construire v86', async () => {
     const { provider, captured } = setup();
     await expect(
@@ -207,5 +259,61 @@ describe('V86Provider', () => {
       }),
     ).rejects.toMatchObject({ code: 'START_FAILED' });
     expect(captured).toHaveLength(0);
+  });
+
+  it('échec de construction de v86 : dispose le contrôleur réseau', async () => {
+    const provider = new V86Provider({
+      createEngine: () => {
+        throw new Error('wasm manquant');
+      },
+      resolveManifest: async () => makeManifest(),
+      createConsole: () => createConsoleStub(),
+    });
+    await expect(provider.start(makeOS(), document.createElement('div'))).rejects.toMatchObject({
+      code: 'START_FAILED',
+    });
+    expect(createdControllers).toHaveLength(1);
+    expect(createdControllers[0]?.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('annulation pendant la construction de v86 : dispose le contrôleur réseau', async () => {
+    const abort = new AbortController();
+    const provider = new V86Provider({
+      createEngine: () => {
+        abort.abort();
+        return new FakeV86() as unknown as V86;
+      },
+      resolveManifest: async () => makeManifest(),
+      createConsole: () => createConsoleStub(),
+    });
+    await expect(
+      provider.start(makeOS(), document.createElement('div'), { signal: abort.signal }),
+    ).rejects.toMatchObject({ code: 'START_FAILED' });
+    expect(createdControllers).toHaveLength(1);
+    expect(createdControllers[0]?.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('succès avec transport : le contrôleur reste « configured », jamais connected/online', async () => {
+    const { provider, captured } = setup();
+    await provider.start(makeOS(), document.createElement('div'), {
+      network: { mode: 'browser-fetch' },
+    });
+    expect(captured[0]?.net_device).toEqual({ relay_url: 'fetch', type: 'virtio' });
+
+    const controller = createdControllers[0];
+    expect(controller?.snapshot().status).toBe('configured');
+    expect(controller?.snapshot().verified).toBe(false);
+    expect(controller?.snapshot().status).not.toBe('connected');
+    expect(controller?.snapshot().status).not.toBe('online');
+    // Le provider n'appelle jamais `setStatus('connected'|'online')` : aucun
+    // faux « connecté » sur `emulator-ready`, DHCP ou simple ouverture de socket.
+    expect(controller?.dispose).not.toHaveBeenCalled();
+  });
+
+  it('offline par défaut : contrôleur « offline » et aucun net_device', async () => {
+    const { provider, captured } = setup();
+    await provider.start(makeOS(), document.createElement('div'));
+    expect(captured[0]?.net_device).toBeUndefined();
+    expect(createdControllers[0]?.snapshot().status).toBe('offline');
   });
 });

@@ -15,7 +15,7 @@ import {
 import { ensureImageManifest, type ImageManifest } from '@lumiboot/vm-assets';
 import type { V86Options } from 'v86';
 import { createBrowserV86, type V86Factory } from './browser-v86';
-import { DomConsoleAdapter, type V86ConsoleAdapter } from './console-adapter';
+import { DomConsoleAdapter, type V86ConsoleAdapter, type V86ConsoleMount } from './console-adapter';
 import {
   selectNetworkDeviceType,
   toV86NetworkDevice,
@@ -163,7 +163,19 @@ export class V86Provider implements VMEngine {
     }
 
     const consoleAdapter = this.#createConsole();
-    const mounted = consoleAdapter.attach(mountTarget);
+    let mounted: V86ConsoleMount;
+    try {
+      mounted = consoleAdapter.attach(mountTarget);
+    } catch (error) {
+      // Le montage de console peut défaillir (DOM inattendu) : le contrôleur
+      // réseau ne doit jamais survivre à un échec de démarrage.
+      await networkController.dispose().catch(() => undefined);
+      throw new VMError(
+        'START_FAILED',
+        `La console v86 n'a pas pu être montée pour « ${os.id} ».`,
+        { systemId: os.id, cause: error },
+      );
+    }
 
     const bootOptions = manifest.boot ?? {};
     const options: V86Options = {
@@ -211,14 +223,32 @@ export class V86Provider implements VMEngine {
       });
     }
 
-    const instance = new V86Instance({
-      providerId: this.id,
-      systemId: os.id,
-      emulator,
-      console: consoleAdapter,
-      network: networkController,
-    });
-    instance.wire();
+    let instance: V86Instance;
+    try {
+      instance = new V86Instance({
+        providerId: this.id,
+        systemId: os.id,
+        emulator,
+        console: consoleAdapter,
+        network: networkController,
+      });
+      instance.wire();
+    } catch (error) {
+      // Dernier filet : si le câblage échoue, on détruit l'émulateur et on
+      // libère le contrôleur réseau pour ne laisser aucune ressource orpheline.
+      try {
+        await emulator.destroy();
+      } catch {
+        /* nettoyage best-effort */
+      }
+      consoleAdapter.detach();
+      await networkController.dispose().catch(() => undefined);
+      throw new VMError(
+        'START_FAILED',
+        `La session v86 n'a pas pu être câblée pour « ${os.id} ».`,
+        { systemId: os.id, cause: error },
+      );
+    }
     return instance;
   }
 

@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { getSystemBySlug } from '@lumiboot/catalog';
 import { Button } from '../components/ui/Button';
+import { NetworkCompanionCard } from '../components/network/NetworkCompanionCard';
 import { useSessionsStore } from '../features/sessions/sessions.store';
 import { getLaunchReadiness } from '../lib/launch';
 import {
@@ -92,6 +93,7 @@ export function SystemPage() {
               </p>
             ) : null}
           </div>
+          {readiness.canLaunch ? <NetworkCompanionCard /> : null}
         </div>
       </div>
     </main>

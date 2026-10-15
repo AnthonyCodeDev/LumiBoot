@@ -2,6 +2,7 @@ import type { OSDefinition } from '@lumiboot/contracts';
 import type { SessionSnapshot, VMState } from '@lumiboot/vm-core';
 import { Button } from '../ui/Button';
 import { getPrimaryLaunchProfile, launchProfileLabel } from '../../lib/labels';
+import { resolveNetworkProfile } from '../../config/runtime';
 
 const STATE_LABELS: Record<SessionSnapshot['state'], string> = {
   idle: 'Inactif',
@@ -52,6 +53,14 @@ export function SessionToolbar({
     progressPercent !== null
       ? `${STATE_LABELS[session.state]} · ${progressPercent} %`
       : STATE_LABELS[session.state];
+  // Mode réseau figé à la création de la session (profil résolu au `boot`).
+  // Repli silencieux hors runtime chargé (tests unitaires) : aucun crash.
+  let networkMode: string | null = null;
+  try {
+    networkMode = resolveNetworkProfile(system.id).mode;
+  } catch {
+    networkMode = null;
+  }
 
   return (
     <div className="session-toolbar">
@@ -69,6 +78,11 @@ export function SessionToolbar({
         <span className="session-state" data-state={session.state}>
           {stateLabel}
         </span>
+        {networkMode ? (
+          <span className="session-network-badge" data-testid="session-network-mode">
+            Réseau : {networkMode}
+          </span>
+        ) : null}
         {onToggleFullscreen ? (
           <Button
             variant="outline"

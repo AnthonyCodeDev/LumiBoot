@@ -1,0 +1,21 @@
+{$WISP_DOMAIN} {
+    # Verifie que HTTPS/TLS est operationnel. Ne teste pas le backend WISP.
+    handle /healthz {
+        respond "ok" 200
+    }
+
+    # Un navigateur provenant de l'origine LumiBoot peut ouvrir un WebSocket.
+    # ATTENTION : Origin n'est pas une authentification robuste : un client
+    # non navigateur peut forger ce header. Voir README avant publication.
+    @allowed {
+        header Origin {$LUMIBOOT_ORIGIN}
+        header Upgrade websocket
+    }
+    handle @allowed {
+        reverse_proxy wisp:8080
+    }
+
+    handle {
+        respond "Forbidden" 403
+    }
+}

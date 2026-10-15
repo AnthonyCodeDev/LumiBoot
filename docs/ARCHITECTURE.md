@@ -13,7 +13,9 @@ brancher. L'arbre ci-dessous reste une **cible d'évolution**, pas la liste exha
 ```text
 lumiboot/
 ├── apps/
-│   └── web/                               # React + Vite + TypeScript
+│   ├── web/                               # React + Vite + TypeScript
+│   └── network-companion/                 # Compagnon réseau local (Go natif, serveur WISP V1
+│   │                                      # sur loopback) — voir docs/network-companion.md
 ├── packages/
 │   ├── contracts/                         # Types et Zod schemas partagés
 │   ├── catalog/                           # Manifestes d'OS et compatibilités vérifiées
@@ -176,8 +178,25 @@ Ethernet ni VirtIO partout : il sépare la **NIC**, le **réseau local**, la **p
 (backend `fetch` ou relais WISP `wisps://`). L'exécution reste locale : **aucun backend ni serveur
 réseau LumiBoot**.
 
-Détails, modes, capacités, fiabilité et validation : [`network.md`](network.md). Décision structurante :
-[`adr/0005-network-universal.md`](adr/0005-network-universal.md).
+**Aucun mode ne garantit « Internet complet » par simple sélection.** Trois niveaux doivent être
+distingués : *configuré* (mode sélectionné), *techniquement supporté* (capacités déclarées par
+`capabilitiesForMode`) et *réellement vérifié* (sondes runtime `dns`/`http`/`https`/`tcp`, jamais
+déduites des compteurs `txBytes`/`rxBytes`). `fullInternet` est **faux pour tous les modes**.
+
+Limites connues avec `v86@0.5.471` : `browser-fetch` ne fonctionne qu'en **HTTP (port 80)** — le
+backend `fetch` de v86 n'enregistre pas le TCP 443, donc **HTTPS et `apt` échouent** — et reste
+**soumis à CORS** (hôtes sans `Access-Control-Allow-Origin` refusés). `user-relay` ne transporte TCP
+(dont 443) **que via un vrai relais WISP compatible v86** ; UDP est optionnel, ICMP non garanti, et
+**aucun relais public n'est livré**. La configuration est **globale** (`public/lumiboot.config.json`
+via `runtime.resolveNetworkProfile`) ; il n'y a **pas de page Settings**.
+
+Détails, modes, capacités, fiabilité, sécurité et validation : [`network.md`](network.md). Décisions
+structurantes : [`adr/0005-network-universal.md`](adr/0005-network-universal.md) et, pour un futur
+transport TCP/UDP brut en Isolated Web App (non disponible aujourd'hui),
+[`adr/0006-direct-sockets-iwa.md`](adr/0006-direct-sockets-iwa.md). Le **compagnon réseau local**
+(`apps/network-companion/`, serveur WISP V1 sur loopback, mode `local-companion`) est décidé
+dans [`adr/0007-network-companion.md`](adr/0007-network-companion.md) et documenté dans
+[`network-companion.md`](network-companion.md).
 
 ## 8. Compatibilité initiale et ambitions
 

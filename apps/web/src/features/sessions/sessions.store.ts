@@ -3,6 +3,7 @@ import { getSystemById } from '@lumiboot/catalog';
 import { SessionLifecycle, VMError, type SessionSnapshot } from '@lumiboot/vm-core';
 import { createRegistry } from './registry';
 import { resolveNetworkProfile } from '../../config/runtime';
+import { getCompanionRuntimeCredentials } from '../companion/store';
 
 const registry = createRegistry();
 const lifecycles = new Map<string, SessionLifecycle>();
@@ -45,9 +46,24 @@ export const useSessionsStore = create<SessionsState>((set) => ({
     if (!lifecycle) return;
     // Le profil réseau est résolu au démarrage puis reste figé pour la session
     // (tout changement de mode exige un redémarrage de la session).
-    await lifecycle.start(mountElement, {
-      network: resolveNetworkProfile(lifecycle.system.id),
-    });
+    // En mode `local-companion`, le jeton runtime issu de l'appairage est
+    // fusionné ici : le profil persisté (`lumiboot.config.json`) ne contient
+    // JAMAIS de token. Sans token, la session démarre quand même : le
+    // compagnon refusera la connexion, ce qui est l'état réel (pas de mode
+    // cassé silencieux).
+    const base = resolveNetworkProfile(lifecycle.system.id);
+    const network =
+      base.mode === 'local-companion'
+        ? (() => {
+            const { companionUrl, companionToken } = getCompanionRuntimeCredentials();
+            return {
+              ...base,
+              companionUrl,
+              ...(companionToken ? { companionToken } : {}),
+            };
+          })()
+        : base;
+    await lifecycle.start(mountElement, { network });
   },
   stop: async (id) => {
     await lifecycles.get(id)?.stop();

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "network": {
+    "defaultProfile": {
+      "mode": "user-relay",
+      "relayUrl": "wss://relay.example.com/"
+    },
+    "systems": {}
+  }
+}

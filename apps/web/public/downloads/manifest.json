@@ -1,0 +1,44 @@
+{
+  "version": "0.0.0",
+  "wispVersion": 1,
+  "generatedAt": null,
+  "platforms": {
+    "windows-x64": {
+      "file": "LumiBoot-Network-windows-amd64.exe",
+      "url": null,
+      "size": null,
+      "sha256": null,
+      "published": false
+    },
+    "windows-arm64": {
+      "file": "LumiBoot-Network-windows-arm64.exe",
+      "url": null,
+      "size": null,
+      "sha256": null,
+      "published": false
+    },
+    "linux-x64": {
+      "file": "LumiBoot-Network-linux-amd64.tar.gz",
+      "url": null,
+      "size": null,
+      "sha256": null,
+      "published": false
+    },
+    "linux-arm64": {
+      "file": "LumiBoot-Network-linux-arm64.tar.gz",
+      "url": null,
+      "size": null,
+      "sha256": null,
+      "published": false
+    },
+    "macos": {
+      "file": "LumiBoot-Network-macos-universal.tar.gz",
+      "url": null,
+      "size": null,
+      "sha256": null,
+      "published": false,
+      "signed": false,
+      "notarized": false
+    }
+  }
+}

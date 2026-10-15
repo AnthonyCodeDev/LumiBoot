@@ -128,13 +128,26 @@ export class V86Instance implements VMInstance {
     // L'émulateur (WASM) est prêt : le noyau invité COMMENCE à démarrer.
     this.#emit({ type: 'progress', phase: 'booting' });
     void this.#emulator.run().catch((error: unknown) => {
-      this.#emit({
-        type: 'error',
-        code: 'START_FAILED',
-        message: `Le noyau invité n'a pas pu démarrer : ${describeError(error)}`,
-      });
+      this.#failBoot(
+        'START_FAILED',
+        `Le noyau invité n'a pas pu démarrer : ${describeError(error)}`,
+      );
     });
   };
+
+  /**
+   * Échec fatal d'amorçage : publie l'erreur puis libère immédiatement les
+   * ressources (listeners v86/réseau, émulateur, **et** `NetworkController`).
+   *
+   * On appelle `#cleanup()` plutôt que `dispose()` pour ne pas effacer les
+   * événements en attente de rejeu : un abonné tardif voit toujours l'erreur.
+   * Le nettoyage reste idempotent (`#cleanupPromise` partagée), donc un
+   * `stop()`/`dispose()` ultérieur de l'hôte est sans effet supplémentaire.
+   */
+  #failBoot(code: string, message: string): void {
+    this.#emit({ type: 'error', code, message });
+    void this.#cleanup();
+  }
 
   readonly #onSerialByte = (byte: number): void => {
     if (this.#disposed || this.#stopping) return;
@@ -156,11 +169,12 @@ export class V86Instance implements VMInstance {
 
   readonly #onDownloadError = (arg: V86Event['download-error']): void => {
     if (this.#disposed || this.#stopping) return;
-    this.#emit({
-      type: 'error',
-      code: 'ASSET_DOWNLOAD_FAILED',
-      message: `Échec du chargement de l'artefact « ${arg.file_name} ».`,
-    });
+    // Un téléchargement d'artefact raté est fatal : même libération que pour
+    // une erreur de `run()` (aucune ressource ne doit rester orpheline).
+    this.#failBoot(
+      'ASSET_DOWNLOAD_FAILED',
+      `Échec du chargement de l'artefact « ${arg.file_name} ».`,
+    );
   };
 
   readonly #onEmulatorStopped = (): void => {

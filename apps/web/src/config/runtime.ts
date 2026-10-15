@@ -1,5 +1,5 @@
-import type { NetworkProfile } from '@lumiboot/vm-network';
-import type { LumibootConfig } from './schema';
+import { DEFAULT_COMPANION_URL, type NetworkProfile } from '@lumiboot/vm-network';
+import type { CompanionConfig, LumibootConfig } from './schema';
 
 let runtimeConfig: LumibootConfig | null = null;
 
@@ -27,6 +27,22 @@ export function getRuntimeConfig(): LumibootConfig {
     );
   }
   return runtimeConfig;
+}
+
+/** Configuration compagnon par défaut (hors runtime chargé). */
+export const DEFAULT_RUNTIME_COMPANION: CompanionConfig = Object.freeze({
+  enabled: true,
+  url: DEFAULT_COMPANION_URL,
+});
+
+/**
+ * Configuration compagnon : celle du runtime si chargée, sinon les défauts
+ * (compagnon activé, URL loopback par défaut). Ne lève jamais : le panneau
+ * compagnon doit rester affichable même sans configuration chargée.
+ */
+export function resolveCompanionConfig(): CompanionConfig {
+  if (runtimeConfig === null) return { ...DEFAULT_RUNTIME_COMPANION };
+  return runtimeConfig.companion;
 }
 
 /**

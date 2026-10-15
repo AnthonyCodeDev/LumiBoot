@@ -3,5 +3,6 @@
   "network": {
     "defaultProfile": { "mode": "browser-fetch" },
     "systems": { "debian-12-i386": { "mode": "browser-fetch" } }
-  }
+  },
+  "companion": { "enabled": true }
 }

@@ -1,0 +1,57 @@
+name: lumiboot-wisp
+
+services:
+  wisp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - python
+      - -m
+      - wisp.server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --limits
+      - --bandwidth
+      - "1024"
+      - --connections
+      - "120"
+      - --window
+      - "60"
+      - --log-level
+      - warning
+    expose:
+      - "8080"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 256m
+    init: true
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    environment:
+      WISP_DOMAIN: ${WISP_DOMAIN:?Set WISP_DOMAIN in .env}
+      LUMIBOOT_ORIGIN: ${LUMIBOOT_ORIGIN:?Set LUMIBOOT_ORIGIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - wisp
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
