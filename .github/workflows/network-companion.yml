@@ -267,16 +267,20 @@ jobs:
     # Ne bloque jamais la publication initiale (aucun `needs` vers ce job).
     name: signature Windows (optionnel)
     needs: [build]
-    if: startsWith(github.ref, 'refs/tags/network-v') && secrets.WINDOWS_CERT_PFX_BASE64 != '' && secrets.WINDOWS_CERT_PASSWORD != ''
+    if: startsWith(github.ref, 'refs/tags/network-v')
     runs-on: windows-latest
+    env:
+      HAS_WIN_CERT: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' && secrets.WINDOWS_CERT_PASSWORD != '' }}
     steps:
       - name: Télécharger les .exe
+        if: env.HAS_WIN_CERT == 'true'
         uses: actions/download-artifact@v4
         with:
           pattern: LumiBoot-Network-windows-*
           merge-multiple: true
           path: dist
       - name: Signer avec signtool (Authenticode + horodatage)
+        if: env.HAS_WIN_CERT == 'true'
         shell: powershell
         env:
           CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
@@ -301,6 +305,7 @@ jobs:
             Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
           }
       - name: Upload .exe signés
+        if: env.HAS_WIN_CERT == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: LumiBoot-Network-windows-signed
@@ -312,16 +317,20 @@ jobs:
     # absents. Ne bloque jamais la publication initiale.
     name: signature macOS (optionnel)
     needs: [build]
-    if: startsWith(github.ref, 'refs/tags/network-v') && secrets.APPLE_CERT_P12_BASE64 != '' && secrets.APPLE_CERT_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_PASSWORD != ''
+    if: startsWith(github.ref, 'refs/tags/network-v')
     runs-on: macos-14
+    env:
+      HAS_APPLE_CERT: ${{ secrets.APPLE_CERT_P12_BASE64 != '' && secrets.APPLE_CERT_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_PASSWORD != '' }}
     steps:
       - name: Télécharger les archives darwin
+        if: env.HAS_APPLE_CERT == 'true'
         uses: actions/download-artifact@v4
         with:
           pattern: LumiBoot-Network-darwin-*
           merge-multiple: true
           path: dist
       - name: Signer (codesign) et notariser (notarytool)
+        if: env.HAS_APPLE_CERT == 'true'
         env:
           APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
@@ -357,6 +366,7 @@ jobs:
           done
           ls -la signed
       - name: Upload archives signées/notarisées
+        if: env.HAS_APPLE_CERT == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: LumiBoot-Network-darwin-signed
