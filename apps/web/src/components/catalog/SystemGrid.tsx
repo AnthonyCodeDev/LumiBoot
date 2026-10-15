@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useCatalogStore } from '../../features/catalog/catalog.store';
 import { useVisibleSystems } from '../../features/catalog/catalog.selectors';
 import { Button } from '../ui/Button';
@@ -5,7 +6,7 @@ import { SystemCard } from './SystemCard';
 
 export function SystemGrid() {
   const visible = useVisibleSystems();
-  const openDetails = useCatalogStore((state) => state.openDetails);
+  const navigate = useNavigate();
   const resetFilters = useCatalogStore((state) => state.resetFilters);
 
   if (visible.length === 0) {
@@ -24,7 +25,7 @@ export function SystemGrid() {
   return (
     <div className="cards" id="cards" aria-live="polite">
       {visible.map((system) => (
-        <SystemCard key={system.id} system={system} onOpen={(target) => openDetails(target.id)} />
+        <SystemCard key={system.id} system={system} onOpen={(target) => navigate(`/systems/${target.slug}`)} />
       ))}
     </div>
   );

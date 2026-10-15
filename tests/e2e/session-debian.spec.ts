@@ -22,6 +22,7 @@ test.describe('Session Debian 12 i386 (v86, boot réel)', () => {
     await page.goto('/');
     await page.getByLabel('Rechercher un système').fill('debian');
     await page.locator('.os-card').first().click();
+    await expect(page).toHaveURL(/\/systems\//);
     await page.getByRole('button', { name: 'Lancer une session' }).click();
     await expect(page).toHaveURL(/\/session\//);
 

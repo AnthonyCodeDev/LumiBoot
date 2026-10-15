@@ -74,6 +74,7 @@ async function bootDebianAndWaitForPrompt(
   await page.goto('/');
   await page.getByLabel('Rechercher un système').fill('debian');
   await page.locator('.os-card').first().click();
+  await expect(page).toHaveURL(/\/systems\//);
   await page.getByRole('button', { name: 'Lancer une session' }).click();
   await expect(page).toHaveURL(/\/session\//);
   await expect(page.locator('.session-console')).toBeVisible();

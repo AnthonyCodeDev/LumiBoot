@@ -315,55 +315,7 @@
   font-size: 28px;
 }
 
-/* Detail drawer */
-.drawer-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  background: rgba(0, 0, 0, 0.62);
-  backdrop-filter: blur(2px);
-  animation: fade-in var(--duration) var(--ease);
-}
-.detail-drawer {
-  position: fixed;
-  z-index: 31;
-  inset: 0 0 0 auto;
-  width: min(460px, 100vw);
-  overflow: auto;
-  border-left: 1px solid var(--line);
-  background: var(--surface);
-  box-shadow: var(--shadow-drawer);
-  transform: translateX(105%);
-  visibility: hidden;
-  transition:
-    transform 240ms var(--ease),
-    visibility 240ms;
-}
-.detail-drawer.open {
-  transform: translateX(0);
-  visibility: visible;
-}
-.drawer-open {
-  overflow: hidden;
-}
-.drawer-header {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 22px;
-  border-bottom: 1px solid var(--line-soft);
-  background: rgba(18, 21, 28, 0.94);
-  backdrop-filter: blur(10px);
-}
-.drawer-overline {
-  color: var(--text-tertiary);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.1em;
-}
+/* System detail (fiche /systems/:slug) */
 .icon-button {
   width: 34px;
   height: 34px;
@@ -384,38 +336,6 @@
   border-color: var(--line-strong);
   background: var(--surface-muted);
 }
-.drawer-cover {
-  position: relative;
-  height: 190px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 22px 22px 0;
-  overflow: hidden;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-lg);
-  background:
-    radial-gradient(circle at 50% 45%, rgba(var(--accent-rgb), 0.17), transparent 65%),
-    var(--surface-muted);
-}
-.drawer-cover img {
-  width: 92px;
-  height: 92px;
-  object-fit: contain;
-  filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.42));
-}
-.drawer-cover > span {
-  position: absolute;
-  left: 14px;
-  bottom: 12px;
-  color: var(--text-tertiary);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-}
-.drawer-overview {
-  padding: 22px 22px 32px;
-}
 .drawer-family {
   color: var(--primary);
   font-size: 9px;
@@ -426,17 +346,6 @@
 .drawer-family span {
   padding: 0 5px;
   color: var(--text-disabled);
-}
-.drawer-overview h2 {
-  margin: 8px 0 0;
-  font-size: 27px;
-  font-weight: 650;
-  letter-spacing: -0.035em;
-}
-.drawer-version {
-  margin: 3px 0 15px;
-  color: var(--text-secondary);
-  font-size: 12px;
 }
 .drawer-description {
   color: var(--text-secondary);
@@ -475,7 +384,6 @@
 .spec-box strong.planned-label {
   color: var(--warning);
 }
-.drawer-overview h3,
 .system-detail-hero h3 {
   margin: 22px 0 7px;
   font-size: 11px;
@@ -488,16 +396,6 @@
   font-size: 12px;
   line-height: 1.7;
 }
-.drawer-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 26px;
-}
-.drawer-fav {
-  width: 100%;
-}
-
 /* Toast */
 .toast {
   position: fixed;
@@ -909,15 +807,6 @@
   }
   .card-cover {
     height: 156px;
-  }
-  .drawer-header {
-    padding: 15px 18px;
-  }
-  .drawer-cover {
-    margin: 18px 18px 0;
-  }
-  .drawer-overview {
-    padding: 20px 18px 28px;
   }
   .session-screen {
     padding: 24px 18px 40px;

@@ -10,12 +10,3 @@ export function useVisibleSystems(): OSDefinition[] {
 
   return useMemo(() => filterSystems({ systems, family, query }), [systems, family, query]);
 }
-
-export function useSelectedSystem(): OSDefinition | null {
-  const systems = useCatalogStore((state) => state.systems);
-  const selectedId = useCatalogStore((state) => state.selectedId);
-  return useMemo(
-    () => systems.find((system) => system.id === selectedId) ?? null,
-    [systems, selectedId],
-  );
-}

@@ -17,14 +17,21 @@ test.describe('Bibliothèque', () => {
     await expect(page.locator('.os-card')).toHaveCount(3);
   });
 
-  test('ouvre et ferme la fiche système au clavier', async ({ page }) => {
+  test('le clic ouvre directement la fiche (sans popup)', async ({ page }) => {
     await page.goto('/');
     await page.locator('.os-card').first().click();
-    const drawer = page.locator('.detail-drawer');
-    await expect(drawer).toHaveClass(/open/);
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(drawer).not.toHaveClass(/open/);
-    await expect(page.getByRole('dialog')).toBeHidden();
+    await expect(page).toHaveURL(/\/systems\//);
+    await expect(page.locator('.detail-drawer')).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+
+  test('la touche Entrée sur une carte navigue vers la fiche', async ({ page }) => {
+    await page.goto('/');
+    const card = page.locator('.os-card').first();
+    await card.focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/systems\//);
+    await expect(page.locator('.detail-drawer')).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 });

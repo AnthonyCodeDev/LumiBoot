@@ -11,12 +11,11 @@ test.describe('Système non disponible', () => {
     await page.getByLabel('Rechercher un système').fill('windows');
     await page.locator('.os-card').first().click();
 
+    await expect(page).toHaveURL(/\/systems\//);
     const launchButton = page.getByRole('button', { name: 'Lancer une session' });
     await expect(launchButton).toBeVisible();
     await expect(launchButton).toBeDisabled();
-    // Le libellé « En préparation » apparaît aussi sur les cartes : on cible
-    // la raison explicite du tiroir (rôle `status`, texte unique).
-    await expect(page.getByRole('dialog').getByRole('status')).toContainText(/en préparation/i);
+    await expect(page.getByRole('status')).toContainText(/en préparation/i);
 
     await expect(page).not.toHaveURL(/\/session\//);
   });
