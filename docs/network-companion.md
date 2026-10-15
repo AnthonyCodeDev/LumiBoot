@@ -48,6 +48,17 @@ d'admin), `--version`. La configuration peut aussi passer par fichier JSON et va
 Pour révoquer : page d'admin → Révoquer la session, ou `POST /api/session/revoke`. Changer
 de mode réseau exige un **redémarrage** de la session (profil fixé avant démarrage).
 
+## Sélection automatique
+
+Aucun choix manuel n'est nécessaire pour profiter du compagnon : à la création de la
+session, LumiBoot sélectionne automatiquement le mode effectif **pour toute VM**. Si le
+compagnon est **appairé et connecté** (jeton de session présent), le mode `local-companion`
+est utilisé automatiquement. Sinon, le **mode de base** configuré (`browser-fetch` par
+défaut) s'applique ; un mode de base `local-companion` sans compagnon retombe sur
+`browser-fetch`. Les modes explicitement choisis `offline` et `user-relay` restent
+**respectés** (le compagnon ne les remplace jamais). Le mode étant figé avant le démarrage
+de l'émulateur, tout changement de mode exige un **redémarrage de la session**.
+
 ## Sécurité
 
 - **Loopback seul** : toute adresse d'écoute non-loopback est refusée sauf

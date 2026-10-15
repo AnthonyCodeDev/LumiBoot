@@ -7,6 +7,9 @@
  * `ws(s)://…/wisp/` dérivée de l'URL HTTP(S) du compagnon.
  */
 
+import type { NetworkMode } from './modes';
+import type { NetworkProfile } from './profile';
+
 export const DEFAULT_COMPANION_HOST = '127.0.0.1';
 export const DEFAULT_COMPANION_PORT = 37892;
 export const DEFAULT_COMPANION_URL = `http://${DEFAULT_COMPANION_HOST}:${DEFAULT_COMPANION_PORT}`;
@@ -109,4 +112,42 @@ export function buildCompanionWispUrl(companionUrl: string, token?: string): str
     url.search = '';
   }
   return url.href;
+}
+
+/** Mode de repli quand `local-companion` est demandé mais que le compagnon est absent. */
+export const DEFAULT_NETWORK_FALLBACK_MODE: NetworkMode = 'browser-fetch';
+
+export interface CompanionAvailability {
+  /** Le compagnon est-il activé côté config ? Défaut : true. */
+  enabled?: boolean;
+  /** Connecté ET appairé (le jeton doit être présent). */
+  connected: boolean;
+  companionUrl?: string;
+  companionToken?: string;
+}
+
+/**
+ * Sélectionne le profil réseau effectif :
+ * - compagnon connecté (activé, `connected`, jeton présent) et mode de base ni
+ *   `offline` ni `user-relay` → `local-companion` (avec URL + jeton runtime) ;
+ * - mode de base `local-companion` sans compagnon → repli `browser-fetch` ;
+ * - sinon → mode de base inchangé.
+ */
+export function selectEffectiveNetworkProfile(
+  base: NetworkProfile,
+  companion: CompanionAvailability,
+): NetworkProfile {
+  const enabled = companion.enabled ?? true;
+  const explicit = base.mode === 'offline' || base.mode === 'user-relay';
+  if (enabled && companion.connected && companion.companionToken && !explicit) {
+    return {
+      mode: 'local-companion',
+      ...(companion.companionUrl === undefined ? {} : { companionUrl: companion.companionUrl }),
+      companionToken: companion.companionToken,
+    };
+  }
+  if (base.mode === 'local-companion') {
+    return { mode: DEFAULT_NETWORK_FALLBACK_MODE };
+  }
+  return base;
 }

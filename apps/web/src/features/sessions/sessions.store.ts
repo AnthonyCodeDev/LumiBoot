@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { getSystemById } from '@lumiboot/catalog';
 import { SessionLifecycle, VMError, type SessionSnapshot } from '@lumiboot/vm-core';
+import { selectEffectiveNetworkProfile } from '@lumiboot/vm-network';
 import { createRegistry } from './registry';
-import { resolveNetworkProfile } from '../../config/runtime';
+import { resolveCompanionConfig, resolveNetworkProfile } from '../../config/runtime';
 import { getCompanionRuntimeCredentials } from '../companion/store';
 
 const registry = createRegistry();
@@ -46,23 +47,19 @@ export const useSessionsStore = create<SessionsState>((set) => ({
     if (!lifecycle) return;
     // Le profil réseau est résolu au démarrage puis reste figé pour la session
     // (tout changement de mode exige un redémarrage de la session).
-    // En mode `local-companion`, le jeton runtime issu de l'appairage est
-    // fusionné ici : le profil persisté (`lumiboot.config.json`) ne contient
-    // JAMAIS de token. Sans token, la session démarre quand même : le
-    // compagnon refusera la connexion, ce qui est l'état réel (pas de mode
-    // cassé silencieux).
+    // Sélection automatique : compagnon appairé/connecté → `local-companion`
+    // (jeton runtime fusionné ici, jamais persisté dans `lumiboot.config.json`) ;
+    // sinon mode de base (`browser-fetch` par défaut). `offline`/`user-relay`
+    // restent des choix explicites respectés.
     const base = resolveNetworkProfile(lifecycle.system.id);
-    const network =
-      base.mode === 'local-companion'
-        ? (() => {
-            const { companionUrl, companionToken } = getCompanionRuntimeCredentials();
-            return {
-              ...base,
-              companionUrl,
-              ...(companionToken ? { companionToken } : {}),
-            };
-          })()
-        : base;
+    const companionConfig = resolveCompanionConfig();
+    const credentials = getCompanionRuntimeCredentials();
+    const network = selectEffectiveNetworkProfile(base, {
+      enabled: companionConfig.enabled,
+      connected: credentials.companionToken !== null,
+      companionUrl: credentials.companionUrl,
+      ...(credentials.companionToken === null ? {} : { companionToken: credentials.companionToken }),
+    });
     await lifecycle.start(mountElement, { network });
   },
   stop: async (id) => {
