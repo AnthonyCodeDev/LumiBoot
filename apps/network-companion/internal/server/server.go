@@ -81,7 +81,7 @@ func New(cfg config.Config) (*Server, error) {
 	mux.HandleFunc("GET /wisp", s.handleWisp)
 	s.mux = mux
 	s.httpSrv = &http.Server{
-		Handler:           securityHeaders(mux),
+		Handler:           securityHeaders(s.preflightMiddleware(mux)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	return s, nil
@@ -97,7 +97,7 @@ func (s *Server) AdminURL() string {
 
 // Handler expose le mux pour les tests (httptest).
 func (s *Server) Handler() http.Handler {
-	return securityHeaders(s.mux)
+	return securityHeaders(s.preflightMiddleware(s.mux))
 }
 
 // Stats expose les compteurs (diagnostics, tests).
@@ -219,6 +219,19 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
+// preflightMiddleware répond aux requêtes OPTIONS (préflight CORS) AVANT le
+// mux : les routes sont enregistrées par méthode (Go 1.22+), donc OPTIONS ne
+// matcherait aucune route et le mux renverrait 405 sans ce court-circuit.
+func (s *Server) preflightMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			s.handlePreflight(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // requireAllowedOrigin refuse les requêtes portant une origine non autorisée.
 // Une origine absente est refusée sur les endpoints sensibles (le provider
 // LumiBoot tourne toujours dans un navigateur, qui envoie Origin).
@@ -274,9 +287,6 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePairRequest(w http.ResponseWriter, r *http.Request) {
-	if s.handlePreflight(w, r) {
-		return
-	}
 	s.setCORS(w, r)
 	origin := r.Header.Get("Origin")
 	if origin == "" {
@@ -302,9 +312,6 @@ func (s *Server) handlePairRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePairStatus(w http.ResponseWriter, r *http.Request) {
-	if s.handlePreflight(w, r) {
-		return
-	}
 	s.setCORS(w, r)
 	// Statut consulté par la page web (origine autorisée) ou l'admin.
 	if r.Header.Get("Origin") != "" {
@@ -326,9 +333,6 @@ func (s *Server) handlePairStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePairExchange(w http.ResponseWriter, r *http.Request) {
-	if s.handlePreflight(w, r) {
-		return
-	}
 	s.setCORS(w, r)
 	origin := s.requireAllowedOrigin(w, r)
 	if origin == "" {
@@ -353,9 +357,6 @@ func (s *Server) handlePairExchange(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePairApprove(w http.ResponseWriter, r *http.Request) {
-	if s.handlePreflight(w, r) {
-		return
-	}
 	s.setCORS(w, r)
 	if !s.checkAdmin(w, r) {
 		return
@@ -374,9 +375,6 @@ func (s *Server) handlePairApprove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePairDeny(w http.ResponseWriter, r *http.Request) {
-	if s.handlePreflight(w, r) {
-		return
-	}
 	s.setCORS(w, r)
 	if !s.checkAdmin(w, r) {
 		return
@@ -392,9 +390,6 @@ func (s *Server) handlePairDeny(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
-	if s.handlePreflight(w, r) {
-		return
-	}
 	s.setCORS(w, r)
 	if !s.checkAdmin(w, r) {
 		return
@@ -424,9 +419,6 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSessionRevoke(w http.ResponseWriter, r *http.Request) {
-	if s.handlePreflight(w, r) {
-		return
-	}
 	s.setCORS(w, r)
 	var body struct {
 		Token string `json:"token"`
