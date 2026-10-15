@@ -68,10 +68,11 @@ de mode réseau exige un **redémarrage** de la session (profil fixé avant dém
 
 ## Manifeste de téléchargement et intégrité
 
-Le manifeste consommé par le site est `apps/web/public/downloads/manifest.json`. Il n'est
-**pas généré par la CI** : c'est le mainteneur qui le met à jour **à la main** après avoir
-déposé les binaires (voir [Procédure de publication](#procédure-de-publication)). Chaque
-entrée référence un fichier local :
+Le manifeste consommé par le site est `apps/web/public/downloads/manifest.json`. Il est
+**généré par la CI** (job `release`) et livré **dans le ZIP de release** à côté des binaires
+et de `SHA256SUMS` ; le mainteneur n'a plus qu'à décompresser ce ZIP dans
+`apps/web/public/downloads/` (voir [Procédure de publication](#procédure-de-publication)).
+Chaque entrée référence un fichier local :
 
 ```json
 {
@@ -89,8 +90,8 @@ entrée référence un fichier local :
 ```
 
 Les `url` sont **relatives** au site (`/downloads/<fichier>`), pas des liens GitHub. Les
-champs `size` et `sha256` sont renseignés par le mainteneur **s'ils sont fournis** (sinon on
-peut les omettre le temps du dépôt). `macos` désigne le binaire **universel**
+champs `size` et `sha256` sont **calculés automatiquement par la CI** sur les binaires réels
+du ZIP (mêmes valeurs que `SHA256SUMS`). `macos` désigne le binaire **universel**
 `LumiBoot-Network-macos-universal.tar.gz` (Intel + Apple Silicon, assemblé avec
 `lipo -create` par le job `package-macos`) ; la V1 fournit ce binaire universel en tar.gz
 (pas encore d'app `.app` signée/notarisée). Les archives mono-architecture
@@ -133,31 +134,40 @@ sha256sum LumiBoot-Network-linux-amd64.tar.gz
 
 ## Procédure de publication
 
-**Aucune publication automatique** : la CI ne fait que **générer les binaires**, c'est le
-mainteneur qui publie à la main.
+**Publication automatique (Release GitHub, repo privé)** : à chaque release, la CI crée
+elle-même une **Release GitHub dans ce dépôt privé** (via `GITHUB_TOKEN`, aucun PAT ni dépôt
+public) contenant **un seul fichier ZIP** : `LumiBoot-Network-companion-<version>.zip`. Ce
+ZIP regroupe **tous les binaires** + `manifest.json` + `SHA256SUMS` **à sa racine** ; le
+`manifest.json` pointe déjà vers `/downloads/<fichier>`. Le mainteneur n'a donc qu'à
+télécharger et décompresser ce ZIP.
 
-1. Déclencher le workflow `.github/workflows/network-companion.yml` : soit manuellement
-   (onglet **Actions → Network Companion → Run workflow**, ce qui sert à produire des
-   artefacts à récupérer), soit en poussant un tag `network-vX.Y.Z`
-   (`git tag network-vX.Y.Z && git push origin network-vX.Y.Z`).
+1. **Déclencher** le workflow `.github/workflows/network-companion.yml` :
+   - en poussant un tag `network-vX.Y.Z`
+     (`git tag network-vX.Y.Z && git push origin network-vX.Y.Z`) → le job `release` crée la
+     Release pour ce tag ;
+   - ou manuellement (onglet **Actions → Network Companion → Run workflow**) en renseignant
+     l'entrée **`version`** (ex. `1.0.0`) : le tag publié est alors `network-v<version>`. Si
+     `version` est laissée vide, le workflow ne **build que** (sans Release).
 2. Le workflow exécute **test → build (6 cibles) + smoke natif (4 OS) + package macOS
-   universel (`lipo -create`, job `package-macos`)**. Il **s'arrête là** : aucun job
-   `release`, aucune Release GitHub, aucun commit automatique. Les artefacts produits sont
-   les **6 cibles** (`LumiBoot-Network-windows-amd64/arm64.exe`,
-   `LumiBoot-Network-linux-amd64/arm64.tar.gz`,
-   `LumiBoot-Network-darwin-amd64/arm64.tar.gz`) et
-   `LumiBoot-Network-macos-universal.tar.gz`.
-3. **Récupération manuelle** : ouvrir l'onglet **Actions → le run → section « Artifacts »**
-   et **télécharger** les artefacts souhaités.
-4. **Dépôt manuel** : copier les fichiers dans `apps/web/public/downloads/` puis mettre à
-   jour `apps/web/public/downloads/manifest.json` (`url` = `/downloads/<fichier>`,
-   `published: true`, et `size`/`sha256` **si fournis**). Le mainteneur est seul
-   responsable de ce commit.
+   universel (`lipo -create`, job `package-macos`)**, puis le job **`release`**
+   (`needs: [build, package-macos, smoke]`) :
+   - télécharge tous les artefacts dans `dist/` ;
+   - calcule `SHA256SUMS` (`sha256sum LumiBoot-Network-*> SHA256SUMS`) et génère
+     `manifest.json` (les 5 plateformes, `url` = `/downloads/<fichier>`, `size`/`sha256`
+     réels, `published: true`, `macos` en `signed:false` / `notarized:false`) ;
+   - produit le ZIP unique `LumiBoot-Network-companion-<version>.zip` ;
+   - crée la **Release GitHub** (`gh release create`, notes générées + encart d'utilisation).
+3. **Récupération en un clic** : ouvrir la page **Releases** du dépôt et télécharger
+   `LumiBoot-Network-companion-<version>.zip`.
+4. **Décompression** : extraire le contenu de ce ZIP **dans
+   `apps/web/public/downloads/`** (les binaires + `manifest.json` + `SHA256SUMS` se
+   retrouvent à la racine de ce dossier). Aucune édition manuelle du manifeste n'est requise,
+   puisqu'il est déjà généré avec les bonnes `url` `/downloads/...`.
 5. **Signature optionnelle** (jobs `sign-windows` / `sign-macos`) : désactivée par défaut.
    Elle ne s'exécute que si la **variable** de dépôt `ENABLE_SIGNING` vaut `true` (et sur un
    tag `network-v*`), puis requiert les secrets correspondants
    (`WINDOWS_CERT_PFX_BASE64` + `WINDOWS_CERT_PASSWORD`, ou `APPLE_CERT_P12_BASE64` +
    `APPLE_CERT_PASSWORD` + `APPLE_TEAM_ID` + `APPLE_ID` + `APPLE_APP_PASSWORD`). Cette
-   signature n'est **pas câblée** au flux de publication ; les artefacts signés restent des
-   artefacts de workflow à récupérer à la main. Ne jamais marquer « stable » un binaire non
-   signé.
+   signature n'est **pas câblée** au flux de publication : le ZIP est publié **non signé /
+   non notarisé** (`ENABLE_SIGNING` non câblée). Windows (SmartScreen) et macOS (Gatekeeper)
+   afficheront un avertissement ; ne jamais marquer « stable » un binaire non signé.

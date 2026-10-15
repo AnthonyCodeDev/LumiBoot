@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version à publier (ex. 1.0.0). Vide = build sans publication."
+        description: "Version à publier (ex. 1.0.0). Vide = build sans release."
         required: false
         type: string
   push:
@@ -177,6 +177,109 @@ jobs:
           name: LumiBoot-Network-macos-universal
           path: dist/LumiBoot-Network-macos-universal.tar.gz
           if-no-files-found: error
+
+  release:
+    # Publication automatique : à chaque tag `network-v*` (ou workflow_dispatch
+    # avec `version` non vide), la CI crée une Release GitHub DANS CE REPO
+    # (private) contenant UN SEUL ZIP : tous les binaires + `manifest.json` +
+    # `SHA256SUMS`. Le ZIP est prêt à être décompressé dans
+    # `apps/web/public/downloads/` (le manifeste pointe vers `/downloads/...`).
+    # `actions/checkout` est INDISPENSABLE : sans lui, `gh release create` échoue
+    # avec « fatal: not a git repository ».
+    name: release (zip complet)
+    needs: [build, package-macos, smoke]
+    if: startsWith(github.ref, 'refs/tags/network-v') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout (requis par gh release)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Télécharger tous les artefacts
+        uses: actions/download-artifact@v7
+        with:
+          merge-multiple: true
+          path: dist
+      - name: Déterminer TAG et VERSION
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="network-v${INPUT_VERSION}"
+            VERSION="${INPUT_VERSION}"
+          else
+            TAG="$GITHUB_REF_NAME"
+            VERSION="${GITHUB_REF_NAME#network-v}"
+          fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=$TAG VERSION=$VERSION"
+      - name: Générer SHA256SUMS
+        run: |
+          cd dist
+          sha256sum LumiBoot-Network-* > SHA256SUMS
+          cat SHA256SUMS
+      - name: Générer manifest.json
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from datetime import datetime, timezone
+
+          files = {
+              "windows-x64": "LumiBoot-Network-windows-amd64.exe",
+              "windows-arm64": "LumiBoot-Network-windows-arm64.exe",
+              "linux-x64": "LumiBoot-Network-linux-amd64.tar.gz",
+              "linux-arm64": "LumiBoot-Network-linux-arm64.tar.gz",
+              "macos": "LumiBoot-Network-macos-universal.tar.gz",
+          }
+
+          def entry(platform, filename):
+              path = os.path.join("dist", filename)
+              digest = hashlib.sha256()
+              with open(path, "rb") as handle:
+                  for chunk in iter(lambda: handle.read(1 << 20), b""):
+                      digest.update(chunk)
+              data = {
+                  "file": filename,
+                  "url": f"/downloads/{filename}",
+                  "size": os.path.getsize(path),
+                  "sha256": digest.hexdigest(),
+                  "published": True,
+              }
+              if platform == "macos":
+                  data["signed"] = False
+                  data["notarized"] = False
+              return data
+
+          manifest = {
+              "version": os.environ["VERSION"],
+              "wispVersion": 1,
+              "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": {name: entry(name, fname) for name, fname in files.items()},
+          }
+
+          with open(os.path.join("dist", "manifest.json"), "w", encoding="utf-8") as handle:
+              json.dump(manifest, handle, indent=2)
+              handle.write("\n")
+          PY
+      - name: Créer le ZIP complet
+        run: |
+          cd dist
+          zip -r "../LumiBoot-Network-companion-${VERSION}.zip" .
+          cd ..
+          ls -la "LumiBoot-Network-companion-${VERSION}.zip"
+      - name: Créer la Release GitHub
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$TAG" "LumiBoot-Network-companion-${VERSION}.zip" \
+            --title "LumiBoot Network Companion ${VERSION}" \
+            --generate-notes \
+            --notes $'### Utilisation\nTéléchargez ce ZIP, décompressez-le dans `apps/web/public/downloads/` (le `manifest.json` qu\'il contient pointe déjà vers `/downloads/...`).\n\n⚠️ Binaires **non signés / non notarisés** : Windows (SmartScreen) et macOS (Gatekeeper) afficheront un avertissement.'
 
   sign-windows:
     # Signature Authenticode OPTIONNELLE : ignorée si les secrets sont absents.
