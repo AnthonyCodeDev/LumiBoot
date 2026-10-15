@@ -26,7 +26,7 @@ permissions:
 jobs:
   test:
     name: test (go test / vet / gofmt)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - name: Set up Go
@@ -53,7 +53,7 @@ jobs:
   build:
     name: build (${{ matrix.goos }}/${{ matrix.goarch }})
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -96,7 +96,7 @@ jobs:
           fi
           ls -la dist
       - name: Upload artefact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: LumiBoot-Network-${{ matrix.goos }}-${{ matrix.goarch }}
           path: apps/network-companion/dist/LumiBoot-Network-*
@@ -112,7 +112,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, ext: "" }
+          - { os: ubuntu-24.04, ext: "" }
           - { os: windows-latest, ext: ".exe" }
           - { os: macos-15-intel, ext: "" }
           - { os: macos-15, ext: "" }
@@ -167,7 +167,7 @@ jobs:
           rm dist/lumiboot-network
           ls -la dist
       - name: Upload artefact universel
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: LumiBoot-Network-macos-universal
           path: dist/LumiBoot-Network-macos-universal.tar.gz
@@ -177,7 +177,7 @@ jobs:
     name: release (préversion non signée)
     needs: [build, package-macos, smoke]
     if: startsWith(github.ref, 'refs/tags/network-v')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -306,7 +306,7 @@ jobs:
           }
       - name: Upload .exe signés
         if: env.HAS_WIN_CERT == 'true'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: LumiBoot-Network-windows-signed
           path: dist/*.exe
@@ -367,7 +367,7 @@ jobs:
           ls -la signed
       - name: Upload archives signées/notarisées
         if: env.HAS_APPLE_CERT == 'true'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: LumiBoot-Network-darwin-signed
           path: signed/*
