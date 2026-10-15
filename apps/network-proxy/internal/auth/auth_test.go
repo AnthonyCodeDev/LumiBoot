@@ -204,3 +204,130 @@ func TestPendingPairings(t *testing.T) {
 		t.Fatalf("attente: %+v", pending)
 	}
 }
+
+// issueToken appaire et échange une session de test.
+func issueToken(t *testing.T, a *Authenticator) string {
+	t.Helper()
+	p, err := a.RequestPairing("http://localhost:5200")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	if err := a.Approve(p.ID, true); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	token, _, err := a.Exchange(p.ID, "http://localhost:5200")
+	if err != nil {
+		t.Fatalf("exchange: %v", err)
+	}
+	return token
+}
+
+func TestTransportClosedOnRevoke(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+	token := issueToken(t, a)
+
+	closed := make(chan struct{}, 1)
+	info, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
+	if !ok || info.ID == "" {
+		t.Fatal("attachement de transport refusé")
+	}
+	// Token invalide / origine différente : pas d'attachement.
+	if _, ok := a.AttachSession("mauvais", "http://localhost:5200", func() {}); ok {
+		t.Fatal("attachement d'un token invalide accepté")
+	}
+	if _, ok := a.AttachSession(token, "https://lumiboot.app", func() {}); ok {
+		t.Fatal("attachement depuis une autre origine accepté")
+	}
+
+	if !a.Revoke(token) {
+		t.Fatal("révocation échouée")
+	}
+	select {
+	case <-closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("callback de fermeture non invoqué après Revoke")
+	}
+}
+
+func TestTransportClosedOnAdminRevokeAndExpiry(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+
+	attach := func() (token, id string, closed chan struct{}) {
+		token = issueToken(t, a)
+		closed = make(chan struct{}, 1)
+		info, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
+		if !ok {
+			t.Fatal("attachement refusé")
+		}
+		return token, info.ID, closed
+	}
+
+	// AdminRevoke.
+	_, id, closed := attach()
+	if !a.AdminRevoke(id) {
+		t.Fatal("AdminRevoke échoué")
+	}
+	select {
+	case <-closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("callback non invoqué après AdminRevoke")
+	}
+
+	// Expiration : CleanupExpired ferme le transport.
+	_, _, closed = attach()
+	now = now.Add(2 * time.Hour)
+	a.CleanupExpired()
+	select {
+	case <-closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("callback non invoqué après expiration")
+	}
+}
+
+func TestDetachSessionPreventsCallback(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+	token := issueToken(t, a)
+	closed := make(chan struct{}, 1)
+	info, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
+	if !ok {
+		t.Fatal("attachement refusé")
+	}
+	a.DetachSession(info.ID)
+	if !a.Revoke(token) {
+		t.Fatal("révocation échouée")
+	}
+	select {
+	case <-closed:
+		t.Fatal("callback invoqué après DetachSession")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestPairingFloodLimit(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+	for i := 0; i < maxPendingPerOrigin; i++ {
+		if _, err := a.RequestPairing("http://localhost:5200"); err != nil {
+			t.Fatalf("demande %d: %v", i, err)
+		}
+	}
+	if _, err := a.RequestPairing("http://localhost:5200"); !errors.Is(err, ErrPairingLimit) {
+		t.Fatalf("plafond par origine non appliqué: %v", err)
+	}
+	// Une autre origine autorisée n'est pas pénalisée.
+	if _, err := a.RequestPairing("https://lumiboot.app"); err != nil {
+		t.Fatalf("autre origine bloquée à tort: %v", err)
+	}
+	// Le nettoyage des expirées libère le quota.
+	now = now.Add(11 * time.Minute)
+	if _, err := a.RequestPairing("http://localhost:5200"); err != nil {
+		t.Fatalf("après nettoyage: %v", err)
+	}
+}

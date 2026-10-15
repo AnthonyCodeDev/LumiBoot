@@ -38,3 +38,23 @@ export function getEffectiveAvailability(facts: SystemAvailabilityFacts): Availa
   const declared = facts.declared ?? 'planned';
   return declared === 'ready' ? 'planned' : declared;
 }
+
+/**
+ * Agrège la disponibilité de PLUSIEURS candidats — un candidat étant un couple
+ * cohérent (image × profil × moteur).
+ *
+ * Correctif audit #19 : la disponibilité d'un système ne doit JAMAIS combiner la
+ * validation d'un profil avec le moteur (ou la compatibilité) d'un autre. Un
+ * système n'est donc `ready` que si un MÊME candidat réunit les quatre
+ * conditions ; des `some()` indépendants pouvaient produire un faux `ready`.
+ *
+ * La règle métier reste inchangée : `ready` exige un boot réellement validé.
+ */
+export function getAggregatedAvailability(
+  candidates: readonly SystemAvailabilityFacts[],
+): Availability {
+  if (candidates.some((facts) => getEffectiveAvailability(facts) === 'ready')) return 'ready';
+
+  const declared = candidates.find((facts) => facts.declared !== undefined)?.declared;
+  return declared !== undefined && declared !== 'ready' ? declared : 'planned';
+}

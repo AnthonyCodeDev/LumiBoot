@@ -1,0 +1,16 @@
+{
+  "$comment": "PLACEHOLDER (source, versionné) — image Debian 12 i386 Desktop NON CONSTRUITE. Décrit le format attendu par @lumiboot/vm-assets (ensureImageManifest) mais n'est VOLONTAIREMENT pas un manifeste valide : `files` est vide et les clés `$comment`/`status`/`notes` sont rejetées par le schéma strict. Il ne peut donc jamais simuler la présence de l'image. Le vrai manifeste est généré par build.sh (FLAVOR=desktop) puis publié dans apps/web/public/images/debian-12-i386-desktop/ (dossier ignoré par Git).",
+  "ref": "debian-12-i386-desktop",
+  "architecture": "i386",
+  "memoryMiB": 1024,
+  "vgaMemoryMiB": 16,
+  "license": "Debian GNU/Linux — voir les notices de paquets (Debian Free Software Guidelines)",
+  "files": {},
+  "status": "not-built",
+  "notes": [
+    "Aucune image réelle ne peut être construite/bootée dans l'environnement de développement (pas de debootstrap/WSL/Docker).",
+    "Ne jamais committer les binaires de l'image dans le dépôt.",
+    "Renseigner sha256 et size pour disk/bzimage/initrd après construction réelle.",
+    "Le catalogue ne référence PAS ce manifeste (imageRef absent) : la disponibilité reste dérivée non-ready."
+  ]
+}

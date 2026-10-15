@@ -68,7 +68,7 @@ describe('checkProxy', () => {
     expect(health).toMatchObject({ state: 'connected', wispVersion: 1 });
   });
 
-  it('TypeError en contexte sécurisé Chromium → permission-required (heuristique)', async () => {
+  it('TypeError en contexte sécurisé Chromium → error incertain (jamais affirmé)', async () => {
     Object.defineProperty(window, 'isSecureContext', {
       value: true,
       configurable: true,
@@ -81,6 +81,8 @@ describe('checkProxy', () => {
       'http://127.0.0.1:37892',
       fetchFail(new TypeError('Failed to fetch')),
     );
-    expect(health.state).toBe('permission-required');
+    expect(health.state).toBe('error');
+    expect(health.uncertain).toBe(true);
+    expect(health.error).toMatch(/proxy réseau local/i);
   });
 });

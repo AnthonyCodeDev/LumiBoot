@@ -15,7 +15,9 @@ test.describe('Système non disponible', () => {
     const launchButton = page.getByRole('button', { name: 'Lancer une session' });
     await expect(launchButton).toBeVisible();
     await expect(launchButton).toBeDisabled();
-    await expect(page.locator('.system-detail-actions').getByRole('status')).toContainText(/en préparation/i);
+    await expect(page.locator('.system-detail-actions').getByRole('status')).toContainText(
+      /en préparation/i,
+    );
 
     await expect(page).not.toHaveURL(/\/session\//);
   });

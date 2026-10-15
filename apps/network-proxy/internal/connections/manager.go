@@ -3,6 +3,7 @@
 package connections
 
 import (
+	"context"
 	"errors"
 	"net"
 	"sync"
@@ -248,8 +249,9 @@ func (m *Manager) SweepIdle(idleTimeout time.Duration) int {
 
 // Throttle applique la limitation de bande passante globale (token bucket).
 // Sans effet si la limite est désactivée. n est le nombre d'octets transférés.
-func (m *Manager) Throttle(n int) {
-	m.limiter.consume(n)
+// L'attente est annulable : dès que ctx est annulé, Throttle rend la main.
+func (m *Manager) Throttle(ctx context.Context, n int) {
+	m.limiter.consume(ctx, n)
 }
 
 // tokenBucket est un seau à jetons minimaliste pour la bande passante.
@@ -264,7 +266,7 @@ func newTokenBucket(bytesPerSecond int64) *tokenBucket {
 	return &tokenBucket{rate: float64(bytesPerSecond), last: time.Now()}
 }
 
-func (b *tokenBucket) consume(n int) {
+func (b *tokenBucket) consume(ctx context.Context, n int) {
 	if n <= 0 {
 		return
 	}
@@ -281,12 +283,18 @@ func (b *tokenBucket) consume(n int) {
 		b.tokens = b.rate // capacité = 1 seconde de débit
 	}
 	b.tokens -= float64(n)
-	wait := 0.0
+	wait := time.Duration(0)
 	if b.tokens < 0 {
-		wait = -b.tokens / b.rate
+		wait = time.Duration(-b.tokens / b.rate * float64(time.Second))
 	}
 	b.mu.Unlock()
-	if wait > 0 {
-		time.Sleep(time.Duration(wait * float64(time.Second)))
+	if wait <= 0 {
+		return
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
 	}
 }

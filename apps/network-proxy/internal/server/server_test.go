@@ -174,6 +174,91 @@ func TestPairingAPI(t *testing.T) {
 	}
 }
 
+// obtainToken exécute appairage + approbation + échange et renvoie le token.
+func obtainToken(t *testing.T, s *Server, ts *httptest.Server) string {
+	t.Helper()
+	client := ts.Client()
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/pair/request", nil)
+	req.Header.Set("Origin", testOrigin)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var created struct {
+		PairingID string `json:"pairingId"`
+	}
+	decodeJSON(t, resp, &created)
+	if err := s.Authenticator().Approve(created.PairingID, true); err != nil {
+		t.Fatalf("approbation: %v", err)
+	}
+	ex, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/pair/exchange",
+		strings.NewReader(`{"pairingId":"`+created.PairingID+`"}`))
+	ex.Header.Set("Origin", testOrigin)
+	ex.Header.Set("Content-Type", "application/json")
+	resp, err = client.Do(ex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var exchanged struct {
+		Token string `json:"token"`
+	}
+	decodeJSON(t, resp, &exchanged)
+	if exchanged.Token == "" {
+		t.Fatal("token vide")
+	}
+	return exchanged.Token
+}
+
+func TestSessionVerify(t *testing.T) {
+	s, ts := newTestServer(t)
+	client := ts.Client()
+	token := obtainToken(t, s, ts)
+
+	get := func(token, origin string) *http.Response {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/session/verify?token="+token, nil)
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	// Token valide -> 200 {"ok":true,"expiresAt":...}.
+	resp := get(token, testOrigin)
+	var body struct {
+		Ok        bool   `json:"ok"`
+		ExpiresAt string `json:"expiresAt"`
+	}
+	decodeJSON(t, resp, &body)
+	if resp.StatusCode != http.StatusOK || !body.Ok || body.ExpiresAt == "" {
+		t.Fatalf("verify valide: %+v (%d)", body, resp.StatusCode)
+	}
+
+	// Token invalide -> 401.
+	resp = get("DeliberementFaux", testOrigin)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("verify token invalide: %d", resp.StatusCode)
+	}
+
+	// Token absent -> 401.
+	resp = get("", testOrigin)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("verify token absent: %d", resp.StatusCode)
+	}
+
+	// Origine non autorisée -> 403.
+	resp = get(token, "http://evil.com")
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("verify origine hostile: %d", resp.StatusCode)
+	}
+}
+
 func TestWispAuthGate(t *testing.T) {
 	_, ts := newTestServer(t)
 	wsURL := "ws://" + strings.TrimPrefix(ts.URL, "http://") + "/wisp/?token=DeliberementFaux"

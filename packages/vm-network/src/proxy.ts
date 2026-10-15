@@ -47,7 +47,10 @@ function isLoopbackHostname(hostname: string): boolean {
  */
 export function validateProxyUrl(raw: unknown): ProxyValidation {
   if (typeof raw !== 'string') {
-    return { ok: false, error: 'Adresse du proxy réseau local invalide : une chaîne est attendue.' };
+    return {
+      ok: false,
+      error: 'Adresse du proxy réseau local invalide : une chaîne est attendue.',
+    };
   }
 
   const trimmed = raw.trim();
@@ -79,7 +82,10 @@ export function validateProxyUrl(raw: unknown): ProxyValidation {
   }
 
   if (!isLoopbackHostname(url.hostname)) {
-    return { ok: false, error: 'Le proxy réseau local doit être une adresse loopback (127.0.0.1, ::1, localhost).' };
+    return {
+      ok: false,
+      error: 'Le proxy réseau local doit être une adresse loopback (127.0.0.1, ::1, localhost).',
+    };
   }
 
   return { ok: true, url: url.href };

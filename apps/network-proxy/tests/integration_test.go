@@ -4,6 +4,7 @@
 package proxy_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net"
@@ -234,6 +235,111 @@ func TestWispRejectsBadOriginAndMissingToken(t *testing.T) {
 	if got := srv.Stats().Snapshot().RejectedAuth; got < 2 {
 		t.Fatalf("rejectedAuth=%d, attendu >= 2", got)
 	}
+}
+
+// trackedEchoServer démarre un écho TCP et signale la fermeture de chaque
+// connexion acceptée : permet de vérifier que le proxy coupe bien le TCP.
+func trackedEchoServer(t *testing.T) (host string, port int, closed <-chan struct{}) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("écho: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	closedCh := make(chan struct{}, 16)
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer func() {
+					_ = c.Close()
+					closedCh <- struct{}{}
+				}()
+				_, _ = io.Copy(c, c)
+			}()
+		}
+	}()
+	addr := ln.Addr().(*net.TCPAddr)
+	return "127.0.0.1", addr.Port, closedCh
+}
+
+// expectTransportClosed vérifie que le WebSocket ET le TCP se ferment.
+func expectTransportClosed(t *testing.T, conn *websocket.Conn, closed <-chan struct{}, label string) {
+	t.Helper()
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if _, _, err := conn.ReadMessage(); err == nil {
+		t.Fatalf("%s: WebSocket toujours ouvert", label)
+	}
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("%s: connexion TCP toujours ouverte", label)
+	}
+}
+
+// openEchoStream ouvre la session WISP, monte un flux TCP vers l'écho local et
+// confirme l'établissement par un aller-retour DATA.
+func openEchoStream(t *testing.T, conn *websocket.Conn, echoPort int) {
+	t.Helper()
+	_ = readWISP(t, conn) // CONTINUE initial
+	sendWISP(t, conn, wisp.Frame{
+		Type:     wisp.TypeConnect,
+		StreamID: 1,
+		Payload:  wisp.BuildConnectPayload(wisp.StreamTypeTCP, uint16(echoPort), "127.0.0.1"),
+	})
+	sendWISP(t, conn, wisp.Frame{Type: wisp.TypeData, StreamID: 1, Payload: []byte("ping")})
+	echo := readWISP(t, conn)
+	if echo.Type != wisp.TypeData || echo.StreamID != 1 || string(echo.Payload) != "ping" {
+		t.Fatalf("établissement du flux: %+v", echo)
+	}
+}
+
+func TestRevocationClosesWebSocketAndTCP(t *testing.T) {
+	srv, ts := proxyFixture(t, nil)
+	token := pair(t, srv, ts)
+	_, echoPort, closed := trackedEchoServer(t)
+
+	conn := dialWISP(t, ts, token, itOrigin)
+	openEchoStream(t, conn, echoPort)
+
+	if !srv.Authenticator().Revoke(token) {
+		t.Fatal("révocation échouée")
+	}
+	expectTransportClosed(t, conn, closed, "révocation")
+}
+
+func TestExpirationClosesTransport(t *testing.T) {
+	srv, ts := proxyFixture(t, func(c *config.Config) {
+		c.SessionTokenTTL = config.Duration(time.Second)
+	})
+	token := pair(t, srv, ts)
+	_, echoPort, closed := trackedEchoServer(t)
+
+	conn := dialWISP(t, ts, token, itOrigin)
+	openEchoStream(t, conn, echoPort)
+
+	time.Sleep(1200 * time.Millisecond) // dépasse SessionTokenTTL
+	srv.Authenticator().CleanupExpired()
+
+	expectTransportClosed(t, conn, closed, "expiration")
+}
+
+func TestShutdownClosesWebSockets(t *testing.T) {
+	srv, ts := proxyFixture(t, nil)
+	token := pair(t, srv, ts)
+	_, echoPort, closed := trackedEchoServer(t)
+
+	conn := dialWISP(t, ts, token, itOrigin)
+	openEchoStream(t, conn, echoPort)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	srv.Shutdown(ctx)
+
+	expectTransportClosed(t, conn, closed, "arrêt du serveur")
 }
 
 func TestConnectionLimit(t *testing.T) {

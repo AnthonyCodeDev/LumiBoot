@@ -29,6 +29,23 @@ export const images = [
     integrationNote: "Premier système du MVP. L'image Linux arrive en premier lot.",
   },
   {
+    id: 'debian-12-i386-desktop-image',
+    familyId: 'debian',
+    architecture: 'i386',
+    // PAS d'`imageRef` : aucune image desktop n'est construite ni publiée dans ce
+    // dépôt. La disponibilité reste donc DÉRIVÉE non-ready (jamais `ready`) tant
+    // qu'une image réelle n'est pas construite, publiée et validée par un boot.
+    requirements: [
+      'Navigateur moderne',
+      'WebAssembly',
+      'Mémoire suffisante (≥ 1 Gio)',
+      'Image graphique (Xorg) non encore publiée',
+    ],
+    integrationNote:
+      'Variante graphique de Debian 12 (Xorg + Openbox sous v86) : NON validée. ' +
+      "L'image doit être construite hors dépôt et un boot réel prouvé avant tout passage en « disponible ».",
+  },
+  {
     id: 'ubuntu-18-i386-image',
     familyId: 'ubuntu',
     architecture: 'i386',

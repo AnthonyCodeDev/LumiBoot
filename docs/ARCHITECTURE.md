@@ -203,6 +203,7 @@ dans [`adr/0007-network-proxy.md`](adr/0007-network-proxy.md) et documenté dans
 | OS / version | Exécution cible | Situation |
 |---|---|---|
 | Debian 12 i386 | Navigateur avec v86 | Premier système à réaliser et tester |
+| Debian 12 i386 Desktop | Navigateur avec v86 | Flavor graphique (Xorg + Openbox) ; NON construit, NON testé, non-`ready` (voir [`debian-desktop.md`](debian-desktop.md)) |
 | Ubuntu historique i386 | Navigateur avec v86 | Étude de compatibilité, version par version |
 | Fedora, Ubuntu et Mint modernes x64 | Navigateur avec moteur compatible local | Support local uniquement, sans backend de virtualisation |
 | Windows anciens x86 | Navigateur avec moteur compatible local | Comportement et licence à vérifier |

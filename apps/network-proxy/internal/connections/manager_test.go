@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"context"
 	"errors"
 	"net"
 	"testing"
@@ -125,8 +126,23 @@ func TestSetConn(t *testing.T) {
 func TestThrottleDisabled(t *testing.T) {
 	m := NewManager(8, 8, 0)
 	start := time.Now()
-	m.Throttle(1 << 20)
+	m.Throttle(context.Background(), 1<<20)
 	if time.Since(start) > 500*time.Millisecond {
 		t.Fatal("limiteur désactivé mais lent")
+	}
+}
+
+func TestThrottleCancellable(t *testing.T) {
+	// 1 octet/s : un transfert de 1 Mio devrait attendre très longtemps.
+	m := NewManager(8, 8, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+	start := time.Now()
+	m.Throttle(ctx, 1<<20)
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("Throttle non annulable: %v", elapsed)
 	}
 }

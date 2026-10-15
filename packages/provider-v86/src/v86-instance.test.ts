@@ -1,10 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { V86 } from 'v86';
-import type { SessionEvent } from '@lumiboot/contracts';
+import type { GuestReadiness, SessionEvent } from '@lumiboot/contracts';
 import { createNetworkController, defaultNetworkProfile } from '@lumiboot/vm-network';
 import { V86Instance } from './v86-instance';
 import type { V86ConsoleAdapter } from './console-adapter';
-import { GUEST_READY_MARKER } from './guest-ready-detector';
+
+const GUEST_READY_MARKER = 'LUMIBOOT_GUEST_READY:debian-12-i386';
+const READINESS: GuestReadiness = {
+  marker: GUEST_READY_MARKER,
+  channel: 'serial',
+  timeoutMs: 120_000,
+};
 
 type Listener = (arg: unknown) => void;
 
@@ -67,6 +73,7 @@ function createInstance(emulator: FakeV86, onCleanupError?: (error: unknown) => 
     systemId: 'debian-12-i386',
     emulator: emulator as unknown as V86,
     console: createConsoleStub(),
+    readiness: READINESS,
     ...(onCleanupError ? { onCleanupError } : {}),
   });
   instance.wire();
@@ -101,6 +108,88 @@ describe('V86Instance', () => {
 
     const running = events.filter((event) => event.type === 'state' && event.state === 'running');
     expect(running).toHaveLength(1);
+  });
+
+  it('lit la preuve sur le canal VGA quand readiness.channel = vga', () => {
+    const emulator = new FakeV86();
+    const instance = new V86Instance({
+      providerId: 'v86',
+      systemId: 'sample',
+      emulator: emulator as unknown as V86,
+      console: createConsoleStub(),
+      readiness: { marker: GUEST_READY_MARKER, channel: 'vga' },
+    });
+    instance.wire();
+    const events: SessionEvent[] = [];
+    instance.subscribe((event) => events.push(event));
+
+    // Le canal série n'est PAS branché : seul le texte écran est surveillé.
+    expect(emulator.listenerCount('serial0-output-byte')).toBe(0);
+    expect(emulator.listenerCount('screen-put-char')).toBe(1);
+
+    for (const char of GUEST_READY_MARKER) {
+      emulator.emit('screen-put-char', [0, 0, char.charCodeAt(0)]);
+    }
+
+    const running = events.filter((event) => event.type === 'state' && event.state === 'running');
+    expect(running).toHaveLength(1);
+  });
+
+  it('émet GUEST_READY_TIMEOUT si le marqueur n’arrive pas dans le délai', async () => {
+    vi.useFakeTimers();
+    try {
+      const emulator = new FakeV86();
+      const instance = new V86Instance({
+        providerId: 'v86',
+        systemId: 'sample',
+        emulator: emulator as unknown as V86,
+        console: createConsoleStub(),
+        readiness: { marker: GUEST_READY_MARKER, timeoutMs: 1000 },
+      });
+      instance.wire();
+      const events: SessionEvent[] = [];
+      instance.subscribe((event) => events.push(event));
+
+      emulator.emit('emulator-ready', undefined);
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'error', code: 'GUEST_READY_TIMEOUT' }),
+        ]),
+      );
+      expect(emulator.listenerCount('serial0-output-byte')).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('n’émet pas GUEST_READY_TIMEOUT si le marqueur arrive avant le délai', async () => {
+    vi.useFakeTimers();
+    try {
+      const emulator = new FakeV86();
+      const instance = new V86Instance({
+        providerId: 'v86',
+        systemId: 'sample',
+        emulator: emulator as unknown as V86,
+        console: createConsoleStub(),
+        readiness: { marker: GUEST_READY_MARKER, timeoutMs: 1000 },
+      });
+      instance.wire();
+      const events: SessionEvent[] = [];
+      instance.subscribe((event) => events.push(event));
+
+      emulator.emit('emulator-ready', undefined);
+      emitMarker(emulator);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(events.some((event) => event.type === 'error')).toBe(false);
+      expect(
+        events.filter((event) => event.type === 'state' && event.state === 'running'),
+      ).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('rejoue les événements émis avant le premier abonné', () => {
@@ -157,6 +246,7 @@ describe('V86Instance', () => {
       systemId: 'debian-12-i386',
       emulator: emulator as unknown as V86,
       console: createConsoleStub(),
+      readiness: READINESS,
       network: controller,
     });
     instance.wire();
@@ -202,6 +292,7 @@ describe('V86Instance', () => {
       systemId: 'debian-12-i386',
       emulator: emulator as unknown as V86,
       console: createConsoleStub(),
+      readiness: READINESS,
       network: controller,
     });
     instance.wire();
@@ -236,6 +327,7 @@ describe('V86Instance', () => {
       systemId: 'debian-12-i386',
       emulator: emulator as unknown as V86,
       console: createConsoleStub(),
+      readiness: READINESS,
       network: controller,
     });
     instance.wire();

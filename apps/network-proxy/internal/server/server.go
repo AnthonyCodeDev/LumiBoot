@@ -9,8 +9,14 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"io"
+	"log"
 	"net"
 	"net/http"
+	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -41,6 +47,11 @@ type Server struct {
 	upgrader  websocket.Upgrader
 	httpSrv   *http.Server
 	startTime time.Time
+
+	// ws compte les handlers WISP actifs. http.Server.Shutdown n'attend pas les
+	// connexions hijackées (WebSocket) : on les ferme via le registre de
+	// révocation puis on attend leur terminaison sous ce compteur.
+	ws sync.WaitGroup
 }
 
 // New valide la configuration et construit le serveur.
@@ -67,14 +78,39 @@ func New(cfg config.Config) (*Server, error) {
 	mux.HandleFunc("GET /api/pair/status", s.handlePairStatus)
 	mux.HandleFunc("POST /api/pair/exchange", s.handlePairExchange)
 	mux.HandleFunc("POST /api/session/revoke", s.handleSessionRevoke)
+	mux.HandleFunc("GET /api/session/verify", s.handleSessionVerify)
 	mux.HandleFunc("GET /wisp/", s.handleWisp)
 	mux.HandleFunc("GET /wisp", s.handleWisp)
 	s.mux = mux
 	s.httpSrv = &http.Server{
 		Handler:           securityHeaders(s.preflightMiddleware(mux)),
 		ReadHeaderTimeout: 10 * time.Second,
+		// Les logs internes du serveur sont filtrés pour ne jamais laisser
+		// fuiter un token de session présent dans une query string.
+		ErrorLog: log.New(redactingWriter{os.Stderr}, "", 0),
 	}
 	return s, nil
+}
+
+// redactingWriter censure un éventuel « token=<valeur> » avant écriture :
+// le token ne doit jamais apparaître dans les logs.
+type redactingWriter struct{ w io.Writer }
+
+func (rw redactingWriter) Write(p []byte) (int, error) {
+	s := string(p)
+	for {
+		i := strings.Index(strings.ToLower(s), "token=")
+		if i < 0 {
+			break
+		}
+		start := i + len("token=")
+		end := start
+		for end < len(s) && s[end] != ' ' && s[end] != '&' && s[end] != '\n' && s[end] != '\r' {
+			end++
+		}
+		s = s[:start] + "REDACTED" + s[end:]
+	}
+	return rw.w.Write([]byte(s))
 }
 
 // Handler expose le mux pour les tests (httptest).
@@ -121,7 +157,7 @@ func (s *Server) Run(ctx context.Context) error {
 	case <-ctx.Done():
 		shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_ = s.httpSrv.Shutdown(shutCtx)
+		s.Shutdown(shutCtx)
 		<-errCh
 		return nil
 	case err := <-errCh:
@@ -130,6 +166,23 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		return err
 	}
+}
+
+// Shutdown ferme explicitement toutes les sessions WebSocket (http.Server
+// n'arrête pas les connexions hijackées), attend leur terminaison sous le délai
+// de ctx, puis arrête le serveur HTTP.
+func (s *Server) Shutdown(ctx context.Context) {
+	s.auth.CloseAllSessions()
+	done := make(chan struct{})
+	go func() {
+		s.ws.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+	_ = s.httpSrv.Shutdown(ctx)
 }
 
 func sweepInterval(idle time.Duration) time.Duration {
@@ -257,6 +310,10 @@ func (s *Server) handlePairRequest(w http.ResponseWriter, r *http.Request) {
 	p, err := s.auth.RequestPairing(origin)
 	if err != nil {
 		s.stats.IncRejectedAuth()
+		if errors.Is(err, auth.ErrPairingLimit) {
+			writeError(w, http.StatusTooManyRequests, "trop de demandes d'appairage en attente")
+			return
+		}
 		writeError(w, http.StatusForbidden, "origine non autorisée")
 		return
 	}
@@ -324,9 +381,35 @@ func (s *Server) handleSessionRevoke(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotFound, "session introuvable")
 }
 
+// handleSessionVerify vérifie Origin + token SANS upgrade et renvoie
+// l'expiration de la session. Le frontend s'en sert pour ne plus afficher
+// « connecté » sur un simple /health. GET, pas de header custom (requête simple
+// CORS, token en query, comme /wisp/).
+func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
+	s.setCORS(w, r)
+	origin := r.Header.Get("Origin")
+	if !s.auth.IsOriginAllowed(origin) {
+		s.stats.IncRejectedAuth()
+		writeError(w, http.StatusForbidden, "origine non autorisée")
+		return
+	}
+	info, ok := s.auth.VerifySession(r.URL.Query().Get("token"), origin)
+	if !ok {
+		s.stats.IncRejectedAuth()
+		writeError(w, http.StatusUnauthorized, "token de session invalide ou expiré")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":        true,
+		"expiresAt": info.ExpiresAt.UTC().Format(time.RFC3339),
+	})
+}
+
 // handleWisp négocie le WebSocket après contrôle Origin + token, puis exécute
 // la session WISP V1. Le token transite en query string car v86 n'envoie ni
-// en-tête ni sous-protocole.
+// en-tête ni sous-protocole. Le transport est enregistré auprès de
+// l'authentificateur : Revoke/AdminRevoke/expiration/arrêt ferment réellement
+// le WebSocket et tous les net.Conn TCP associés.
 func (s *Server) handleWisp(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	if !s.auth.IsOriginAllowed(origin) {
@@ -335,6 +418,7 @@ func (s *Server) handleWisp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := r.URL.Query().Get("token")
+	// Contrôle préalable : renvoie un 403 JSON clair (comportement d'API).
 	if !s.auth.Verify(token, origin) {
 		s.stats.IncRejectedAuth()
 		writeError(w, http.StatusForbidden, "token de session invalide ou expiré")
@@ -360,6 +444,19 @@ func (s *Server) handleWisp(w http.ResponseWriter, r *http.Request) {
 		Stats:                s.stats,
 		SessionID:            sessionID,
 	})
+
+	// Enregistrement atomique du transport : si la session a été révoquée
+	// entre la vérification et l'upgrade, l'attachement échoue et on ferme.
+	info, ok := s.auth.AttachSession(token, origin, h.Close)
+	if !ok {
+		_ = conn.Close()
+		s.stats.IncRejectedAuth()
+		return
+	}
+	defer s.auth.DetachSession(info.ID)
+
+	s.ws.Add(1)
+	defer s.ws.Done()
 	_ = h.Run(r.Context())
 }
 

@@ -1,5 +1,3 @@
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { expect, test, type Locator } from '@playwright/test';
 
 /**
@@ -18,15 +16,14 @@ import { expect, test, type Locator } from '@playwright/test';
  *
  * Sans ces deux variables, tous les cas sont **ignorés** (skipped).
  *
- * Le mode `user-relay` change le profil global écrit dans
- * `apps/web/public/lumiboot.config.json` : le fichier original est restauré
- * dans `afterAll`, même en cas d'échec.
+ * Le profil `user-relay` est injecté par **interception de requête Playwright**
+ * (`page.route` sur `lumiboot.config.json`), comme le fait déjà
+ * `network-debian.spec.ts` pour le relais injoignable. Le fichier public
+ * `apps/web/public/lumiboot.config.json` n'est **jamais** modifié : aucune
+ * exécution parallèle ni interruption ne peut laisser le dépôt altéré.
  */
 const relay = process.env.LUMIBOOT_WISP_RELAY_URL;
 const assetsPresent = process.env.VM_E2E_ASSETS === '1';
-
-const configPath = join(process.cwd(), 'apps', 'web', 'public', 'lumiboot.config.json');
-let originalConfig: string | null = null;
 
 /** Identique au helper de `network-debian.spec.ts` (sortie isolée par marqueurs). */
 async function probe(
@@ -59,37 +56,27 @@ test.describe('Réseau WISP (user-relay, opt-in)', () => {
     'Relais WISP de test (LUMIBOOT_WISP_RELAY_URL) + artefacts (VM_E2E_ASSETS=1) requis.',
   );
 
-  // Un seul test, mais le fichier de config est global : exécution sérielle.
-  test.describe.configure({ mode: 'serial' });
-
-  test.beforeAll(() => {
-    if (relay === undefined) return;
-    originalConfig = readFileSync(configPath, 'utf8');
-    writeFileSync(
-      configPath,
-      `${JSON.stringify(
-        {
-          version: 1,
-          network: { defaultProfile: { mode: 'user-relay', relayUrl: relay }, systems: {} },
-        },
-        null,
-        2,
-      )}\n`,
-    );
-  });
-
-  test.afterAll(() => {
-    if (originalConfig === null) return;
-    writeFileSync(configPath, originalConfig);
-    originalConfig = null;
-  });
-
   test('le relais WISP transporte HTTPS et rend apt-get update fonctionnel', async ({ page }) => {
     test.setTimeout(1_200_000);
 
     // Le relais doit être un vrai relais WISP TLS ; une adresse brute invalide
     // ferait de toute façon échouer la validation du profil.
-    expect(relay).toMatch(/^wss:\/\//);
+    const relayUrl = relay ?? '';
+    expect(relayUrl).toMatch(/^wss:\/\//);
+
+    // Injection du profil `user-relay` au niveau du réseau Playwright : le
+    // fichier public n'est PAS modifié (isolé des autres specs parallèles).
+    await page.route('**/lumiboot.config.json', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          version: 1,
+          network: { defaultProfile: { mode: 'user-relay', relayUrl }, systems: {} },
+          proxy: { enabled: true },
+        }),
+      }),
+    );
 
     await page.goto('/');
     await page.getByLabel('Rechercher un système').fill('debian');

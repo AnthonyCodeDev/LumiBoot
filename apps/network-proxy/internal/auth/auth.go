@@ -37,6 +37,14 @@ var (
 	ErrPairingNotApproved = errors.New("auth: appairage non approuvé")
 	// ErrOriginMismatch signale une origine différente de celle d'appairage.
 	ErrOriginMismatch = errors.New("auth: origine différente de celle d'appairage")
+	// ErrPairingLimit signale un flood de demandes d'appairage en attente.
+	ErrPairingLimit = errors.New("auth: trop de demandes d'appairage en attente")
+)
+
+// Plafonds anti-flood des appairages en attente (total et par origine).
+const (
+	maxPendingPairings  = 64
+	maxPendingPerOrigin = 8
 )
 
 // Statuts d'appairage exposés par Status.
@@ -68,6 +76,10 @@ type session struct {
 	hash      string
 	origin    string
 	expiresAt time.Time
+	// onClose est le callback de fermeture du transport associé (WebSocket +
+	// net.Conn). Renseigné par AttachSession, appelé à la révocation ou à
+	// l'expiration de la session, jamais sous verrou.
+	onClose func()
 }
 
 // Authenticator gère origines, appairages et sessions. Thread-safe.
@@ -152,6 +164,25 @@ func (a *Authenticator) RequestPairing(origin string) (Pairing, error) {
 	defer a.mu.Unlock()
 	if _, ok := a.allowed[n]; !ok {
 		return Pairing{}, fmt.Errorf("%w: %q", ErrOriginNotAllowed, origin)
+	}
+	// Nettoyage des expirés puis plafonds anti-flood (total et par origine).
+	now := a.now()
+	for id, p := range a.pairings {
+		if now.After(p.ExpiresAt) {
+			delete(a.pairings, id)
+		}
+	}
+	if len(a.pairings) >= maxPendingPairings {
+		return Pairing{}, ErrPairingLimit
+	}
+	perOrigin := 0
+	for _, p := range a.pairings {
+		if p.Origin == n {
+			perOrigin++
+		}
+	}
+	if perOrigin >= maxPendingPerOrigin {
+		return Pairing{}, ErrPairingLimit
 	}
 	id, err := randomString(a.randSource, 12)
 	if err != nil {
@@ -244,43 +275,120 @@ func (a *Authenticator) Exchange(pairingID, origin string) (token string, expire
 // Verify contrôle un token de session pour une origine donnée.
 // Comparaison à temps constant ; vérifie TTL et liaison d'origine.
 func (a *Authenticator) Verify(token, origin string) bool {
+	_, _, ok := a.lookup(token, origin)
+	return ok
+}
+
+// VerifySession est identique à Verify mais renvoie aussi les métadonnées de la
+// session (sans secret) : ID (empreinte du token) et date d'expiration.
+func (a *Authenticator) VerifySession(token, origin string) (SessionInfo, bool) {
+	id, s, ok := a.lookup(token, origin)
+	if !ok {
+		return SessionInfo{}, false
+	}
+	return SessionInfo{ID: id, Origin: s.origin, ExpiresAt: s.expiresAt}, true
+}
+
+// AttachSession vérifie atomiquement le token et associe à la session un
+// callback de fermeture, invoqué lors de Revoke/AdminRevoke/expiration (ou
+// CloseAllSessions). Atomique : aucune fenêtre où une révocation concurrente
+// pourrait passer inaperçue. Renvoie les métadonnées de la session.
+func (a *Authenticator) AttachSession(token, origin string, onClose func()) (SessionInfo, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	id, s, ok := a.lookupLocked(token, origin)
+	if !ok {
+		return SessionInfo{}, false
+	}
+	s.onClose = onClose
+	return SessionInfo{ID: id, Origin: s.origin, ExpiresAt: s.expiresAt}, true
+}
+
+// DetachSession retire le callback de fermeture sans révoquer la session
+// (fermeture normale du transport).
+func (a *Authenticator) DetachSession(id string) {
+	if id == "" {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if s, ok := a.sessions[id]; ok {
+		s.onClose = nil
+	}
+}
+
+// CloseAllSessions invoque tous les callbacks de fermeture (arrêt du serveur).
+// Les sessions ne sont pas supprimées (le serveur s'arrête).
+func (a *Authenticator) CloseAllSessions() {
+	a.mu.Lock()
+	cbs := make([]func(), 0, len(a.sessions))
+	for _, s := range a.sessions {
+		if s.onClose != nil {
+			cbs = append(cbs, s.onClose)
+		}
+	}
+	a.mu.Unlock()
+	for _, cb := range cbs {
+		cb()
+	}
+}
+
+// lookup vérifie un token (verrou interne) ; voir lookupLocked.
+func (a *Authenticator) lookup(token, origin string) (string, *session, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lookupLocked(token, origin)
+}
+
+// lookupLocked résout une session valide à partir d'un token et d'une origine.
+// Purge une session expirée rencontrée. L'appelant DOIT détenir a.mu.
+func (a *Authenticator) lookupLocked(token, origin string) (string, *session, bool) {
 	if token == "" {
-		return false
+		return "", nil, false
 	}
 	n := NormalizeOrigin(origin)
 	if n == "" {
-		return false
+		return "", nil, false
 	}
 	want := hashToken(token)
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	for h, s := range a.sessions {
 		if subtle.ConstantTimeCompare([]byte(h), []byte(want)) == 1 {
 			if a.now().After(s.expiresAt) {
 				delete(a.sessions, h)
-				return false
+				return "", nil, false
 			}
-			return subtle.ConstantTimeCompare([]byte(s.origin), []byte(n)) == 1
+			if subtle.ConstantTimeCompare([]byte(s.origin), []byte(n)) != 1 {
+				return "", nil, false
+			}
+			return h, s, true
 		}
 	}
-	return false
+	return "", nil, false
 }
 
-// Revoke révoque la session correspondant au token brut. Renvoie false si inconnu.
+// Revoke révoque la session correspondant au token brut. Renvoie false si
+// inconnu. Ferme le transport associé (callback hors verrou).
 func (a *Authenticator) Revoke(token string) bool {
 	if token == "" {
 		return false
 	}
 	want := hashToken(token)
+	var cb func()
+	found := false
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	for h := range a.sessions {
+	for h, s := range a.sessions {
 		if subtle.ConstantTimeCompare([]byte(h), []byte(want)) == 1 {
+			cb = s.onClose
 			delete(a.sessions, h)
-			return true
+			found = true
+			break
 		}
 	}
-	return false
+	a.mu.Unlock()
+	if cb != nil {
+		cb()
+	}
+	return found
 }
 
 // ListSessions liste les sessions actives (sans secret), expirées purgées.
@@ -300,26 +408,35 @@ func (a *Authenticator) ListSessions() []SessionInfo {
 }
 
 // AdminRevoke révoque une session par son empreinte (ID de ListSessions).
-// Réservé à la console locale du proxy réseau local.
+// Réservé à la console locale du proxy réseau local. Ferme le transport associé.
 func (a *Authenticator) AdminRevoke(id string) bool {
 	if id == "" {
 		return false
 	}
+	var cb func()
+	found := false
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	for h := range a.sessions {
+	for h, s := range a.sessions {
 		if subtle.ConstantTimeCompare([]byte(h), []byte(id)) == 1 {
+			cb = s.onClose
 			delete(a.sessions, h)
-			return true
+			found = true
+			break
 		}
 	}
-	return false
+	a.mu.Unlock()
+	if cb != nil {
+		cb()
+	}
+	return found
 }
 
-// CleanupExpired purge appairages et sessions expirés.
+// CleanupExpired purge appairages et sessions expirés. Une session expirée voit
+// son transport fermé (callback invoqué hors verrou) : une expiration ferme
+// réellement le WebSocket et les net.Conn associés.
 func (a *Authenticator) CleanupExpired() {
+	var cbs []func()
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	now := a.now()
 	for id, p := range a.pairings {
 		if now.After(p.ExpiresAt) {
@@ -328,8 +445,15 @@ func (a *Authenticator) CleanupExpired() {
 	}
 	for h, s := range a.sessions {
 		if now.After(s.expiresAt) {
+			if s.onClose != nil {
+				cbs = append(cbs, s.onClose)
+			}
 			delete(a.sessions, h)
 		}
+	}
+	a.mu.Unlock()
+	for _, cb := range cbs {
+		cb()
 	}
 }
 

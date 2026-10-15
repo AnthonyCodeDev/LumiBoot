@@ -4,7 +4,13 @@
  * du système invité.
  */
 
-export const NETWORK_MODES = ['offline', 'browser-fetch', 'local-proxy', 'user-relay', 'local-network'] as const;
+export const NETWORK_MODES = [
+  'offline',
+  'browser-fetch',
+  'local-proxy',
+  'user-relay',
+  'local-network',
+] as const;
 
 export type NetworkMode = (typeof NETWORK_MODES)[number];
 

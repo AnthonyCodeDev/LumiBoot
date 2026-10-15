@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Bibliothèque', () => {
-  test('affiche les huit systèmes du catalogue', async ({ page }) => {
+  test('affiche les neuf systèmes du catalogue', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Bibliothèque' })).toBeVisible();
-    await expect(page.locator('.os-card')).toHaveCount(8);
+    await expect(page.locator('.os-card')).toHaveCount(9);
   });
 
   test('recherche un système et filtre par famille', async ({ page }) => {

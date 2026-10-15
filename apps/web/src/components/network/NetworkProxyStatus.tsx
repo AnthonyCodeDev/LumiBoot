@@ -29,8 +29,9 @@ const STATE_TONE: Record<ProxyState, 'ok' | 'warn' | 'bad' | 'idle'> = {
 /**
  * Affiche l'état réel du proxy réseau local (`ProxyState`) avec une action
  * contextuelle. N'affiche l'état actif que sur `connected` (store : `/health`
- * OK + token obtenu) — aucune réussite fictive. Après l'appairage, la
- * connexion se fait toute seule : aucun bouton « Connecter » à cliquer.
+ * OK **et** jeton validé par vérification authentifiée) — aucune réussite
+ * fictive sur un simple `/health`. Après l'appairage, la connexion se fait
+ * toute seule : aucun bouton « Connecter » à cliquer.
  */
 export function NetworkProxyStatus() {
   const state = useProxyStore((s) => s.state);
@@ -40,11 +41,16 @@ export function NetworkProxyStatus() {
   const refresh = useProxyStore((s) => s.refresh);
   const startPairing = useProxyStore((s) => s.startPairing);
   const revoke = useProxyStore((s) => s.revoke);
+  const cancelPairing = useProxyStore((s) => s.cancelPairing);
   const proxyUrl = resolveProxyConfig().url;
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Démontage : annuler toute surveillance d'appairage en cours (aucun poll
+  // orphelin continuant en arrière-plan).
+  useEffect(() => () => cancelPairing(), [cancelPairing]);
 
   return (
     <div className="proxy-status" data-state={state} data-tone={STATE_TONE[state]}>
@@ -52,9 +58,7 @@ export function NetworkProxyStatus() {
       <div className="proxy-status-body">
         <strong>{STATE_LABELS[state]}</strong>
         {state === 'not-running' ? (
-          <p>
-            Lancez LumiBoot Network Proxy sur cette machine ({proxyUrl}), puis réessayez.
-          </p>
+          <p>Lancez LumiBoot Network Proxy sur cette machine ({proxyUrl}), puis réessayez.</p>
         ) : null}
         {state === 'permission-required' ? (
           <p>
@@ -64,14 +68,12 @@ export function NetworkProxyStatus() {
         ) : null}
         {state === 'pairing-required' && userCode ? (
           <p>
-            Code d’appairage : <code>{userCode}</code> — validez-le depuis la console du proxy.
-            En attente d’autorisation…
+            Code d’appairage : <code>{userCode}</code> — validez-le depuis la console du proxy. En
+            attente d’autorisation…
           </p>
         ) : null}
         {state === 'pairing-required' && !userCode ? (
-          <p>
-            Proxy réseau local joint. Lancez l’appairage pour obtenir un jeton de session.
-          </p>
+          <p>Proxy réseau local joint. Lancez l’appairage pour obtenir un jeton de session.</p>
         ) : null}
         {state === 'incompatible' ? (
           <p>

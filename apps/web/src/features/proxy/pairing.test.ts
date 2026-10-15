@@ -5,6 +5,7 @@ import {
   getPairingStatus,
   requestPairing,
   revokeSession,
+  verifyToken,
 } from './pairing';
 import type { FetchLike } from '../../config/load-config';
 
@@ -15,6 +16,12 @@ function fetchJson(status: number, body: unknown): FetchLike {
       status,
       json: async () => body,
     }) as unknown as Response) as FetchLike;
+}
+
+function fetchNetworkError(): FetchLike {
+  return (async () => {
+    throw new TypeError('Failed to fetch');
+  }) as FetchLike;
 }
 
 describe('pairing', () => {
@@ -86,5 +93,61 @@ describe('pairing', () => {
       fetchJson(404, { error: 'introuvable' }),
     ).catch((e: unknown) => e);
     expect((error as ProxyPairingError).code).toBe('REVOKE_FAILED');
+  });
+
+  it('verifyToken 200 {ok:true} → ok + expiresAt, token en query', async () => {
+    let seenUrl = '';
+    const fetchImpl: FetchLike = (async (input: string) => {
+      seenUrl = input;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, expiresAt: '2030-01-01T00:00:00Z' }),
+      } as unknown as Response;
+    }) as FetchLike;
+    const result = await verifyToken('http://127.0.0.1:37892', 'tok', fetchImpl);
+    expect(result).toEqual({ ok: true, expiresAt: '2030-01-01T00:00:00Z' });
+    expect(seenUrl).toBe('http://127.0.0.1:37892/api/session/verify?token=tok');
+  });
+
+  it('verifyToken 200 sans expiresAt → ok sans expiresAt', async () => {
+    const result = await verifyToken('http://127.0.0.1:37892', 'tok', fetchJson(200, { ok: true }));
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('verifyToken 401 → ok:false', async () => {
+    const result = await verifyToken(
+      'http://127.0.0.1:37892',
+      'tok',
+      fetchJson(401, { error: 'jeton invalide' }),
+    );
+    expect(result).toEqual({ ok: false });
+  });
+
+  it('verifyToken 403 → ok:false', async () => {
+    const result = await verifyToken(
+      'http://127.0.0.1:37892',
+      'tok',
+      fetchJson(403, { error: 'origine refusée' }),
+    );
+    expect(result).toEqual({ ok: false });
+  });
+
+  it('verifyToken erreur réseau → ProxyPairingError PROXY_UNREACHABLE', async () => {
+    const error = await verifyToken('http://127.0.0.1:37892', 'tok', fetchNetworkError()).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(ProxyPairingError);
+    expect((error as ProxyPairingError).code).toBe('PROXY_UNREACHABLE');
+  });
+
+  it('verifyToken statut inattendu (500) → ProxyPairingError, pas ok:false', async () => {
+    const error = await verifyToken(
+      'http://127.0.0.1:37892',
+      'tok',
+      fetchJson(500, { error: 'boom' }),
+    ).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ProxyPairingError);
+    expect((error as ProxyPairingError).code).toBe('PROXY_UNREACHABLE');
   });
 });

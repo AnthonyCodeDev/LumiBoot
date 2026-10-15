@@ -32,7 +32,9 @@ export function NetworkProxyCard(props: NetworkProxyCardProps) {
         <ol className="proxy-steps">
           <li>Téléchargez le proxy réseau local pour votre plateforme.</li>
           <li>Installez-le puis lancez-le sur cette machine.</li>
-          <li>Validez l’autorisation depuis la console du proxy : la connexion se fait toute seule.</li>
+          <li>
+            Validez l’autorisation depuis la console du proxy : la connexion se fait toute seule.
+          </li>
         </ol>
       ) : (
         <p className="proxy-hint">

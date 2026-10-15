@@ -1,31 +1,111 @@
 #!/usr/bin/env bash
 #
-# Construction reproductible de l'image Debian 12 Bookworm i386 pour v86.
+# Construction reproductible d'une image Debian 12 Bookworm i386 pour v86.
+#
+#   sudo ./images/debian-12-i386/build.sh              # flavor « minimal » (console, défaut)
+#   sudo FLAVOR=desktop ./images/debian-12-i386/build.sh   # flavor « desktop » (Xorg + Openbox)
+#   sudo ./images/debian-12-i386/build.sh desktop          # équivalent (flavor en 1er argument)
 #
 # À exécuter sous Linux ou WSL2, jamais sous Windows natif ni dans un pipeline
 # qui n'a pas debootstrap. Ne committe jamais les binaires produits.
 #
-#   sudo ./images/debian-12-i386/build.sh
+# ⚠️  CE SCRIPT N'A PAS ÉTÉ EXÉCUTÉ dans l'environnement de développement de ce
+#     dépôt (pas de debootstrap, ni WSL, ni Docker, aucune image ne peut être
+#     construite ni bootée ici). Il doit être testé sur une machine Linux/WSL2
+#     adaptée AVANT toute publication. Aucun boot réel n'est prouvé à ce stade.
 #
-# Résultat dans images/debian-12-i386/build/ :
+# Deux flavors partagent le MÊME socle ci-dessous (aucun copier-coller) :
+#
+#   * minimal  (défaut) — baseline E2E validée : console série + VGA, marqueur
+#              LUMIBOOT_GUEST_READY:debian-12-i386. Comportement/compatibilité
+#              INCHANGÉS par rapport à la version précédente du script.
+#   * desktop  — socle minimal + pile graphique Xorg/Openbox (voir §4d), session
+#              graphique sur le canvas VGA (autologin du compte non privilégié
+#              « lumiboot », jamais root). Émet
+#              LUMIBOOT_GUEST_READY:debian-12-i386-desktop (OS opérationnel)
+#              PUIS, seulement après le démarrage effectif du serveur X et de la
+#              session, LUMIBOOT_DESKTOP_READY:debian-12-i386-desktop.
+#
+#     Les deux marqueurs sont émis par le système INVITÉ via systemd (voir
+#     guest/), jamais par JavaScript, et écrits sur la console série (ttyS0).
+#
+# Résultat dans images/debian-12-i386/build[-desktop]/ :
 #   rootfs.img      disque ext4 brut (racine Debian)
 #   vmlinuz-686     noyau (bzimage) de la même version que l'initrd
 #   initrd.img      initramfs correspondant
 #   manifest.json   tailles + SHA-256 réels (schéma strict @lumiboot/vm-assets)
 #   packages.tsv    versions réellement installées (traçabilité)
+#   provenance.txt  miroir, release, snapshot éventuel, date, version debootstrap
 #
-# Le marqueur de disponibilité LUMIBOOT_GUEST_READY:debian-12-i386 est émis par
-# le système invité via systemd (voir guest/), jamais par JavaScript.
+# VERROUILLAGE : la release Debian est figée (bookworm). Pour un build
+# strictement reproductible, pointer un snapshot daté :
+#   sudo SNAPSHOT=20240101T000000Z ./images/debian-12-i386/build.sh
+# (les paquets proviennent alors de snapshot.debian.org, cf. §2).
 set -euo pipefail
+
+# --- Paramétrage du flavor ---------------------------------------------------
+FLAVOR="${1:-${FLAVOR:-minimal}}"
+case "$FLAVOR" in
+  minimal)
+    REF="debian-12-i386"
+    MEMORY_MIB="512"
+    VGA_MIB="16"
+    BUILD_SUFFIX=""
+    READY_SERVICE_SRC=""
+    ;;
+  desktop)
+    REF="debian-12-i386-desktop"
+    MEMORY_MIB="1024"
+    VGA_MIB="16"
+    BUILD_SUFFIX="-desktop"
+    READY_SERVICE_SRC="desktop/lumiboot-ready.service"
+    ;;
+  *)
+    echo "Flavor inconnu : « $FLAVOR » (attendu : minimal | desktop)." >&2
+    exit 1
+    ;;
+esac
 
 RELEASE="bookworm"
 ARCH="i386"
 DEBIAN_MIRROR="${DEBIAN_MIRROR:-https://deb.debian.org/debian}"
+SECURITY_MIRROR="${SECURITY_MIRROR:-http://security.debian.org/debian-security}"
+# Snapshot daté optionnel (format snapshot.debian.org : 20240101T000000Z).
+SNAPSHOT="${SNAPSHOT:-}"
 DISK_SIZE="${DISK_SIZE:-3G}"
 
+if [ -n "$SNAPSHOT" ]; then
+  DEBIAN_MIRROR="https://snapshot.debian.org/archive/debian/$SNAPSHOT"
+  SECURITY_MIRROR="https://snapshot.debian.org/archive/debian-security/$SNAPSHOT"
+fi
+
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="$HERE/build"
+BUILD_DIR="$HERE/build$BUILD_SUFFIX"
 ROOTFS="$BUILD_DIR/rootfs"
+
+# Paquets du socle commun (identiques aux deux flavors : la baseline console
+# reste strictement la même).
+BASE_PACKAGES="linux-image-686 initramfs-tools systemd-sysv systemd-resolved udev kmod \
+bash coreutils util-linux mount login passwd sudo \
+curl wget ca-certificates gnupg openssl \
+tar gzip bzip2 xz-utils zstd zip unzip \
+less nano vim-tiny file tree rsync git \
+bash-completion gawk sed grep findutils procps psmisc man-db manpages htop \
+iproute2 iputils-ping dnsutils \
+python3 perl \
+console-setup kbd locales"
+
+# Paquets additionnels du flavor desktop : Xorg minimal + Openbox + xterm.
+# Volontairement SANS GNOME/KDE ni Wayland. Le pilote vidéo vise VBE (vesa) et
+# le framebuffer (fbdev) : v86 n'expose ni accélération ni DRM utilisable ici.
+DESKTOP_PACKAGES="xserver-xorg-core xserver-xorg-video-vesa xserver-xorg-video-fbdev \
+xserver-xorg-input-libinput xinit x11-xserver-utils x11-utils x11-xkb-utils xauth \
+xterm openbox fonts-dejavu-core dbus-x11"
+
+PACKAGES="$BASE_PACKAGES"
+if [ "$FLAVOR" = "desktop" ]; then
+  PACKAGES="$BASE_PACKAGES $DESKTOP_PACKAGES"
+fi
 
 require() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -52,14 +132,14 @@ fi
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-echo "== 1. debootstrap $RELEASE/$ARCH (minbase) =="
+echo "== 1. debootstrap $RELEASE/$ARCH (minbase) — flavor=$FLAVOR =="
 debootstrap --arch="$ARCH" --variant=minbase "$RELEASE" "$ROOTFS" "$DEBIAN_MIRROR"
 
 echo "== 2. Configuration de base du rootfs =="
 cat > "$ROOTFS/etc/apt/sources.list" <<EOF
 deb $DEBIAN_MIRROR $RELEASE main
 deb $DEBIAN_MIRROR $RELEASE-updates main
-deb http://security.debian.org/debian-security $RELEASE-security main
+deb $SECURITY_MIRROR $RELEASE-security main
 EOF
 
 echo "lumiboot" > "$ROOTFS/etc/hostname"
@@ -118,8 +198,8 @@ mount_pseudo /dev/pts "$ROOTFS/dev/pts"
 mount -t proc proc "$ROOTFS/proc"
 mount -t sysfs sys "$ROOTFS/sys"
 
-echo "== 4. Installation des paquets (socle utilisable + clavier + locale) =="
-chroot "$ROOTFS" bash -e -c '
+echo "== 4. Installation des paquets (socle commun + flavor $FLAVOR) =="
+chroot "$ROOTFS" env PACKAGES="$PACKAGES" bash -e -c '
   export DEBIAN_FRONTEND=noninteractive
   if command -v debconf-set-selections >/dev/null 2>&1; then
     debconf-set-selections /tmp/lumiboot-preseed.txt
@@ -127,15 +207,7 @@ chroot "$ROOTFS" bash -e -c '
   apt-get update
   apt-get install -y --no-install-recommends \
     -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
-    linux-image-686 initramfs-tools systemd-sysv systemd-resolved udev kmod \
-    bash coreutils util-linux mount login passwd sudo \
-    curl wget ca-certificates gnupg openssl \
-    tar gzip bzip2 xz-utils zstd zip unzip \
-    less nano vim-tiny file tree rsync git \
-    bash-completion gawk sed grep findutils procps psmisc man-db manpages htop \
-    iproute2 iputils-ping dnsutils \
-    python3 perl \
-    console-setup kbd locales
+    $PACKAGES
 '
 rm -f "$ROOTFS/tmp/lumiboot-preseed.txt"
 
@@ -152,6 +224,16 @@ printf 'LANG=fr_FR.UTF-8\n' > "$ROOTFS/etc/default/locale"
 echo "== 4c. vim : exposer /usr/bin/vim (vim-tiny ne fournit que vim.tiny) =="
 if [ -x "$ROOTFS/usr/bin/vim.tiny" ] && [ ! -e "$ROOTFS/usr/bin/vim" ]; then
   chroot "$ROOTFS" update-alternatives --install /usr/bin/vim vim /usr/bin/vim.tiny 10
+fi
+
+# ── 4d. Pile graphique (flavor desktop uniquement) ───────────────────────────
+if [ "$FLAVOR" = "desktop" ]; then
+  echo "== 4d. Pile graphique Xorg/Openbox =="
+  # Pilote vidéo : sous v86 il n'y a pas de DRM exploitable, on force VBE
+  # (« vesa ») ; « fbdev » reste disponible en repli si un framebuffer existe.
+  install -d -m 0755 "$ROOTFS/etc/X11/xorg.conf.d"
+  install -D -m 0644 "$HERE/guest/desktop/xorg.conf.d/20-lumiboot-vesa.conf" \
+    "$ROOTFS/etc/X11/xorg.conf.d/20-lumiboot-vesa.conf"
 fi
 
 echo "== 5. initramfs : pilotes stockage/FS émulés =="
@@ -175,10 +257,31 @@ install -D -m 0644 "$HERE/guest/serial-getty-autologin.conf" \
   "$ROOTFS/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf"
 install -D -m 0644 "$HERE/guest/getty-autologin.conf" \
   "$ROOTFS/etc/systemd/system/getty@tty1.service.d/autologin.conf"
-install -D -m 0644 "$HERE/guest/lumiboot-ready.service" \
-  "$ROOTFS/etc/systemd/system/lumiboot-ready.service"
 install -D -m 0644 "$HERE/guest/no-drm.conf" \
   "$ROOTFS/etc/modprobe.d/lumiboot-no-drm.conf"
+
+# Marqueur GUEST_READY : même unité « lumiboot-ready.service » pour les deux
+# flavors, contenu adapté (référence d'image différente).
+if [ -n "$READY_SERVICE_SRC" ]; then
+  install -D -m 0644 "$HERE/guest/$READY_SERVICE_SRC" \
+    "$ROOTFS/etc/systemd/system/lumiboot-ready.service"
+else
+  install -D -m 0644 "$HERE/guest/lumiboot-ready.service" \
+    "$ROOTFS/etc/systemd/system/lumiboot-ready.service"
+fi
+
+# Session graphique (flavor desktop) : autologin tty1 → ~/.bash_profile lance
+# startx → ~/.xinitrc démarre Openbox + un xterm. Le marqueur DESKTOP_READY
+# n'est émis qu'après vérification réelle du serveur X et de la session.
+if [ "$FLAVOR" = "desktop" ]; then
+  install -D -m 0755 "$HERE/guest/desktop/lumiboot-desktop-ready.sh" \
+    "$ROOTFS/usr/local/bin/lumiboot-desktop-ready"
+  install -D -m 0644 "$HERE/guest/desktop/lumiboot-desktop-ready.service" \
+    "$ROOTFS/etc/systemd/system/lumiboot-desktop-ready.service"
+  install -D -m 0644 "$HERE/guest/desktop/bash_profile" "$ROOTFS/home/lumiboot/.bash_profile"
+  install -D -m 0755 "$HERE/guest/desktop/xinitrc" "$ROOTFS/home/lumiboot/.xinitrc"
+  chroot "$ROOTFS" chown lumiboot:lumiboot /home/lumiboot/.bash_profile /home/lumiboot/.xinitrc
+fi
 
 chroot "$ROOTFS" bash -e -c '
   systemctl enable serial-getty@ttyS0.service
@@ -191,6 +294,9 @@ chroot "$ROOTFS" bash -e -c '
     systemctl enable console-setup.service
   fi
 '
+if [ "$FLAVOR" = "desktop" ]; then
+  chroot "$ROOTFS" systemctl enable lumiboot-desktop-ready.service
+fi
 
 # Debian active keyboard-setup.service via sysinit.target.wants (WantedBy
 # =sysinit.target) ; on ajoute aussi le lien multi-user.target.wants attendu
@@ -244,19 +350,11 @@ chroot "$ROOTFS" update-initramfs -u -k all
 echo "== 8. Extraction noyau + initrd (même version) =="
 # Format par défaut de `dpkg-query -W` = "Paquet<TAB>Version" : pas de -f,
 # donc aucun `$` à échapper à travers les couches de shell/chroot.
-chroot "$ROOTFS" dpkg-query -W \
-  linux-image-686 initramfs-tools systemd-sysv systemd-resolved udev kmod \
-  bash coreutils util-linux mount login passwd sudo \
-  curl wget ca-certificates gnupg openssl \
-  tar gzip bzip2 xz-utils zstd zip unzip \
-  less nano vim-tiny file tree rsync git \
-  bash-completion gawk sed grep findutils procps psmisc man-db manpages htop \
-  iproute2 iputils-ping dnsutils \
-  python3 perl console-setup kbd locales \
+chroot "$ROOTFS" env PACKAGES="$PACKAGES" bash -c 'dpkg-query -W $PACKAGES' \
   > "$BUILD_DIR/packages.tsv" 2>/dev/null || true
 
-echo "== 8b. Vérification in-rootfs (outils, clavier, locale) =="
-chroot "$ROOTFS" bash -c '
+echo "== 8b. Vérification in-rootfs (outils, clavier, locale, graphique) =="
+chroot "$ROOTFS" env FLAVOR="$FLAVOR" bash -c '
   for tool in curl wget git vim nano ping dig python3 perl htop tree rsync zstd unzip less file; do
     if command -v "$tool" >/dev/null 2>&1; then
       echo "OK   $tool -> $(command -v "$tool")"
@@ -285,6 +383,26 @@ chroot "$ROOTFS" bash -c '
   done
   test -x /lib/systemd/systemd-networkd && echo "systemd-networkd: present" || echo "systemd-networkd: MISSING"
   test -x /lib/systemd/systemd-resolved && echo "systemd-resolved: present" || echo "systemd-resolved: MISSING"
+
+  if [ "$FLAVOR" = "desktop" ]; then
+    echo "--- pile graphique"
+    for b in Xorg startx xterm openbox; do
+      if command -v "$b" >/dev/null 2>&1; then
+        echo "OK   $b -> $(command -v "$b")"
+      else
+        echo "MISS $b"
+      fi
+    done
+    for u in lumiboot-ready.service lumiboot-desktop-ready.service; do
+      if systemctl is-enabled "$u" 2>/dev/null | grep -qx enabled; then
+        echo "$u: ENABLED"
+      else
+        echo "$u: NOT ENABLED"
+      fi
+    done
+    test -x /usr/local/bin/lumiboot-desktop-ready && echo "lumiboot-desktop-ready: present" || echo "lumiboot-desktop-ready: MISSING"
+    ls -l /home/lumiboot/.xinitrc /home/lumiboot/.bash_profile /etc/X11/xorg.conf.d/20-lumiboot-vesa.conf
+  fi
 '
 
 KERNEL_VERSION="$(ls "$ROOTFS/boot" | sed -n 's/^vmlinuz-\(.*\)$/\1/p' | head -n1)"
@@ -312,20 +430,39 @@ truncate -s "$DISK_SIZE" "$BUILD_DIR/rootfs.img"
 mkfs.ext4 -F -L lumiboot -d "$ROOTFS" "$BUILD_DIR/rootfs.img"
 e2fsck -fn "$BUILD_DIR/rootfs.img"
 
-echo "== 10. Manifeste (tailles + SHA réels) =="
-node "$HERE/write-manifest.mjs" "$BUILD_DIR"
+echo "== 10. Manifeste + provenance (tailles + SHA réels) =="
+IMAGE_REF="$REF" IMAGE_ARCH="$ARCH" IMAGE_MEMORY_MIB="$MEMORY_MIB" IMAGE_VGA_MIB="$VGA_MIB" \
+  node "$HERE/write-manifest.mjs" "$BUILD_DIR"
+
+{
+  echo "flavor: $FLAVOR"
+  echo "image-ref: $REF"
+  echo "release: $RELEASE"
+  echo "architecture: $ARCH"
+  echo "mirror: $DEBIAN_MIRROR"
+  echo "security-mirror: $SECURITY_MIRROR"
+  echo "snapshot: ${SNAPSHOT:-aucun (miroir vivant)}"
+  echo "debootstrap: $(debootstrap --version 2>/dev/null | head -n1 || echo inconnu)"
+  echo "built-utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "note: les SHA-256 réels des artefacts sont dans manifest.json."
+  echo "note: ce build N'A PAS été exécuté dans l'environnement de développement (aucune image réelle)."
+} > "$BUILD_DIR/provenance.txt"
+cat "$BUILD_DIR/provenance.txt"
 
 cat <<EOF
 
-Construction terminée.
+Construction terminée (flavor=$FLAVOR, ref=$REF).
 
 Pour publier dans l'application :
-  cp "$BUILD_DIR/rootfs.img"           "$HERE/../../apps/web/public/images/debian-12-i386/"
-  cp "$BUILD_DIR/vmlinuz-686"          "$HERE/../../apps/web/public/images/debian-12-i386/"
-  cp "$BUILD_DIR/initrd.img"           "$HERE/../../apps/web/public/images/debian-12-i386/"
-  cp "$BUILD_DIR/manifest.json"        "$HERE/../../apps/web/public/images/debian-12-i386/"
+  cp "$BUILD_DIR/rootfs.img"           "$HERE/../../apps/web/public/images/$REF/"
+  cp "$BUILD_DIR/vmlinuz-686"          "$HERE/../../apps/web/public/images/$REF/"
+  cp "$BUILD_DIR/initrd.img"           "$HERE/../../apps/web/public/images/$REF/"
+  cp "$BUILD_DIR/manifest.json"        "$HERE/../../apps/web/public/images/$REF/"
 
-Vérifiez ensuite les requêtes HTTP Range puis le smoke test réel
-(images/debian-12-i386/tests/boot-smoke-test.md) AVANT de passer Debian
-à availability:'ready' et v86.integrated à true.
+Vérifiez ensuite les requêtes HTTP Range puis le smoke test réel.
+Pour le flavor minimal : images/debian-12-i386/tests/boot-smoke-test.md
+Pour le flavor desktop : images/debian-12-i386/tests/desktop-smoke-test.md
+
+Ne passer un système à availability:'ready' (et v86.integrated à true) qu'APRÈS
+un boot réellement prouvé. Le flavor desktop n'est PAS prêt par défaut.
 EOF

@@ -1,4 +1,10 @@
-import type { EngineId, ExecutionMode, VMConfiguration } from '@lumiboot/contracts';
+import type {
+  EngineId,
+  ExecutionMode,
+  GuestReadiness,
+  HardwareProfile,
+  VMConfiguration,
+} from '@lumiboot/contracts';
 
 /**
  * Description factuelle d'un profil de lancement (image + moteur + paramètres).
@@ -6,6 +12,10 @@ import type { EngineId, ExecutionMode, VMConfiguration } from '@lumiboot/contrac
  * Ce fichier ne déclare AUCUN statut de disponibilité : la disponibilité est
  * calculée une seule fois, dans `systems.ts`. `validated` atteste uniquement
  * qu'un boot réel a été prouvé pour ce couple image/moteur.
+ *
+ * `hardwareProfile` décrit le matériel émulé vu par l'invité (indépendant du
+ * moteur) et `readiness` la preuve de démarrage attendue : ils sont portés par
+ * le PROFIL afin que le provider n'ait plus à les deviner par famille/arch.
  */
 export interface LaunchProfileDefinition {
   readonly id: string;
@@ -14,6 +24,8 @@ export interface LaunchProfileDefinition {
   readonly executionMode: ExecutionMode;
   readonly minMemoryMiB: number;
   readonly configuration?: VMConfiguration;
+  readonly hardwareProfile: HardwareProfile;
+  readonly readiness: GuestReadiness;
   readonly slug: string;
   readonly displayName: string;
   readonly versionLabel: string;
@@ -21,6 +33,43 @@ export interface LaunchProfileDefinition {
   /** Boot réel prouvé pour ce profil (tests E2E). */
   readonly validated: boolean;
   readonly featured?: boolean;
+}
+
+/**
+ * Matériel émulé commun aux invités PC de ce catalogue : machine standard,
+ * VGA, entrée PS/2, disque IDE/ATA, sans son. Seule la carte réseau varie.
+ */
+function pcHardware(network: HardwareProfile['network']): HardwareProfile {
+  return { network, machine: 'pc', video: 'vga', input: 'ps2', disk: 'ide', audio: false };
+}
+
+/**
+ * Preuve de démarrage propre à un système : le marqueur reste celui émis par
+ * `lumiboot-ready.service` sur `ttyS0` (canal série), avec un délai de sécurité
+ * de 120 s.
+ */
+function guestReadiness(systemId: string): GuestReadiness {
+  return {
+    marker: `LUMIBOOT_GUEST_READY:${systemId}`,
+    channel: 'serial',
+    timeoutMs: 120_000,
+  };
+}
+
+/**
+ * Preuve de démarrage d'un système à interface graphique.
+ *
+ * Le marqueur `LUMIBOOT_DESKTOP_READY` n'est émis qu'APRÈS le démarrage effectif
+ * du serveur X (socket + réponse) ET de la session graphique (gestionnaire de
+ * fenêtres vivant). Il est distinct de `LUMIBOOT_GUEST_READY` (OS opérationnel)
+ * et n'est jamais produit côté JavaScript : il vient du système invité réel.
+ */
+function desktopReadiness(systemId: string): GuestReadiness {
+  return {
+    marker: `LUMIBOOT_DESKTOP_READY:${systemId}`,
+    channel: 'serial',
+    timeoutMs: 120_000,
+  };
 }
 
 export const launchProfiles = [
@@ -38,6 +87,9 @@ export const launchProfiles = [
       vgaMemoryMiB: 16,
       bootDevice: 'disk',
     },
+    // Noyau 6.x : `virtio-net` natif, marqueur conservé tel quel.
+    hardwareProfile: pcHardware('virtio'),
+    readiness: guestReadiness('debian-12-i386'),
     slug: 'debian-12-i386',
     displayName: 'Debian',
     versionLabel: '12 Bookworm',
@@ -45,6 +97,30 @@ export const launchProfiles = [
     featured: true,
     description:
       "Une distribution Linux stable, flexible et idéale pour découvrir un véritable système d'exploitation en navigateur.",
+  },
+  {
+    id: 'debian-12-i386-desktop',
+    imageId: 'debian-12-i386-desktop-image',
+    engineId: 'v86',
+    executionMode: 'browser',
+    // Xorg + Openbox consomment plus de mémoire que la console : plancher 1 Gio.
+    minMemoryMiB: 1024,
+    configuration: {
+      memoryMiB: 1024,
+      vgaMemoryMiB: 16,
+      bootDevice: 'disk',
+    },
+    // Même carte réseau émulée que le profil console (noyau 6.x, `virtio-net`).
+    hardwareProfile: pcHardware('virtio'),
+    // Le marqueur Desktop n'est émis qu'après le démarrage réel de X + session.
+    readiness: desktopReadiness('debian-12-i386-desktop'),
+    slug: 'debian-12-i386-desktop',
+    displayName: 'Debian (Bureau)',
+    versionLabel: '12 Bookworm · X11',
+    // Jamais validé : aucun boot graphique réel n'a été prouvé dans ce dépôt.
+    validated: false,
+    description:
+      'La variante graphique de Debian 12 : session Xorg + Openbox dans le navigateur, à valider par un boot réel avant publication.',
   },
   {
     id: 'ubuntu-18-i386',
@@ -57,6 +133,9 @@ export const launchProfiles = [
       vgaMemoryMiB: 16,
       bootDevice: 'cdrom',
     },
+    // Noyau 4.15 : `virtio-net` natif.
+    hardwareProfile: pcHardware('virtio'),
+    readiness: guestReadiness('ubuntu-18-i386'),
     slug: 'ubuntu-18-i386',
     displayName: 'Ubuntu',
     versionLabel: '18.04 LTS',
@@ -74,6 +153,8 @@ export const launchProfiles = [
       memoryMiB: 4096,
       bootDevice: 'disk',
     },
+    hardwareProfile: pcHardware('virtio'),
+    readiness: guestReadiness('fedora-workstation'),
     slug: 'fedora-workstation',
     displayName: 'Fedora',
     versionLabel: 'Workstation · x64',
@@ -90,6 +171,8 @@ export const launchProfiles = [
       memoryMiB: 4096,
       bootDevice: 'disk',
     },
+    hardwareProfile: pcHardware('virtio'),
+    readiness: guestReadiness('mint-x64'),
     slug: 'mint-x64',
     displayName: 'Linux Mint',
     versionLabel: 'Cinnamon · x64',
@@ -106,6 +189,9 @@ export const launchProfiles = [
       memoryMiB: 2048,
       bootDevice: 'disk',
     },
+    // Invité ancien : pilotes virtio fragiles, `ne2k` est le support commun.
+    hardwareProfile: pcHardware('ne2k'),
+    readiness: guestReadiness('windows-7-x86'),
     slug: 'windows-7-x86',
     displayName: 'Windows 7',
     versionLabel: 'Édition x86',
@@ -123,6 +209,8 @@ export const launchProfiles = [
       memoryMiB: 4096,
       bootDevice: 'disk',
     },
+    hardwareProfile: pcHardware('virtio'),
+    readiness: guestReadiness('windows-10-x64'),
     slug: 'windows-10-x64',
     displayName: 'Windows 10',
     versionLabel: '64 bits',
@@ -139,6 +227,8 @@ export const launchProfiles = [
       memoryMiB: 4096,
       bootDevice: 'disk',
     },
+    hardwareProfile: pcHardware('virtio'),
+    readiness: guestReadiness('windows-11-x64'),
     slug: 'windows-11-x64',
     displayName: 'Windows 11',
     versionLabel: '64 bits',
@@ -156,6 +246,8 @@ export const launchProfiles = [
       memoryMiB: 8192,
       bootDevice: 'disk',
     },
+    hardwareProfile: pcHardware('virtio'),
+    readiness: guestReadiness('macos-sequoia'),
     slug: 'macos-sequoia',
     displayName: 'macOS',
     versionLabel: 'Sequoia · Apple Silicon',

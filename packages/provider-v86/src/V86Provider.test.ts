@@ -215,6 +215,42 @@ describe('V86Provider', () => {
     expect(captured[0]?.net_device).toEqual({ relay_url: 'fetch', type: 'virtio' });
   });
 
+  it('profil matériel ne2k : la carte suit le contrat du catalogue', async () => {
+    const { provider, captured } = setup();
+    const os = makeOS({
+      launchProfiles: [
+        {
+          id: 'default',
+          engineId: 'v86',
+          executionMode: 'browser',
+          hardwareProfile: { network: 'ne2k' },
+        },
+      ],
+    });
+    await provider.start(os, document.createElement('div'), {
+      network: { mode: 'browser-fetch' },
+    });
+    expect(captured[0]?.net_device).toEqual({ relay_url: 'fetch', type: 'ne2k' });
+  });
+
+  it('profil matériel none : aucune carte réseau même avec un transport', async () => {
+    const { provider, captured } = setup();
+    const os = makeOS({
+      launchProfiles: [
+        {
+          id: 'default',
+          engineId: 'v86',
+          executionMode: 'browser',
+          hardwareProfile: { network: 'none' },
+        },
+      ],
+    });
+    await provider.start(os, document.createElement('div'), {
+      network: { mode: 'browser-fetch' },
+    });
+    expect(captured[0]?.net_device).toBeUndefined();
+  });
+
   it('relais injoignable : le démarrage aboutit sans bloquer le cycle de vie', async () => {
     const { provider, captured } = setup();
     const instance = await provider.start(makeOS(), document.createElement('div'), {

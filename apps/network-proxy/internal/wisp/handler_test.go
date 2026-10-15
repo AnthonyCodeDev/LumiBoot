@@ -1,11 +1,15 @@
 package wisp
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -218,4 +222,151 @@ func TestConnectRefused(t *testing.T) {
 	_ = readFrame(t, fx.conn)
 	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
 	expectClose(t, readFrame(t, fx.conn), 1, CloseConnectRefused)
+}
+
+// TestFlowControlContinueEmission vérifie l'émission du CONTINUE par flux :
+// après InitialBufferPackets trames traitées, un CONTINUE annonçant la fenêtre
+// est émis, sans bloquer les échos.
+func TestFlowControlContinueEmission(t *testing.T) {
+	fx := newSession(t, func(c *HandlerConfig) { c.InitialBufferPackets = 3 })
+	_ = readFrame(t, fx.conn) // CONTINUE initial stream 0
+
+	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
+	for i := 0; i < 3; i++ {
+		sendFrame(t, fx.conn, Frame{Type: TypeData, StreamID: 1, Payload: []byte("x")})
+	}
+
+	seenContinue := false
+	dataCount := 0
+	for !seenContinue || dataCount != 3 {
+		f := readFrame(t, fx.conn)
+		switch {
+		case f.Type == TypeData && f.StreamID == 1:
+			dataCount++
+		case f.Type == TypeContinue && f.StreamID == 1:
+			if n, _ := ParseContinue(f.Payload); n != 3 {
+				t.Fatalf("fenêtre CONTINUE inattendue: %d", n)
+			}
+			seenContinue = true
+		default:
+			t.Fatalf("paquet inattendu: %+v", f)
+		}
+	}
+}
+
+// TestConcurrentCloseNoPanic ferme la session pendant un transfert actif sur
+// plusieurs flux : non-régression « send on closed channel » / double close.
+func TestConcurrentCloseNoPanic(t *testing.T) {
+	fx := newSession(t, nil)
+	_ = readFrame(t, fx.conn)
+
+	for id := uint32(1); id <= 5; id++ {
+		sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: id, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
+	}
+
+	// Lecteur de fond : absorbe les échos pour ne pas saturer la socket.
+	stopRead := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stopRead:
+				return
+			default:
+			}
+			_ = fx.conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+			if _, _, err := fx.conn.ReadMessage(); err != nil {
+				if isTimeout(err) {
+					continue
+				}
+				return
+			}
+		}
+	}()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 300; i++ {
+			id := uint32(1 + i%5)
+			_ = fx.conn.SetWriteDeadline(time.Now().Add(time.Second))
+			if err := fx.conn.WriteMessage(websocket.BinaryMessage, Frame{Type: TypeData, StreamID: id, Payload: []byte("charge")}.Encode()); err != nil {
+				return
+			}
+		}
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+	fx.cancel() // fermeture concurrente pendant le transfert
+	wg.Wait()
+	close(stopRead)
+}
+
+// scriptedConn est un net.Conn de test qui écrit partiellement puis, si errAt
+// est atteint, renvoie une erreur.
+type scriptedConn struct {
+	mu          sync.Mutex
+	maxPerWrite int
+	errAt       int
+	written     int
+	buf         bytes.Buffer
+}
+
+var errScripted = errors.New("scripted: erreur d'écriture")
+
+func (c *scriptedConn) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.errAt > 0 && c.written >= c.errAt {
+		return 0, errScripted
+	}
+	n := c.maxPerWrite
+	if n <= 0 || n > len(p) {
+		n = len(p)
+	}
+	c.buf.Write(p[:n])
+	c.written += n
+	return n, nil
+}
+
+func (c *scriptedConn) Read([]byte) (int, error)         { return 0, io.EOF }
+func (c *scriptedConn) Close() error                     { return nil }
+func (c *scriptedConn) LocalAddr() net.Addr              { return dummyAddr{} }
+func (c *scriptedConn) RemoteAddr() net.Addr             { return dummyAddr{} }
+func (c *scriptedConn) SetDeadline(time.Time) error      { return nil }
+func (c *scriptedConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *scriptedConn) SetWriteDeadline(time.Time) error { return nil }
+
+type dummyAddr struct{}
+
+func (dummyAddr) Network() string { return "test" }
+func (dummyAddr) String() string  { return "test" }
+
+func TestWriteFullPartial(t *testing.T) {
+	t.Parallel()
+	conn := &scriptedConn{maxPerWrite: 3}
+	data := []byte("abcdefghij")
+	n, err := writeFull(conn, data, time.Second)
+	if err != nil {
+		t.Fatalf("writeFull: %v", err)
+	}
+	if n != len(data) {
+		t.Fatalf("octets écrits: %d, attendu %d", n, len(data))
+	}
+	if conn.buf.String() != string(data) {
+		t.Fatalf("données: %q", conn.buf.String())
+	}
+}
+
+func TestWriteFullErrorPartial(t *testing.T) {
+	t.Parallel()
+	conn := &scriptedConn{maxPerWrite: 2, errAt: 2}
+	data := []byte("abcdef")
+	n, err := writeFull(conn, data, time.Second)
+	if !errors.Is(err, errScripted) {
+		t.Fatalf("erreur attendue, obtenue %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("octets partiels comptés: %d, attendu 2", n)
+	}
 }

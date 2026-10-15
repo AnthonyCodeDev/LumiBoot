@@ -1,5 +1,5 @@
 import type { Event as V86Event, V86 } from 'v86';
-import type { SessionEvent } from '@lumiboot/contracts';
+import type { GuestReadiness, SessionEvent } from '@lumiboot/contracts';
 import type { NetworkController } from '@lumiboot/vm-network';
 import { createSessionId, type VMInstance } from '@lumiboot/vm-core';
 import type { V86ConsoleAdapter } from './console-adapter';
@@ -11,7 +11,8 @@ export interface V86InstanceDeps {
   readonly systemId: string;
   readonly emulator: V86;
   readonly console: V86ConsoleAdapter;
-  readonly detector?: GuestReadyDetector;
+  /** Preuve de démarrage attendue (marqueur + canal + délai) issue du profil. */
+  readonly readiness: GuestReadiness;
   readonly id?: string;
   readonly onCleanupError?: (error: unknown) => void;
   /** Contrôleur réseau optionnel : ses diagnostics sont relayés en événements. */
@@ -49,6 +50,7 @@ export class V86Instance implements VMInstance {
   #stopping = false;
   #stopSignalled = false;
   #disposed = false;
+  #readyTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(deps: V86InstanceDeps) {
     this.id = deps.id ?? createSessionId();
@@ -56,7 +58,7 @@ export class V86Instance implements VMInstance {
     this.systemId = deps.systemId;
     this.#emulator = deps.emulator;
     this.#console = deps.console;
-    this.#detector = deps.detector ?? new GuestReadyDetector();
+    this.#detector = new GuestReadyDetector(deps.readiness);
     this.#network = deps.network;
     this.#onCleanupError = deps.onCleanupError;
   }
@@ -68,7 +70,12 @@ export class V86Instance implements VMInstance {
     emulator.add_listener('emulator-stopped', this.#onEmulatorStopped);
     emulator.add_listener('download-progress', this.#onDownloadProgress);
     emulator.add_listener('download-error', this.#onDownloadError);
-    emulator.add_listener('serial0-output-byte', this.#onSerialByte);
+    // Le canal de preuve vient du profil (`serial` par défaut, `vga` possible).
+    if (this.#detector.channel === 'vga') {
+      emulator.add_listener('screen-put-char', this.#onScreenChar);
+    } else {
+      emulator.add_listener('serial0-output-byte', this.#onSerialByte);
+    }
     this.#wireNetwork();
   }
 
@@ -127,6 +134,7 @@ export class V86Instance implements VMInstance {
     if (this.#disposed || this.#stopping) return;
     // L'émulateur (WASM) est prêt : le noyau invité COMMENCE à démarrer.
     this.#emit({ type: 'progress', phase: 'booting' });
+    this.#armReadyTimeout();
     void this.#emulator.run().catch((error: unknown) => {
       this.#failBoot(
         'START_FAILED',
@@ -134,6 +142,29 @@ export class V86Instance implements VMInstance {
       );
     });
   };
+
+  /**
+   * Arme le délai d'attente du marqueur, issu de `readiness.timeoutMs`. Le
+   * marqueur reste l'unique preuve d'un démarrage réel : un délai dépassé est
+   * donc un échec, jamais un faux `running`.
+   */
+  #armReadyTimeout(): void {
+    if (this.#readyTimer !== null) return;
+    this.#readyTimer = setTimeout(() => {
+      this.#readyTimer = null;
+      if (this.#disposed || this.#stopping || this.#detector.detected) return;
+      this.#failBoot(
+        'GUEST_READY_TIMEOUT',
+        `Le marqueur de disponibilité « ${this.#detector.marker} » n'a pas été détecté dans le délai imparti.`,
+      );
+    }, this.#detector.timeoutMs);
+  }
+
+  #clearReadyTimeout(): void {
+    if (this.#readyTimer === null) return;
+    clearTimeout(this.#readyTimer);
+    this.#readyTimer = null;
+  }
 
   /**
    * Échec fatal d'amorçage : publie l'erreur puis libère immédiatement les
@@ -152,6 +183,16 @@ export class V86Instance implements VMInstance {
   readonly #onSerialByte = (byte: number): void => {
     if (this.#disposed || this.#stopping) return;
     if (this.#detector.pushByte(byte)) {
+      this.#clearReadyTimeout();
+      this.#emit({ type: 'state', state: 'running' });
+    }
+  };
+
+  /** Canal VGA : la preuve est lue sur la sortie texte de l'écran. */
+  readonly #onScreenChar = (arg: V86Event['screen-put-char']): void => {
+    if (this.#disposed || this.#stopping) return;
+    if (this.#detector.pushByte(arg[2])) {
+      this.#clearReadyTimeout();
       this.#emit({ type: 'state', state: 'running' });
     }
   };
@@ -186,6 +227,7 @@ export class V86Instance implements VMInstance {
   #cleanup(): Promise<void> {
     if (this.#cleanupPromise !== null) return this.#cleanupPromise;
     this.#cleanupPromise = (async () => {
+      this.#clearReadyTimeout();
       this.#removeListeners();
       this.#unsubscribeNetwork?.();
       this.#unsubscribeNetwork = null;
@@ -219,7 +261,11 @@ export class V86Instance implements VMInstance {
     emulator.remove_listener('emulator-stopped', this.#onEmulatorStopped);
     emulator.remove_listener('download-progress', this.#onDownloadProgress);
     emulator.remove_listener('download-error', this.#onDownloadError);
-    emulator.remove_listener('serial0-output-byte', this.#onSerialByte);
+    if (this.#detector.channel === 'vga') {
+      emulator.remove_listener('screen-put-char', this.#onScreenChar);
+    } else {
+      emulator.remove_listener('serial0-output-byte', this.#onSerialByte);
+    }
   }
 }
 

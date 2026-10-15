@@ -1,4 +1,4 @@
-import type { OSDefinition } from '@lumiboot/contracts';
+import { DEFAULT_GUEST_READINESS, type OSDefinition } from '@lumiboot/contracts';
 import {
   VMError,
   isVMError,
@@ -17,8 +17,8 @@ import type { V86Options } from 'v86';
 import { createBrowserV86, type V86Factory } from './browser-v86';
 import { DomConsoleAdapter, type V86ConsoleAdapter, type V86ConsoleMount } from './console-adapter';
 import {
-  selectNetworkDeviceType,
   toV86NetworkDevice,
+  toV86NetworkDeviceType,
   type V86NetworkDevice,
 } from './network/V86NetworkAdapter';
 import { V86Instance } from './v86-instance';
@@ -148,13 +148,18 @@ export class V86Provider implements VMEngine {
     // Réseau fixé AVANT la construction de l'émulateur : changer d'interface
     // réseau exige un redémarrage complet de v86. Chaque session possède son
     // propre contrôleur (jamais partagé entre sessions).
+    //
+    // La carte émulée vient du PROFIL MATÉRIEL du catalogue : le provider ne
+    // fait que traduire ce contrat (`network` -> `net_device.type`), jamais de
+    // décision par système.
     const networkProfile = configuration?.network ?? defaultNetworkProfile;
     const networkController = createNetworkController({ profile: networkProfile });
     let netDevice: V86NetworkDevice | undefined;
     try {
       const transport = toV86NetworkDevice(networkProfile);
-      if (transport !== undefined) {
-        netDevice = { ...transport, type: selectNetworkDeviceType(os) };
+      const deviceType = toV86NetworkDeviceType(launchProfile.hardwareProfile);
+      if (transport !== undefined && deviceType !== undefined) {
+        netDevice = { ...transport, type: deviceType };
       }
       await networkController.start(signal);
     } catch (error) {
@@ -230,6 +235,7 @@ export class V86Provider implements VMEngine {
         systemId: os.id,
         emulator,
         console: consoleAdapter,
+        readiness: launchProfile.readiness ?? DEFAULT_GUEST_READINESS,
         network: networkController,
       });
       instance.wire();

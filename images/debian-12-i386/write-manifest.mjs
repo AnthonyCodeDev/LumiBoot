@@ -5,16 +5,21 @@
 // valeur fictive n'est jamais écrite.
 //
 //   node images/debian-12-i386/write-manifest.mjs <dossier-artefacts>
+//
+// Paramétrable par variables d'environnement (utilisées par build.sh selon le
+// flavor) ; les valeurs par défaut reproduisent EXACTEMENT l'image console
+// `debian-12-i386` :
+//   IMAGE_REF=debian-12-i386-desktop IMAGE_MEMORY_MIB=1024 node write-manifest.mjs build-desktop
 
 import { createHash } from 'node:crypto';
 import { stat, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const REF = 'debian-12-i386';
-const ARCH = 'i386';
-const MEMORY_MIB = 512;
-const VGA_MIB = 16;
+const REF = process.env.IMAGE_REF ?? 'debian-12-i386';
+const ARCH = process.env.IMAGE_ARCH ?? 'i386';
+const MEMORY_MIB = Number(process.env.IMAGE_MEMORY_MIB ?? 512);
+const VGA_MIB = Number(process.env.IMAGE_VGA_MIB ?? 16);
 const LICENSE = 'Debian GNU/Linux — voir les notices de paquets (Debian Free Software Guidelines)';
 const BASE_URL = `/images/${REF}`;
 

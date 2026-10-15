@@ -6,6 +6,13 @@ export interface ProxyHealth {
   state: ProxyState;
   version?: string;
   wispVersion?: number;
+  /** Message de diagnostic guidé (état `error` incertain). */
+  error?: string;
+  /**
+   * `true` quand la sonde ne permet pas de trancher (ex. `TypeError` Chromium
+   * ambigu entre proxy arrêté et refus d'accès réseau local).
+   */
+  uncertain?: boolean;
 }
 
 /** Délai de sonde : le proxy réseau local est local, 1500 ms suffisent. */
@@ -66,14 +73,14 @@ function isSecureContextActive(): boolean {
  * - succès → `connected` (proxy réseau local **joint**, pas encore appairé : le store
  *   exige en plus un token avant d'afficher « Connecté »).
  *
- * Heuristique `permission-required` (LIMITATION DOCUMENTÉE) : quand le fetch
- * échoue par `TypeError` alors que `window.isSecureContext` est vrai ET que
- * l'environnement supporte Local Network Access (Chromium), on renvoie
- * `permission-required`. Ce n'est PAS une certitude : Chrome signale un refus
- * LNA et un proxy réseau local arrêté par le même `TypeError` générique (« Failed to
- * fetch »). L'heuristique peut donc classer à tort un proxy réseau local arrêté en
- * `permission-required`. Hors contexte sécurisé ou hors Chromium, le même
- * échec donne `not-running`.
+ * État **incertain** (LIMITATION DOCUMENTÉE) : quand le fetch échoue par
+ * `TypeError` alors que `window.isSecureContext` est vrai ET que
+ * l'environnement supporte Local Network Access (Chromium), le navigateur ne
+ * permet PAS de distinguer un refus LNA d'un proxy réseau local arrêté : les
+ * deux produisent le même `TypeError` générique (« Failed to fetch »). On
+ * renvoie donc un état `error` **incertain** (`uncertain: true`) portant un
+ * message de diagnostic guidé, au lieu d'affirmer `permission-required`. Hors
+ * contexte sécurisé ou hors Chromium, le même échec donne `not-running`.
  *
  * `not-installed` n'est JAMAIS renvoyé ici : l'absence de réponse ne prouve
  * pas l'absence d'installation.
@@ -97,7 +104,15 @@ export async function checkProxy(
       if (isAbortError(error)) return { state: 'not-running' };
       if (error instanceof TypeError) {
         if (isSecureContextActive() && supportsLocalNetworkAccess()) {
-          return { state: 'permission-required' };
+          // Chromium : impossible de trancher entre refus LNA et proxy arrêté.
+          return {
+            state: 'error',
+            uncertain: true,
+            error:
+              'Impossible de joindre le proxy réseau local : le navigateur a pu bloquer ' +
+              'l’accès au réseau local, ou le proxy n’est pas lancé. Vérifiez qu’il tourne ' +
+              'sur cette machine, puis autorisez l’accès au réseau local pour ce site.',
+          };
         }
         return { state: 'not-running' };
       }

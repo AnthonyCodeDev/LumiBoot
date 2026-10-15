@@ -1,4 +1,4 @@
-import type { OSDefinition } from '@lumiboot/contracts';
+import { DEFAULT_HARDWARE_PROFILE, type HardwareProfile } from '@lumiboot/contracts';
 import {
   DEFAULT_PROXY_URL,
   NetworkError,
@@ -85,8 +85,9 @@ function toWispRelayUrl(relayUrl: string): string {
 /**
  * Construit la carte réseau v86 correspondant à un profil LumiBoot.
  *
- * Le champ `type` (NIC) n'est pas fixé ici : il dépend du système invité et est
- * fusionné par le provider via {@link selectNetworkDeviceType}.
+ * Le champ `type` (NIC) n'est pas fixé ici : il provient du PROFIL MATÉRIEL du
+ * catalogue et est fusionné par le provider via
+ * {@link toV86NetworkDeviceType}.
  *
  * @throws NetworkError `NETWORK_INVALID_RELAY_URL` en mode `user-relay` sans
  *   adresse `wss://` valide, `NETWORK_INVALID_PROXY_URL` en mode
@@ -112,10 +113,7 @@ export function toV86NetworkDevice(profile: NetworkProfile): V86NetworkDevice | 
     case 'local-proxy': {
       let url: string;
       try {
-        url = buildProxyWispUrl(
-          profile.proxyUrl ?? DEFAULT_PROXY_URL,
-          profile.proxyToken,
-        );
+        url = buildProxyWispUrl(profile.proxyUrl ?? DEFAULT_PROXY_URL, profile.proxyToken);
       } catch (error) {
         throw new NetworkError(
           'NETWORK_INVALID_PROXY_URL',
@@ -133,82 +131,29 @@ export function toV86NetworkDevice(profile: NetworkProfile): V86NetworkDevice | 
 }
 
 /**
- * Profil matériel réseau : regroupe les invités qui partagent le MÊME support
- * de pilote NIC sous v86. Le choix ne dépend donc pas de la seule famille
- * Linux/Windows, mais d'une décision par système (voir ci-dessous).
+ * Traduit la carte réseau du PROFIL MATÉRIEL (`HardwareProfile.network`) vers le
+ * type attendu par v86 (`net_device.type`).
+ *
+ * Correctif audit #18 : le provider ne décide plus de la carte par `id`/famille
+ * ou par une heuristique `family`+`architecture` ; il ne fait que LIRE le
+ * contrat du catalogue et le traduire. `none` signifie « aucune carte ».
+ *
+ * `undefined` (profil matériel absent) retombe sur le défaut documenté
+ * `'virtio'`.
  */
-type NetworkDeviceProfile = 'virtio-net' | 'legacy-ne2k';
-
-/** Carte v86 associée à chaque profil matériel. */
-const DEVICE_BY_PROFILE: Readonly<Record<NetworkDeviceProfile, V86NetworkDeviceType>> = {
-  // Noyaux modernes : `virtio-net` natif, recommandé par v86 (meilleures perfs).
-  'virtio-net': 'virtio',
-  // Invités anciens : pilotes virtio absents/instables, `ne2k` (NE2000) est le
-  // dénominateur commun (Windows 9x/DOS, vieux noyaux).
-  'legacy-ne2k': 'ne2k',
+const DEVICE_TYPE_BY_NETWORK: Readonly<
+  Record<HardwareProfile['network'], V86NetworkDeviceType | undefined>
+> = {
+  virtio: 'virtio',
+  ne2k: 'ne2k',
+  none: undefined,
 };
 
-/**
- * Table de résolution par identifiant de système : source de vérité pour les
- * invités explicitement validés. Toute entrée absente retombe sur
- * {@link profileForHardware}. Documenter ici chaque nouveau système confirmé.
- */
-const PROFILE_BY_SYSTEM_ID: Readonly<Record<string, NetworkDeviceProfile>> = Object.freeze({
-  // Debian 12 Bookworm : noyau 6.x, `virtio-net` natif (choix historique conservé).
-  'debian-12-i386': 'virtio-net',
-  // Ubuntu 18.04 : noyau 4.15, virtio-net natif.
-  'ubuntu-18-i386': 'virtio-net',
-  // Windows 7 x86 : invité ancien, pilotes virtio fragiles sous v86.
-  'windows-7-x86': 'legacy-ne2k',
-});
-
-/**
- * Heuristique matérielle de repli, appliquée quand l'`id` n'est pas tabulé :
- * un Windows 32 bits est traité comme invité ancien (`ne2k`) ; tout le reste
- * reçoit `virtio`, valeur par défaut adaptée à v86 (noyaux Linux modernes).
- */
-function profileForHardware(
-  os: Pick<OSDefinition, 'family' | 'architecture'>,
-): NetworkDeviceProfile {
-  const legacyWindows =
-    os.family === 'windows' && (os.architecture === 'i386' || os.architecture === 'x86');
-  return legacyWindows ? 'legacy-ne2k' : 'virtio-net';
-}
-
-/**
- * Résout la carte réseau émulée (`ne2k` ou `virtio`) pour un système donné.
- *
- * Ordre de résolution, du plus spécifique au plus général :
- *   1. `override` explicite (surcharge issue du profil réseau/de la config) ;
- *   2. table {@link PROFILE_BY_SYSTEM_ID} (par `os.id`, décisions validées) ;
- *   3. heuristique {@link profileForHardware} (`family` + `architecture`) ;
- *   4. défaut v86 : `virtio`.
- *
- * Ainsi un même `family` peut recevoir un NIC différent selon son `id`/`arch`,
- * et LumiBoot réserve `virtio` à Debian 12 (`debian-12-i386`) sans le généraliser.
- *
- * @param os Système invité (au minimum `id`/`family`/`architecture`) ;
- *   un `OSDefinition` complet satisfait la contrainte.
- * @param override Carte imposée par l'appelant (surcharge config/profil) ; si
- *   fournie, elle prime sur la table et l'heuristique.
- */
-export function resolveNetworkDevice(
-  os: Pick<OSDefinition, 'id' | 'family' | 'architecture'>,
-  override?: V86NetworkDeviceType,
-): V86NetworkDeviceType {
-  if (override !== undefined) return override;
-  const profile = PROFILE_BY_SYSTEM_ID[os.id] ?? profileForHardware(os);
-  return DEVICE_BY_PROFILE[profile];
-}
-
-/**
- * Alias historique conservé pour `V86Provider` (comportement inchangé).
- * Toute nouvelle logique doit passer par {@link resolveNetworkDevice}.
- *
- * @deprecated Utiliser {@link resolveNetworkDevice} (surcharge possible).
- */
-export function selectNetworkDeviceType(os: OSDefinition): V86NetworkDeviceType {
-  return resolveNetworkDevice(os);
+export function toV86NetworkDeviceType(
+  hardware: HardwareProfile | undefined,
+): V86NetworkDeviceType | undefined {
+  const network = hardware?.network ?? DEFAULT_HARDWARE_PROFILE.network;
+  return DEVICE_TYPE_BY_NETWORK[network];
 }
 
 /**

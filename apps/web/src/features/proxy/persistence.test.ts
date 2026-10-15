@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  clearProxySession,
-  loadProxySession,
-  saveProxySession,
-} from './persistence';
+import { clearProxySession, loadProxySession, saveProxySession } from './persistence';
 
 const STORAGE_KEY = 'lumiboot.proxy.session';
 const URL = 'http://127.0.0.1:37892';
@@ -68,7 +64,9 @@ describe('proxy persistence', () => {
 
   it('absence de localStorage → null sans lever', () => {
     vi.stubGlobal('localStorage', undefined);
-    expect(() => saveProxySession({ token: 'tok', expiresAt: futureIso(), proxyUrl: URL })).not.toThrow();
+    expect(() =>
+      saveProxySession({ token: 'tok', expiresAt: futureIso(), proxyUrl: URL }),
+    ).not.toThrow();
     expect(loadProxySession(URL)).toBeNull();
     expect(() => clearProxySession()).not.toThrow();
   });

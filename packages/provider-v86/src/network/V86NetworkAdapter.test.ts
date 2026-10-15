@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { OSDefinition } from '@lumiboot/contracts';
 import { createNetworkController, defaultNetworkProfile } from '@lumiboot/vm-network';
 import {
   attachNetworkDiagnostics,
-  resolveNetworkDevice,
   toV86NetworkDevice,
+  toV86NetworkDeviceType,
   type NetworkEventSource,
 } from './V86NetworkAdapter';
 
@@ -30,30 +29,6 @@ class FakeEmitter {
   listenerCount(event: string): number {
     return this.#listeners.get(event)?.size ?? 0;
   }
-}
-
-function makeOS(overrides: Partial<OSDefinition> = {}): OSDefinition {
-  return {
-    id: 'sample',
-    slug: 'sample',
-    family: 'linux',
-    displayName: 'Sample',
-    versionLabel: '1',
-    architecture: 'i386',
-    availability: 'ready',
-    description: 'desc',
-    iconUrl: '/icons/os/sample.svg',
-    minMemoryMiB: 128,
-    imageRef: 'sample',
-    launchProfiles: [
-      { id: 'default', engineId: 'v86', executionMode: 'browser', minMemoryMiB: 128 },
-    ],
-    requirements: ['WebAssembly'],
-    accent: '#000000',
-    accentRgb: '0,0,0',
-    integrationNote: 'note',
-    ...overrides,
-  };
 }
 
 describe('toV86NetworkDevice', () => {
@@ -153,33 +128,27 @@ describe('toV86NetworkDevice', () => {
   });
 });
 
-describe('resolveNetworkDevice', () => {
-  it('Debian 12 (debian-12-i386) : virtio', () => {
-    expect(
-      resolveNetworkDevice(
-        makeOS({ id: 'debian-12-i386', family: 'linux', versionLabel: '12 Bookworm' }),
-      ),
-    ).toBe('virtio');
+describe('toV86NetworkDeviceType', () => {
+  it('profil matériel absent : défaut documenté virtio', () => {
+    expect(toV86NetworkDeviceType(undefined)).toBe('virtio');
   });
 
-  it('OS ancien tabulé (windows-7-x86) : ne2k', () => {
-    expect(
-      resolveNetworkDevice(makeOS({ id: 'windows-7-x86', family: 'windows', versionLabel: '7' })),
-    ).toBe('ne2k');
+  it('network virtio : NIC virtio (noyaux modernes)', () => {
+    expect(toV86NetworkDeviceType({ network: 'virtio' })).toBe('virtio');
   });
 
-  it('Windows 32 bits non tabulé : heuristique legacy → ne2k', () => {
-    expect(
-      resolveNetworkDevice(makeOS({ id: 'windows-old', family: 'windows', architecture: 'i386' })),
-    ).toBe('ne2k');
+  it('network ne2k : NIC NE2000 (invités anciens)', () => {
+    expect(toV86NetworkDeviceType({ network: 'ne2k' })).toBe('ne2k');
   });
 
-  it('système inconnu : virtio par défaut (adapté à v86)', () => {
-    expect(resolveNetworkDevice(makeOS({ id: 'mystery', family: 'linux' }))).toBe('virtio');
+  it('network none : aucune carte réseau', () => {
+    expect(toV86NetworkDeviceType({ network: 'none' })).toBeUndefined();
   });
 
-  it('surcharge explicite prioritaire sur table et heuristique', () => {
-    expect(resolveNetworkDevice(makeOS({ id: 'debian-12-i386' }), 'ne2k')).toBe('ne2k');
+  it('la traduction ne dépend que du contrat, pas du système', () => {
+    // Le même profil matériel donne la même carte quel que soit l'invité.
+    expect(toV86NetworkDeviceType({ network: 'ne2k', machine: 'pc' })).toBe('ne2k');
+    expect(toV86NetworkDeviceType({ network: 'virtio', audio: true })).toBe('virtio');
   });
 });
 

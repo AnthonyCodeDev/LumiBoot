@@ -79,9 +79,7 @@ class DefaultNetworkController implements NetworkController {
     this.#profile = Object.freeze({
       mode: options.profile.mode,
       ...(options.profile.relayUrl === undefined ? {} : { relayUrl: options.profile.relayUrl }),
-      ...(options.profile.proxyUrl === undefined
-        ? {}
-        : { proxyUrl: options.profile.proxyUrl }),
+      ...(options.profile.proxyUrl === undefined ? {} : { proxyUrl: options.profile.proxyUrl }),
       ...(options.profile.proxyToken === undefined
         ? {}
         : { proxyToken: options.profile.proxyToken }),
@@ -158,9 +156,7 @@ class DefaultNetworkController implements NetworkController {
         return;
       }
       case 'local-proxy': {
-        const validation = validateProxyUrl(
-          this.#profile.proxyUrl ?? DEFAULT_PROXY_URL,
-        );
+        const validation = validateProxyUrl(this.#profile.proxyUrl ?? DEFAULT_PROXY_URL);
         if (!validation.ok || validation.url === undefined) {
           const message = validation.error ?? 'Adresse du proxy réseau local invalide.';
           this.#fail('NETWORK_INVALID_PROXY_URL', message);

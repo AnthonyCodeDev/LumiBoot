@@ -332,14 +332,13 @@ $env:VM_E2E_ASSETS='1'; pnpm test:e2e --grep "WISP"
   sont des assertions, pas des contournements. Vérifie aussi qu'un relais
   **injoignable** (`wss://127.0.0.1:9/`) n'empêche ni le démarrage ni
   Arrêter/Redémarrer.
-- `tests/e2e/network-wisp.spec.ts` : `user-relay`. Réécrit temporairement
-  `apps/web/public/lumiboot.config.json` puis le **restaure** dans `afterAll`
-  (même en cas d'échec). Exige DHCP/DNS, puis **HTTPS réussi** et
-  `apt-get update` **réussi**.
+- `tests/e2e/network-wisp.spec.ts` : `user-relay`. Le profil est injecté par
+  **interception de requête Playwright** (`page.route('**/lumiboot.config.json', …)`),
+  comme dans `network-debian.spec.ts` : le fichier public n'est **jamais**
+  modifié. Exige DHCP/DNS, puis **HTTPS réussi** et `apt-get update` **réussi**.
 
-> La suite WISP modifie un fichier de configuration **global** : lancez-la
-> isolément (`--grep "WISP"`, idéalement `--workers=1`) pour ne pas interférer
-> avec les autres specs exécutées en parallèle.
+> Aucun test E2E n'écrit dans le dépôt : l'isolation passe par `page.route`, ce
+> qui rend les specs sûres en parallèle comme en cas d'interruption.
 
 ### Réellement vérifié aujourd'hui
 

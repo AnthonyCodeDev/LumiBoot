@@ -8,6 +8,8 @@ import type { FetchLike } from '../../config/load-config';
  * - `POST /api/pair/request` (origine autorisée) → `{pairingId, userCode, expiresAt}` ;
  * - `GET /api/pair/status?id=…` → `{status: "pending"|"approved"|"denied", expiresAt}` ;
  * - `POST /api/pair/exchange` `{pairingId}` (même origine) → `{token, expiresAt}` ;
+ * - `GET /api/session/verify?token=…` (contrôle authentifié origine + jeton) →
+ *   `200 {"ok":true,"expiresAt":"…"}` / `401`/`403` ;
  * - `POST /api/session/revoke` `{token}` → `{revoked: true}`.
  *
  * L'approbation elle-même (`approve`/`deny`) se fait depuis la console du
@@ -30,6 +32,13 @@ export interface PairingStatusResult {
 export interface PairingExchangeResult {
   token: string;
   expiresAt: string;
+}
+
+export interface VerifyTokenResult {
+  /** Le proxy a confirmé que le jeton est valide (HTTP 200 + `{ok:true}`). */
+  ok: boolean;
+  /** Expiration renvoyée par le proxy si connue. */
+  expiresAt?: string;
 }
 
 export class ProxyPairingError extends Error {
@@ -144,16 +153,21 @@ export async function requestPairing(
   return { pairingId, userCode, expiresAt };
 }
 
-/** Consulte l'état d'une demande d'appairage. */
+/** Consulte l'état d'une demande d'appairage (polling annulable via `signal`). */
 export async function getPairingStatus(
   baseUrl: string,
   pairingId: string,
   fetchImpl: FetchLike = fetch,
+  signal?: AbortSignal,
 ): Promise<PairingStatusResult> {
   const url = `${trimBaseUrl(baseUrl)}/api/pair/status?id=${encodeURIComponent(pairingId)}`;
   let response: Response;
   try {
-    response = await fetchImpl(url, { method: 'GET', headers: { Accept: 'application/json' } });
+    response = await fetchImpl(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      ...(signal === undefined ? {} : { signal }),
+    });
   } catch (cause) {
     throw new ProxyPairingError(
       'PROXY_UNREACHABLE',
@@ -241,6 +255,66 @@ export async function exchangeToken(
   return { token, expiresAt };
 }
 
+/**
+ * Vérifie qu'un jeton de session est **réellement validé** par le proxy
+ * réseau local via `GET {proxyUrl}/api/session/verify?token=<token>`.
+ *
+ * Le jeton passe en **query** (comme `/wisp/`) pour éviter le préflight d'un
+ * en-tête `Authorization` personnalisé. Le contrôle est authentifié : le proxy
+ * vérifie l'origine et le jeton, et ne fait pas d'upgrade.
+ *
+ * - `200 {"ok":true,"expiresAt":"…"}` → `{ok:true, expiresAt}` ;
+ * - `401`/`403` → `{ok:false}` (jeton absent, invalide, expiré ou origine refusée) ;
+ * - erreur réseau ou réponse inattendue → `ProxyPairingError`
+ *   (`PROXY_UNREACHABLE`), état **incertain** : on ne conclut pas à l'invalidité.
+ */
+export async function verifyToken(
+  baseUrl: string,
+  token: string,
+  fetchImpl: FetchLike = fetch,
+  signal?: AbortSignal,
+): Promise<VerifyTokenResult> {
+  const url = `${trimBaseUrl(baseUrl)}/api/session/verify?token=${encodeURIComponent(token)}`;
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      ...(signal === undefined ? {} : { signal }),
+    });
+  } catch (cause) {
+    throw new ProxyPairingError(
+      'PROXY_UNREACHABLE',
+      'Proxy réseau local injoignable pendant la vérification du jeton de session.',
+      { cause },
+    );
+  }
+  if (response.status === 401 || response.status === 403) {
+    return { ok: false };
+  }
+  if (!response.ok) {
+    throw new ProxyPairingError(
+      'PROXY_UNREACHABLE',
+      `Vérification du jeton illisible (HTTP ${response.status}).`,
+    );
+  }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch (cause) {
+    throw new ProxyPairingError(
+      'PROXY_UNREACHABLE',
+      'Réponse de vérification du jeton illisible.',
+      { cause },
+    );
+  }
+  const record = body as { ok?: unknown; expiresAt?: unknown };
+  if (record.ok !== true) return { ok: false };
+  return typeof record.expiresAt === 'string'
+    ? { ok: true, expiresAt: record.expiresAt }
+    : { ok: true };
+}
+
 /** Révoque la session par possession du token brut. */
 export async function revokeSession(
   baseUrl: string,
@@ -259,9 +333,6 @@ export async function revokeSession(
     );
   }
   if (result.data.revoked !== true) {
-    throw new ProxyPairingError(
-      'REVOKE_FAILED',
-      'Révocation refusée par le proxy réseau local.',
-    );
+    throw new ProxyPairingError('REVOKE_FAILED', 'Révocation refusée par le proxy réseau local.');
   }
 }

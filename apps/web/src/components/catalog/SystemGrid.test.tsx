@@ -28,9 +28,9 @@ beforeEach(() => {
 });
 
 describe('SystemGrid', () => {
-  it('affiche les huit cartes du catalogue', () => {
+  it('affiche les neuf cartes du catalogue', () => {
     renderGrid();
-    expect(screen.getAllByRole('article')).toHaveLength(8);
+    expect(screen.getAllByRole('article')).toHaveLength(9);
   });
 
   it('filtre les cartes selon la recherche', () => {
@@ -38,7 +38,8 @@ describe('SystemGrid', () => {
     act(() => {
       useCatalogStore.getState().setQuery('debian');
     });
-    expect(screen.getAllByRole('article')).toHaveLength(1);
+    // Debian (console) et Debian (Bureau) correspondent à « debian ».
+    expect(screen.getAllByRole('article')).toHaveLength(2);
   });
 
   it('affiche un état vide et le réinitialise', async () => {
@@ -49,20 +50,20 @@ describe('SystemGrid', () => {
     });
     expect(screen.queryAllByRole('article')).toHaveLength(0);
     await user.click(screen.getByRole('button', { name: 'Réinitialiser les filtres' }));
-    expect(screen.getAllByRole('article')).toHaveLength(8);
+    expect(screen.getAllByRole('article')).toHaveLength(9);
   });
 
   it('affiche le badge de statut de disponibilité sur chaque carte', () => {
     renderGrid();
     const cards = screen.getAllByRole('article');
-    expect(cards).toHaveLength(8);
+    expect(cards).toHaveLength(9);
     for (const card of cards) {
-      // Debian 12 i386 a prouvé un vrai boot (Lot 2) : badge « Disponible ».
-      // Tous les autres systèmes restent « En préparation ».
-      const name = card.getAttribute('aria-label') ?? '';
-      const expected = name.includes('Debian') ? 'Disponible' : 'En préparation';
+      // Seul le profil console Debian 12 i386 a prouvé un vrai boot (Lot 2) :
+      // badge « Disponible ». La variante Bureau reste « En préparation ».
+      const isReadyConsole = card.getAttribute('data-id') === 'debian-12-i386';
+      const expected = isReadyConsole ? 'Disponible' : 'En préparation';
       const badge = within(card).getByText(expected);
-      expect(badge.getAttribute('data-state')).toBe(name.includes('Debian') ? 'ready' : 'planned');
+      expect(badge.getAttribute('data-state')).toBe(isReadyConsole ? 'ready' : 'planned');
       expect(badge.className).toContain('card-status');
     }
   });

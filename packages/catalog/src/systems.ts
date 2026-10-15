@@ -3,7 +3,7 @@ import { validateCatalog } from './validation';
 import { families, type OSFamilyDefinition } from './families';
 import { images, type SystemImageDefinition } from './images';
 import { launchProfiles, type LaunchProfileDefinition } from './profiles';
-import { getEffectiveAvailability } from './availability';
+import { getAggregatedAvailability } from './availability';
 import { isEngineIntegrated } from './engines';
 
 const familyIndex = new Map<string, OSFamilyDefinition>(
@@ -29,16 +29,19 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
   // est DÉRIVÉE des faits (image présente, profil compatible, moteur intégré,
   // fonctionnement validé). Un système ne devient donc pas disponible parce que
   // son image existe.
-  const availability = getEffectiveAvailability({
-    hasImage: image.imageRef !== undefined,
-    hasCompatibleProfile: launchProfilesForImage.some(
-      (launchProfile) => launchProfile.executionMode === 'browser',
-    ),
-    engineIntegrated: launchProfilesForImage.some((launchProfile) =>
-      isEngineIntegrated(launchProfile.engineId),
-    ),
-    validated: launchProfilesForImage.some((launchProfile) => launchProfile.validated),
-  });
+  //
+  // Audit #19 : on évalue chaque candidat (image × profil × moteur) POUR LUI-
+  // MÊME. On ne mélange jamais la validation d'un profil avec le moteur d'un
+  // autre : un faux `ready` exigerait qu'un MÊME profil coche les quatre
+  // conditions.
+  const availability = getAggregatedAvailability(
+    launchProfilesForImage.map((launchProfile) => ({
+      hasImage: image.imageRef !== undefined,
+      hasCompatibleProfile: launchProfile.executionMode === 'browser',
+      engineIntegrated: isEngineIntegrated(launchProfile.engineId),
+      validated: launchProfile.validated,
+    })),
+  );
 
   return {
     id: launchProfilesForImage[0]!.id,
@@ -59,6 +62,8 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
       minMemoryMiB: launchProfile.minMemoryMiB,
       featured: launchProfile.featured ?? undefined,
       configuration: launchProfile.configuration,
+      hardwareProfile: launchProfile.hardwareProfile,
+      readiness: launchProfile.readiness,
     })),
     requirements: [...image.requirements],
     licenseNotes: image.licenseNotes ?? undefined,

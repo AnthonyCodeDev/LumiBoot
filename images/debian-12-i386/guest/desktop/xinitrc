@@ -1,0 +1,24 @@
+#!/bin/sh
+# ~/.xinitrc — session graphique LumiBoot (Openbox + xterm).
+#
+# Lancée par startx sur le canvas VGA (tty1) après l'autologin de « lumiboot ».
+# Cette session est RÉELLE : elle n'est jamais simulée côté React/JavaScript.
+# Le marqueur LUMIBOOT_DESKTOP_READY n'est émis que lorsque X répond et
+# qu'Openbox tourne (voir /usr/local/bin/lumiboot-desktop-ready).
+
+# Bus D-Bus de session (requis par de nombreux clients X).
+if command -v dbus-launch >/dev/null 2>&1 && [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+  eval "$(dbus-launch --sh-syntax --exit-with-session)"
+fi
+
+# Clavier français au niveau du serveur X.
+setxkbmap fr 2>/dev/null || true
+
+# Fond uni sobre (xsetroot fourni par x11-xserver-utils).
+xsetroot -solid '#101418' 2>/dev/null || true
+
+# Un terminal visible dès l'ouverture de la session.
+xterm -geometry 100x28+40+40 -fa 'DejaVu Sans Mono' -fs 11 -title 'LumiBoot' &
+
+# Gestionnaire de fenêtres : remplace le shell (fin d'Openbox = fin de session).
+exec openbox

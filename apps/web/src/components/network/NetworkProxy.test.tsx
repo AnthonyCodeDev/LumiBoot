@@ -39,15 +39,18 @@ function manifestWith(published: Record<string, string | null>): DownloadsManife
 const PUBLISHED_WIN = manifestWith({ 'windows-x64': 'https://example.com/win.exe' });
 
 function stubHealth(body: unknown): void {
-  vi.stubGlobal(
-    'fetch',
-    (async () =>
-      ({
+  vi.stubGlobal('fetch', (async (input: unknown) => {
+    const url = String(input);
+    // La vérification authentifiée du jeton doit réussir pour un état `connected`.
+    if (url.includes('/api/session/verify')) {
+      return {
         ok: true,
         status: 200,
-        json: async () => body,
-      }) as unknown as Response) as typeof fetch,
-  );
+        json: async () => ({ ok: true, expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+      } as unknown as Response;
+    }
+    return { ok: true, status: 200, json: async () => body } as unknown as Response;
+  }) as typeof fetch);
 }
 
 beforeEach(() => {

@@ -25,7 +25,11 @@ export function SystemGrid() {
   return (
     <div className="cards" id="cards" aria-live="polite">
       {visible.map((system) => (
-        <SystemCard key={system.id} system={system} onOpen={(target) => navigate(`/systems/${target.slug}`)} />
+        <SystemCard
+          key={system.id}
+          system={system}
+          onOpen={(target) => navigate(`/systems/${target.slug}`)}
+        />
       ))}
     </div>
   );
