@@ -12,6 +12,11 @@ name: Network Companion
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à publier (ex. 1.0.0). Vide = build sans publication."
+        required: false
+        type: string
   push:
     tags:
       - network-v*
@@ -173,101 +178,12 @@ jobs:
           path: dist/LumiBoot-Network-macos-universal.tar.gz
           if-no-files-found: error
 
-  release:
-    name: release (préversion non signée)
-    needs: [build, package-macos, smoke]
-    if: startsWith(github.ref, 'refs/tags/network-v')
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - name: Télécharger tous les artefacts
-        uses: actions/download-artifact@v7
-        with:
-          merge-multiple: true
-          path: dist
-      - name: Générer SHA256SUMS
-        run: |
-          cd dist
-          sha256sum LumiBoot-Network-* > SHA256SUMS
-          cat SHA256SUMS
-      - name: Générer manifest.json (tailles et SHA-256 réels)
-        env:
-          TAG: ${{ github.ref_name }}
-          REPO: ${{ github.repository }}
-        run: |
-          python3 - <<'EOF'
-          import datetime
-          import hashlib
-          import json
-          import os
-
-          tag = os.environ["TAG"]
-          repo = os.environ["REPO"]
-          version = tag[len("network-v"):] if tag.startswith("network-v") else tag
-          base = f"https://github.com/{repo}/releases/download/{tag}"
-
-          def entry(fname):
-              path = os.path.join("dist", fname)
-              digest = hashlib.sha256()
-              with open(path, "rb") as fh:
-                  for chunk in iter(lambda: fh.read(65536), b""):
-                      digest.update(chunk)
-              return {
-                  "file": fname,
-                  "url": f"{base}/{fname}",
-                  "size": os.path.getsize(path),
-                  "sha256": digest.hexdigest(),
-                  "published": True,
-              }
-
-          # Cinq clés imposées : `macos` pointe vers le binaire UNIVERSEL
-          # (Intel + Apple Silicon) assemblé par `package-macos` avec
-          # `lipo -create` et empaqueté en `.tar.gz` (V1 : pas de DMG, pas de
-          # .app signée/notarisée). Les archives darwin mono-architecture
-          # restent publiées en assets (checksums dans SHA256SUMS) pour
-          # diagnostic, mais seul l'universel est référencé par le manifeste.
-          platforms = {
-              "windows-x64": entry("LumiBoot-Network-windows-amd64.exe"),
-              "windows-arm64": entry("LumiBoot-Network-windows-arm64.exe"),
-              "linux-x64": entry("LumiBoot-Network-linux-amd64.tar.gz"),
-              "linux-arm64": entry("LumiBoot-Network-linux-arm64.tar.gz"),
-              "macos": {
-                  **entry("LumiBoot-Network-macos-universal.tar.gz"),
-                  "signed": False,
-                  "notarized": False,
-              },
-          }
-
-          manifest = {
-              "version": version,
-              "wispVersion": 1,
-              "generatedAt": datetime.datetime.now(datetime.timezone.utc)
-              .isoformat()
-              .replace("+00:00", "Z"),
-              "platforms": platforms,
-          }
-          with open("dist/manifest.json", "w", encoding="utf-8") as fh:
-              json.dump(manifest, fh, indent=2)
-              fh.write("\n")
-          EOF
-          cat dist/manifest.json
-      - name: Créer la préversion GitHub (non signée)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            dist/LumiBoot-Network-* dist/manifest.json dist/SHA256SUMS \
-            --generate-notes --prerelease --verify-tag
-          gh release edit "$GITHUB_REF_NAME" --add-notes \
-            "⚠️ **Préversion NON SIGNÉE / NON NOTARISÉE.** Les binaires Windows ne sont pas signés (SmartScreen avertira) et les binaires macOS ne sont ni signés ni notarisés (Gatekeeper bloquera l'ouverture : clic droit → Ouvrir, ou \`xattr -d com.apple.quarantine\`). Ne pas considérer cette préversion comme stable : la signature/notarisation (jobs \`sign-windows\` / \`sign-macos\`, via secrets) est requise avant toute publication stable."
-
   sign-windows:
     # Signature Authenticode OPTIONNELLE : ignorée si les secrets sont absents.
     # Ne bloque jamais la publication initiale (aucun `needs` vers ce job).
     name: signature Windows (optionnel)
     needs: [build]
-    if: startsWith(github.ref, 'refs/tags/network-v')
+    if: startsWith(github.ref, 'refs/tags/network-v') && vars.ENABLE_SIGNING == 'true'
     runs-on: windows-latest
     env:
       HAS_WIN_CERT: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' && secrets.WINDOWS_CERT_PASSWORD != '' }}
@@ -317,7 +233,7 @@ jobs:
     # absents. Ne bloque jamais la publication initiale.
     name: signature macOS (optionnel)
     needs: [build]
-    if: startsWith(github.ref, 'refs/tags/network-v')
+    if: startsWith(github.ref, 'refs/tags/network-v') && vars.ENABLE_SIGNING == 'true'
     runs-on: macos-15
     env:
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERT_P12_BASE64 != '' && secrets.APPLE_CERT_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_PASSWORD != '' }}
