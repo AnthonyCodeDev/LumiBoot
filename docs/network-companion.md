@@ -142,28 +142,33 @@ ZIP regroupe **tous les binaires** + `manifest.json` + `SHA256SUMS` **à sa raci
 télécharger et décompresser ce ZIP.
 
 1. **Déclencher** le workflow `.github/workflows/network-companion.yml` :
-   - en poussant un tag `network-vX.Y.Z`
+   - manuellement (onglet **Actions → Network Companion → Run workflow**) : **aucune saisie
+     requise** — la version est calculée automatiquement (voir ci-dessous) ;
+   - ou en poussant un tag `network-vX.Y.Z`
      (`git tag network-vX.Y.Z && git push origin network-vX.Y.Z`) → le job `release` crée la
-     Release pour ce tag ;
-   - ou manuellement (onglet **Actions → Network Companion → Run workflow**) en renseignant
-     l'entrée **`version`** (ex. `1.0.0`) : le tag publié est alors `network-v<version>`. Si
-     `version` est laissée vide, le workflow ne **build que** (sans Release).
-2. Le workflow exécute **test → build (6 cibles) + smoke natif (4 OS) + package macOS
+     Release pour ce tag.
+2. **Versionnement automatique** (job `prepare`, toujours exécuté) : la CI liste les tags
+   `network-v*` existants et, s'il n'y en a **aucun**, publie **`1.0.0`** ; sinon elle
+   **incrémente le patch** du dernier (`1.0.0` → `1.0.1` → `1.0.2` … ; le tri est
+   sémantique via `sort -V`, donc `1.0.9` → `1.0.10`). Le tag créé est `network-v<version>`.
+   L'entrée `version` du *Run workflow* reste une **surcharge optionnelle** : si vous la
+   remplissez, elle prime sur l'auto-incrément.
+3. Le workflow exécute **test → build (6 cibles) + smoke natif (4 OS) + package macOS
    universel (`lipo -create`, job `package-macos`)**, puis le job **`release`**
-   (`needs: [build, package-macos, smoke]`) :
+   (`needs: [prepare, build, package-macos, smoke]`, `if: needs.prepare.outputs.release == 'true'`) :
    - télécharge tous les artefacts dans `dist/` ;
    - calcule `SHA256SUMS` (`sha256sum LumiBoot-Network-*> SHA256SUMS`) et génère
      `manifest.json` (les 5 plateformes, `url` = `/downloads/<fichier>`, `size`/`sha256`
      réels, `published: true`, `macos` en `signed:false` / `notarized:false`) ;
    - produit le ZIP unique `LumiBoot-Network-companion-<version>.zip` ;
    - crée la **Release GitHub** (`gh release create`, notes générées + encart d'utilisation).
-3. **Récupération en un clic** : ouvrir la page **Releases** du dépôt et télécharger
+4. **Récupération en un clic** : ouvrir la page **Releases** du dépôt et télécharger
    `LumiBoot-Network-companion-<version>.zip`.
-4. **Décompression** : extraire le contenu de ce ZIP **dans
+5. **Décompression** : extraire le contenu de ce ZIP **dans
    `apps/web/public/downloads/`** (les binaires + `manifest.json` + `SHA256SUMS` se
    retrouvent à la racine de ce dossier). Aucune édition manuelle du manifeste n'est requise,
    puisqu'il est déjà généré avec les bonnes `url` `/downloads/...`.
-5. **Signature optionnelle** (jobs `sign-windows` / `sign-macos`) : désactivée par défaut.
+6. **Signature optionnelle** (jobs `sign-windows` / `sign-macos`) : désactivée par défaut.
    Elle ne s'exécute que si la **variable** de dépôt `ENABLE_SIGNING` vaut `true` (et sur un
    tag `network-v*`), puis requiert les secrets correspondants
    (`WINDOWS_CERT_PFX_BASE64` + `WINDOWS_CERT_PASSWORD`, ou `APPLE_CERT_P12_BASE64` +

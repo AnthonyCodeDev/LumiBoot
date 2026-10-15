@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version à publier (ex. 1.0.0). Vide = build sans release."
+        description: "Version forcée (optionnel). Laisser vide = auto-incrément."
         required: false
         type: string
   push:
@@ -55,9 +55,51 @@ jobs:
             exit 1
           fi
 
+  prepare:
+    name: version (auto-incrément)
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+      tag: ${{ steps.compute.outputs.tag }}
+      release: ${{ steps.compute.outputs.release }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: compute
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          RELEASE="false"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RELEASE="true"
+            if [ -n "$INPUT_VERSION" ]; then
+              VERSION="$INPUT_VERSION"
+            else
+              LATEST="$(git tag -l 'network-v*' | sed 's/^network-v//' | sort -V | tail -n1)"
+              if [ -z "$LATEST" ]; then
+                VERSION="1.0.0"
+              else
+                IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST"
+                PATCH=$((PATCH + 1))
+                VERSION="${MAJOR}.${MINOR}.${PATCH}"
+              fi
+            fi
+          elif [[ "${{ github.ref }}" == refs/tags/network-v* ]]; then
+            RELEASE="true"
+            VERSION="${GITHUB_REF_NAME#network-v}"
+          else
+            VERSION="0.0.0-dev"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=network-v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+          echo "Version calculée : $VERSION (release=$RELEASE)"
+
   build:
     name: build (${{ matrix.goos }}/${{ matrix.goarch }})
-    needs: test
+    needs: [test, prepare]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -84,14 +126,10 @@ jobs:
           CGO_ENABLED: 0
         run: |
           mkdir -p dist
-          case "$GITHUB_REF" in
-            refs/tags/network-v*) VERSION="${GITHUB_REF_NAME#network-v}" ;;
-            *) VERSION="0.0.0-dev" ;;
-          esac
           BIN="lumiboot-network"
           if [ "$GOOS" = "windows" ]; then BIN="$BIN.exe"; fi
           go build -trimpath \
-            -ldflags="-s -w -X github.com/lumiboot/network-companion/internal/server.Version=${VERSION}" \
+            -ldflags="-s -w -X github.com/lumiboot/network-companion/internal/server.Version=${{ needs.prepare.outputs.version }}" \
             -o "dist/$BIN" ./cmd/lumiboot-network
           if [ "$GOOS" = "windows" ]; then
             mv "dist/$BIN" "dist/LumiBoot-Network-$GOOS-$GOARCH.exe"
@@ -179,16 +217,18 @@ jobs:
           if-no-files-found: error
 
   release:
-    # Publication automatique : à chaque tag `network-v*` (ou workflow_dispatch
-    # avec `version` non vide), la CI crée une Release GitHub DANS CE REPO
+    # Publication automatique : à chaque tag `network-v*` ou à chaque
+    # `workflow_dispatch` (version forcée optionnelle ; vide = auto-incrément du
+    # dernier tag `network-v*`, ou 1.0.0 s'il n'y en a aucun), la CI crée une
+    # Release GitHub DANS CE REPO
     # (private) contenant UN SEUL ZIP : tous les binaires + `manifest.json` +
     # `SHA256SUMS`. Le ZIP est prêt à être décompressé dans
     # `apps/web/public/downloads/` (le manifeste pointe vers `/downloads/...`).
     # `actions/checkout` est INDISPENSABLE : sans lui, `gh release create` échoue
     # avec « fatal: not a git repository ».
     name: release (zip complet)
-    needs: [build, package-macos, smoke]
-    if: startsWith(github.ref, 'refs/tags/network-v') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
+    needs: [prepare, build, package-macos, smoke]
+    if: needs.prepare.outputs.release == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -202,26 +242,14 @@ jobs:
         with:
           merge-multiple: true
           path: dist
-      - name: Déterminer TAG et VERSION
-        env:
-          INPUT_VERSION: ${{ inputs.version }}
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="network-v${INPUT_VERSION}"
-            VERSION="${INPUT_VERSION}"
-          else
-            TAG="$GITHUB_REF_NAME"
-            VERSION="${GITHUB_REF_NAME#network-v}"
-          fi
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "TAG=$TAG VERSION=$VERSION"
       - name: Générer SHA256SUMS
         run: |
           cd dist
           sha256sum LumiBoot-Network-* > SHA256SUMS
           cat SHA256SUMS
       - name: Générer manifest.json
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           python3 - <<'PY'
           import hashlib
@@ -267,6 +295,8 @@ jobs:
               handle.write("\n")
           PY
       - name: Créer le ZIP complet
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           cd dist
           zip -r "../LumiBoot-Network-companion-${VERSION}.zip" .
@@ -275,6 +305,8 @@ jobs:
       - name: Créer la Release GitHub
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           gh release create "$TAG" "LumiBoot-Network-companion-${VERSION}.zip" \
             --title "LumiBoot Network Companion ${VERSION}" \
