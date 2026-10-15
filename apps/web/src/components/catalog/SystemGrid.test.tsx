@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { systems } from '@lumiboot/catalog';
+import { getSystemById, systems } from '@lumiboot/catalog';
 import { SystemGrid } from './SystemGrid';
 import { useCatalogStore } from '../../features/catalog/catalog.store';
 
@@ -58,12 +58,14 @@ describe('SystemGrid', () => {
     const cards = screen.getAllByRole('article');
     expect(cards).toHaveLength(9);
     for (const card of cards) {
-      // Seul le profil console Debian 12 i386 a prouvé un vrai boot (Lot 2) :
-      // badge « Disponible ». La variante Bureau reste « En préparation ».
-      const isReadyConsole = card.getAttribute('data-id') === 'debian-12-i386';
-      const expected = isReadyConsole ? 'Disponible' : 'En préparation';
+      // On ne recode pas la disponibilité en dur : on la lit dans le catalogue.
+      const id = card.getAttribute('data-id');
+      const system = id ? getSystemById(id) : null;
+      expect(system).not.toBeNull();
+      const availability = system!.availability;
+      const expected = availability === 'ready' ? 'Disponible' : 'En préparation';
       const badge = within(card).getByText(expected);
-      expect(badge.getAttribute('data-state')).toBe(isReadyConsole ? 'ready' : 'planned');
+      expect(badge.getAttribute('data-state')).toBe(availability);
       expect(badge.className).toContain('card-status');
     }
   });

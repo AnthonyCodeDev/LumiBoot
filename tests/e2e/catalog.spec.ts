@@ -10,7 +10,10 @@ test.describe('Bibliothèque', () => {
   test('recherche un système et filtre par famille', async ({ page }) => {
     await page.goto('/');
     await page.getByLabel('Rechercher un système').fill('debian');
-    await expect(page.locator('.os-card')).toHaveCount(1);
+    // « debian » correspond à la console ET à la variante Bureau.
+    await expect(page.locator('.os-card')).toHaveCount(2);
+    await expect(page.locator('.os-card[data-id="debian-12-i386"]')).toHaveCount(1);
+    await expect(page.locator('.os-card[data-id="debian-12-i386-desktop"]')).toHaveCount(1);
 
     await page.getByLabel('Rechercher un système').fill('');
     await page.getByRole('button', { name: 'Windows' }).click();
