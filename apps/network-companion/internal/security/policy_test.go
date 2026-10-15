@@ -42,9 +42,9 @@ func TestForbiddenRanges(t *testing.T) {
 		"169.254.10.20", "fe80::1", // link-local
 		"0.0.0.0", "::", // non spécifiées
 		"224.0.0.1", "ff02::1", // multicast
-		"255.255.255.255",       // broadcast
-		"240.0.0.1",             // réservée
-		"0.5.0.1",               // 0.0.0.0/8
+		"255.255.255.255",                                                      // broadcast
+		"240.0.0.1",                                                            // réservée
+		"0.5.0.1",                                                              // 0.0.0.0/8
 		"169.254.169.254", "100.100.100.200", "169.254.170.2", "fd00:ec2::254", // métadonnées
 	}
 	for _, ip := range forbidden {

@@ -22,8 +22,8 @@ func TestOriginMatching(t *testing.T) {
 	a := testAuth(&now)
 	allowed := []string{
 		"http://localhost:5200",
-		"http://localhost:5200/",            // slash final toléré
-		"HTTP://LOCALHOST:5200/some/path",   // casse + chemin tolérés
+		"http://localhost:5200/",          // slash final toléré
+		"HTTP://LOCALHOST:5200/some/path", // casse + chemin tolérés
 		"https://lumiboot.app",
 	}
 	for _, o := range allowed {

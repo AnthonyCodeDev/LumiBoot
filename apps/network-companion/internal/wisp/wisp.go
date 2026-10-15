@@ -40,11 +40,11 @@ const (
 
 // Raisons de fermeture envoyées par le serveur.
 const (
-	CloseInvalidInfo      byte = 0x41 // demande invalide
-	CloseHostUnreachable  byte = 0x42 // hôte injoignable
-	CloseConnectTimeout   byte = 0x43 // timeout de connexion
-	CloseConnectRefused   byte = 0x44 // connexion refusée
-	CloseTransferTimeout  byte = 0x47 // timeout de transfert
+	CloseInvalidInfo        byte = 0x41 // demande invalide
+	CloseHostUnreachable    byte = 0x42 // hôte injoignable
+	CloseConnectTimeout     byte = 0x43 // timeout de connexion
+	CloseConnectRefused     byte = 0x44 // connexion refusée
+	CloseTransferTimeout    byte = 0x47 // timeout de transfert
 	CloseDestinationBlocked byte = 0x48 // destination bloquée par la politique
 	CloseThrottled          byte = 0x49 // limite de connexions atteinte
 )

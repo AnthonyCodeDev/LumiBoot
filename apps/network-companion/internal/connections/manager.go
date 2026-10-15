@@ -39,12 +39,12 @@ type entry struct {
 // Manager suit les flux actifs. Zéro valeur inutilisable : passer par NewManager.
 // Thread-safe.
 type Manager struct {
-	mu             sync.Mutex
-	maxTotal       int
-	maxPerSession  int
-	streams        map[string]map[uint32]*entry
-	total          int
-	limiter        *tokenBucket
+	mu            sync.Mutex
+	maxTotal      int
+	maxPerSession int
+	streams       map[string]map[uint32]*entry
+	total         int
+	limiter       *tokenBucket
 }
 
 // NewManager construit un gestionnaire.

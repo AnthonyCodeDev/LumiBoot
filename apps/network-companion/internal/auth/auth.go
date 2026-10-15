@@ -73,14 +73,14 @@ type session struct {
 // Authenticator gère origines, appairages et sessions. Thread-safe.
 // Le zéro valeur est inutilisable : passer par NewAuthenticator.
 type Authenticator struct {
-	mu          sync.Mutex
-	allowed     map[string]struct{}
-	pairings    map[string]*Pairing
-	sessions    map[string]*session
-	pairingTTL  time.Duration
-	sessionTTL  time.Duration
-	randSource  io.Reader
-	now         func() time.Time
+	mu         sync.Mutex
+	allowed    map[string]struct{}
+	pairings   map[string]*Pairing
+	sessions   map[string]*session
+	pairingTTL time.Duration
+	sessionTTL time.Duration
+	randSource io.Reader
+	now        func() time.Time
 }
 
 // NewAuthenticator construit un authentificateur.

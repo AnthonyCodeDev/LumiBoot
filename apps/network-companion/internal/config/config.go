@@ -89,20 +89,20 @@ func DefaultOrigins() []string {
 // Default renvoie la configuration par défaut (sécurisée).
 func Default() Config {
 	return Config{
-		ListenAddr:                  "127.0.0.1:37892",
-		AllowedOrigins:              DefaultOrigins(),
-		MaxConnections:              64,
-		MaxConnectionsPerSession:    16,
-		ConnectTimeout:              Duration(10 * time.Second),
-		IdleTimeout:                 Duration(60 * time.Second),
-		DataTimeout:                 Duration(30 * time.Second),
-		InitialBufferPackets:        32,
-		MaxDataChunk:                128 * 1024,
-		AllowPrivateNetworks:        false,
-		AllowNonLoopback:            false,
+		ListenAddr:                   "127.0.0.1:37892",
+		AllowedOrigins:               DefaultOrigins(),
+		MaxConnections:               64,
+		MaxConnectionsPerSession:     16,
+		ConnectTimeout:               Duration(10 * time.Second),
+		IdleTimeout:                  Duration(60 * time.Second),
+		DataTimeout:                  Duration(30 * time.Second),
+		InitialBufferPackets:         32,
+		MaxDataChunk:                 128 * 1024,
+		AllowPrivateNetworks:         false,
+		AllowNonLoopback:             false,
 		BandwidthLimitBytesPerSecond: 0, // 0 = illimité
-		PairingTTL:                  Duration(10 * time.Minute),
-		SessionTokenTTL:             Duration(24 * time.Hour),
+		PairingTTL:                   Duration(10 * time.Minute),
+		SessionTokenTTL:              Duration(24 * time.Hour),
 	}
 }
 
