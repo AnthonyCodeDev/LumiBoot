@@ -1,5 +1,5 @@
-import { DEFAULT_COMPANION_URL, type NetworkProfile } from '@lumiboot/vm-network';
-import type { CompanionConfig, LumibootConfig } from './schema';
+import { DEFAULT_PROXY_URL, type NetworkProfile } from '@lumiboot/vm-network';
+import type { ProxyConfig, LumibootConfig } from './schema';
 
 let runtimeConfig: LumibootConfig | null = null;
 
@@ -29,20 +29,20 @@ export function getRuntimeConfig(): LumibootConfig {
   return runtimeConfig;
 }
 
-/** Configuration compagnon par défaut (hors runtime chargé). */
-export const DEFAULT_RUNTIME_COMPANION: CompanionConfig = Object.freeze({
+/** Configuration proxy réseau local par défaut (hors runtime chargé). */
+export const DEFAULT_RUNTIME_PROXY: ProxyConfig = Object.freeze({
   enabled: true,
-  url: DEFAULT_COMPANION_URL,
+  url: DEFAULT_PROXY_URL,
 });
 
 /**
- * Configuration compagnon : celle du runtime si chargée, sinon les défauts
- * (compagnon activé, URL loopback par défaut). Ne lève jamais : le panneau
- * compagnon doit rester affichable même sans configuration chargée.
+ * Configuration proxy réseau local : celle du runtime si chargée, sinon les défauts
+ * (proxy réseau local activé, URL loopback par défaut). Ne lève jamais : le panneau
+ * proxy réseau local doit rester affichable même sans configuration chargée.
  */
-export function resolveCompanionConfig(): CompanionConfig {
-  if (runtimeConfig === null) return { ...DEFAULT_RUNTIME_COMPANION };
-  return runtimeConfig.companion;
+export function resolveProxyConfig(): ProxyConfig {
+  if (runtimeConfig === null) return { ...DEFAULT_RUNTIME_PROXY };
+  return runtimeConfig.proxy;
 }
 
 /**

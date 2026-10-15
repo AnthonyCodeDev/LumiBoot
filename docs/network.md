@@ -74,7 +74,7 @@ d'un mode sont dérivées par `capabilitiesForMode(mode)` (`capabilities.ts`).
 |---|---|---|---|
 | `offline` | **implémenté** | La machine invitée est totalement isolée ; aucune NIC n'est fournie. | Aucun accès réseau (`fullInternet = false`). |
 | `browser-fetch` | **implémenté** | Réseau émulé au-dessus du backend `fetch` natif de v86. | De fait **HTTP (port 80) uniquement** ; **HTTPS (443) ne fonctionne pas** avec v86 0.5.471. **CORS s'applique**. Pas d'accès brut. **Internet complet NON garanti**. |
-| `local-companion` | **implémenté** | Réseau émulé via le **LumiBoot Network Companion** installé localement : relais **WISP local** sur loopback (`ws://127.0.0.1:37892/wisp/`). | Relais **local** (pas d'IP de sortie distante) mais **appairage explicite requis** ; UDP **non supporté par le client v86 actuel**, ICMP non garanti. **Internet complet NON garanti** (`fullInternet = false` par défaut, preuve par sonde). Voir [Companion réseau local](#compagnon-réseau-local). |
+| `local-proxy` | **implémenté** | Réseau émulé via le **LumiBoot Network Proxy** installé localement : relais **WISP local** sur loopback (`ws://127.0.0.1:37892/wisp/`). | Relais **local** (pas d'IP de sortie distante) mais **appairage explicite requis** ; UDP **non supporté par le client v86 actuel**, ICMP non garanti. **Internet complet NON garanti** (`fullInternet = false` par défaut, preuve par sonde). Voir [Proxy réseau local](#proxy-réseau-local). |
 | `user-relay` | **implémenté** | Réseau émulé via un relais **WISP personnel** en `wss://` fourni et administré par l'utilisateur. | Ne **garantit rien** seul : dépend d'un **vrai serveur WISP** ; UDP optionnel ; ICMP non garanti. Relais **fourni par l'utilisateur**. **Aucun relais public par défaut**. |
 | `local-network` | **prévu** (non implémenté) | **Réseau virtuel entre invités** (segment local partagé), **pas** le LAN physique de l'hôte. | **Non implémenté** : le switch virtuel est absent. Le mode est **refusé au démarrage** (`NETWORK_UNSUPPORTED_MODE`). **Ne pas l'activer artificiellement**. |
 
@@ -88,7 +88,7 @@ Le tableau ci-dessous décrit ce que le package **déclare** (niveau *techniquem
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `offline` | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | `none` | ✗ | ✗ | ✗ | ✗ |
 | `browser-fetch` | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | `fetch` | ✓ | ✓ | ✓ | ✗ |
-| `local-companion` | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | `wisp` | ✓ | ✓ | ✗ | ✗ |
+| `local-proxy` | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | `wisp` | ✓ | ✓ | ✗ | ✗ |
 | `user-relay` | ✓ | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | `wisp` | ✓ | ✓ | ✗ | ✗ |
 | `local-network` (prévu) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | `none` | ✗ | ✗ | ✗ | ✗ |
 
@@ -101,13 +101,13 @@ Le tableau ci-dessous décrit ce que le package **déclare** (niveau *techniquem
 Ce tableau décrit ce qui est **réellement opérationnel** avec le moteur actuel. C'est le niveau
 *techniquement supporté mis à l'épreuve du réel*.
 
-| Cible | `offline` | `browser-fetch` | `local-companion` (compagnon local) | `user-relay` (relais WISP valide) |
+| Cible | `offline` | `browser-fetch` | `local-proxy` (proxy réseau local) | `user-relay` (relais WISP valide) |
 |---|---|---|---|---|
 | DHCP / DNS invité | ✗ | ✓ | ✓ | ✓ |
 | HTTP (port 80) | ✗ | ✓ (si CORS autorise l'origine) | ✓ | ✓ |
 | HTTPS (port 443) | ✗ | **✗** | ✓ | ✓ |
 | TCP arbitraire | ✗ | ✗ | ✓ | ✓ |
-| UDP | ✗ | ✗ | **✗** (client v86 actuel ; refusé proprement par le compagnon) | **optionnel** (dépend du relais) |
+| UDP | ✗ | ✗ | **✗** (client v86 actuel ; refusé proprement par le proxy réseau local) | **optionnel** (dépend du relais) |
 | ICMP (`ping`) | ✗ | ✗ | **non garanti** | **non garanti** |
 | Internet complet garanti | ✗ | ✗ | **✗** | **✗** |
 
@@ -129,11 +129,11 @@ Ce tableau décrit ce qui est **réellement opérationnel** avec le moteur actue
   **WebSocket ordinaire n'est pas** forcément un serveur WISP : seul un **vrai relais WISP compatible
   v86** transporte le TCP (dont 443). Le relais est **personnel** — LumiBoot n'en fournit et n'en
   active aucun. Le relais devient l'**IP de sortie** vers Internet (voir [Sécurité](#sécurité)).
-- **`local-companion`** : même transport WISP que `user-relay`, mais le relais est le **compagnon
+- **`local-proxy`** : même transport WISP que `user-relay`, mais le relais est le **proxy réseau local
   local** (`ws://127.0.0.1:37892/wisp/`, loopback, appairage explicite approuvé par l'utilisateur).
   Le trafic TCP sort par **la propre connexion de l'utilisateur** (aucune IP de sortie distante),
   sans contrainte CORS navigateur. `fullInternet` reste `false` par défaut (preuve par sonde).
-  Voir [Companion réseau local](#compagnon-réseau-local).
+  Voir [Proxy réseau local](#proxy-réseau-local).
 - **`local-network`** : désigne un **réseau virtuel entre invités** d'un même navigateur, **et non**
   le LAN physique de l'hôte. Le mode est déclaré (`requiresRestart: true`,
   `requiresConfiguration: true`) mais rien n'est branché ; le switch virtuel est absent.
@@ -216,16 +216,16 @@ Pour dépasser les limites de `browser-fetch` (HTTP seul, CORS), il faut un **re
 - Le relais est l'**IP de sortie** vers Internet : tout le trafic de l'invité sort par lui. La
   confidentialité et la confiance dépendent donc **entièrement** de l'opérateur du relais.
 
-## Compagnon réseau local
+## Proxy réseau local
 
-Alternative au relais distant : le **LumiBoot Network Companion** (`apps/network-companion/`,
+Alternative au relais distant : le **LumiBoot Network Proxy** (`apps/network-proxy/`,
 binaire Go natif Windows/macOS/Linux) expose un **serveur WISP V1 sur loopback**
-(`127.0.0.1:37892`). En mode `local-companion`, l'invité s'y relie après **appairage
+(`127.0.0.1:37892`). En mode `local-proxy`, l'invité s'y relie après **appairage
 explicite** approuvé par l'utilisateur (Origin vérifiée + token de session en query, car
 v86 0.5.471 n'envoie ni sous-protocole ni en-tête). Destinations sensibles bloquées après
 résolution DNS, quotas et révocation : le modèle complet est décrit dans
-[`network-companion.md`](network-companion.md), décision
-[`adr/0007-network-companion.md`](adr/0007-network-companion.md). `fullInternet` reste
+[`network-proxy.md`](network-proxy.md), décision
+[`adr/0007-network-proxy.md`](adr/0007-network-proxy.md). `fullInternet` reste
 `false` par défaut : la connectivité se prouve par sonde depuis l'invité, comme pour
 `user-relay`.
 

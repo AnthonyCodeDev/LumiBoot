@@ -885,8 +885,8 @@
   color: var(--text);
 }
 
-/* Network companion */
-.companion-card {
+/* Network proxy */
+.proxy-card {
   margin-top: 24px;
   padding: 22px;
   border: 1px solid var(--line);
@@ -894,36 +894,36 @@
   background: var(--surface);
   box-shadow: var(--shadow-xs);
 }
-.companion-card h2 {
+.proxy-card h2 {
   margin: 0 0 8px;
   font-size: 17px;
   font-weight: 650;
   letter-spacing: -0.02em;
 }
-.companion-description {
+.proxy-description {
   margin: 0 0 16px;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.7;
 }
-.companion-download {
+.proxy-download {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-bottom: 14px;
 }
-.companion-download-primary {
+.proxy-download-primary {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.companion-hint {
+.proxy-hint {
   margin: 0;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.7;
 }
-.companion-warning {
+.proxy-warning {
   margin: 0;
   padding: 10px 12px;
   border: 1px solid #5d4a2b;
@@ -933,7 +933,7 @@
   font-size: 12px;
   line-height: 1.7;
 }
-.companion-others-toggle {
+.proxy-others-toggle {
   align-self: flex-start;
   padding: 0;
   border: 0;
@@ -944,10 +944,10 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.companion-others-toggle:hover {
+.proxy-others-toggle:hover {
   color: var(--text);
 }
-.companion-targets {
+.proxy-targets {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -955,19 +955,19 @@
   flex-direction: column;
   gap: 6px;
 }
-.companion-targets a {
+.proxy-targets a {
   color: var(--primary);
   font-size: 12px;
   font-weight: 550;
 }
-.companion-targets a:hover {
+.proxy-targets a:hover {
   text-decoration: underline;
 }
-.companion-targets span[aria-disabled='true'] {
+.proxy-targets span[aria-disabled='true'] {
   color: var(--text-disabled);
   font-size: 12px;
 }
-.companion-status {
+.proxy-status {
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -976,31 +976,31 @@
   border-radius: var(--radius-md);
   background: var(--surface-muted);
 }
-.companion-status-body {
+.proxy-status-body {
   flex: 1;
   min-width: 0;
 }
-.companion-status-body strong {
+.proxy-status-body strong {
   font-size: 13px;
 }
-.companion-status-body p {
+.proxy-status-body p {
   margin: 6px 0 0;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.7;
 }
-.companion-status-body code {
+.proxy-status-body code {
   padding: 2px 6px;
   border-radius: 4px;
   background: var(--bg-subtle);
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
-.companion-status-actions {
+.proxy-status-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
-.companion-status-dot {
+.proxy-status-dot {
   width: 9px;
   height: 9px;
   flex: 0 0 auto;
@@ -1008,16 +1008,16 @@
   border-radius: 999px;
   background: var(--text-disabled);
 }
-.companion-status[data-tone='ok'] .companion-status-dot {
+.proxy-status[data-tone='ok'] .proxy-status-dot {
   background: var(--success);
 }
-.companion-status[data-tone='warn'] .companion-status-dot {
+.proxy-status[data-tone='warn'] .proxy-status-dot {
   background: var(--warning);
 }
-.companion-status[data-tone='bad'] .companion-status-dot {
+.proxy-status[data-tone='bad'] .proxy-status-dot {
   background: var(--danger);
 }
-.companion-steps {
+.proxy-steps {
   margin: 14px 0 0;
   padding-left: 20px;
   color: var(--text-secondary);

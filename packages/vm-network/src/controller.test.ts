@@ -40,8 +40,8 @@ describe('createNetworkController', () => {
     expect(diagnostics.verified).toBe(false);
   });
 
-  it('local-companion : start configure le transport avec companionUrl par défaut', async () => {
-    const controller = createNetworkController({ profile: { mode: 'local-companion' } });
+  it('local-proxy : start configure le transport avec proxyUrl par défaut', async () => {
+    const controller = createNetworkController({ profile: { mode: 'local-proxy' } });
     await controller.start();
     const diagnostics = controller.snapshot();
     expect(diagnostics.status).toBe('configured');
@@ -49,15 +49,15 @@ describe('createNetworkController', () => {
     expect(diagnostics.verified).toBe(false);
   });
 
-  it('local-companion : companionUrl invalide rejette NETWORK_INVALID_COMPANION_URL', async () => {
+  it('local-proxy : proxyUrl invalide rejette NETWORK_INVALID_PROXY_URL', async () => {
     const controller = createNetworkController({
-      profile: { mode: 'local-companion', companionUrl: 'https://relay.example' },
+      profile: { mode: 'local-proxy', proxyUrl: 'https://relay.example' },
     });
     await expect(controller.start()).rejects.toMatchObject({
-      code: 'NETWORK_INVALID_COMPANION_URL',
+      code: 'NETWORK_INVALID_PROXY_URL',
     });
     expect(controller.snapshot().status).toBe('error');
-    expect(controller.snapshot().lastError?.code).toBe('NETWORK_INVALID_COMPANION_URL');
+    expect(controller.snapshot().lastError?.code).toBe('NETWORK_INVALID_PROXY_URL');
   });
 
   it('local-network : start rejette NETWORK_UNSUPPORTED_MODE', async () => {

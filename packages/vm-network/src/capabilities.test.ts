@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BROWSER_FETCH_CAPABILITIES,
-  LOCAL_COMPANION_CAPABILITIES,
+  LOCAL_PROXY_CAPABILITIES,
   LOCAL_NETWORK_CAPABILITIES,
   OFFLINE_CAPABILITIES,
   USER_RELAY_CAPABILITIES,
@@ -44,14 +44,14 @@ describe('capabilitiesForMode', () => {
     expect(USER_RELAY_CAPABILITIES.fullInternet).toBe(false);
   });
 
-  it('local-companion : wisp local (https true, cors false) sans promesse de fullInternet, udp false', () => {
-    expect(LOCAL_COMPANION_CAPABILITIES.transport.kind).toBe('wisp');
-    expect(LOCAL_COMPANION_CAPABILITIES.transport.http).toBe(true);
-    expect(LOCAL_COMPANION_CAPABILITIES.transport.https).toBe(true);
-    expect(LOCAL_COMPANION_CAPABILITIES.transport.cors).toBe(false);
-    expect(LOCAL_COMPANION_CAPABILITIES.guestStack.udp).toBe(false);
-    expect(LOCAL_COMPANION_CAPABILITIES.fullInternet).toBe(false);
-    expect(capabilitiesForMode('local-companion')).toBe(LOCAL_COMPANION_CAPABILITIES);
+  it('local-proxy : wisp local (https true, cors false) sans promesse de fullInternet, udp false', () => {
+    expect(LOCAL_PROXY_CAPABILITIES.transport.kind).toBe('wisp');
+    expect(LOCAL_PROXY_CAPABILITIES.transport.http).toBe(true);
+    expect(LOCAL_PROXY_CAPABILITIES.transport.https).toBe(true);
+    expect(LOCAL_PROXY_CAPABILITIES.transport.cors).toBe(false);
+    expect(LOCAL_PROXY_CAPABILITIES.guestStack.udp).toBe(false);
+    expect(LOCAL_PROXY_CAPABILITIES.fullInternet).toBe(false);
+    expect(capabilitiesForMode('local-proxy')).toBe(LOCAL_PROXY_CAPABILITIES);
   });
 
   it('local-network : indisponible tant que non implémenté', () => {
@@ -78,7 +78,7 @@ describe('capabilitiesForMode', () => {
     expect(capabilitiesForMode('offline')).toBe(OFFLINE_CAPABILITIES);
     expect(capabilitiesForMode('browser-fetch')).toBe(BROWSER_FETCH_CAPABILITIES);
     expect(capabilitiesForMode('user-relay')).toBe(USER_RELAY_CAPABILITIES);
-    expect(capabilitiesForMode('local-companion')).toBe(LOCAL_COMPANION_CAPABILITIES);
+    expect(capabilitiesForMode('local-proxy')).toBe(LOCAL_PROXY_CAPABILITIES);
     expect(capabilitiesForMode('local-network')).toBe(LOCAL_NETWORK_CAPABILITIES);
   });
 

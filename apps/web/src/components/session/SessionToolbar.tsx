@@ -55,7 +55,7 @@ export function SessionToolbar({
       ? `${STATE_LABELS[session.state]} · ${progressPercent} %`
       : STATE_LABELS[session.state];
   // Mode réseau **effectivement utilisé au démarrage** de la session (mémorisé
-  // par le store au `boot`, ex. `local-companion` par sélection automatique),
+  // par le store au `boot`, ex. `local-proxy` par sélection automatique),
   // et non le mode configuré. Repli sur le mode configuré si la session n'est
   // pas encore enregistrée, puis silencieux hors runtime chargé (tests
   // unitaires) : aucun crash.

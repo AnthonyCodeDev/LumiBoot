@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PlatformKey } from '../lib/platform';
-import { resolveCompanionConfig } from './runtime';
+import { resolveProxyConfig } from './runtime';
 import type { FetchLike } from './load-config';
 
 /** Emplacement public par défaut du manifeste de téléchargement. */
@@ -44,16 +44,16 @@ export class DownloadsManifestError extends Error {
 }
 
 /**
- * Charge le manifeste de téléchargement du compagnon.
+ * Charge le manifeste de téléchargement du proxy réseau local.
  *
- * Source : `companion.downloadManifestUrl` (config) si défini, sinon
+ * Source : `proxy.downloadManifestUrl` (config) si défini, sinon
  * `/downloads/manifest.json`. Aucune URL de téléchargement n'est construite
  * en dur ailleurs : tout passe par ce manifeste.
  */
 export async function loadDownloadsManifest(
   fetchImpl: FetchLike = fetch,
 ): Promise<DownloadsManifest> {
-  const url = resolveCompanionConfig().downloadManifestUrl ?? DOWNLOADS_MANIFEST_URL;
+  const url = resolveProxyConfig().downloadManifestUrl ?? DOWNLOADS_MANIFEST_URL;
   let response: Response;
   try {
     response = await fetchImpl(url, { cache: 'no-store' });

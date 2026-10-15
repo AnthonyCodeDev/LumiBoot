@@ -10,7 +10,7 @@ import type {
 } from './diagnostics';
 import type { NetworkMode } from './modes';
 import type { NetworkProfile } from './profile';
-import { DEFAULT_COMPANION_URL, validateCompanionUrl } from './companion';
+import { DEFAULT_PROXY_URL, validateProxyUrl } from './proxy';
 import { validateRelayUrl } from './relay';
 
 const MAX_COUNTER = Number.MAX_SAFE_INTEGER;
@@ -52,7 +52,7 @@ function transportForMode(mode: NetworkMode): NetworkTransportKind {
   switch (mode) {
     case 'browser-fetch':
       return 'fetch';
-    case 'local-companion':
+    case 'local-proxy':
     case 'user-relay':
       return 'wisp';
     case 'offline':
@@ -79,12 +79,12 @@ class DefaultNetworkController implements NetworkController {
     this.#profile = Object.freeze({
       mode: options.profile.mode,
       ...(options.profile.relayUrl === undefined ? {} : { relayUrl: options.profile.relayUrl }),
-      ...(options.profile.companionUrl === undefined
+      ...(options.profile.proxyUrl === undefined
         ? {}
-        : { companionUrl: options.profile.companionUrl }),
-      ...(options.profile.companionToken === undefined
+        : { proxyUrl: options.profile.proxyUrl }),
+      ...(options.profile.proxyToken === undefined
         ? {}
-        : { companionToken: options.profile.companionToken }),
+        : { proxyToken: options.profile.proxyToken }),
     });
     this.#capabilities = capabilitiesForMode(options.profile.mode);
     this.#now = options.now ?? (() => Date.now());
@@ -126,7 +126,7 @@ class DefaultNetworkController implements NetworkController {
   /**
    * Accepte la configuration et, au mieux, **configure** le transport.
    *
-   * Un mode à transport (browser-fetch, user-relay, local-companion) aboutit à `configured` :
+   * Un mode à transport (browser-fetch, user-relay, local-proxy) aboutit à `configured` :
    * le profil est accepté mais **rien ne prouve que la connexion est établie**.
    * Seul le provider peut faire évoluer l'état vers `connected`/`online` via
    * `setStatus`, une fois le transport réellement opérationnel.
@@ -157,14 +157,14 @@ class DefaultNetworkController implements NetworkController {
         this.setStatus('configured');
         return;
       }
-      case 'local-companion': {
-        const validation = validateCompanionUrl(
-          this.#profile.companionUrl ?? DEFAULT_COMPANION_URL,
+      case 'local-proxy': {
+        const validation = validateProxyUrl(
+          this.#profile.proxyUrl ?? DEFAULT_PROXY_URL,
         );
         if (!validation.ok || validation.url === undefined) {
-          const message = validation.error ?? 'Adresse du compagnon invalide.';
-          this.#fail('NETWORK_INVALID_COMPANION_URL', message);
-          throw new NetworkError('NETWORK_INVALID_COMPANION_URL', message);
+          const message = validation.error ?? 'Adresse du proxy réseau local invalide.';
+          this.#fail('NETWORK_INVALID_PROXY_URL', message);
+          throw new NetworkError('NETWORK_INVALID_PROXY_URL', message);
         }
         this.setStatus('configured');
         return;

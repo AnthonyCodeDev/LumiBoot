@@ -15,7 +15,7 @@ export const networkConfigSchema = z
   })
   .strict();
 
-export const companionFileSchema = z
+export const proxyFileSchema = z
   .object({
     enabled: z.boolean().optional(),
     url: z.string().min(1).optional(),
@@ -27,14 +27,14 @@ export const lumibootConfigSchema = z
   .object({
     version: z.literal(1),
     network: networkConfigSchema,
-    companion: companionFileSchema.optional(),
+    proxy: proxyFileSchema.optional(),
   })
   .strict();
 
 /** Sortie brute du schéma (avant nettoyage / normalisation). */
 export type ParsedLumibootConfig = z.infer<typeof lumibootConfigSchema>;
 export type ParsedNetworkConfig = z.infer<typeof networkConfigSchema>;
-export type ParsedCompanionFileConfig = z.infer<typeof companionFileSchema>;
+export type ParsedProxyFileConfig = z.infer<typeof proxyFileSchema>;
 
 /** Configuration réseau normalisée (profils nettoyés, relayUrl cohérent). */
 export interface NetworkConfig {
@@ -42,8 +42,8 @@ export interface NetworkConfig {
   systems?: Record<string, NetworkProfile>;
 }
 
-/** Configuration compagnon normalisée (valeurs par défaut appliquées). */
-export interface CompanionConfig {
+/** Configuration proxy réseau local normalisée (valeurs par défaut appliquées). */
+export interface ProxyConfig {
   enabled: boolean;
   url: string;
   downloadManifestUrl?: string;
@@ -53,5 +53,5 @@ export interface CompanionConfig {
 export interface LumibootConfig {
   version: 1;
   network: NetworkConfig;
-  companion: CompanionConfig;
+  proxy: ProxyConfig;
 }

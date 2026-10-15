@@ -1,8 +1,8 @@
 import type { OSDefinition } from '@lumiboot/contracts';
 import {
-  DEFAULT_COMPANION_URL,
+  DEFAULT_PROXY_URL,
   NetworkError,
-  buildCompanionWispUrl,
+  buildProxyWispUrl,
   validateRelayUrl,
   type NetworkController,
   type NetworkProfile,
@@ -56,9 +56,9 @@ export interface NetworkEventSource {
  * Modes LumiBoot :
  *   - `offline` / `browser-fetch` / `user-relay` : voir
  *     {@link toV86NetworkDevice} ;
- *   - `local-companion` : relais WISP local du compagnon
- *     (`wisp://127.0.0.1:37892/wisp/`), dérivé de `companionUrl` (+ token
- *     runtime `companionToken`) via `buildCompanionWispUrl`, puis converti par
+ *   - `local-proxy` : relais WISP local du proxy réseau local
+ *     (`wisp://127.0.0.1:37892/wisp/`), dérivé de `proxyUrl` (+ token
+ *     runtime `proxyToken`) via `buildProxyWispUrl`, puis converti par
  *     `toWispRelayUrl` comme les autres relais.
  *
  * `network_relay_url` est marqué `@deprecated` dans `v86.d.ts` au profit de
@@ -89,8 +89,8 @@ function toWispRelayUrl(relayUrl: string): string {
  * fusionné par le provider via {@link selectNetworkDeviceType}.
  *
  * @throws NetworkError `NETWORK_INVALID_RELAY_URL` en mode `user-relay` sans
- *   adresse `wss://` valide, `NETWORK_INVALID_COMPANION_URL` en mode
- *   `local-companion` sans adresse loopback valide, `NETWORK_UNSUPPORTED_MODE`
+ *   adresse `wss://` valide, `NETWORK_INVALID_PROXY_URL` en mode
+ *   `local-proxy` sans adresse loopback valide, `NETWORK_UNSUPPORTED_MODE`
  *   en mode `local-network`.
  */
 export function toV86NetworkDevice(profile: NetworkProfile): V86NetworkDevice | undefined {
@@ -109,17 +109,17 @@ export function toV86NetworkDevice(profile: NetworkProfile): V86NetworkDevice | 
       }
       return { relay_url: toWispRelayUrl(validation.url) };
     }
-    case 'local-companion': {
+    case 'local-proxy': {
       let url: string;
       try {
-        url = buildCompanionWispUrl(
-          profile.companionUrl ?? DEFAULT_COMPANION_URL,
-          profile.companionToken,
+        url = buildProxyWispUrl(
+          profile.proxyUrl ?? DEFAULT_PROXY_URL,
+          profile.proxyToken,
         );
       } catch (error) {
         throw new NetworkError(
-          'NETWORK_INVALID_COMPANION_URL',
-          error instanceof Error ? error.message : 'Adresse du compagnon invalide.',
+          'NETWORK_INVALID_PROXY_URL',
+          error instanceof Error ? error.message : 'Adresse du proxy réseau local invalide.',
         );
       }
       return { relay_url: toWispRelayUrl(url) };

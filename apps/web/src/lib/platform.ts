@@ -1,5 +1,5 @@
 /**
- * Détection de la plateforme hôte pour le téléchargement du compagnon.
+ * Détection de la plateforme hôte pour le téléchargement du proxy réseau local.
  *
  * Règles strictes : on ne suppose JAMAIS qu'un Mac est ARM64 ni qu'un
  * Windows est AMD64. Si l'architecture est indéterminée, `arch` vaut

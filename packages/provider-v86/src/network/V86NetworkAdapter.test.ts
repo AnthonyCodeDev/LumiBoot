@@ -121,35 +121,35 @@ describe('toV86NetworkDevice', () => {
     );
   });
 
-  it('local-companion sans token : relais WISP local par défaut', () => {
-    expect(toV86NetworkDevice({ mode: 'local-companion' })).toEqual({
+  it('local-proxy sans token : relais WISP local par défaut', () => {
+    expect(toV86NetworkDevice({ mode: 'local-proxy' })).toEqual({
       relay_url: 'wisp://127.0.0.1:37892/wisp/',
     });
   });
 
-  it('local-companion avec token : query ?token conservée', () => {
-    expect(toV86NetworkDevice({ mode: 'local-companion', companionToken: 'abc' })).toEqual({
+  it('local-proxy avec token : query ?token conservée', () => {
+    expect(toV86NetworkDevice({ mode: 'local-proxy', proxyToken: 'abc' })).toEqual({
       relay_url: 'wisp://127.0.0.1:37892/wisp/?token=abc',
     });
   });
 
-  it('local-companion avec URL loopback personnalisée : host/port conservés', () => {
+  it('local-proxy avec URL loopback personnalisée : host/port conservés', () => {
     expect(
       toV86NetworkDevice({
-        mode: 'local-companion',
-        companionUrl: 'http://127.0.0.1:40000',
-        companionToken: 'abc',
+        mode: 'local-proxy',
+        proxyUrl: 'http://127.0.0.1:40000',
+        proxyToken: 'abc',
       }),
     ).toEqual({ relay_url: 'wisp://127.0.0.1:40000/wisp/?token=abc' });
   });
 
-  it('local-companion avec URL non loopback : rejette avec NETWORK_INVALID_COMPANION_URL', () => {
+  it('local-proxy avec URL non loopback : rejette avec NETWORK_INVALID_PROXY_URL', () => {
     expect(() =>
       toV86NetworkDevice({
-        mode: 'local-companion',
-        companionUrl: 'http://example.com:37892',
+        mode: 'local-proxy',
+        proxyUrl: 'http://example.com:37892',
       }),
-    ).toThrowError(expect.objectContaining({ code: 'NETWORK_INVALID_COMPANION_URL' }));
+    ).toThrowError(expect.objectContaining({ code: 'NETWORK_INVALID_PROXY_URL' }));
   });
 });
 

@@ -1,16 +1,16 @@
 import {
-  DEFAULT_COMPANION_URL,
+  DEFAULT_PROXY_URL,
   normalizeNetworkProfile,
-  validateCompanionUrl,
+  validateProxyUrl,
   validateRelayUrl,
   type NetworkProfile,
 } from '@lumiboot/vm-network';
 import {
   lumibootConfigSchema,
-  type CompanionConfig,
+  type ProxyConfig,
   type LumibootConfig,
   type NetworkConfig,
-  type ParsedCompanionFileConfig,
+  type ParsedProxyFileConfig,
   type ParsedNetworkConfig,
 } from './schema';
 
@@ -24,7 +24,7 @@ export type ConfigLoadErrorCode =
   | 'CONFIG_VERSION_UNSUPPORTED'
   | 'CONFIG_INVALID_MODE'
   | 'CONFIG_INVALID_RELAY'
-  | 'CONFIG_INVALID_COMPANION_URL'
+  | 'CONFIG_INVALID_PROXY_URL'
   | 'CONFIG_FORBIDDEN_TOKEN';
 
 /** Erreur typée : tout échec de chargement porte un code exploitable. */
@@ -65,12 +65,12 @@ function assertRelay(profile: NetworkProfile, label: string): void {
 }
 
 /**
- * Refuse tout jeton persisté dans le fichier public : `companionToken` est
+ * Refuse tout jeton persisté dans le fichier public : `proxyToken` est
  * runtime uniquement (mémoire, jamais `lumiboot.config.json`). Balaye
  * récursivement le JSON brut car le schéma strict le rejetterait sinon en
  * `CONFIG_INVALID` générique, sans message de sécurité explicite.
  */
-function assertNoCompanionToken(raw: unknown): void {
+function assertNoProxyToken(raw: unknown): void {
   const seen = new Set<unknown>();
   const visit = (value: unknown): boolean => {
     if (value === null || typeof value !== 'object') return false;
@@ -78,7 +78,7 @@ function assertNoCompanionToken(raw: unknown): void {
     seen.add(value);
     if (Array.isArray(value)) return value.some(visit);
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-      if (key === 'companionToken') return true;
+      if (key === 'proxyToken') return true;
       if (visit(entry)) return true;
     }
     return false;
@@ -86,38 +86,38 @@ function assertNoCompanionToken(raw: unknown): void {
   if (visit(raw)) {
     throw new ConfigLoadError(
       'CONFIG_FORBIDDEN_TOKEN',
-      'Configuration invalide : « companionToken » ne doit jamais figurer dans le fichier public « /lumiboot.config.json » (jeton runtime uniquement, obtenu par appairage).',
+      'Configuration invalide : « proxyToken » ne doit jamais figurer dans le fichier public « /lumiboot.config.json » (jeton runtime uniquement, obtenu par appairage).',
     );
   }
 }
 
-/** Valide l'URL d'un profil `local-companion` (loopback uniquement). */
-function assertCompanionUrl(companionUrl: string | undefined, label: string): void {
-  if (companionUrl === undefined) return;
-  const validation = validateCompanionUrl(companionUrl);
+/** Valide l'URL d'un profil `local-proxy` (loopback uniquement). */
+function assertProxyUrl(proxyUrl: string | undefined, label: string): void {
+  if (proxyUrl === undefined) return;
+  const validation = validateProxyUrl(proxyUrl);
   if (!validation.ok) {
     throw new ConfigLoadError(
-      'CONFIG_INVALID_COMPANION_URL',
-      `Configuration invalide : adresse du compagnon rejetée pour ${label} — ${
+      'CONFIG_INVALID_PROXY_URL',
+      `Configuration invalide : adresse du proxy réseau local rejetée pour ${label} — ${
         validation.error ?? 'adresse invalide'
       }.`,
     );
   }
 }
 
-/** Normalise la section `companion` (défauts appliqués, URL validée). */
-function toCompanionConfig(parsed: ParsedCompanionFileConfig | undefined): CompanionConfig {
-  const url = parsed?.url ?? DEFAULT_COMPANION_URL;
-  const validation = validateCompanionUrl(url);
+/** Normalise la section `proxy` (défauts appliqués, URL validée). */
+function toProxyConfig(parsed: ParsedProxyFileConfig | undefined): ProxyConfig {
+  const url = parsed?.url ?? DEFAULT_PROXY_URL;
+  const validation = validateProxyUrl(url);
   if (!validation.ok || validation.url === undefined) {
     throw new ConfigLoadError(
-      'CONFIG_INVALID_COMPANION_URL',
-      `Configuration invalide : adresse du compagnon rejetée — ${
+      'CONFIG_INVALID_PROXY_URL',
+      `Configuration invalide : adresse du proxy réseau local rejetée — ${
         validation.error ?? 'adresse invalide'
       }.`,
     );
   }
-  const config: CompanionConfig = {
+  const config: ProxyConfig = {
     enabled: parsed?.enabled ?? true,
     url: validation.url,
   };
@@ -131,8 +131,8 @@ function toCompanionConfig(parsed: ParsedCompanionFileConfig | undefined): Compa
 function toNetworkConfig(parsed: ParsedNetworkConfig): NetworkConfig {
   const defaultProfile = normalizeNetworkProfile(parsed.defaultProfile);
   assertRelay(defaultProfile, 'le profil réseau par défaut');
-  assertCompanionUrl(
-    defaultProfile.mode === 'local-companion' ? defaultProfile.companionUrl : undefined,
+  assertProxyUrl(
+    defaultProfile.mode === 'local-proxy' ? defaultProfile.proxyUrl : undefined,
     'le profil réseau par défaut',
   );
 
@@ -145,8 +145,8 @@ function toNetworkConfig(parsed: ParsedNetworkConfig): NetworkConfig {
   for (const [id, rawProfile] of Object.entries(parsedSystems)) {
     const profile = normalizeNetworkProfile(rawProfile);
     assertRelay(profile, `le système « ${id} »`);
-    assertCompanionUrl(
-      profile.mode === 'local-companion' ? profile.companionUrl : undefined,
+    assertProxyUrl(
+      profile.mode === 'local-proxy' ? profile.proxyUrl : undefined,
       `le système « ${id} »`,
     );
     systems[id] = profile;
@@ -224,7 +224,7 @@ export async function loadConfig(fetchImpl: FetchLike = fetch): Promise<Lumiboot
     );
   }
 
-  assertNoCompanionToken(raw);
+  assertNoProxyToken(raw);
 
   const result = lumibootConfigSchema.safeParse(raw);
   if (!result.success) {
@@ -246,6 +246,6 @@ export async function loadConfig(fetchImpl: FetchLike = fetch): Promise<Lumiboot
   return {
     version: 1,
     network: toNetworkConfig(result.data.network),
-    companion: toCompanionConfig(result.data.companion),
+    proxy: toProxyConfig(result.data.proxy),
   };
 }

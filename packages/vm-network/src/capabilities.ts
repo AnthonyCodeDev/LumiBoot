@@ -151,7 +151,7 @@ export const USER_RELAY_CAPABILITIES: NetworkCapabilities = Object.freeze({
 });
 
 /**
- * Relais WISP **local géré par le compagnon** (loopback, `ws://127.0.0.1:37892/wisp/`).
+ * Relais WISP **local géré par le proxy réseau local** (loopback, `ws://127.0.0.1:37892/wisp/`).
  *
  * Comme `user-relay`, le transport WISP peut porter du TCP arbitraire (dont le
  * 443), donc `transport.https = true` est une capacité de transport légitime et
@@ -162,7 +162,7 @@ export const USER_RELAY_CAPABILITIES: NetworkCapabilities = Object.freeze({
  * `fullInternet` ne peut devenir vrai qu'après vérification réelle à
  * l'exécution.
  */
-export const LOCAL_COMPANION_CAPABILITIES: NetworkCapabilities = Object.freeze({
+export const LOCAL_PROXY_CAPABILITIES: NetworkCapabilities = Object.freeze({
   nic: Object.freeze({ ethernet: true, virtio: true, ne2k: true }),
   guestStack: Object.freeze({
     ip: true,
@@ -197,8 +197,8 @@ export function capabilitiesForMode(mode: NetworkMode): NetworkCapabilities {
       return BROWSER_FETCH_CAPABILITIES;
     case 'user-relay':
       return USER_RELAY_CAPABILITIES;
-    case 'local-companion':
-      return LOCAL_COMPANION_CAPABILITIES;
+    case 'local-proxy':
+      return LOCAL_PROXY_CAPABILITIES;
     case 'local-network':
       return LOCAL_NETWORK_CAPABILITIES;
   }

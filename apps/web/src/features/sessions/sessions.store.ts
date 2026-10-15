@@ -3,8 +3,8 @@ import { getSystemById } from '@lumiboot/catalog';
 import { SessionLifecycle, VMError, type SessionSnapshot } from '@lumiboot/vm-core';
 import { selectEffectiveNetworkProfile, type NetworkMode } from '@lumiboot/vm-network';
 import { createRegistry } from './registry';
-import { resolveCompanionConfig, resolveNetworkProfile } from '../../config/runtime';
-import { getCompanionRuntimeCredentials } from '../companion/store';
+import { resolveProxyConfig, resolveNetworkProfile } from '../../config/runtime';
+import { getProxyRuntimeCredentials } from '../proxy/store';
 
 const registry = createRegistry();
 const lifecycles = new Map<string, SessionLifecycle>();
@@ -17,7 +17,7 @@ export interface SessionsState {
   /**
    * Mode réseau **effectivement utilisé** au démarrage de chaque session
    * (résolu par `selectEffectiveNetworkProfile`, potentiellement
-   * `local-companion` via l'appairage automatique). Distinct du mode
+   * `local-proxy` via l'appairage automatique). Distinct du mode
    * configuré : sert au badge de la barre d'outils.
    */
   networkModes: Record<string, NetworkMode>;
@@ -55,18 +55,18 @@ export const useSessionsStore = create<SessionsState>((set) => ({
     if (!lifecycle) return;
     // Le profil réseau est résolu au démarrage puis reste figé pour la session
     // (tout changement de mode exige un redémarrage de la session).
-    // Sélection automatique : compagnon appairé/connecté → `local-companion`
+    // Sélection automatique : proxy réseau local appairé/connecté → `local-proxy`
     // (jeton runtime fusionné ici, jamais persisté dans `lumiboot.config.json`) ;
     // sinon mode de base (`browser-fetch` par défaut). `offline`/`user-relay`
     // restent des choix explicites respectés.
     const base = resolveNetworkProfile(lifecycle.system.id);
-    const companionConfig = resolveCompanionConfig();
-    const credentials = getCompanionRuntimeCredentials();
+    const proxyConfig = resolveProxyConfig();
+    const credentials = getProxyRuntimeCredentials();
     const network = selectEffectiveNetworkProfile(base, {
-      enabled: companionConfig.enabled,
-      connected: credentials.companionToken !== null,
-      companionUrl: credentials.companionUrl,
-      ...(credentials.companionToken === null ? {} : { companionToken: credentials.companionToken }),
+      enabled: proxyConfig.enabled,
+      connected: credentials.proxyToken !== null,
+      proxyUrl: credentials.proxyUrl,
+      ...(credentials.proxyToken === null ? {} : { proxyToken: credentials.proxyToken }),
     });
     // Mémorise le mode effectif avant le démarrage : la barre d'outils affiche
     // ce qui tourne réellement, pas le mode configuré.

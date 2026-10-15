@@ -39,28 +39,28 @@ describe('normalizeNetworkProfile', () => {
     ).toEqual({ mode: 'browser-fetch' });
   });
 
-  it('conserve companionUrl/companionToken uniquement en mode local-companion', () => {
+  it('conserve proxyUrl/proxyToken uniquement en mode local-proxy', () => {
     expect(
       normalizeNetworkProfile({
-        mode: 'local-companion',
-        companionUrl: 'http://127.0.0.1:37892',
-        companionToken: 'abc',
+        mode: 'local-proxy',
+        proxyUrl: 'http://127.0.0.1:37892',
+        proxyToken: 'abc',
       }),
     ).toEqual({
-      mode: 'local-companion',
-      companionUrl: 'http://127.0.0.1:37892',
-      companionToken: 'abc',
+      mode: 'local-proxy',
+      proxyUrl: 'http://127.0.0.1:37892',
+      proxyToken: 'abc',
     });
 
     expect(
-      normalizeNetworkProfile({ mode: 'local-companion', relayUrl: 'wss://relay.example' }),
-    ).toEqual({ mode: 'local-companion' });
+      normalizeNetworkProfile({ mode: 'local-proxy', relayUrl: 'wss://relay.example' }),
+    ).toEqual({ mode: 'local-proxy' });
 
     expect(
       normalizeNetworkProfile({
         mode: 'offline',
-        companionUrl: 'http://127.0.0.1:37892',
-        companionToken: 'abc',
+        proxyUrl: 'http://127.0.0.1:37892',
+        proxyToken: 'abc',
       }),
     ).toEqual({ mode: 'offline' });
 
@@ -68,7 +68,7 @@ describe('normalizeNetworkProfile', () => {
       normalizeNetworkProfile({
         mode: 'user-relay',
         relayUrl: 'wss://relay.example',
-        companionUrl: 'http://127.0.0.1:37892',
+        proxyUrl: 'http://127.0.0.1:37892',
       }),
     ).toEqual({ mode: 'user-relay', relayUrl: 'wss://relay.example' });
   });

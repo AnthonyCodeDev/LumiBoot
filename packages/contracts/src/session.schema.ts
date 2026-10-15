@@ -25,7 +25,7 @@ export const vmStateSchema = z.enum([
 export const networkModeSchema = z.enum([
   'offline',
   'browser-fetch',
-  'local-companion',
+  'local-proxy',
   'user-relay',
   'local-network',
 ]);

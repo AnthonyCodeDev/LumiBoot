@@ -14,8 +14,8 @@ brancher. L'arbre ci-dessous reste une **cible d'évolution**, pas la liste exha
 lumiboot/
 ├── apps/
 │   ├── web/                               # React + Vite + TypeScript
-│   └── network-companion/                 # Compagnon réseau local (Go natif, serveur WISP V1
-│   │                                      # sur loopback) — voir docs/network-companion.md
+│   └── network-proxy/                 # Proxy réseau local (Go natif, serveur WISP V1
+│   │                                      # sur loopback) — voir docs/network-proxy.md
 ├── packages/
 │   ├── contracts/                         # Types et Zod schemas partagés
 │   ├── catalog/                           # Manifestes d'OS et compatibilités vérifiées
@@ -193,10 +193,10 @@ via `runtime.resolveNetworkProfile`) ; il n'y a **pas de page Settings**.
 Détails, modes, capacités, fiabilité, sécurité et validation : [`network.md`](network.md). Décisions
 structurantes : [`adr/0005-network-universal.md`](adr/0005-network-universal.md) et, pour un futur
 transport TCP/UDP brut en Isolated Web App (non disponible aujourd'hui),
-[`adr/0006-direct-sockets-iwa.md`](adr/0006-direct-sockets-iwa.md). Le **compagnon réseau local**
-(`apps/network-companion/`, serveur WISP V1 sur loopback, mode `local-companion`) est décidé
-dans [`adr/0007-network-companion.md`](adr/0007-network-companion.md) et documenté dans
-[`network-companion.md`](network-companion.md).
+[`adr/0006-direct-sockets-iwa.md`](adr/0006-direct-sockets-iwa.md). Le **proxy réseau local**
+(`apps/network-proxy/`, serveur WISP V1 sur loopback, mode `local-proxy`) est décidé
+dans [`adr/0007-network-proxy.md`](adr/0007-network-proxy.md) et documenté dans
+[`network-proxy.md`](network-proxy.md).
 
 ## 8. Compatibilité initiale et ambitions
 
