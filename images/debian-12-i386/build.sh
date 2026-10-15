@@ -74,13 +74,25 @@ SECURITY_MIRROR="${SECURITY_MIRROR:-http://security.debian.org/debian-security}"
 SNAPSHOT="${SNAPSHOT:-}"
 DISK_SIZE="${DISK_SIZE:-3G}"
 
+# Cmdline noyau du flavor desktop. Identique au socle (V86Provider.DEFAULT_BOOT_CMDLINE)
+# PLUS « vga=0x318 » (1024×768×24) : sous v86 il n'y a pas de DRM, on force donc
+# la console framebuffer VBE du noyau pour obtenir /dev/fb0, requis par le repli
+# Xorg « fbdev ». Le flavor minimal n'émet PAS de boot.cmdline : il garde la
+# console VGA texte et le DEFAULT_BOOT_CMDLINE du provider (comportement inchangé).
+DESKTOP_CMDLINE="console=tty0 console=ttyS0,115200 root=/dev/sda rw vga=0x318"
+
 if [ -n "$SNAPSHOT" ]; then
   DEBIAN_MIRROR="https://snapshot.debian.org/archive/debian/$SNAPSHOT"
   SECURITY_MIRROR="https://snapshot.debian.org/archive/debian-security/$SNAPSHOT"
 fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="$HERE/build$BUILD_SUFFIX"
+# Le dossier de construction peut être déplacé hors du dépôt (par ex. sur un
+# ext4 natif sous WSL) via LUMIBOOT_BUILD_DIR. Nécessaire car debootstrap et le
+# chroot échouent sur les systèmes de fichiers 9p/DrvFs (/mnt/c) : l'extraction
+# de certains paquets (ex. libpam-runtime) fait échouer tar. Par défaut, le
+# comportement est inchangé (build/ ou build-desktop/ dans le dépôt).
+BUILD_DIR="${LUMIBOOT_BUILD_DIR:-$HERE/build$BUILD_SUFFIX}"
 ROOTFS="$BUILD_DIR/rootfs"
 
 # Paquets du socle commun (identiques aux deux flavors : la baseline console
@@ -96,9 +108,19 @@ python3 perl \
 console-setup kbd locales"
 
 # Paquets additionnels du flavor desktop : Xorg minimal + Openbox + xterm.
-# Volontairement SANS GNOME/KDE ni Wayland. Le pilote vidéo vise VBE (vesa) et
-# le framebuffer (fbdev) : v86 n'expose ni accélération ni DRM utilisable ici.
-DESKTOP_PACKAGES="xserver-xorg-core xserver-xorg-video-vesa xserver-xorg-video-fbdev \
+# Volontairement SANS GNOME/KDE ni Wayland.
+#
+# Pilote vidéo : sous v86 le noyau attache un pilote KMS `bochs-drm` (framebuffer
+# /dev/fb0). Un pilote VBE (`vesa`) refuse alors de s'attacher et X échoue avec
+# « no screens found ». On utilise donc `fbdev` (framebuffer noyau) en primaire
+# et `modesetting` (KMS, fourni par `xserver-xorg-core`) en repli — voir
+# guest/desktop/xorg.conf.d/20-lumiboot-fbdev.conf. `vesa` reste installé mais
+# n'est plus sélectionné.
+#
+# `xserver-xorg-legacy` est conservé : il fournit le wrapper setuid
+# `/usr/lib/xorg/Xorg.wrap` (+ `/etc/X11/Xwrapper.config`), requis car Xorg est
+# lancé par le compte non privilégié « lumiboot » avec `needs_root_rights=yes`.
+DESKTOP_PACKAGES="xserver-xorg-core xserver-xorg-legacy xserver-xorg-video-vesa xserver-xorg-video-fbdev \
 xserver-xorg-input-libinput xinit x11-xserver-utils x11-utils x11-xkb-utils xauth \
 xterm openbox fonts-dejavu-core dbus-x11"
 
@@ -229,11 +251,39 @@ fi
 # ── 4d. Pile graphique (flavor desktop uniquement) ───────────────────────────
 if [ "$FLAVOR" = "desktop" ]; then
   echo "== 4d. Pile graphique Xorg/Openbox =="
-  # Pilote vidéo : sous v86 il n'y a pas de DRM exploitable, on force VBE
-  # (« vesa ») ; « fbdev » reste disponible en repli si un framebuffer existe.
+  # Pilote vidéo : le noyau attache KMS « bochs-drm » (framebuffer /dev/fb0). On
+  # définit DEUX ServerLayout (fbdev primaire, modesetting en repli), sélectionnés
+  # par /usr/local/bin/lumiboot-startx. « vesa » n'est plus utilisé (il refuse de
+  # s'attacher quand un pilote KMS est lié → « no screens found »).
   install -d -m 0755 "$ROOTFS/etc/X11/xorg.conf.d"
-  install -D -m 0644 "$HERE/guest/desktop/xorg.conf.d/20-lumiboot-vesa.conf" \
-    "$ROOTFS/etc/X11/xorg.conf.d/20-lumiboot-vesa.conf"
+  install -D -m 0644 "$HERE/guest/desktop/xorg.conf.d/20-lumiboot-fbdev.conf" \
+    "$ROOTFS/etc/X11/xorg.conf.d/20-lumiboot-fbdev.conf"
+
+  # Xwrapper.config : autorise un lancement de Xorg par le compte NON
+  # privilégié « lumiboot » avec des droits root (needs_root_rights=yes). Le
+  # wrapper setuid Xorg.wrap vient de xserver-xorg-legacy. La SESSION
+  # (openbox/xterm) reste, elle, non privilégiée.
+  cat > "$ROOTFS/etc/X11/Xwrapper.config" <<'EOF'
+# Configuration du wrapper Xorg (xserver-xorg-legacy) pour v86.
+# Le serveur X doit disposer des droits root (needs_root_rights=yes) pour
+# piloter le framebuffer noyau /dev/fb0, tandis que le lancement par
+# l'utilisateur « lumiboot » doit être autorisé (allowed_users). Sans le bit
+# setuid de Xorg.wrap, Xorg échoue avec « no screens found ».
+allowed_users=anybody
+needs_root_rights=yes
+EOF
+  chmod 0644 "$ROOTFS/etc/X11/Xwrapper.config"
+
+  # Ceinture et bretelles : le paquet installe Xorg.wrap en 6755 (setuid+setgid).
+  # On (re)pose le bit setuid pour ne jamais livrer une image où Xorg ne peut pas
+  # piloter le framebuffer noyau — cause possible du « no screens found ».
+  if [ -e "$ROOTFS/usr/lib/xorg/Xorg.wrap" ]; then
+    chmod u+s "$ROOTFS/usr/lib/xorg/Xorg.wrap"
+  fi
+
+  # Lanceur de session : tente « fbdev » puis « modesetting » en repli.
+  install -D -m 0755 "$HERE/guest/desktop/lumiboot-startx" \
+    "$ROOTFS/usr/local/bin/lumiboot-startx"
 fi
 
 echo "== 5. initramfs : pilotes stockage/FS émulés =="
@@ -251,14 +301,26 @@ chroot "$ROOTFS" bash -e -c '
     useradd --create-home --shell /bin/bash lumiboot
   fi
   passwd -d lumiboot >/dev/null
+  # Accès en lecture/écriture au framebuffer noyau /dev/fb0 (groupe « video »),
+  # requis par le pilote X « fbdev » du flavor desktop (inutile en console).
+  if getent group video >/dev/null 2>&1; then
+    usermod -aG video lumiboot
+  fi
 '
 
 install -D -m 0644 "$HERE/guest/serial-getty-autologin.conf" \
   "$ROOTFS/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf"
 install -D -m 0644 "$HERE/guest/getty-autologin.conf" \
   "$ROOTFS/etc/systemd/system/getty@tty1.service.d/autologin.conf"
-install -D -m 0644 "$HERE/guest/no-drm.conf" \
-  "$ROOTFS/etc/modprobe.d/lumiboot-no-drm.conf"
+# Console VGA texte : le flavor minimal blackliste le DRM `bochs` pour rester en
+# mode texte (vérifications `vga-console`). Le flavor desktop veut au contraire
+# un framebuffer RÉEL /dev/fb0 (repli Xorg `fbdev`) : sous v86 le seul
+# fournisseur de framebuffer est `bochs-drm` (le noyau Debian 6.1 n'honore plus
+# `vga=` au démarrage). On ne blackliste donc PAS `bochs` en desktop.
+if [ "$FLAVOR" = "minimal" ]; then
+  install -D -m 0644 "$HERE/guest/no-drm.conf" \
+    "$ROOTFS/etc/modprobe.d/lumiboot-no-drm.conf"
+fi
 
 # Marqueur GUEST_READY : même unité « lumiboot-ready.service » pour les deux
 # flavors, contenu adapté (référence d'image différente).
@@ -386,7 +448,7 @@ chroot "$ROOTFS" env FLAVOR="$FLAVOR" bash -c '
 
   if [ "$FLAVOR" = "desktop" ]; then
     echo "--- pile graphique"
-    for b in Xorg startx xterm openbox; do
+    for b in Xorg startx xterm openbox xdpyinfo; do
       if command -v "$b" >/dev/null 2>&1; then
         echo "OK   $b -> $(command -v "$b")"
       else
@@ -401,7 +463,22 @@ chroot "$ROOTFS" env FLAVOR="$FLAVOR" bash -c '
       fi
     done
     test -x /usr/local/bin/lumiboot-desktop-ready && echo "lumiboot-desktop-ready: present" || echo "lumiboot-desktop-ready: MISSING"
-    ls -l /home/lumiboot/.xinitrc /home/lumiboot/.bash_profile /etc/X11/xorg.conf.d/20-lumiboot-vesa.conf
+    test -x /usr/local/bin/lumiboot-startx && echo "lumiboot-startx: present" || echo "lumiboot-startx: MISSING"
+    ls -l /home/lumiboot/.xinitrc /home/lumiboot/.bash_profile /etc/X11/xorg.conf.d/20-lumiboot-fbdev.conf
+    echo "--- pilotes X fbdev / modesetting ---"
+    test -e /usr/lib/xorg/modules/drivers/fbdev_drv.so && echo "fbdev_drv.so: present" || echo "fbdev_drv.so: MISSING" >&2
+    test -e /usr/lib/xorg/modules/drivers/modesetting_drv.so && echo "modesetting_drv.so: present" || echo "modesetting_drv.so: MISSING (fourni par xserver-xorg-core)" >&2
+    echo "--- wrapper Xorg setuid (framebuffer noyau /dev/fb0) ---"
+    ls -l /usr/lib/xorg/Xorg.wrap /etc/X11/Xwrapper.config 2>/dev/null || true
+    cat /etc/X11/Xwrapper.config 2>/dev/null || echo "MISS Xwrapper.config"
+    if [ -u /usr/lib/xorg/Xorg.wrap ]; then
+      echo "Xorg.wrap setuid: OK"
+    else
+      echo "Xorg.wrap setuid: MANQUANT (Xorg ne pourra pas piloter le framebuffer)" >&2
+      exit 1
+    fi
+    echo "--- groupes de lumiboot (video requis pour /dev/fb0) ---"
+    id lumiboot
   fi
 '
 
@@ -430,8 +507,30 @@ truncate -s "$DISK_SIZE" "$BUILD_DIR/rootfs.img"
 mkfs.ext4 -F -L lumiboot -d "$ROOTFS" "$BUILD_DIR/rootfs.img"
 e2fsck -fn "$BUILD_DIR/rootfs.img"
 
+# Vérification post-copie : `mkfs.ext4 -d` DOIT préserver le bit setuid de
+# Xorg.wrap (extraction/copie de l'arbre sans perte de permissions). On le
+# contrôle directement DANS l'image produite, pas seulement dans le chroot.
+if [ "$FLAVOR" = "desktop" ]; then
+  echo "== 9b. Contrôle du bit setuid dans rootfs.img (debugfs) =="
+  if debugfs -R 'stat /usr/lib/xorg/Xorg.wrap' "$BUILD_DIR/rootfs.img" 2>/dev/null | grep -qE 'Mode: *0?[4-7][0-7]{3}'; then
+    echo "Xorg.wrap dans rootfs.img : setuid présent"
+  else
+    debugfs -R 'stat /usr/lib/xorg/Xorg.wrap' "$BUILD_DIR/rootfs.img" 2>&1 | sed -n '1,6p' || true
+    echo "Xorg.wrap dans rootfs.img : setuid ABSENT (X échouerait sous v86)." >&2
+    exit 1
+  fi
+fi
+
 echo "== 10. Manifeste + provenance (tailles + SHA réels) =="
+# Le flavor desktop publie une cmdline noyau propre (framebuffer VBE pour le
+# repli Xorg fbdev) ; le flavor minimal ne l'émet pas et garde le défaut du
+# provider (console texte) — comportement inchangé.
+MANIFEST_CMDLINE=""
+if [ "$FLAVOR" = "desktop" ]; then
+  MANIFEST_CMDLINE="$DESKTOP_CMDLINE"
+fi
 IMAGE_REF="$REF" IMAGE_ARCH="$ARCH" IMAGE_MEMORY_MIB="$MEMORY_MIB" IMAGE_VGA_MIB="$VGA_MIB" \
+  IMAGE_CMDLINE="$MANIFEST_CMDLINE" \
   node "$HERE/write-manifest.mjs" "$BUILD_DIR"
 
 {

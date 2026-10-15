@@ -20,6 +20,10 @@ const REF = process.env.IMAGE_REF ?? 'debian-12-i386';
 const ARCH = process.env.IMAGE_ARCH ?? 'i386';
 const MEMORY_MIB = Number(process.env.IMAGE_MEMORY_MIB ?? 512);
 const VGA_MIB = Number(process.env.IMAGE_VGA_MIB ?? 16);
+// Cmdline noyau optionnelle, propre au flavor (le flavor desktop y ajoute
+// « vga=0x318 » pour disposer d'un framebuffer /dev/fb0, repli Xorg fbdev).
+// Vide/absente → aucun champ `boot` : le provider applique son DEFAULT_BOOT_CMDLINE.
+const CMDLINE = (process.env.IMAGE_CMDLINE ?? '').trim();
 const LICENSE = 'Debian GNU/Linux — voir les notices de paquets (Debian Free Software Guidelines)';
 const BASE_URL = `/images/${REF}`;
 
@@ -62,6 +66,12 @@ const manifest = {
   license: LICENSE,
   files,
 };
+
+// Champ `boot` optionnel : présent uniquement si une cmdline a été fournie
+// (flavor desktop). Le schéma @lumiboot/vm-assets valide `boot.cmdline`.
+if (CMDLINE) {
+  manifest.boot = { cmdline: CMDLINE };
+}
 
 const outPath = join(artifactsDir, 'manifest.json');
 await writeFile(outPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');

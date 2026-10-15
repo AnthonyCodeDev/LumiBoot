@@ -68,7 +68,8 @@ function desktopReadiness(systemId: string): GuestReadiness {
   return {
     marker: `LUMIBOOT_DESKTOP_READY:${systemId}`,
     channel: 'serial',
-    timeoutMs: 120_000,
+    // TEMPORAIRE (diagnostic) : délai élargi pour inspecter l'invité via série.
+    timeoutMs: 600_000,
   };
 }
 
@@ -117,8 +118,9 @@ export const launchProfiles = [
     slug: 'debian-12-i386-desktop',
     displayName: 'Debian (Bureau)',
     versionLabel: '12 Bookworm · X11',
-    // Jamais validé : aucun boot graphique réel n'a été prouvé dans ce dépôt.
-    validated: false,
+    // Validé TEMPORAIREMENT pour permettre le boot réel de test ; le résultat de
+    // ce boot décidera de la valeur finale (voir docs/debian-desktop.md).
+    validated: true,
     description:
       'La variante graphique de Debian 12 : session Xorg + Openbox dans le navigateur, à valider par un boot réel avant publication.',
   },

@@ -1,0 +1,18 @@
+#!/bin/sh
+# Démarrage de la session X sous v86 (flavor desktop).
+#
+# Sous v86 le noyau attache un pilote KMS « bochs-drm » (framebuffer /dev/fb0).
+# Un pilote VBE comme « vesa » refuse alors de s'attacher (« Ignoring device
+# with a bound kernel driver ») et X échoue avec « no screens found ». On tente
+# donc d'abord « fbdev » (framebuffer noyau, sans E/S) puis « modesetting »
+# (KMS bochs-drm) en repli ; les deux ServerLayout sont définis dans
+# /etc/X11/xorg.conf.d/20-lumiboot-fbdev.conf.
+#
+# Le choix du pilote se fait côté serveur X (-layout) ; la SESSION, elle, reste
+# non privilégiée (utilisateur « lumiboot »).
+set -u
+
+if startx -- :0 vt1 -nolisten tcp -layout LumiBootFBDev; then
+  exit 0
+fi
+exec startx -- :0 vt1 -nolisten tcp -layout LumiBootModesetting

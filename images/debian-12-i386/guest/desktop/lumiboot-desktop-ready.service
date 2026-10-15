@@ -10,6 +10,8 @@ RemainAfterExit=yes
 # Sonde réelle : attend que le serveur X réponde sur :0 et qu'Openbox tourne,
 # puis écrit LUMIBOOT_DESKTOP_READY sur ttyS0. Tant que ce n'est pas vrai, le
 # marqueur n'est PAS émis (échec signalé par un marqueur distinct).
+# Délai de démarrage large : l'émulation logicielle de v86 est lente.
+TimeoutStartSec=360
 ExecStart=/usr/local/bin/lumiboot-desktop-ready
 
 [Install]

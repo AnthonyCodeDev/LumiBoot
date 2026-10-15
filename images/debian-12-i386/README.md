@@ -29,7 +29,7 @@ navigateur via v86. Deux **flavors** partagent le même socle de construction (a
 | `guest/desktop/lumiboot-ready.service` | Idem pour le flavor desktop (réf. `…-desktop`) |
 | `guest/desktop/lumiboot-desktop-ready.{service,sh}` | Émet `LUMIBOOT_DESKTOP_READY` **après** X + Openbox réels |
 | `guest/desktop/bash_profile`, `guest/desktop/xinitrc` | Entrée graphique (autologin `lumiboot` → startx → Openbox + xterm) |
-| `guest/desktop/xorg.conf.d/20-lumiboot-vesa.conf` | Pilote X `vesa`/VBE adapté à v86 |
+| `guest/desktop/xorg.conf.d/20-lumiboot-fbdev.conf` | Pilote X `fbdev` (framebuffer noyau `bochs-drm`) + repli `modesetting` |
 | `guest/serial-getty-autologin.conf` | Autologin `lumiboot` sur la console série |
 | `tests/boot-smoke-test.md` | Smoke test console (flavor minimal) |
 | `tests/desktop-smoke-test.md` | Smoke test graphique (flavor desktop) |

@@ -10,5 +10,6 @@ fi
 if [ -z "${DISPLAY:-}" ] \
   && [ "$(tty 2>/dev/null)" = "/dev/tty1" ] \
   && command -v startx >/dev/null 2>&1; then
-  exec startx -- :0 vt1 -nolisten tcp
+  # lumiboot-startx tente « fbdev » (framebuffer noyau) puis « modesetting » en repli.
+  exec /usr/local/bin/lumiboot-startx
 fi

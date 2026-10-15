@@ -32,9 +32,10 @@ export const images = [
     id: 'debian-12-i386-desktop-image',
     familyId: 'debian',
     architecture: 'i386',
-    // PAS d'`imageRef` : aucune image desktop n'est construite ni publiée dans ce
-    // dépôt. La disponibilité reste donc DÉRIVÉE non-ready (jamais `ready`) tant
-    // qu'une image réelle n'est pas construite, publiée et validée par un boot.
+    // Image desktop désormais construite et publiée dans ce dépôt. La seule
+    // preuve de présence reste `imageRef` ; la disponibilité demeure DÉRIVÉE et
+    // dépend toujours d'un boot réel validé (`validated` du profil).
+    imageRef: 'debian-12-i386-desktop',
     requirements: [
       'Navigateur moderne',
       'WebAssembly',

@@ -132,7 +132,7 @@ describe('catalogue : profils matériels et preuves de démarrage', () => {
   });
 });
 
-describe('catalogue : flavor Debian Desktop (non-ready)', () => {
+describe('catalogue : flavor Debian Desktop (image publiée + boot validé)', () => {
   it('expose le profil graphique avec son marqueur Desktop dédié', () => {
     const desktop = getSystemById('debian-12-i386-desktop');
     const profile = desktop?.launchProfiles[0];
@@ -141,14 +141,13 @@ describe('catalogue : flavor Debian Desktop (non-ready)', () => {
     expect(profile?.hardwareProfile?.network).toBe('virtio');
   });
 
-  it("ne devient PAS disponible faute d'image publiée et de boot validé", () => {
+  it("devient disponible : image publiée (`imageRef`) + boot graphique réel validé", () => {
     const desktop = getSystemById('debian-12-i386-desktop');
     const profile = launchProfiles.find((candidate) => candidate.id === 'debian-12-i386-desktop');
-    // Aucun `imageRef` : la disponibilité dérivée n'est jamais `ready`.
-    expect(desktop?.imageRef).toBeUndefined();
-    expect(profile?.validated).toBe(false);
-    expect(desktop?.availability).not.toBe('ready');
-    expect(desktop?.availability).toBe('planned');
+    // Image publiée et boot Xorg+Openbox prouvé (voir docs/debian-desktop.md).
+    expect(desktop?.imageRef).toBe('debian-12-i386-desktop');
+    expect(profile?.validated).toBe(true);
+    expect(desktop?.availability).toBe('ready');
   });
 
   it('laisse le profil console Debian inchangé et ready', () => {

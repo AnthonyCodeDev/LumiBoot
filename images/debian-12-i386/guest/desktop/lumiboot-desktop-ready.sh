@@ -10,17 +10,27 @@
 #   3. le gestionnaire de fenêtres Openbox tourne,
 # puis écrit LUMIBOOT_DESKTOP_READY:<ref> sur la console série (ttyS0).
 #
+# Le service tourne en root ; le serveur X a été lancé par l'utilisateur
+# « lumiboot » avec un cookie MIT-MAGIC-COOKIE dans ~/.Xauthority. Pour pouvoir
+# interroger :0, on pointe donc XAUTHORITY sur le fichier de « lumiboot » (et on
+# fixe DISPLAY) : sans cela, xdpyinfo échouerait sur « No protocol specified »
+# alors même que X fonctionne.
+#
 # Si la session graphique ne démarre pas dans le délai, un marqueur d'échec
 # distinct est émis et l'unité échoue : aucune GUI n'est déclarée prête à tort.
 set -u
 
 REF='debian-12-i386-desktop'
-DEADLINE=60
+# Délai large : l'émulation logicielle de v86 est lente (démarrage X + Openbox).
+DEADLINE=300
+
+export DISPLAY=:0
+export XAUTHORITY=/home/lumiboot/.Xauthority
 
 i=0
 while [ "$i" -lt "$DEADLINE" ]; do
   if [ -S /tmp/.X11-unix/X0 ] \
-    && xdpyinfo -display :0 >/dev/null 2>&1 \
+    && xdpyinfo >/dev/null 2>&1 \
     && pgrep -x openbox >/dev/null 2>&1; then
     printf 'LUMIBOOT_DESKTOP_READY:%s\n' "$REF" > /dev/ttyS0
     exit 0

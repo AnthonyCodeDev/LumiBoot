@@ -41,9 +41,9 @@ Ajoutés au socle commun (jamais de GNOME/KDE, jamais Wayland) :
 
 | Paquet | Rôle |
 |---|---|
-| `xserver-xorg-core` | serveur X (Xorg) |
-| `xserver-xorg-video-vesa` | pilote VBE — adapté à la VGA émulée par v86 |
-| `xserver-xorg-video-fbdev` | repli framebuffer |
+| `xserver-xorg-core` | serveur X (Xorg) + pilote `modesetting` (KMS) |
+| `xserver-xorg-video-fbdev` | pilote `fbdev` (framebuffer noyau `/dev/fb0`) — primaire sous v86 |
+| `xserver-xorg-video-vesa` | pilote VBE — installé mais **non sélectionné** (incompatible KMS) |
 | `xserver-xorg-input-libinput` | entrée clavier/souris (PS/2) |
 | `xinit` | `startx` / `xinit` |
 | `x11-xserver-utils` (`xset`, `xsetroot`, `xrdb`) | utilitaires de session |
@@ -55,8 +55,10 @@ Ajoutés au socle commun (jamais de GNOME/KDE, jamais Wayland) :
 | `fonts-dejavu-core` | polices (`DejaVu Sans Mono` pour xterm) |
 | `dbus-x11` | bus D-Bus de session |
 
-Configuration Xorg : `guest/desktop/xorg.conf.d/20-lumiboot-vesa.conf` force le pilote `vesa`
-(le module DRM `bochs` reste blacklisté pour préserver le mode texte de la console).
+Configuration Xorg : `guest/desktop/xorg.conf.d/20-lumiboot-fbdev.conf` sélectionne le pilote
+`fbdev` (framebuffer noyau `/dev/fb0`, fourni par le KMS `bochs-drm`) avec repli `modesetting`.
+Un pilote VBE (`vesa`) échoue sous v86 : il refuse de s'attacher quand un pilote KMS est lié
+(« no screens found »). Le module `bochs` n'est **pas** blacklisté en flavor desktop.
 
 ## 4. Interaction (flavor `desktop`)
 
