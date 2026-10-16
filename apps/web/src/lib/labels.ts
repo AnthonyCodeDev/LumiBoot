@@ -3,6 +3,7 @@ import type {
   Availability,
   EngineId,
   ExecutionMode,
+  HardwareNetwork,
   LaunchProfile,
   OSDefinition,
   OSFamily,
@@ -23,8 +24,31 @@ export const engineLabels: Record<EngineId, string> = {
   'wasm-68k': 'WASM 68k',
 };
 
+/** Libellés courts de moteur, utilisés dans les sous-titres de session. */
+export const engineShortLabels: Record<EngineId, string> = {
+  v86: 'v86',
+  'wasm-x86': 'WASM x86',
+  'wasm-x86_64': 'WASM x64',
+  'wasm-arm': 'WASM ARM',
+  'wasm-powerpc': 'WASM PowerPC',
+  'wasm-68k': 'WASM 68k',
+};
+
 export const executionLabels: Record<ExecutionMode, string> = {
   browser: 'Dans le navigateur',
+};
+
+/** Libellés du média de démarrage émulé (`bootDevice` d'un profil). */
+export const bootDeviceLabels: Record<string, string> = {
+  disk: 'Disque (hda)',
+  cdrom: 'CD-ROM',
+};
+
+/** Libellés de la carte réseau émulée vue par l'invité. */
+export const hardwareNetworkLabels: Record<HardwareNetwork, string> = {
+  virtio: 'VirtIO',
+  ne2k: 'NE2000',
+  none: 'Aucune',
 };
 
 export const availabilityLabels: Record<Availability, string> = {

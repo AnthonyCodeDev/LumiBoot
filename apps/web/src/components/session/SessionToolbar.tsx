@@ -1,20 +1,9 @@
 import type { OSDefinition } from '@lumiboot/contracts';
 import type { SessionSnapshot, VMState } from '@lumiboot/vm-core';
 import { Button } from '../ui/Button';
-import { getPrimaryLaunchProfile, launchProfileLabel } from '../../lib/labels';
+import { engineShortLabels, getPrimaryLaunchProfile } from '../../lib/labels';
 import { resolveNetworkProfile } from '../../config/runtime';
 import { useSessionsStore } from '../../features/sessions/sessions.store';
-
-const STATE_LABELS: Record<SessionSnapshot['state'], string> = {
-  idle: 'Inactif',
-  preparing: 'Préparation',
-  downloading: 'Téléchargement',
-  booting: 'Démarrage',
-  running: 'En cours',
-  stopping: 'Arrêt',
-  stopped: 'Arrêté',
-  error: 'Erreur',
-};
 
 /** États pendant lesquels une demande d'arrêt a du sens. */
 const STOPPABLE: readonly VMState[] = ['preparing', 'downloading', 'booting', 'running'];
@@ -44,16 +33,6 @@ export function SessionToolbar({
 }: SessionToolbarProps) {
   const launchProfile = getPrimaryLaunchProfile(system);
   const canStop = STOPPABLE.includes(session.state);
-  const totalBytes = session.totalBytes ?? 0;
-  const loadedBytes = session.loadedBytes ?? 0;
-  const hasProgress = session.state === 'downloading' && totalBytes > 0;
-  const progressPercent = hasProgress
-    ? Math.round(Math.min(Math.max(loadedBytes / totalBytes, 0), 1) * 100)
-    : null;
-  const stateLabel =
-    progressPercent !== null
-      ? `${STATE_LABELS[session.state]} · ${progressPercent} %`
-      : STATE_LABELS[session.state];
   // Mode réseau **effectivement utilisé au démarrage** de la session (mémorisé
   // par le store au `boot`, ex. `local-proxy` par sélection automatique),
   // et non le mode configuré. Repli sur le mode configuré si la session n'est
@@ -68,21 +47,17 @@ export function SessionToolbar({
   }
 
   return (
-    <div className="session-toolbar">
+    <div className="session-toolbar" data-state={session.state} data-session-id={session.id}>
       <div className="session-toolbar-left">
         <img src={system.iconUrl} alt="" />
         <div className="session-title">
           <h1>{system.displayName}</h1>
           <p>
-            {system.versionLabel} · {launchProfileLabel(launchProfile)} · provider «{' '}
-            {session.providerId} »
+            {system.versionLabel} · {engineShortLabels[launchProfile.engineId]}
           </p>
         </div>
       </div>
       <div className="session-actions">
-        <span className="session-state" data-state={session.state}>
-          {stateLabel}
-        </span>
         {networkMode ? (
           <span className="session-network-badge" data-testid="session-network-mode">
             Réseau : {networkMode}

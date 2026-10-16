@@ -552,6 +552,18 @@ ls -l "$ROOTFS/etc/resolv.conf"
 echo "== 9. Image disque ext4 brute ($DISK_SIZE) =="
 truncate -s "$DISK_SIZE" "$BUILD_DIR/rootfs.img"
 mkfs.ext4 -F -L lumiboot -d "$ROOTFS" "$BUILD_DIR/rootfs.img"
+
+# `mkfs.ext4 -d` (metadata_csum activé par défaut) peut produire des blocs de
+# répertoire sans place pour la queue de checksum -> le noyau invité logue en
+# boucle « No space for directory leaf checksum. Please run e2fsck -D. » puis
+# « ext4_find_entry: reading directory lblock 0 » à chaque lecture du
+# répertoire concerné. `e2fsck -fyD` reconstruit les index/checksums des
+# répertoires (option -D) directement dans l'image fraîchement créée.
+e2fsck -fyD "$BUILD_DIR/rootfs.img"
+
+# Contrôle final en LECTURE SEULE : la passe ci-dessus doit avoir laissé un
+# système de fichiers propre ; toute incohérence restante doit faire échouer
+# le build.
 e2fsck -fn "$BUILD_DIR/rootfs.img"
 
 # Vérification post-copie : `mkfs.ext4 -d` DOIT préserver le bit setuid de

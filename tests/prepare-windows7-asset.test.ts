@@ -9,7 +9,7 @@ import { parseLocalDiskManifest } from '../packages/vm-assets/src/local-disk';
 /**
  * Test d'intégration du pipeline réel `scripts/prepare-windows7-asset.mjs` :
  * on lance le script avec une petite image temporaire (jamais le vrai disque
- * de 16 Gio) et on valide sa sortie avec le schéma `@lumiboot/vm-assets`.
+ * de 32 Gio) et on valide sa sortie avec le schéma `@lumiboot/vm-assets`.
  * Preuve que l'outil est réutilisable et que sa sortie est conforme.
  */
 
@@ -48,17 +48,17 @@ describe('prepare-windows7-asset.mjs', () => {
       '--out',
       outDir,
       '--ref',
-      'windows-7-x86',
+      'windows-7-pro-sp1-x86',
       '--json',
     ]);
     expect(result.status).toBe(0);
     const manifest = parseLocalDiskManifest(JSON.parse(result.stdout));
-    expect(manifest.ref).toBe('windows-7-x86');
+    expect(manifest.ref).toBe('windows-7-pro-sp1-x86');
     expect(manifest.disk.size).toBe(sourceBytes.length);
     expect(manifest.disk.sha256).toBe(sourceHash);
     expect(manifest.boot).toEqual({
       mode: 'disk-boot',
-      url: '/images/windows-7-x86/disk.img',
+      url: '/images/windows-7-pro-sp1-x86/disk.img',
       async: true,
       size: sourceBytes.length,
     });

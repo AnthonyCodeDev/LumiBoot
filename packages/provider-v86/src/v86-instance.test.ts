@@ -59,6 +59,7 @@ class FakeV86 {
 
 function createConsoleStub(): V86ConsoleAdapter {
   return {
+    screen: null,
     attach: vi.fn(() => ({
       screenContainer: document.createElement('div'),
       serialTextarea: document.createElement('textarea'),
@@ -139,11 +140,11 @@ describe('V86Instance', () => {
     const emulator = new FakeV86();
     const instance = new V86Instance({
       providerId: 'v86',
-      systemId: 'windows-7-x86',
+      systemId: 'windows-7-pro-sp1-x86',
       emulator: emulator as unknown as V86,
       console: createConsoleStub(),
       readiness: {
-        marker: 'LUMIBOOT_DISK_BOOT:windows-7-x86',
+        marker: 'LUMIBOOT_DISK_BOOT:windows-7-pro-sp1-x86',
         mode: 'disk-boot',
         channel: 'vga',
       },

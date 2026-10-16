@@ -181,7 +181,7 @@ export class V86Provider implements VMEngine {
       launchProfile.configuration,
       configuration,
     );
-    assertPowerOfTwoMiB(memoryMiB, 'memory_size', os.id);
+    assertSupportedMemoryMiB(memoryMiB, 'memory_size', os.id);
     const vgaMemoryMiB =
       configuration?.vgaMemoryMiB ??
       launchProfile.configuration?.vgaMemoryMiB ??
@@ -373,7 +373,7 @@ export class V86Provider implements VMEngine {
   }
 }
 
-/** Mémoire par défaut (puissance de deux) si aucun niveau ne la fournit. */
+/** Mémoire par défaut si aucun niveau ne la fournit. */
 const DEFAULT_MEMORY_MIB = 512;
 
 interface MemoryHint {
@@ -393,12 +393,20 @@ function resolveMemoryMiB(
   );
 }
 
-function assertPowerOfTwoMiB(value: number, label: string, systemId: string): void {
-  const isPowerOfTwo = Number.isInteger(value) && value > 0 && (value & (value - 1)) === 0;
-  if (!isPowerOfTwo) {
+/**
+ * Valide la mémoire invitée selon les contraintes RÉELLES de v86 0.5.471 :
+ * un entier de Mio strictement positif dont la taille en octets tient dans un
+ * entier signé 32 bits (`0x7FFFFFFF`, soit 2047 Mio). v86 arrondit
+ * `create_memory` à un multiple de 128 Kio et clampe au-delà de 2 Gio : une
+ * puissance de deux n'est PAS requise. 1536 Mio est donc valide et accepté.
+ */
+function assertSupportedMemoryMiB(value: number, label: string, systemId: string): void {
+  const supported =
+    Number.isInteger(value) && value > 0 && value * MiB <= 0x7fffffff;
+  if (!supported) {
     throw new VMError(
       'START_FAILED',
-      `« ${label} » doit être une puissance de deux (reçu : ${value} MiB).`,
+      `« ${label} » doit être un entier de Mio <= 2047 (reçu : ${value} MiB).`,
       { systemId },
     );
   }

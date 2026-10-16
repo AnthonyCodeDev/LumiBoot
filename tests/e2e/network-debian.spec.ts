@@ -81,7 +81,7 @@ async function bootDebianAndWaitForPrompt(
 
   await page.getByRole('button', { name: 'Logs' }).click();
 
-  const state = page.locator('.session-state');
+  const state = page.locator('.session-toolbar');
   // `running` n'est émis que sur preuve du marqueur invité sur ttyS0.
   await expect(state).toHaveAttribute('data-state', 'running', { timeout: runningTimeout });
 
@@ -148,7 +148,7 @@ test.describe('Réseau invité Debian (browser-fetch, boot réel)', () => {
 
     // Arrêt propre : la session doit atteindre `stopped` sans rester bloquée.
     await page.getByRole('button', { name: 'Arrêter' }).click();
-    await expect(page.locator('.session-state')).toHaveAttribute('data-state', 'stopped', {
+    await expect(page.locator('.session-toolbar')).toHaveAttribute('data-state', 'stopped', {
       timeout: 60_000,
     });
   });
@@ -182,7 +182,7 @@ test.describe('Réseau invité Debian (browser-fetch, boot réel)', () => {
     const serial = await bootDebianAndWaitForPrompt(page, 300_000);
     await expect(serial).toHaveValue(/lumiboot@lumiboot/);
 
-    const state = page.locator('.session-state');
+    const state = page.locator('.session-toolbar');
 
     // Arrêter puis redémarrer : le cycle de vie reste fonctionnel malgré le
     // relais injoignable (aucun blocage, aucune ressource bloquante).

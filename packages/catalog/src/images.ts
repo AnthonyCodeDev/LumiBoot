@@ -101,20 +101,41 @@ export const images = [
     id: 'windows-7-x86-image',
     familyId: 'windows',
     architecture: 'i386',
-    // Disque RAW de la codebase (images/windows-7-x86/disk.img, ignoré par Git)
-    // servi localement en HTTP Range. Aucun import : il est démarré directement
-    // par BIOS sous v86 (voir docs/windows-7.md).
+    // Disque RAW 16 Gio de l'opérateur (images/windows-7-x86/disk.img, ignoré
+    // par Git) servi localement en HTTP Range. Aucun import : il est démarré
+    // directement par BIOS sous v86 (voir docs/windows-7.md). Variante « Lite »,
+    // base (mère) du groupe de variantes Windows 7.
     imageRef: 'windows-7-x86',
     requirements: [
       'Navigateur moderne avec WebAssembly (v86)',
       'Disque RAW local servi en HTTP Range (images/windows-7-x86/disk.img)',
-      'Mémoire invitée 1024 Mio (niveau puissance de deux)',
+      'Mémoire invitée 1024 Mio',
       'Démarrage disque (MBR) ; pas de noyau Linux',
     ],
     integrationNote:
-      'Démarrage BIOS direct du disque RAW local par hda (jamais en cdrom), lu en ' +
-      'HTTP Range via v86. Le disque n’est jamais modifié : les écritures invitées ' +
-      'restent en mémoire le temps de la session.',
+      'Démarrage BIOS direct du disque RAW local par hda IDE (jamais en cdrom), ' +
+      'lu en HTTP Range via v86. Base immuable, écritures invitées en mémoire le ' +
+      'temps de la session. Variante « Lite ».',
+  },
+  {
+    id: 'windows-7-pro-sp1-x86-image',
+    familyId: 'windows',
+    architecture: 'i386',
+    // Disque RAW 32 Gio de l'opérateur (images/windows-7-pro-sp1-x86/disk.img,
+    // ignoré par Git) servi localement en HTTP Range. Aucun import : il est
+    // démarré directement par BIOS sous v86 (voir docs/windows-7.md). Variante
+    // « Professionnel » du groupe de variantes Windows 7.
+    imageRef: 'windows-7-pro-sp1-x86',
+    requirements: [
+      'Navigateur moderne avec WebAssembly (v86)',
+      'Disque RAW 32 Gio servi en HTTP Range (images/windows-7-pro-sp1-x86/disk.img)',
+      'Mémoire invitée 1536 Mio (arrondie à 128 Kio près par v86)',
+      'Démarrage disque (MBR) ; pas de noyau Linux',
+    ],
+    integrationNote:
+      'Démarrage BIOS direct du disque RAW local par hda en IDE (jamais en cdrom), ' +
+      'lu en HTTP Range via v86. La base disque n’est jamais modifiée : les écritures ' +
+      'invitées restent en mémoire le temps de la session.',
   },
   {
     id: 'windows-10-x64-image',

@@ -1,20 +1,79 @@
+import { useEffect, useState, type RefObject } from 'react';
 import type { OSDefinition } from '@lumiboot/contracts';
 import type { SessionSnapshot } from '@lumiboot/vm-core';
 import { getPrimaryLaunchProfile } from '../../lib/labels';
-import {
-  STEPS,
-  formatSessionBytes,
-  statusMessageForSession,
-  statusTextForSession,
-  stepIndexForState,
-} from './statusOverlay.helpers';
+import { statusMessageForSession, statusTextForSession } from './statusOverlay.helpers';
 
 export interface StatusOverlayProps {
   session: SessionSnapshot;
   system: OSDefinition;
+  /** Référence vers `.session-console`, qui contient le `textarea.v86-serial`. */
+  consoleRef: RefObject<HTMLDivElement>;
 }
 
-export function StatusOverlay({ session, system }: StatusOverlayProps) {
+/** Période de relecture du terminal série (ms). */
+const SERIAL_POLL_MS = 400;
+/** Nombre de lignes de log conservées à l'écran. */
+const LOG_LINE_COUNT = 3;
+
+/**
+ * Dernières lignes non vides du terminal série de l'invité.
+ * v86 écrit dans `.value` du `<textarea class="v86-serial">`, même masqué.
+ */
+function readSerialTail(container: HTMLElement | null): string[] {
+  const serial = container?.querySelector<HTMLTextAreaElement>('textarea.v86-serial');
+  const raw = serial?.value ?? '';
+  return raw
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0)
+    .slice(-LOG_LINE_COUNT);
+}
+
+interface SessionLogsProps {
+  consoleRef: RefObject<HTMLDivElement>;
+  fallback: string;
+}
+
+/**
+ * Panneau de logs : les 3 dernières lignes du terminal, rafraîchies en polling
+ * pour donner l'impression d'un défilement continu. Toujours au moins une ligne
+ * (repli dérivé de l'état) pour ne jamais afficher un panneau vide.
+ */
+function SessionLogs({ consoleRef, fallback }: SessionLogsProps) {
+  const [tail, setTail] = useState('');
+
+  useEffect(() => {
+    const read = () => {
+      const next = readSerialTail(consoleRef.current).join('\n');
+      setTail((prev) => (prev === next ? prev : next));
+    };
+    read();
+    const timer = window.setInterval(read, SERIAL_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [consoleRef]);
+
+  const lines = tail.length > 0 ? tail.split('\n') : [fallback];
+
+  return (
+    <div className="session-logs" role="log" aria-label="Journal de démarrage">
+      {lines.map((line, index) => (
+        <p
+          className="session-logs-line"
+          key={`${index}-${line}`}
+          data-current={index === lines.length - 1 ? '' : undefined}
+        >
+          {line}
+          {index === lines.length - 1 ? (
+            <span className="session-logs-cursor" aria-hidden="true" />
+          ) : null}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+export function StatusOverlay({ session, system, consoleRef }: StatusOverlayProps) {
   const launchProfile = getPrimaryLaunchProfile(system);
 
   if (session.state === 'error') {
@@ -75,16 +134,6 @@ export function StatusOverlay({ session, system }: StatusOverlayProps) {
   }
 
   const statusText = statusTextForSession(session);
-  const loadedBytes = session.loadedBytes ?? 0;
-  const totalBytes = session.totalBytes ?? 0;
-  const hasTotal = totalBytes > 0;
-  const ratio = hasTotal ? Math.min(Math.max(loadedBytes / totalBytes, 0), 1) : 0;
-  const percent = Math.round(ratio * 100);
-  const currentStep =
-    session.state === 'running' ? STEPS.length - 1 : stepIndexForState(session.state);
-  const progressAriaText = hasTotal
-    ? `${percent} % · ${formatSessionBytes(loadedBytes)} sur ${formatSessionBytes(totalBytes)}`
-    : statusText;
 
   return (
     <div className="status-overlay" role="status" aria-live="polite">
@@ -94,60 +143,7 @@ export function StatusOverlay({ session, system }: StatusOverlayProps) {
           <h2 className="session-progress-title">{statusText}</h2>
         </header>
 
-        <ol className="session-steps" aria-label="Progression de la session">
-          {STEPS.map((label, index) => {
-            const status =
-              index < currentStep ? 'done' : index === currentStep ? 'current' : 'upcoming';
-            return (
-              <li
-                key={label}
-                className="session-steps-item"
-                data-status={status}
-                aria-current={status === 'current' ? 'step' : undefined}
-              >
-                <span className="session-steps-marker" aria-hidden="true">
-                  {status === 'done' ? (
-                    <svg className="session-steps-check" viewBox="0 0 16 16">
-                      <path d="M4.5 8.5 7 11l4.5-5.5" />
-                    </svg>
-                  ) : status === 'current' ? (
-                    <span className="session-steps-core" />
-                  ) : null}
-                </span>
-                <span className="session-steps-label">{label}</span>
-              </li>
-            );
-          })}
-        </ol>
-
-        <div
-          className="session-progress-bar"
-          role="progressbar"
-          aria-label="Progression du téléchargement"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={hasTotal ? percent : undefined}
-          aria-valuetext={progressAriaText}
-        >
-          <div className="session-progress-track">
-            <div
-              className={
-                hasTotal
-                  ? 'session-progress-fill'
-                  : 'session-progress-fill session-progress-fill--indeterminate'
-              }
-              style={hasTotal ? { width: `${percent}%` } : undefined}
-            />
-          </div>
-          {hasTotal ? (
-            <div className="session-progress-meta">
-              <span className="session-progress-percent">{percent} %</span>
-              <span className="session-progress-bytes">
-                {formatSessionBytes(loadedBytes)} / {formatSessionBytes(totalBytes)}
-              </span>
-            </div>
-          ) : null}
-        </div>
+        <SessionLogs consoleRef={consoleRef} fallback={statusText} />
       </div>
     </div>
   );

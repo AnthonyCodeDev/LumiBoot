@@ -469,27 +469,6 @@
   color: var(--text-tertiary);
   font-size: 10px;
 }
-.session-state {
-  padding: 5px 9px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface-muted);
-  color: var(--text-secondary);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-.session-state[data-state='running'] {
-  border-color: #285b48;
-  background: var(--success-soft);
-  color: var(--success);
-}
-.session-state[data-state='error'] {
-  border-color: #653642;
-  background: var(--danger-soft);
-  color: var(--danger);
-}
 .session-actions {
   display: flex;
   align-items: center;
@@ -540,11 +519,10 @@
   width: 100%;
   background: #000;
   border-bottom: 1px solid #282c33;
-  display: grid;
-  place-items: center;
+  display: flex; /* au lieu de grid/place-items */
   overflow: hidden;
 }
-/* Le canvas reçoit des styles inline px de v86 : on les neutralise avec !important. */
+/* Le canvas reçoit des styles inline px de v86 : neutralisés avec !important. */
 .v86-screen canvas {
   display: block;
   width: 100% !important;
@@ -555,10 +533,13 @@
   object-position: center;
 }
 .v86-screen-text {
-  width: max-content !important;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
   box-sizing: border-box;
-  transform: scale(var(--v86-fit, 1));
-  transform-origin: center center;
 }
 /* Logs série : plus petits, en dessous de l'écran, style terminal. */
 .v86-serial {
@@ -949,9 +930,6 @@
   .session-actions .btn {
     flex: 1;
   }
-  .session-state {
-    margin-right: auto;
-  }
   .session-viewport {
     min-height: 420px;
   }
@@ -1074,123 +1052,81 @@
   font-size: 12px;
   line-height: 1.7;
 }
-.proxy-download {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.proxy-download-primary {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 .proxy-hint {
   margin: 0;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.7;
 }
-.proxy-warning {
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid #5d4a2b;
-  border-radius: var(--radius-md);
-  background: var(--warning-soft);
-  color: var(--warning);
-  font-size: 12px;
+.proxy-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.proxy-connected {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.proxy-note {
+  margin: 12px 0 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
   line-height: 1.7;
 }
-.proxy-others-toggle {
-  align-self: flex-start;
-  padding: 0;
-  border: 0;
-  background: transparent;
+.proxy-note a {
   color: var(--text-tertiary);
-  font-size: 12px;
   font-weight: 550;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.proxy-others-toggle:hover {
+.proxy-note a:hover {
   color: var(--text);
 }
-.proxy-targets {
-  margin: 0;
+/* Ligne « Installer » + « voir toutes les versions », sur une même ligne. */
+.proxy-install-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.proxy-versions-toggle {
   padding: 0;
-  list-style: none;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.proxy-versions-toggle:hover {
+  color: var(--text);
+}
+/* Liste dépliable de toutes les plateformes du manifeste. */
+.proxy-targets {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
 }
 .proxy-targets a {
   color: var(--primary);
   font-size: 12px;
-  font-weight: 550;
 }
-.proxy-targets a:hover {
-  text-decoration: underline;
-}
-.proxy-targets span[aria-disabled='true'] {
+.proxy-targets span {
   color: var(--text-disabled);
   font-size: 12px;
-}
-.proxy-status {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface-muted);
-}
-.proxy-status-body {
-  flex: 1;
-  min-width: 0;
-}
-.proxy-status-body strong {
-  font-size: 13px;
-}
-.proxy-status-body p {
-  margin: 6px 0 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.7;
-}
-.proxy-status-body code {
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--bg-subtle);
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-}
-.proxy-status-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.proxy-status-dot {
-  width: 9px;
-  height: 9px;
-  flex: 0 0 auto;
-  margin-top: 5px;
-  border-radius: 999px;
-  background: var(--text-disabled);
-}
-.proxy-status[data-tone='ok'] .proxy-status-dot {
-  background: var(--success);
-}
-.proxy-status[data-tone='warn'] .proxy-status-dot {
-  background: var(--warning);
-}
-.proxy-status[data-tone='bad'] .proxy-status-dot {
-  background: var(--danger);
-}
-.proxy-steps {
-  margin: 14px 0 0;
-  padding-left: 20px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.8;
 }
 .session-network-badge {
   padding: 5px 9px;

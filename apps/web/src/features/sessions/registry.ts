@@ -6,7 +6,10 @@ const V86_CAPABILITIES: VMCapabilities = {
   architectures: ['i386'],
   ramSnapshots: true,
   diskSnapshots: true,
-  partialDownload: false,
+  // v86 lit `hda` par requêtes HTTP Range (`hda.async`) : le disque n'est jamais
+  // téléchargé en entier. Cette copie locale des capacités doit rester alignée
+  // sur `V86Provider` (`V86_CAPABILITIES.partialDownload`).
+  partialDownload: true,
   resumable: false,
   configurableMemory: true,
 };

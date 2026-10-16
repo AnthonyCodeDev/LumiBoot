@@ -139,11 +139,13 @@ describe('getEffectiveAvailability : média utilisateur requis', () => {
   });
 });
 
-describe('catalogue : Windows 7 sous v86 (disque RAW local)', () => {
-  it('est sélectionnable, moteur v86 intégré, et ready (boot disque prouvé)', () => {
-    const windows = getSystemById('windows-7-x86');
+describe('catalogue : Windows 7 Professionnel (enfant validé) sous v86', () => {
+  it('est sélectionnable, moteur v86 intégré, disponibilité dérivée de validated', () => {
+    const windows = getSystemById('windows-7-pro-sp1-x86');
     const profile = windows?.launchProfiles[0];
-    const definition = launchProfiles.find((candidate) => candidate.id === 'windows-7-x86');
+    const definition = launchProfiles.find(
+      (candidate) => candidate.id === 'windows-7-pro-sp1-x86',
+    );
     expect(windows).not.toBeNull();
     expect(windows?.family).toBe('windows');
     expect(windows?.architecture).toBe('i386');
@@ -151,39 +153,87 @@ describe('catalogue : Windows 7 sous v86 (disque RAW local)', () => {
     expect(profile && isEngineIntegrated(profile.engineId)).toBe(true);
     // `validated` vit sur la définition du catalogue, pas sur le contrat.
     expect(definition?.validated).toBe(true);
-    expect(windows?.availability).toBe('ready');
+    // La disponibilité est DÉRIVÉE de `validated` : jamais déclarée en dur.
+    expect(windows?.availability).toBe(definition?.validated ? 'ready' : 'planned');
   });
 
   it('référence le disque RAW local de la codebase (plus de média à importer)', () => {
-    expect(getSystemById('windows-7-x86')?.availability).toBe('ready');
     // Le disque local est référencé : plus de `resource-required`.
-    expect(getSystemById('windows-7-x86')?.imageRef).toBe('windows-7-x86');
-    expect(getSystemById('windows-7-x86')?.mediaStrategy).toBe('bundled');
+    expect(getSystemById('windows-7-pro-sp1-x86')?.imageRef).toBe('windows-7-pro-sp1-x86');
+    expect(getSystemById('windows-7-pro-sp1-x86')?.mediaStrategy).toBe('bundled');
+    expect(getSystemById('windows-7-pro-sp1-x86')?.availability).toBe('ready');
   });
 
   it('utilise une preuve de démarrage disque (aucun marqueur invité simulé)', () => {
+    const profile = getSystemById('windows-7-pro-sp1-x86')?.launchProfiles[0];
+    expect(profile?.readiness?.mode).toBe('disk-boot');
+    expect(profile?.readiness?.marker).toBe('LUMIBOOT_DISK_BOOT:windows-7-pro-sp1-x86');
+  });
+
+  it('active l’ACPI et la NIC ne2k requises par l’invité', () => {
+    const profile = getSystemById('windows-7-pro-sp1-x86')?.launchProfiles[0];
+    expect(profile?.hardwareProfile?.network).toBe('ne2k');
+    expect(profile?.hardwareProfile?.acpi).toBe(true);
+  });
+
+  it('expose l’identité Professionnel SP1 x86 et 1536 Mio acceptés par v86', () => {
+    const system = getSystemById('windows-7-pro-sp1-x86');
+    const profile = system?.launchProfiles[0];
+    expect(system?.displayName).toBe('Windows 7 (Professionnel)');
+    expect(system?.versionLabel).toBe('SP1 · x86');
+    // v86 arrondit `create_memory` à un multiple de 128 Kio et accepte les
+    // valeurs non-puissances-de-deux : 1536 Mio (installé sous QEMU) est valide.
+    expect(profile?.configuration?.memoryMiB).toBe(1536);
+    expect(profile?.minMemoryMiB).toBe(1536);
+  });
+
+  it('est rattaché à la mère neutre `windows-7-x86` comme variante par défaut', () => {
+    const system = getSystemById('windows-7-pro-sp1-x86');
+    expect(system?.variantGroupId).toBe('windows-7-x86');
+    expect(system?.variantName).toBe('Professionnel');
+    expect(system?.variantOrder).toBe(1);
+  });
+});
+
+describe('catalogue : Windows 7 Lite (mère du groupe) sous v86', () => {
+  it('est la mère neutre du groupe, avec son disque RAW 16 Gio local', () => {
+    const lite = getSystemById('windows-7-x86');
+    const profile = lite?.launchProfiles[0];
+    expect(lite).not.toBeNull();
+    expect(lite?.family).toBe('windows');
+    expect(lite?.architecture).toBe('i386');
+    // La mère porte le groupe : elle n'a pas de `variantGroupId`.
+    expect(lite?.variantGroupId).toBeUndefined();
+    expect(lite?.variantName).toBe('Lite');
+    expect(lite?.variantOrder).toBe(2);
+    expect(lite?.imageRef).toBe('windows-7-x86');
+    expect(lite?.mediaStrategy).toBe('bundled');
+    expect(profile?.engineId).toBe('v86');
+  });
+
+  it('dérive la disponibilité de `validated` et est `ready` (boot réel prouvé)', () => {
+    const lite = getSystemById('windows-7-x86');
+    const definition = launchProfiles.find((candidate) => candidate.id === 'windows-7-x86');
+    // `validated` vit sur la définition du catalogue, pas sur le contrat : la
+    // disponibilité suit la même règle que Professionnel (jamais déclarée).
+    expect(definition?.validated).toBe(true);
+    expect(lite?.availability).toBe(definition?.validated ? 'ready' : 'planned');
+    // Boot bureau réel prouvé (tests/e2e/windows7-desktop.spec.ts) : `ready`.
+    expect(lite?.availability).toBe('ready');
+  });
+
+  it('utilise une preuve de démarrage disque dédiée', () => {
     const profile = getSystemById('windows-7-x86')?.launchProfiles[0];
     expect(profile?.readiness?.mode).toBe('disk-boot');
     expect(profile?.readiness?.marker).toBe('LUMIBOOT_DISK_BOOT:windows-7-x86');
   });
 
-  it('active l’ACPI et la NIC ne2k requises par l’invité', () => {
+  it('active l’ACPI et la NIC ne2k et exige 1024 Mio', () => {
     const profile = getSystemById('windows-7-x86')?.launchProfiles[0];
     expect(profile?.hardwareProfile?.network).toBe('ne2k');
     expect(profile?.hardwareProfile?.acpi).toBe(true);
-  });
-
-  it('expose l’identité Lite x86 et une mémoire puissance de deux', () => {
-    const system = getSystemById('windows-7-x86');
-    const profile = system?.launchProfiles[0];
-    expect(system?.displayName).toBe('Windows 7 Lite');
-    expect(system?.versionLabel).toBe('Lite · x86');
-    // v86 exige une puissance de deux : 1536 (préparé sous QEMU) est invalide.
-    const memoryMiB = profile?.configuration?.memoryMiB ?? 0;
-    expect(Number.isInteger(memoryMiB) && memoryMiB > 0 && (memoryMiB & (memoryMiB - 1)) === 0).toBe(
-      true,
-    );
-    expect(memoryMiB).toBe(1024);
+    expect(profile?.configuration?.memoryMiB).toBe(1024);
+    expect(profile?.minMemoryMiB).toBe(1024);
   });
 });
 
@@ -210,7 +260,7 @@ describe('catalogue : profils matériels et preuves de démarrage', () => {
     expect(getSystemById('ubuntu-18-i386')?.launchProfiles[0]?.hardwareProfile?.network).toBe(
       'virtio',
     );
-    expect(getSystemById('windows-7-x86')?.launchProfiles[0]?.hardwareProfile?.network).toBe(
+    expect(getSystemById('windows-7-pro-sp1-x86')?.launchProfiles[0]?.hardwareProfile?.network).toBe(
       'ne2k',
     );
   });

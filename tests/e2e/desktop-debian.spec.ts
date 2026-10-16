@@ -46,7 +46,7 @@ async function waitForDesktopProof(page: Page): Promise<'ready' | 'failed' | 'er
         const value = serial?.value ?? '';
         if (value.includes(ready)) return 'ready';
         if (value.includes(failed)) return 'failed';
-        if (document.querySelector('.session-state')?.getAttribute('data-state') === 'error') {
+        if (document.querySelector('.session-toolbar')?.getAttribute('data-state') === 'error') {
           return 'error';
         }
         return null;
@@ -80,7 +80,7 @@ async function openDesktopSession(page: Page): Promise<{ serial: Locator; state:
   // Les logs série sont masqués par défaut : on les affiche pour lire `.v86-serial`.
   await page.getByRole('button', { name: 'Logs' }).click();
 
-  return { serial: page.locator('.v86-serial'), state: page.locator('.session-state') };
+  return { serial: page.locator('.v86-serial'), state: page.locator('.session-toolbar') };
 }
 
 /** Dump la sortie série complète dans la sortie de test (diagnostic). */

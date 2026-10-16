@@ -4,8 +4,9 @@ test.describe('Bibliothèque', () => {
   test('affiche les huit systèmes affichés du catalogue (mères + autonomes)', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Bibliothèque' })).toBeVisible();
-    // 10 entrées au catalogue plat, mais les 2 variantes Debian enfants sont
-    // repliées sur la carte de leur mère : 8 cartes affichées.
+    // 11 entrées au catalogue plat, mais les 3 variantes enfants (2 Debian +
+    // 1 Windows 7 Professionnel) sont repliées sur la carte de leur mère :
+    // 8 cartes affichées.
     await expect(page.locator('.os-card')).toHaveCount(8);
   });
 

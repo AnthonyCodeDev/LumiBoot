@@ -13,10 +13,11 @@ import { useSessionsStore } from '../features/sessions/sessions.store';
 import { getLaunchReadiness } from '../lib/launch';
 import {
   availabilityLabels,
+  bootDeviceLabels,
+  engineLabels,
   familyLabels,
   getPrimaryLaunchProfile,
-  launchProfileLabel,
-  engineLabels,
+  hardwareNetworkLabels,
 } from '../lib/labels';
 import { NotFoundPage } from './NotFoundPage';
 
@@ -56,8 +57,13 @@ export function SystemPage() {
     '--accent': base.accent,
     '--accent-rgb': base.accentRgb,
   } as CSSProperties;
-  const launchProfile = getPrimaryLaunchProfile(base);
+  // Profil principal de la variante À LANCER : le tableau de spécifications
+  // reflète la sélection (mémoire, réseau…), pas la mère affichée.
+  const profile = getPrimaryLaunchProfile(selected);
   const readiness = getLaunchReadiness(selected);
+  const memoryMiB = profile.configuration?.memoryMiB ?? selected.minMemoryMiB;
+  const bootDevice = profile.configuration?.bootDevice;
+  const network = profile.hardwareProfile?.network;
 
   return (
     <main className="system-detail">
@@ -76,28 +82,38 @@ export function SystemPage() {
           <p className="drawer-description">{base.description}</p>
           <div className="spec-box">
             <div>
+              <span>Moteur</span>
+              <strong>{engineLabels[profile.engineId]}</strong>
+            </div>
+            <div>
               <span>Architecture</span>
-              <strong>{base.architecture}</strong>
+              <strong>{selected.architecture}</strong>
             </div>
+            {memoryMiB !== undefined ? (
+              <div>
+                <span>Mémoire</span>
+                <strong>{memoryMiB} Mio</strong>
+              </div>
+            ) : null}
+            {bootDevice !== undefined ? (
+              <div>
+                <span>Démarrage</span>
+                <strong>{bootDeviceLabels[bootDevice] ?? bootDevice}</strong>
+              </div>
+            ) : null}
+            {network !== undefined ? (
+              <div>
+                <span>Réseau</span>
+                <strong>{hardwareNetworkLabels[network]}</strong>
+              </div>
+            ) : null}
             <div>
-              <span>Mode d&apos;exécution</span>
-              <strong>{launchProfileLabel(launchProfile)}</strong>
-            </div>
-            <div>
-              <span>Moteur envisagé</span>
-              <strong>{engineLabels[launchProfile.engineId]}</strong>
-            </div>
-            <div>
-              <span>État actuel</span>
-              <strong className={base.availability === 'ready' ? '' : 'planned-label'}>
-                {availabilityLabels[base.availability]}
+              <span>État</span>
+              <strong className={selected.availability === 'ready' ? '' : 'planned-label'}>
+                {availabilityLabels[selected.availability]}
               </strong>
             </div>
           </div>
-          <h3>Pré-requis</h3>
-          <p className="drawer-bodytext">{base.requirements.join(' · ')}</p>
-          <h3>État de l&apos;intégration</h3>
-          <p className="drawer-bodytext">{base.integrationNote}</p>
           {base.licenseNotes ? (
             <>
               <h3>Licences</h3>

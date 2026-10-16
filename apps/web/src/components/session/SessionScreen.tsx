@@ -112,7 +112,9 @@ export function SessionScreen({
       */}
       <div className="session-viewport">
         <div className={`session-console${logsOpen ? '' : ' logs-hidden'}`} ref={consoleRef} />
-        {!running ? <StatusOverlay session={session} system={system} /> : null}
+        {!running ? (
+          <StatusOverlay session={session} system={system} consoleRef={consoleRef} />
+        ) : null}
       </div>
     </div>
   );

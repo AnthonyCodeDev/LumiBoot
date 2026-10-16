@@ -33,7 +33,7 @@ test.describe('Session Debian 12 i386 (v86, boot réel)', () => {
     // lire/taper dans `.v86-serial` pendant le reste du test.
     await page.getByRole('button', { name: 'Logs' }).click();
 
-    const state = page.locator('.session-state');
+    const state = page.locator('.session-toolbar');
     // `running` = marqueur émis par le Debian invité sur ttyS0, pas un timer.
     await expect(state).toHaveAttribute('data-state', 'running', { timeout: 180_000 });
 

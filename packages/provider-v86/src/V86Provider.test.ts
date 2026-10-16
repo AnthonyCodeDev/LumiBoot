@@ -106,6 +106,7 @@ function makeManifest(memoryMiB = 512): ImageManifest {
 
 function createConsoleStub(): V86ConsoleAdapter {
   return {
+    screen: null,
     attach: vi.fn(() => ({
       screenContainer: document.createElement('div'),
       serialTextarea: document.createElement('textarea'),
@@ -117,19 +118,19 @@ function createConsoleStub(): V86ConsoleAdapter {
 function makeDiskManifest(): LocalDiskManifest {
   return {
     version: 1,
-    ref: 'windows-7-x86',
-    displayName: 'Windows 7 x86 (disque local)',
+    ref: 'windows-7-pro-sp1-x86',
+    displayName: 'Windows 7 Professionnel SP1 x86',
     architecture: 'i386',
-    memoryMiB: 1024,
+    memoryMiB: 1536,
     vgaMemoryMiB: 16,
     license: 'Disque local de la codebase',
-    provenance: 'images/windows-7-x86/disk.img',
-    source: { path: 'images/windows-7-x86/disk.img', size: 17_179_869_184, mtimeMs: 0 },
+    provenance: 'images/windows-7-pro-sp1-x86/disk.img',
+    source: { path: 'images/windows-7-pro-sp1-x86/disk.img', size: 34_359_738_368, mtimeMs: 0 },
     disk: {
       fileName: 'disk.img',
       format: 'raw',
-      url: '/images/windows-7-x86/disk.img',
-      size: 17_179_869_184,
+      url: '/images/windows-7-pro-sp1-x86/disk.img',
+      size: 34_359_738_368,
       mtimeMs: 0,
       sha256: 'd'.repeat(64),
     },
@@ -141,7 +142,12 @@ function makeDiskManifest(): LocalDiskManifest {
         vgabios: { url: '/v86/vgabios.bin', size: 1, sha256: '0'.repeat(64) },
       },
     },
-    boot: { mode: 'disk-boot', url: '/images/windows-7-x86/disk.img', async: true, size: 17_179_869_184 },
+    boot: {
+      mode: 'disk-boot',
+      url: '/images/windows-7-pro-sp1-x86/disk.img',
+      async: true,
+      size: 34_359_738_368,
+    },
   };
 }
 
@@ -182,7 +188,7 @@ describe('V86Provider', () => {
     expect(captured).toHaveLength(0);
   });
 
-  it('refuse une mémoire qui n’est pas une puissance de deux', async () => {
+  it('accepte 1536 Mio (non puissance de deux) comme requis par l’invité Windows', async () => {
     const { provider, captured } = setup();
     const os = makeOS({
       launchProfiles: [
@@ -190,7 +196,24 @@ describe('V86Provider', () => {
           id: 'default',
           engineId: 'v86',
           executionMode: 'browser',
-          configuration: { memoryMiB: 768 },
+          configuration: { memoryMiB: 1536 },
+        },
+      ],
+    });
+    await provider.start(os, document.createElement('div'));
+    // v86 arrondit `create_memory` à 128 Kio : aucune puissance de deux requise.
+    expect(captured[0]?.memory_size).toBe(1536 * MiB);
+  });
+
+  it('refuse une mémoire hors des bornes réelles de v86 (> 2047 Mio)', async () => {
+    const { provider, captured } = setup();
+    const os = makeOS({
+      launchProfiles: [
+        {
+          id: 'default',
+          engineId: 'v86',
+          executionMode: 'browser',
+          configuration: { memoryMiB: 4096 },
         },
       ],
     });
@@ -389,22 +412,22 @@ describe('V86Provider', () => {
 describe('V86Provider : média importé (Windows 7)', () => {
   function makeWindowsOS(): OSDefinition {
     return makeOS({
-      id: 'windows-7-x86',
-      slug: 'windows-7-x86',
+      id: 'windows-7-pro-sp1-x86',
+      slug: 'windows-7-pro-sp1-x86',
       family: 'windows',
       mediaStrategy: 'user-import',
       architecture: 'i386',
       availability: 'resource-required',
       launchProfiles: [
         {
-          id: 'windows-7-x86',
+          id: 'windows-7-pro-sp1-x86',
           engineId: 'v86',
           executionMode: 'browser',
-          minMemoryMiB: 1024,
-          configuration: { memoryMiB: 1024, vgaMemoryMiB: 16, bootDevice: 'disk' },
+          minMemoryMiB: 1536,
+          configuration: { memoryMiB: 1536, vgaMemoryMiB: 16, bootDevice: 'disk' },
           hardwareProfile: { network: 'ne2k', acpi: true },
           readiness: {
-            marker: 'LUMIBOOT_DISK_BOOT:windows-7-x86',
+            marker: 'LUMIBOOT_DISK_BOOT:windows-7-pro-sp1-x86',
             mode: 'disk-boot',
             channel: 'vga',
           },
@@ -431,7 +454,7 @@ describe('V86Provider : média importé (Windows 7)', () => {
     expect(options?.cmdline).toBeUndefined();
     // ACPI activée par le profil matériel (requis par la famille Vista+).
     expect(options?.acpi).toBe(true);
-    expect(options?.memory_size).toBe(1024 * MiB);
+    expect(options?.memory_size).toBe(1536 * MiB);
   });
 
   it('échoue honnêtement (MEDIA_REQUIRED) sans média importé', async () => {
@@ -446,23 +469,23 @@ describe('V86Provider : média importé (Windows 7)', () => {
 describe('V86Provider : disque RAW local bundled (Windows 7)', () => {
   function makeDiskBootOS(): OSDefinition {
     return makeOS({
-      id: 'windows-7-x86',
-      slug: 'windows-7-x86',
+      id: 'windows-7-pro-sp1-x86',
+      slug: 'windows-7-pro-sp1-x86',
       family: 'windows',
       // Plus de `mediaStrategy: 'user-import'` : disque bundled de la codebase.
-      imageRef: 'windows-7-x86',
+      imageRef: 'windows-7-pro-sp1-x86',
       architecture: 'i386',
       availability: 'planned',
       launchProfiles: [
         {
-          id: 'windows-7-x86',
+          id: 'windows-7-pro-sp1-x86',
           engineId: 'v86',
           executionMode: 'browser',
-          minMemoryMiB: 1024,
-          configuration: { memoryMiB: 1024, vgaMemoryMiB: 16, bootDevice: 'disk' },
+          minMemoryMiB: 1536,
+          configuration: { memoryMiB: 1536, vgaMemoryMiB: 16, bootDevice: 'disk' },
           hardwareProfile: { network: 'ne2k', acpi: true },
           readiness: {
-            marker: 'LUMIBOOT_DISK_BOOT:windows-7-x86',
+            marker: 'LUMIBOOT_DISK_BOOT:windows-7-pro-sp1-x86',
             mode: 'disk-boot',
             channel: 'vga',
           },
@@ -477,9 +500,9 @@ describe('V86Provider : disque RAW local bundled (Windows 7)', () => {
 
     const options = captured[0];
     expect(options?.hda).toMatchObject({
-      url: '/images/windows-7-x86/disk.img',
+      url: '/images/windows-7-pro-sp1-x86/disk.img',
       async: true,
-      size: 17_179_869_184,
+      size: 34_359_738_368,
     });
     // Aucun démarrage par noyau : pas de bzimage/initrd/cmdline.
     expect(options?.bzimage).toBeUndefined();
@@ -487,6 +510,6 @@ describe('V86Provider : disque RAW local bundled (Windows 7)', () => {
     expect(options?.cmdline).toBeUndefined();
     // ACPI activée par le profil matériel (requis par la famille Vista+).
     expect(options?.acpi).toBe(true);
-    expect(options?.memory_size).toBe(1024 * MiB);
+    expect(options?.memory_size).toBe(1536 * MiB);
   });
 });

@@ -79,6 +79,7 @@ lerna-debug.log*
 # propre à la machine et ne doivent jamais être committés. Le média lui-même
 # (*.img/*.iso, cf. plus haut) n'est jamais versionné.
 /images/windows-7-x86/
+/images/windows-7-pro-sp1-x86/
 /images/*/provenance.txt
 /media/
 

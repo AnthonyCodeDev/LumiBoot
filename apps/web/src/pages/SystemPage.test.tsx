@@ -100,8 +100,48 @@ describe('SystemPage — sélecteur de variante', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('n’affiche aucun sélecteur pour un système autonome (Windows 7 Lite)', () => {
+  it('affiche le sélecteur de la mère Windows 7, variante par défaut Professionnel', async () => {
+    const user = userEvent.setup();
+    // La carte catalogue Windows 7 ouvre la MÈRE neutre ; Professionnel est la
+    // meilleure variante (variantOrder 1), donc présélectionnée.
     renderSystemPage('windows-7-x86');
+
+    const trigger = screen.getByRole('button', { name: 'Choisir la variante' });
+    expect(trigger.textContent).toBe('Windows 7 Professionnel');
+
+    await user.click(trigger);
+    const options = screen.getAllByRole('option').map((option) => option.textContent);
+    expect(options).toEqual(['Windows 7 Professionnel', 'Windows 7 Lite']);
+  });
+
+  it('n’affiche aucun sélecteur pour un système autonome (Ubuntu 18.04)', () => {
+    renderSystemPage('ubuntu-18-i386');
     expect(screen.queryByRole('button', { name: 'Choisir la variante' })).toBeNull();
+  });
+
+  it('reflète la variante sélectionnée dans le tableau de spécifications', async () => {
+    const user = userEvent.setup();
+    renderSystemPage('debian-12-i386');
+
+    // Debian XFCE (variante par défaut) : 1024 Mio, virtio, démarrage disque.
+    expect(screen.getByText('v86 / WebAssembly')).toBeTruthy();
+    expect(screen.getByText('1024 Mio')).toBeTruthy();
+    expect(screen.getByText('VirtIO')).toBeTruthy();
+    expect(screen.getByText('Disque (hda)')).toBeTruthy();
+
+    // La variante console CLI réduit la mémoire à 512 Mio.
+    await user.click(screen.getByRole('button', { name: 'Choisir la variante' }));
+    await user.click(screen.getByRole('button', { name: 'Debian CLI' }));
+    expect(screen.getByText('512 Mio')).toBeTruthy();
+    expect(screen.queryByText('1024 Mio')).toBeNull();
+  });
+
+  it('affiche les specs de la variante Windows 7 (NE2000, 1536 Mio)', () => {
+    renderSystemPage('windows-7-x86');
+
+    // Windows 7 Professionnel est la variante par défaut du groupe.
+    expect(screen.getByText('Windows 7 Professionnel')).toBeTruthy();
+    expect(screen.getByText('1536 Mio')).toBeTruthy();
+    expect(screen.getByText('NE2000')).toBeTruthy();
   });
 });

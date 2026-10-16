@@ -32,8 +32,12 @@ Règles :
   - `debian-12-i386-xfce` (`variantGroupId: 'debian-12-i386'`, `variantName: 'XFCE'`, `variantOrder: 1`) — **meilleure variante**, ouverte par défaut.
   - `debian-12-i386-desktop` (`variantGroupId: 'debian-12-i386'`, `variantName: 'X11'`, `variantOrder: 2`)
   - `debian-12-i386` (mère/ancre, `variantName: 'CLI'`, `variantOrder: 3`)
-- Tous les autres systèmes (Ubuntu, Windows 7 Lite, etc.) sont **autonomes** (aucune variante).
-- À terme, Windows 7 : `windows-7-x86` (Lite) aura un enfant `windows-7-pro-x86` (`variantName: 'Pro'`) comme meilleure variante.
+- Groupe **Windows 7** — ordre/défaut = **Professionnel** (`variantOrder: 1`) :
+  - `windows-7-pro-sp1-x86` (`variantGroupId: 'windows-7-x86'`, `variantName: 'Professionnel'`, `variantOrder: 1`) — **meilleure variante**, ouverte par défaut ; disque RAW 32 Gio, `validated: true`.
+  - `windows-7-x86` (mère/ancre, `displayName: 'Windows 7'`, `variantName: 'Lite'`, `variantOrder: 2`) ; disque RAW 16 Gio, `validated: true` (boot bureau réel prouvé, `tests/e2e/windows7-desktop.spec.ts`).
+  - La carte catalogue « Windows 7 » ouvre la mère neutre ; le dropdown propose « Windows 7 Professionnel » et « Windows 7 Lite ».
+- Tous les autres systèmes (Ubuntu, Windows 10/11, macOS…) sont **autonomes** (aucune variante).
+- Windows 7 suit désormais **exactement le même modèle que Debian** : une carte, une mère neutre, un dropdown de variantes, et un choix qui ne change que la variante lancée (voir `docs/windows-7.md`).
 
 ## Helpers du catalogue
 
@@ -135,42 +139,45 @@ Exportés par `@lumiboot/catalog` (voir `packages/catalog/src/systems.ts`) :
    `variantOrder` devient la meilleure (ouverte par défaut, en tête du dropdown). Ne pas modifier
    `packages/contracts`.
 
-## Ajouter des enfants à un système existant (exemple : futur Windows 7 Pro)
+## Ajouter un enfant à un système existant (exemple : nouvelle variante du groupe Windows 7)
 
-1. **Image** — `images.ts` : ajouter `windows-7-pro-x86-image` (même `familyId: 'windows'`,
+Le groupe Windows 7 est déjà implémenté (mère `windows-7-x86`). Pour lui ajouter
+une variante supplémentaire :
+
+1. **Image** — `images.ts` : ajouter `windows-7-ultimate-x86-image` (même `familyId: 'windows'`,
    `architecture: 'i386'`, `mediaStrategy: 'user-import'` si le média n'est pas distribuable,
    `licenseNotes` le cas échéant).
 2. **Profil** — `profiles.ts` : ajouter le profil enfant en pointant vers la **mère existante** :
 
    ```ts
    {
-     id: 'windows-7-pro-x86',
-     imageId: 'windows-7-pro-x86-image',
+     id: 'windows-7-ultimate-x86',
+     imageId: 'windows-7-ultimate-x86-image',
      engineId: 'v86',
      executionMode: 'browser',
-     minMemoryMiB: 1024,
-     configuration: { memoryMiB: 1024, vgaMemoryMiB: 16, bootDevice: 'disk' },
+     minMemoryMiB: 1536,
+     configuration: { memoryMiB: 1536, vgaMemoryMiB: 16, bootDevice: 'disk' },
      hardwareProfile: { ...pcHardware('ne2k'), acpi: true },
-     readiness: diskBootReadiness('windows-7-pro-x86'),
-     slug: 'windows-7-pro-x86',
-     displayName: 'Windows 7 Pro',
-     versionLabel: 'Pro · x86',
+     readiness: diskBootReadiness('windows-7-ultimate-x86'),
+     slug: 'windows-7-ultimate-x86',
+     displayName: 'Windows 7 (Ultimate)',
+     versionLabel: 'Ultimate · x86',
      validated: false,
-      // Rattachement à la mère existante Windows 7 Lite.
-      variantGroupId: 'windows-7-x86',
-      variantName: 'Pro',
-      variantOrder: 1,
-      description: '…',
-    }
-    ```
+     // Rattachement à la mère existante du groupe Windows 7.
+     variantGroupId: 'windows-7-x86',
+     variantName: 'Ultimate',
+     variantOrder: 3,
+     description: '…',
+   }
+   ```
 
-3. La fiche Windows 7 propose alors le dropdown ; `getVariantGroup(windows7Lite)` renvoie
-   `[Pro, mère]` (Pro meilleure variante si la mère n'a pas de `variantOrder`, ou un `variantOrder`
-   plus grand). La carte ouvre la mère et le dropdown présélectionne Pro.
+3. La fiche Windows 7 propose alors le dropdown enrichi ; `getVariantGroup(windows7)` renvoie
+   `[Professionnel, Lite, Ultimate]` trié par `variantOrder`. La carte ouvre toujours la mère et le
+   dropdown présélectionne la variante par défaut (au plus petit `variantOrder`).
 
 ## Tests
 
-- `packages/catalog/src/variants.test.ts` — helpers du catalogue.
+- `packages/catalog/src/variants.test.ts` — helpers du catalogue (groupes Debian **et Windows 7**).
 - `apps/web/src/components/catalog/SystemGrid.test.tsx` — repliement de la grille.
 - `apps/web/src/pages/SystemPage.test.tsx` — présence et comportement du dropdown de variante
   (contenu de la mère, défaut = meilleure variante, sélection sans navigation, Échap).
@@ -178,3 +185,5 @@ Exportés par `@lumiboot/catalog` (voir `packages/catalog/src/systems.ts`) :
 - `tests/e2e/xfce-debian.spec.ts` / `tests/e2e/desktop-debian.spec.ts` — la carte Debian ouvre la
   mère ; XFCE est lancée directement (défaut), le flavor Bureau bascule vers X11 via le dropdown
   sans changement d'URL.
+- `tests/e2e/windows7-desktop.spec.ts` — la carte Windows 7 ouvre la mère ; Professionnel est lancée
+  directement (défaut), et Lite se sélectionne dans le dropdown (`VM_E2E_ASSETS=1`).

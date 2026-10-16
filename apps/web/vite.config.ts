@@ -1,7 +1,7 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
-// Module Node ESM (sans déclarations de types) : sert le disque RAW local
-// Windows 7 par HTTP Range en développement, sans copie dans `public/`.
+// Module Node ESM (sans déclarations de types) : sert les disques RAW locaux
+// par HTTP Range en développement, sans copie dans `public/`.
 // @ts-expect-error -- module .mjs sans types TypeScript
 import { createDiskAssetMiddleware } from '../../scripts/lib/disk-asset-dev.mjs';
 
@@ -31,11 +31,13 @@ const isolationHeaders: Record<string, string> | undefined = crossOriginIsolatio
   : undefined;
 
 /**
- * Sert `images/windows-7-x86/disk.img` (hors `public/`, ignoré par Git) en
- * HTTP Range sur la même origine que l'app. v86 lit `hda` par plages : sans
- * ce middleware, le disque de 16 Gio ne serait pas accessible en développement
- * et ne doit jamais entrer dans le bundle Vite. En production, aucun disque
- * local n'est servi (voir docs/windows-7.md).
+ * Sert les disques RAW locaux découverts sous `images/<ref>/` (hors `public/`,
+ * ignorés par Git) en HTTP Range sur la même origine que l'app. v86 lit `hda`
+ * par plages : sans ce middleware, un disque de plusieurs dizaines de Gio ne
+ * serait pas accessible en développement et ne doit jamais entrer dans le
+ * bundle Vite. La découverte est générique (Windows XP/Vista/7/8/10) : chaque
+ * manifeste `boot.mode === 'disk-boot'` est servi in-place. En production,
+ * aucun disque local n'est servi (voir docs/windows-7.md).
  */
 const windowsDiskAssetPlugin: Plugin = {
   name: 'lumiboot-windows-disk-asset',

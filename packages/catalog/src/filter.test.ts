@@ -27,7 +27,8 @@ describe('filterSystems', () => {
   });
 
   it('filtre par famille et recherche', () => {
-    expect(filterSystems({ ...base, family: 'windows' })).toHaveLength(3);
+    // 4 entrées plates : Lite (mère), Professionnel (enfant), Windows 10, Windows 11.
+    expect(filterSystems({ ...base, family: 'windows' })).toHaveLength(4);
     expect(filterSystems({ ...base, query: 'fedora' })).toHaveLength(1);
     expect(filterSystems({ ...base, query: 'ubuntu x64' })).toHaveLength(0);
   });

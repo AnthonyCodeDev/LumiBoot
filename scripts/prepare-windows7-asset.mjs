@@ -1,13 +1,16 @@
 #!/usr/bin/env node
-// Prépare le manifeste d'un disque système fourni LOCALEMENT (ex. Windows 7 x86)
-// destiné à être streamé vers v86 par HTTP Range, sans jamais le copier dans
-// public/ ni le committer.
+// Prépare le manifeste d'un disque système fourni LOCALEMENT (ex. Windows 7
+// Professionnel SP1 x86) destiné à être streamé vers v86 par HTTP Range, sans
+// jamais le copier dans public/ ni le committer.
 //
 //   node scripts/prepare-windows7-asset.mjs
 //   node scripts/prepare-windows7-asset.mjs --source D:\media\winxp.img \
 //       --ref windows-xp-x86 --display-name "Windows XP x86" --architecture i386
 //   node scripts/prepare-windows7-asset.mjs --check
 //   node scripts/prepare-windows7-asset.mjs --skip-hash   # documente méthode+taille+mtime
+//
+// Le disque est servi IN-PLACE : le manifeste enregistre `source.path` sur le
+// fichier réel de l'opérateur (hors dépôt) et ne copie RIEN dans le dépôt.
 //
 // Garanties :
 //   - le fichier source est ouvert en LECTURE SEULE et n'est JAMAIS modifié,
@@ -16,7 +19,7 @@
 //     elle-même ou un dossier `public/`, et n'est écrite qu'après vérification
 //     du SHA-256 calculé en flux ;
 //   - l'empreinte SHA-256 est calculée en streaming (8 Mio par bloc), jamais en
-//     chargeant les 16 Gio en mémoire ;
+//     chargeant les 32 Gio en mémoire ;
 //   - la sortie par défaut `images/<ref>/` est ignorée par Git.
 //
 // Le manifeste produit est validé par `parseLocalDiskManifest` (tests
@@ -38,17 +41,19 @@ const CHUNK = 8 * 1024 * 1024;
 const GIB = 1024 * 1024 * 1024;
 
 const DEFAULTS = {
-  source: process.env.WINDOWS7_IMG ?? 'C:\\Users\\antho\\Desktop\\Windows7.img',
-  ref: 'windows-7-x86',
-  displayName: 'Windows 7 x86 (disque local)',
+  source: process.env.WINDOWS7_IMG ?? join(repoRoot, 'images', 'windows-7-pro-sp1-x86', 'disk.img'),
+  ref: 'windows-7-pro-sp1-x86',
+  displayName: 'Windows 7 Professionnel SP1 x86',
   architecture: 'i386',
-  memoryMiB: 1024,
+  // Windows 7 (Vista+) exige au moins 512 Mio ; 1536 Mio est requis par
+  // l'invité installé sous QEMU et accepté par v86 (arrondi à 128 Kio).
+  memoryMiB: 1536,
   vgaMiB: 16,
   license: 'Disque RAW local de la codebase (non distribué)',
-  provenance: 'images/windows-7-x86/disk.img (disque local de la codebase)',
+  provenance: 'images/windows-7-pro-sp1-x86/disk.img (disque local servi in-place)',
   servedName: 'disk.img',
   notes: [
-    'Disque local de la codebase (images/windows-7-x86/disk.img) : ignoré par Git, jamais committé ni distribué.',
+    'Disque RAW 32 Gio de l’opérateur, servi in-place (images/windows-7-pro-sp1-x86/disk.img) : jamais copié, ignoré par Git, committé ni distribué.',
     'Démarré par BIOS sous v86 via HTTP Range (hda.async = true), jamais en cdrom.',
   ],
 };
@@ -109,12 +114,13 @@ function parseArgs(argv) {
 function usage() {
   return `Usage : node scripts/prepare-windows7-asset.mjs [options]
 
-  --source <chemin>       Image disque source (défaut : WINDOWS7_IMG ou
-                          C:\\Users\\antho\\Desktop\\Windows7.img)
-  --ref <ref>             Référence (minuscules/tirets), ex. windows-7-x86
+  --source <chemin>       Image disque source (défaut :
+                          images/windows-7-pro-sp1-x86/disk.img à la racine du
+                          dépôt, ou WINDOWS7_IMG / --source pour la surcharger)
+  --ref <ref>             Référence (minuscules/tirets), ex. windows-7-pro-sp1-x86
   --display-name <nom>    Libellé lisible
   --architecture <arch>   i386 (défaut), x86_64, …
-  --memory-mib <n>        Mémoire invitée conseillée (défaut 1024)
+  --memory-mib <n>        Mémoire invitée conseillée (défaut 1536)
   --vga-mib <n>           Mémoire VGA (défaut 16)
   --license <texte>       Rappel de licence
   --provenance <texte>    Origine du média

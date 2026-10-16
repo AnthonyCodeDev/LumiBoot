@@ -1,9 +1,9 @@
-/* Progression de session : timeline verticale + barre (thème sombre, tokens partagés). */
+/* Démarrage de session : heading + journal de logs (thème sombre, tokens partagés). */
 
 .session-progress {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1.75rem;
   width: min(100%, 540px);
   text-align: left;
 }
@@ -15,7 +15,7 @@
   text-align: center;
 }
 
-/* État « message » : arrêt / inactivité — ni timeline ni barre de progression. */
+/* État « message » : arrêt / inactivité — ni journal ni progression. */
 .session-progress--message {
   align-items: center;
   justify-content: center;
@@ -88,199 +88,80 @@
   text-wrap: balance;
 }
 
-/* Timeline des étapes : dot + libellé, reliés par un rail fin. */
-.session-steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* Journal de démarrage : panneau arrondi des dernières lignes série. Les lignes
+   plus anciennes s'estompent, la dernière garde un curseur clignotant. */
+.session-logs {
+  position: relative;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.3rem;
+  align-self: center;
+  width: min(100%, 420px);
+  min-height: calc(3 * 1.55em + 1.8rem);
+  padding: 0.9rem 1.1rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-raised) 82%, var(--surface-muted)),
+    var(--surface-muted)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    var(--shadow-sm);
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  text-align: left;
 }
 
-.session-steps-item {
-  position: relative;
-  display: flex;
-  align-items: flex-start;
-  gap: 0.9rem;
-  padding-bottom: 1.65rem;
-}
-
-.session-steps-item:last-child {
-  padding-bottom: 0;
-}
-
-.session-steps-item::before {
-  content: '';
-  position: absolute;
-  left: 0.5625rem;
-  top: 1.25rem;
-  bottom: 0;
-  width: 2px;
-  border-radius: 999px;
-  background: var(--line);
-  transition: background var(--duration) var(--ease);
-}
-
-.session-steps-item:last-child::before {
-  display: none;
-}
-
-.session-steps-item[data-status='done']::before {
-  background: var(--primary);
-}
-
-.session-steps-marker {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
-  flex: none;
-  border-radius: 999px;
-  border: 1.5px solid var(--line-strong);
-  background: transparent;
-  transition:
-    background var(--duration) var(--ease),
-    border-color var(--duration) var(--ease);
-}
-
-.session-steps-item[data-status='done'] .session-steps-marker {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-ink);
-}
-
-.session-steps-item[data-status='current'] .session-steps-marker {
-  border-color: var(--primary);
-  background: var(--primary);
-  box-shadow: 0 0 0 4px var(--primary-soft);
-}
-
-.session-steps-item[data-status='current'] .session-steps-marker::after {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 999px;
-  border: 2px solid var(--primary);
-  opacity: 0.5;
-  animation: session-progress-pulse 1.8s var(--ease) infinite;
-}
-
-.session-steps-check {
-  width: 0.7rem;
-  height: 0.7rem;
-  stroke-width: 2.2;
-}
-
-.session-steps-core {
-  width: 0.42rem;
-  height: 0.42rem;
-  border-radius: 999px;
-  background: var(--primary-ink);
-}
-
-.session-steps-label {
-  flex: 1;
-  padding-top: 0.1rem;
-  font-size: 0.95rem;
-  line-height: 1.35;
+.session-logs-line {
+  margin: 0;
+  min-height: 1.55em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--text-tertiary);
   transition: color var(--duration) var(--ease);
 }
 
-.session-steps-item[data-status='done'] .session-steps-label {
+/* La dernière ligne (la plus récente) est mise en avant. */
+.session-logs-line[data-current] {
   color: var(--text-secondary);
 }
 
-.session-steps-item[data-status='current'] .session-steps-label {
-  color: var(--text);
-  font-weight: 600;
+.session-logs-cursor {
+  display: inline-block;
+  width: 0.5ch;
+  height: 1.05em;
+  margin-left: 0.35rem;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  background: var(--primary);
+  animation: session-logs-blink 1.1s steps(1) infinite;
 }
 
-.session-steps-item[data-status='upcoming'] .session-steps-label {
-  color: var(--text-disabled);
-}
-
-/* Barre de progression fine et arrondie (déterminée / indéterminée). */
-.session-progress-bar {
-  width: 100%;
-}
-
-.session-progress-track {
-  position: relative;
-  height: 0.4rem;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--surface-muted);
-}
-
-.session-progress-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--primary), var(--primary-hover));
-  transition: width var(--duration) var(--ease);
-}
-
-.session-progress-fill--indeterminate {
-  width: 40%;
-  background: linear-gradient(90deg, var(--primary), var(--primary-hover));
-  transform: translateX(-110%);
-  animation: session-progress-slide 1.3s cubic-bezier(0.65, 0, 0.35, 1) infinite;
-  will-change: transform;
-}
-
-.session-progress-meta {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-top: 0.65rem;
-  font-size: 0.78rem;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-.session-progress-percent {
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-@keyframes session-progress-pulse {
-  0% {
-    transform: scale(0.7);
-    opacity: 0.55;
+@keyframes session-logs-blink {
+  0%,
+  49% {
+    opacity: 1;
   }
-  70% {
-    transform: scale(1.18);
-    opacity: 0;
-  }
+  50%,
   100% {
-    transform: scale(1.18);
     opacity: 0;
-  }
-}
-
-@keyframes session-progress-slide {
-  0% {
-    transform: translateX(-110%);
-  }
-  100% {
-    transform: translateX(260%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .session-steps-item[data-status='current'] .session-steps-marker::after {
-    animation: none;
-    opacity: 0.35;
-  }
-  .session-progress-fill--indeterminate {
-    animation-duration: 2.6s;
-  }
   .session-message-dot {
     animation: none;
     opacity: 0.55;
+  }
+  .session-logs-cursor {
+    animation: none;
+    opacity: 0.6;
   }
 }

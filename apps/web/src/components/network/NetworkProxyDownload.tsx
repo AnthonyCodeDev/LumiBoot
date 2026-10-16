@@ -7,21 +7,6 @@ import {
   type HostPlatform,
   type PlatformKey,
 } from '../../lib/platform';
-import { Button } from '../ui/Button';
-
-const OS_DOWNLOAD_LABEL: Record<string, string> = {
-  windows: 'Télécharger pour Windows',
-  macos: 'Télécharger pour macOS',
-  linux: 'Télécharger pour Linux',
-};
-
-const TARGET_LABEL: Record<PlatformKey, string> = {
-  'windows-x64': 'Windows x64',
-  'windows-arm64': 'Windows ARM64',
-  'linux-x64': 'Linux x64',
-  'linux-arm64': 'Linux ARM64',
-  macos: 'macOS (universel)',
-};
 
 export interface NetworkProxyDownloadProps {
   /** Plateforme injectée en test (sinon détection automatique). */
@@ -30,25 +15,27 @@ export interface NetworkProxyDownloadProps {
   manifest?: DownloadsManifest | undefined;
 }
 
-function primaryLabel(platform: HostPlatform | null): string {
-  if (!platform || platform.os === 'unknown') return 'Télécharger le proxy réseau local';
-  return OS_DOWNLOAD_LABEL[platform.os] ?? 'Télécharger le proxy réseau local';
-}
+/** Libellés lisibles des cibles, dans l'ordre du manifeste. */
+const TARGET_LABELS: Record<PlatformKey, string> = {
+  'windows-x64': 'Windows x64',
+  'windows-arm64': 'Windows ARM64',
+  'linux-x64': 'Linux x64',
+  'linux-arm64': 'Linux ARM64',
+  macos: 'macOS',
+};
 
 /**
- * Bouton de téléchargement du proxy réseau local.
+ * Lien texte discret « Installer » vers le proxy réseau local de la plateforme
+ * hôte, accompagné d'un bouton « voir toutes les versions » qui déplie la
+ * liste de toutes les plateformes du manifeste.
  *
  * Tout passe par le manifeste (`/downloads/manifest.json`) : aucune URL en
- * dur. Chaque cible n'est cliquable que si `published === true && url`.
- * macOS non signé : l'avertissement n'apparaît que si macOS est la plateforme
- * pertinente (détectée/choisie ou liste « Autres plateformes » dépliée).
+ * dur, et une cible n'est cliquable que si `published === true && url`.
  */
 export function NetworkProxyDownload(props: NetworkProxyDownloadProps) {
   const [platform, setPlatform] = useState<HostPlatform | null>(props.platform ?? null);
   const [manifest, setManifest] = useState<DownloadsManifest | null>(props.manifest ?? null);
-  const [loading, setLoading] = useState(props.manifest !== undefined ? false : true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     if (props.platform !== undefined || props.manifest !== undefined) return;
@@ -64,16 +51,9 @@ export function NetworkProxyDownload(props: NetworkProxyDownloadProps) {
       }
       try {
         const loaded = await loadDownloadsManifest();
-        if (!cancelled) {
-          setManifest(loaded);
-          setLoadError(null);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setLoadError(error instanceof Error ? error.message : 'Téléchargements indisponibles.');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setManifest(loaded);
+      } catch {
+        // Manifeste indisponible : aucun lien affiché.
       }
     })();
     return () => {
@@ -81,87 +61,44 @@ export function NetworkProxyDownload(props: NetworkProxyDownloadProps) {
     };
   }, [props.platform, props.manifest]);
 
-  if (loading) {
-    return <p className="proxy-hint">Chargement des téléchargements…</p>;
-  }
-  if (!manifest) {
-    return (
-      <p className="proxy-hint" role="status">
-        {loadError ?? 'Téléchargements indisponibles pour le moment.'}
-      </p>
-    );
-  }
-
+  if (!manifest) return null;
   const targets = listDownloadTargets(manifest);
-  const primaryKey = platform?.key ?? null;
-  const primary = primaryKey ? targets.find((t) => t.key === primaryKey) : undefined;
-  const macosEntry = manifest.platforms['macos'];
-  const macosUnsigned = macosEntry.published && macosEntry.signed === false;
-  // L'avertissement macOS n'est contextuel : plateforme pertinente ou liste dépliée.
-  const showMacosWarning = macosUnsigned && (primaryKey === 'macos' || showAll);
+  const primary = platform?.key
+    ? targets.find((target) => target.key === platform.key)
+    : undefined;
 
   return (
-    <div className="proxy-download">
-      {primary?.url ? (
-        <Button
-          variant="primary"
+    <>
+      <div className="proxy-install-row">
+        {primary?.url ? (
+          <a href={primary.url} target="_blank" rel="noopener noreferrer">
+            Installer
+          </a>
+        ) : null}
+        <button
           type="button"
-          onClick={() => window.open(primary.url as string, '_blank', 'noopener')}
+          className="proxy-versions-toggle"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
         >
-          {primaryLabel(platform)}
-        </Button>
-      ) : primary && !primary.url ? (
-        <div className="proxy-download-primary">
-          <Button variant="primary" type="button" disabled>
-            {primaryLabel(platform)}
-          </Button>
-          <p className="proxy-hint">Bientôt disponible pour {TARGET_LABEL[primary.key]}</p>
-        </div>
-      ) : (
-        <div className="proxy-download-primary">
-          <p className="proxy-hint">
-            Votre système n’a pas pu être détecté : choisissez votre plateforme ci-dessous.
-          </p>
-        </div>
-      )}
-      {showMacosWarning ? (
-        <p className="proxy-warning" role="note">
-          Version macOS non signée et non notariée : macOS affichera un avertissement (clic droit →
-          Ouvrir) et l’archive doit être vérifiée avant usage. Ce n’est pas une application
-          installable sans avertissement.
-        </p>
-      ) : null}
-      <button
-        type="button"
-        className="proxy-others-toggle"
-        onClick={() => setShowAll((v) => !v)}
-        aria-expanded={showAll}
-      >
-        {showAll ? 'Masquer les autres plateformes' : 'Autres plateformes'}
-      </button>
-      {showAll ? (
+          {expanded ? 'masquer les versions' : 'voir toutes les versions'}
+        </button>
+      </div>
+      {expanded ? (
         <ul className="proxy-targets">
-          {targets.map(({ key, entry, url }) => {
-            const label =
-              key === 'macos' && entry.signed === false
-                ? `${TARGET_LABEL[key]} (non signé)`
-                : TARGET_LABEL[key];
-            return (
-              <li key={key}>
-                {url ? (
-                  <a href={url} target="_blank" rel="noopener noreferrer">
-                    {label} — {entry.file}
-                  </a>
-                ) : (
-                  <span aria-disabled="true">
-                    {label} — {entry.file} · Bientôt disponible
-                  </span>
-                )}
-              </li>
-            );
-          })}
+          {targets.map((target) => (
+            <li key={target.key}>
+              {target.url ? (
+                <a href={target.url} target="_blank" rel="noopener noreferrer">
+                  {TARGET_LABELS[target.key]}
+                </a>
+              ) : (
+                <span aria-disabled="true">{TARGET_LABELS[target.key]} · Bientôt disponible</span>
+              )}
+            </li>
+          ))}
         </ul>
       ) : null}
-    </div>
+    </>
   );
 }

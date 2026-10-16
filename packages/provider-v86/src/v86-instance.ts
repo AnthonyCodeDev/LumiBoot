@@ -3,6 +3,7 @@ import type { GuestReadiness, SessionEvent } from '@lumiboot/contracts';
 import type { NetworkController } from '@lumiboot/vm-network';
 import { createSessionId, type VMInstance } from '@lumiboot/vm-core';
 import type { V86ConsoleAdapter } from './console-adapter';
+import { attachConsoleWheelScroll } from './console-scroll';
 import { GuestReadyDetector } from './guest-ready-detector';
 import { attachNetworkDiagnostics } from './network/V86NetworkAdapter';
 
@@ -44,6 +45,7 @@ export class V86Instance implements VMInstance {
 
   #detachNetwork: (() => void) | null = null;
   #unsubscribeNetwork: (() => void) | null = null;
+  #detachScroll: (() => void) | null = null;
   #pending: SessionEvent[] = [];
   #hasSubscriber = false;
   #cleanupPromise: Promise<void> | null = null;
@@ -80,6 +82,11 @@ export class V86Instance implements VMInstance {
       emulator.add_listener('serial0-output-byte', this.#onSerialByte);
     }
     this.#wireNetwork();
+    // Molette -> Shift+PageUp/PageDown (scrollback console Linux en mode texte).
+    const screen = this.#console.screen;
+    if (screen !== null) {
+      this.#detachScroll = attachConsoleWheelScroll(screen, this.#emulator);
+    }
   }
 
   #wireNetwork(): void {
@@ -249,6 +256,8 @@ export class V86Instance implements VMInstance {
     this.#cleanupPromise = (async () => {
       this.#clearReadyTimeout();
       this.#removeListeners();
+      this.#detachScroll?.();
+      this.#detachScroll = null;
       this.#unsubscribeNetwork?.();
       this.#unsubscribeNetwork = null;
       this.#detachNetwork?.();

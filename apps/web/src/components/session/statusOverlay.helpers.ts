@@ -1,20 +1,13 @@
 import type { SessionSnapshot } from '@lumiboot/vm-core';
 
-export const STEPS = [
-  'Préparation',
-  'Chargement des ressources',
-  'Démarrage du système',
-  'Session active',
-] as const;
-
 export interface StatusMessage {
   title: string;
   detail?: string;
 }
 
 /**
- * Message sobre pour les états hors progression (arrêt, inactivité).
- * Ces états n'affichent ni timeline ni barre de progression.
+ * Message sobre pour les états hors démarrage (arrêt, inactivité).
+ * Ces états n'affichent ni journal ni progression.
  */
 export function statusMessageForSession(session: SessionSnapshot): StatusMessage {
   switch (session.state) {
@@ -25,21 +18,6 @@ export function statusMessageForSession(session: SessionSnapshot): StatusMessage
     case 'idle':
     default:
       return { title: 'Session inactive', detail: 'Aucune session en cours.' };
-  }
-}
-
-export function stepIndexForState(state: SessionSnapshot['state']): number {
-  switch (state) {
-    case 'preparing':
-      return 0;
-    case 'downloading':
-      return 1;
-    case 'booting':
-      return 2;
-    case 'running':
-      return 3;
-    default:
-      return -1;
   }
 }
 
@@ -60,18 +38,4 @@ export function statusTextForSession(session: SessionSnapshot): string {
     default:
       return 'Préparation de la session…';
   }
-}
-
-export function formatSessionBytes(value: number): string {
-  if (!Number.isFinite(value) || value < 0) return '—';
-  if (value < 1024) return `${Math.round(value)} o`;
-  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
-  let size = value;
-  let unitIndex = 0;
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024;
-    unitIndex += 1;
-  }
-  const rounded = size >= 100 ? Math.round(size).toString() : size.toFixed(1).replace('.', ',');
-  return `${rounded} ${units[unitIndex]}`;
 }

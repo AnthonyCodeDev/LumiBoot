@@ -1,5 +1,6 @@
 export * from './browser-v86';
 export * from './console-adapter';
+export * from './console-scroll';
 export * from './guest-ready-detector';
 export * from './network/V86NetworkAdapter';
 export * from './v86-instance';

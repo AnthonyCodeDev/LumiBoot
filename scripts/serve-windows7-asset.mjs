@@ -2,11 +2,11 @@
 // Sert LOCALEMENT (loopback) le disque d'un manifeste `prepare-*-asset` en
 // HTTP Range, ainsi que le manifeste et les binaires du moteur v86, sur une
 // seule origine. Objectif : v86 (`hda.async = true`) lit le disque par plages
-// sans jamais télécharger les 16 Gio, sans copie dans public/ et sans exposer
+// sans jamais télécharger les 32 Gio, sans copie dans public/ et sans exposer
 // l'image publiquement.
 //
 //   node scripts/serve-windows7-asset.mjs
-//   node scripts/serve-windows7-asset.mjs --manifest images/windows-7-x86/manifest.json --port 37893
+//   node scripts/serve-windows7-asset.mjs --manifest images/windows-7-pro-sp1-x86/manifest.json --port 37893
 //   node scripts/serve-windows7-asset.mjs --no-token     # loopback seulement
 //
 // SÉCURITÉ : par défaut le serveur n'écoute que sur 127.0.0.1 et exige un jeton
@@ -27,7 +27,7 @@ const repoRoot = resolve(here, '..');
 
 const args = process.argv.slice(2);
 const options = {
-  manifest: join(repoRoot, 'images', 'windows-7-x86', 'manifest.json'),
+  manifest: join(repoRoot, 'images', 'windows-7-pro-sp1-x86', 'manifest.json'),
   source: undefined,
   host: '127.0.0.1',
   port: 37893,

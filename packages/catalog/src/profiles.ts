@@ -90,13 +90,14 @@ function desktopReadiness(systemId: string): GuestReadiness {
 }
 
 /**
- * Preuve de démarrage d'un système à média importé (ex. Windows 7).
+ * Preuve de démarrage d'un système à disque démarré par BIOS (ex. Windows 7
+ * à partir d'un disque RAW local ou d'un média importé).
  *
  * Ce système n'émet AUCUN marqueur LumiBoot. La preuve est une **lecture réelle
  * du disque dur** après le démarrage de l'émulateur (le BIOS/l'amorce exécute
- * l'image fournie par l'utilisateur). `marker` sert d'identifiant documentaire
- * et n'est jamais scanné. Le délai est large : le POST, l'amorce et le chargement
- * NT prennent plusieurs minutes sous émulation logicielle.
+ * l'image disque). `marker` sert d'identifiant documentaire et n'est jamais
+ * scanné. Le délai est large : le POST, l'amorce et le chargement NT prennent
+ * plusieurs minutes sous émulation logicielle.
  */
 function diskBootReadiness(systemId: string): GuestReadiness {
   return {
@@ -256,36 +257,78 @@ export const launchProfiles = [
   {
     id: 'windows-7-x86',
     imageId: 'windows-7-x86-image',
-    // v86 est le seul moteur navigateur x86 32 bits intégré : Windows 7 x86
-    // démarre directement le disque RAW local de la codebase par BIOS, sans
+    // v86 est le seul moteur navigateur x86 32 bits intégré : la variante Lite
+    // démarre directement le disque RAW local de l'opérateur par BIOS, sans
     // média à importer ni noyau Linux.
     engineId: 'v86',
     executionMode: 'browser',
-    // `memory_size` de v86 EXIGE une puissance de deux (assertPowerOfTwoMiB).
-    // 1024 Mio (plancher documenté par v86 pour Vista+) est retenu.
     minMemoryMiB: 1024,
     configuration: {
       memoryMiB: 1024,
       vgaMemoryMiB: 16,
       bootDevice: 'disk',
     },
-    // Invité NT ancien : pilotes virtio absents, `ne2k` est le support commun.
-    // v86 n'émule QUE `ne2k` ou `virtio` (`v86.d.ts` : `type?: "ne2k" | "virtio"`)
-    // — e1000/rtl8139 ne sont pas disponibles. ACPI est requise par la famille
-    // Vista+ (voir docs/windows-nt.md de v86 : « Enable ACPI and set the memory
-    // size to 512 MB or more »).
+    // Invité NT : pilotes virtio absents, `ne2k` est le support commun émulé
+    // par v86 (seuls `ne2k` et `virtio` existent). ACPI est requise par la
+    // famille Vista+ (voir docs/windows-nt.md de v86).
     hardwareProfile: { ...pcHardware('ne2k'), acpi: true },
     // Disque local : le démarrage est prouvé par une lecture disque réelle.
     readiness: diskBootReadiness('windows-7-x86'),
     slug: 'windows-7-x86',
-    displayName: 'Windows 7 Lite',
-    versionLabel: 'Lite · x86',
+    // Système MÈRE du groupe de variantes Windows 7 : pas de `variantGroupId`.
+    // Nom de base (le dropdown ajoute le `variantName`). Lite est la variante la
+    // MOINS mise en avant : `variantOrder` le plus grand.
+    displayName: 'Windows 7',
+    versionLabel: 'x86',
+    variantName: 'Lite',
+    variantOrder: 2,
+    // Boot bureau réel prouvé (canvas VGA 2D sous v86, E2E
+    // tests/e2e/windows7-desktop.spec.ts, `VM_E2E_ASSETS=1`) : le profil est
+    // validé, la disponibilité dérivée passe donc à `ready`.
+    validated: true,
+    description:
+      'La variante « Lite » : Windows 7 x86 allégé, démarré par BIOS depuis ' +
+      'son disque RAW 16 Gio local, sans installation.',
+  },
+  {
+    id: 'windows-7-pro-sp1-x86',
+    imageId: 'windows-7-pro-sp1-x86-image',
+    // v86 est le seul moteur navigateur x86 32 bits intégré : Windows 7
+    // Professionnel SP1 x86 démarre directement le disque RAW local de
+    // l'opérateur par BIOS, sans média à importer ni noyau Linux.
+    engineId: 'v86',
+    executionMode: 'browser',
+    // v86 arrondit `memory_size` à un multiple de 128 Kio et accepte les
+    // valeurs non-puissances-de-deux : 1536 Mio (installé sous QEMU) est
+    // accepté et requis par l'invité.
+    minMemoryMiB: 1536,
+    configuration: {
+      memoryMiB: 1536,
+      vgaMemoryMiB: 16,
+      bootDevice: 'disk',
+    },
+    // Invité NT : pilotes virtio absents, `ne2k` est le support commun émulé
+    // par v86 (seuls `ne2k` et `virtio` existent). ACPI est requise par la
+    // famille Vista+ (voir docs/windows-nt.md de v86).
+    hardwareProfile: { ...pcHardware('ne2k'), acpi: true },
+    // Disque local : le démarrage est prouvé par une lecture disque réelle.
+    readiness: diskBootReadiness('windows-7-pro-sp1-x86'),
+    slug: 'windows-7-pro-sp1-x86',
+    displayName: 'Windows 7 (Professionnel)',
+    versionLabel: 'SP1 · x86',
+    // Variant enfant rattaché à la mère Lite `windows-7-x86`. Professionnel est
+    // la MEILLEURE variante Windows 7 : `variantOrder` le plus petit, donc
+    // première du groupe et sélectionnée par défaut.
+    variantGroupId: 'windows-7-x86',
+    variantName: 'Professionnel',
+    variantOrder: 1,
     // Boot prouvé par une lecture disque réelle (mode `disk-boot`, voir
     // docs/windows-7.md) : le profil est désormais validé.
     validated: true,
     description:
-      'Une session Windows 7 Lite x86 dans le navigateur via v86, à partir du ' +
-      'disque RAW local de la codebase. Aucun média à importer.',
+      'Une session Windows 7 Professionnel SP1 x86 dans le navigateur via v86, ' +
+      'démarrée directement par BIOS depuis le disque RAW 32 Gio local, sans ' +
+      'installation ni média à importer.',
   },
   {
     id: 'windows-10-x64',

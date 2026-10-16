@@ -87,7 +87,7 @@ test.describe('Réseau WISP (user-relay, opt-in)', () => {
 
     await page.getByRole('button', { name: 'Logs' }).click();
 
-    const state = page.locator('.session-state');
+    const state = page.locator('.session-toolbar');
     await expect(state).toHaveAttribute('data-state', 'running', { timeout: 180_000 });
 
     const serial = page.locator('.v86-serial');

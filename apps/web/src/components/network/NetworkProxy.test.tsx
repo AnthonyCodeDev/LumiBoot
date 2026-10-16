@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useProxyStore } from '../../features/proxy/store';
+import { clearProxySession, saveProxySession } from '../../features/proxy/persistence';
+import { resolveProxyConfig } from '../../config/runtime';
 import type { DownloadsManifest } from '../../config/downloads';
+import type { HostPlatform } from '../../lib/platform';
 import { NetworkProxyCard } from './NetworkProxyCard';
 import { NetworkProxyDownload } from './NetworkProxyDownload';
-import { NetworkProxyStatus } from './NetworkProxyStatus';
 
 function manifestWith(published: Record<string, string | null>): DownloadsManifest {
   const entry = (file: string, url: string | null) => ({
@@ -36,192 +38,204 @@ function manifestWith(published: Record<string, string | null>): DownloadsManife
   };
 }
 
+const WIN: HostPlatform = { os: 'windows', arch: 'x64', key: 'windows-x64' };
 const PUBLISHED_WIN = manifestWith({ 'windows-x64': 'https://example.com/win.exe' });
+const PROXY_URL = resolveProxyConfig().url;
 
-function stubHealth(body: unknown): void {
-  vi.stubGlobal('fetch', (async (input: unknown) => {
-    const url = String(input);
-    // La vérification authentifiée du jeton doit réussir pour un état `connected`.
-    if (url.includes('/api/session/verify')) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, expiresAt: new Date(Date.now() + 60_000).toISOString() }),
-      } as unknown as Response;
-    }
-    return { ok: true, status: 200, json: async () => body } as unknown as Response;
-  }) as typeof fetch);
+/** Persiste une session d'appairage valide (non expirée) pour l'URL courante. */
+function persistSession(): void {
+  saveProxySession({
+    token: 'tok',
+    expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    proxyUrl: PROXY_URL,
+  });
 }
 
+// Actions du store remplacées par des espions : la carte ne déclenche alors
+// aucun appel réseau (les tests pilotent directement l'état).
+const refresh = vi.fn(async () => {});
+const cancelPairing = vi.fn();
+const startPairing = vi.fn(async () => {});
+const revoke = vi.fn(async () => {});
+
 beforeEach(() => {
+  clearProxySession();
+  refresh.mockClear();
+  cancelPairing.mockClear();
+  startPairing.mockClear();
+  // Réinitialise l'implémentation éventuellement surchargée par un test.
+  startPairing.mockImplementation(async () => {});
+  revoke.mockClear();
   useProxyStore.setState({
     state: 'not-running',
     token: null,
     pairingId: null,
     userCode: null,
     error: null,
+    refresh,
+    cancelPairing,
+    startPairing,
+    revoke,
   });
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  clearProxySession();
 });
 
-describe('NetworkProxyStatus', () => {
-  it('affiche l’état arrêté avec une action Réessayer', async () => {
-    vi.stubGlobal('fetch', (async () => {
-      throw new TypeError('Failed to fetch');
-    }) as typeof fetch);
-    useProxyStore.setState({ state: 'not-running', token: null });
-    render(<NetworkProxyStatus />);
-    expect(await screen.findByText('Proxy réseau local arrêté')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Réessayer' })).toBeTruthy();
+describe('NetworkProxyCard', () => {
+  it('affiche le titre, la description courte et le bouton « Appairer »', () => {
+    render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
+    expect(screen.getByRole('heading', { name: 'Internet via votre connexion' })).toBeTruthy();
+    expect(screen.getByText(/Faites profiter vos systèmes lancés/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Appairer' })).toBeTruthy();
   });
 
-  it('pairing-required sans userCode : « Lancer l’appairage » seul, pas « Connecter »', async () => {
-    stubHealth({ status: 'ok', version: '0.1.0', wispVersion: 1 });
-    useProxyStore.setState({ state: 'pairing-required', token: null, userCode: null });
-    render(<NetworkProxyStatus />);
-    expect(await screen.findByText('En attente d’autorisation')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Connecter' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Lancer l’appairage' })).toBeTruthy();
+  it('cliquer « Appairer » lance startPairing', async () => {
+    const user = userEvent.setup();
+    render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
+    await user.click(screen.getByRole('button', { name: 'Appairer' }));
+    expect(startPairing).toHaveBeenCalledTimes(1);
   });
 
-  it('pairing-required avec userCode : code affiché, « En attente d’autorisation… », aucun bouton Connecter', async () => {
-    stubHealth({ status: 'ok', version: '0.1.0', wispVersion: 1 });
-    useProxyStore.setState({ state: 'pairing-required', token: null, userCode: 'ABCD-1234' });
-    render(<NetworkProxyStatus />);
-    expect(await screen.findByText('En attente d’autorisation')).toBeTruthy();
-    expect(screen.getByText('ABCD-1234')).toBeTruthy();
-    expect(screen.getByText(/En attente d’autorisation…/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Connecter' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Lancer l’appairage' })).toBeNull();
+  it('état connecting : libellé « Appairage… » et bouton désactivé', () => {
+    useProxyStore.setState({ state: 'connecting' });
+    render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
+    const button = screen.getByRole('button', { name: 'Appairage…' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Appairer' })).toBeNull();
   });
 
-  it('état connected + token : « Proxy réseau local actif » et Révocable', async () => {
-    stubHealth({ status: 'ok', version: '0.1.0', wispVersion: 1 });
+  it('état connected + token : « Connecté » et « Déconnecter », pas « Appairer »', () => {
     useProxyStore.setState({ state: 'connected', token: 'tok' });
-    render(<NetworkProxyStatus />);
-    expect(await screen.findByText('Proxy réseau local actif')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Révoquer' })).toBeTruthy();
+    render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
+    expect(screen.getByText('Connecté')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Déconnecter' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Appairer' })).toBeNull();
+    expect(screen.getByText('Votre connexion est partagée avec vos systèmes.')).toBeTruthy();
   });
 
-  it('état error : proposition de relancer l’appairage', async () => {
-    stubHealth({ status: 'ok', version: '0.1.0', wispVersion: 1 });
-    useProxyStore.setState({ state: 'pairing-required', token: null, userCode: null });
-    render(<NetworkProxyStatus />);
-    // Laisse le refresh de montage se stabiliser.
-    await screen.findByText('En attente d’autorisation');
-    await act(async () => {
-      useProxyStore.setState({
-        state: 'error',
-        error: 'Accès refusé depuis la console du proxy.',
-      });
+  it('lien discret « Installer » présent quand une cible publiée existe', () => {
+    render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
+    const link = screen.getByRole('link', { name: 'Installer' });
+    expect(link.getAttribute('href')).toBe('https://example.com/win.exe');
+    expect(link.getAttribute('target')).toBe('_blank');
+  });
+
+  it('aucun lien « Installer » quand aucune cible n’est publiée', () => {
+    render(<NetworkProxyCard platform={WIN} manifest={manifestWith({})} />);
+    expect(screen.queryByRole('link', { name: 'Installer' })).toBeNull();
+  });
+
+  it.each(['not-installed', 'not-running', 'permission-required', 'incompatible'] as const)(
+    'état passif « %s » sans session : aucune alerte/erreur affichée',
+    (state) => {
+      useProxyStore.setState({ state });
+      render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.queryByRole('status')).toBeNull();
+      expect(screen.queryByText(/Appairage impossible/)).toBeNull();
+    },
+  );
+
+  it('sans session + state error : aucun message d’erreur ni d’alerte affiché', () => {
+    useProxyStore.setState({
+      state: 'error',
+      error: 'Un long message technique du store qui ne doit pas être affiché.',
     });
-    expect(await screen.findByText('Accès refusé depuis la console du proxy.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Relancer l’appairage' })).toBeTruthy();
+    render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
+    // Aucun message d'erreur/alerte quand on n'est pas appairé.
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+    // Jamais le long message du store, ni l'ancien message alarmiste.
+    expect(screen.queryByText(/long message technique/)).toBeNull();
+    expect(screen.queryByText(/Le proxy n’a pas répondu/)).toBeNull();
+    expect(screen.queryByText(/Appairage impossible/)).toBeNull();
+  });
+
+  it('session persistée + state error : message neutre « Vous êtes déjà appairé… », pas d’erreur', () => {
+    persistSession();
+    useProxyStore.setState({ state: 'error', error: 'proxy injoignable' });
+    render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
+    expect(
+      screen.getByRole('status').textContent,
+    ).toBe(
+      'Vous êtes déjà appairé. Relancez le proxy, ou cliquez sur le bouton ci-dessus pour lancer un nouvel appairage.',
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/Appairage impossible/)).toBeNull();
+  });
+
+  it('session persistée + state not-running : message neutre « Vous êtes déjà appairé… »', () => {
+    persistSession();
+    useProxyStore.setState({ state: 'not-running' });
+    render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
+    expect(screen.getByRole('status').textContent).toMatch(/Vous êtes déjà appairé/);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('cliquer « Appairer » (passage en connecting) fait disparaître le message « déjà appairé »', async () => {
+    const user = userEvent.setup();
+    persistSession();
+    useProxyStore.setState({ state: 'not-running' });
+    // La vraie action passerait en 'connecting' : on simule ce basculement.
+    startPairing.mockImplementation(async () => {
+      useProxyStore.setState({ state: 'connecting' });
+    });
+    render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
+    expect(screen.getByRole('status').textContent).toMatch(/Vous êtes déjà appairé/);
+
+    await user.click(screen.getByRole('button', { name: 'Appairer' }));
+
+    expect(screen.queryByText(/Vous êtes déjà appairé/)).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Appairage…' })).toBeTruthy();
+  });
+
+  it('état pairing-required avec code : courte ligne « En attente d’autorisation… »', () => {
+    useProxyStore.setState({ state: 'pairing-required', userCode: 'ABCD-1234' });
+    render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
+    expect(screen.getByText('En attente d’autorisation…')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 
 describe('NetworkProxyDownload', () => {
-  it('bouton auto selon la plateforme détectée', () => {
-    render(
-      <NetworkProxyDownload
-        platform={{ os: 'windows', arch: 'x64', key: 'windows-x64' }}
-        manifest={PUBLISHED_WIN}
-      />,
-    );
-    expect(screen.getByRole('button', { name: 'Télécharger pour Windows' })).toBeTruthy();
+  it('rend un lien « Installer » pour la plateforme détectée/injectée', () => {
+    render(<NetworkProxyDownload platform={WIN} manifest={PUBLISHED_WIN} />);
+    const link = screen.getByRole('link', { name: 'Installer' });
+    expect(link.getAttribute('href')).toBe('https://example.com/win.exe');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
-  it('aucun lien si non publié : « Bientôt disponible » et cible désactivée', async () => {
+  it('ne rend rien si aucune cible publiée ne correspond', () => {
+    const { container } = render(<NetworkProxyDownload platform={WIN} manifest={manifestWith({})} />);
+    expect(container.querySelector('a')).toBeNull();
+  });
+
+  it('toggle « voir toutes les versions » : masqué par défaut, déplie toutes les cibles, puis replie', async () => {
     const user = userEvent.setup();
-    const empty = manifestWith({});
-    render(
-      <NetworkProxyDownload
-        platform={{ os: 'windows', arch: 'x64', key: 'windows-x64' }}
-        manifest={empty}
-      />,
-    );
-    expect(screen.getByText(/Bientôt disponible/)).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Autres plateformes' }));
-    expect(screen.getByText(/Windows x64.*Bientôt disponible/)).toBeTruthy();
-    expect(screen.queryByRole('link')).toBeNull();
-  });
+    render(<NetworkProxyDownload platform={WIN} manifest={PUBLISHED_WIN} />);
 
-  it('macOS non signée : avertissement explicite quand macOS est la plateforme', () => {
-    const macos = manifestWith({ macos: 'https://example.com/mac.tar.gz' });
-    render(
-      <NetworkProxyDownload
-        platform={{ os: 'macos', arch: 'unknown', key: 'macos' }}
-        manifest={macos}
-      />,
-    );
-    expect(screen.getByText(/non signée/)).toBeTruthy();
-  });
+    const toggle = screen.getByRole('button', { name: 'voir toutes les versions' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('list')).toBeNull();
 
-  it('Windows sans dépliage : aucun avertissement macOS', () => {
-    const both = manifestWith({
-      'windows-x64': 'https://example.com/win.exe',
-      macos: 'https://example.com/mac.tar.gz',
-    });
-    render(
-      <NetworkProxyDownload
-        platform={{ os: 'windows', arch: 'x64', key: 'windows-x64' }}
-        manifest={both}
-      />,
-    );
-    expect(screen.queryByText(/non signée/)).toBeNull();
-  });
+    await user.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle.textContent).toBe('masquer les versions');
 
-  it('Windows + « Autres plateformes » : avertissement macOS et entrée annotée (non signé)', async () => {
-    const user = userEvent.setup();
-    const both = manifestWith({
-      'windows-x64': 'https://example.com/win.exe',
-      macos: 'https://example.com/mac.tar.gz',
-    });
-    render(
-      <NetworkProxyDownload
-        platform={{ os: 'windows', arch: 'x64', key: 'windows-x64' }}
-        manifest={both}
-      />,
-    );
-    expect(screen.queryByText(/non signée/)).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Autres plateformes' }));
-    expect(screen.getByText(/non signée/)).toBeTruthy();
-    expect(screen.getByText(/macOS \(universel\) \(non signé\)/)).toBeTruthy();
-  });
-});
+    // Les 5 plateformes sont listées.
+    expect(screen.getAllByRole('listitem')).toHaveLength(5);
+    // Cible publiée : lien cliquable.
+    const winLink = screen.getByRole('link', { name: 'Windows x64' });
+    expect(winLink.getAttribute('href')).toBe('https://example.com/win.exe');
+    // Cibles non publiées : « Bientôt disponible ».
+    expect(screen.getByText(/Windows ARM64 · Bientôt disponible/)).toBeTruthy();
+    expect(screen.getByText(/macOS · Bientôt disponible/)).toBeTruthy();
 
-describe('NetworkProxyCard', () => {
-  it('titre et description imposés, étapes visibles quand non connecté', async () => {
-    stubHealth({ status: 'ok', version: '0.1.0', wispVersion: 1 });
-    useProxyStore.setState({ state: 'pairing-required', token: null });
-    render(
-      <NetworkProxyCard
-        platform={{ os: 'windows', arch: 'x64', key: 'windows-x64' }}
-        manifest={PUBLISHED_WIN}
-      />,
-    );
-    expect(await screen.findByText('Internet via votre connexion')).toBeTruthy();
-    expect(screen.getByText(/utiliser directement votre connexion Internet/)).toBeTruthy();
-    await waitFor(() => {
-      expect(screen.getByText(/Téléchargez le proxy réseau local/)).toBeTruthy();
-    });
-  });
-
-  it('état connecté : masque les instructions d’installation', async () => {
-    stubHealth({ status: 'ok', version: '0.1.0', wispVersion: 1 });
-    useProxyStore.setState({ state: 'connected', token: 'tok' });
-    render(
-      <NetworkProxyCard
-        platform={{ os: 'windows', arch: 'x64', key: 'windows-x64' }}
-        manifest={PUBLISHED_WIN}
-      />,
-    );
-    await waitFor(() => {
-      expect(screen.queryByText(/Téléchargez le proxy réseau local/)).toBeNull();
-    });
-    expect(screen.getByText('Proxy réseau local actif')).toBeTruthy();
+    await user.click(toggle);
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.getByRole('button', { name: 'voir toutes les versions' })).toBeTruthy();
   });
 });

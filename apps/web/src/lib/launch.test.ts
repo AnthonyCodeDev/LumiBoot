@@ -19,7 +19,7 @@ describe('getLaunchReadiness', () => {
     expect(readiness.reason).toMatch(/préparation|intégré/i);
   });
 
-  it('autorise Windows 7 directement depuis le disque local, sans média importé', () => {
-    expect(getLaunchReadiness(system('windows-7-x86'))).toEqual({ canLaunch: true });
+  it('autorise Windows 7 Professionnel directement depuis le disque local, sans média importé', () => {
+    expect(getLaunchReadiness(system('windows-7-pro-sp1-x86'))).toEqual({ canLaunch: true });
   });
 });
