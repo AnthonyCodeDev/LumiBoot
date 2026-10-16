@@ -114,8 +114,8 @@ function makeFixture(): Fixture {
   return { container, screen, canvas, serial };
 }
 
-function clickOn(target: Element): void {
-  target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+function pointerDownOn(target: Element, button = 0): void {
+  target.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button }));
 }
 
 describe('pointer-lock — orchestration Pointer Lock', () => {
@@ -131,7 +131,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     expect(isPointerLockSupported(document)).toBe(false);
   });
 
-  it('capture au clic dans l’écran et masque le curseur hôte seulement alors', () => {
+  it('capture dès l’appui dans l’écran, avant le relâchement', () => {
     mock = installPointerLock();
     expect(isPointerLockSupported(document)).toBe(true);
 
@@ -146,7 +146,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     expect(document.pointerLockElement).toBeNull();
     expect(screen.classList.contains(POINTER_LOCKED_CLASS)).toBe(false);
 
-    clickOn(canvas);
+    pointerDownOn(canvas);
 
     expect(document.pointerLockElement).toBe(screen);
     expect(handle.isCaptured()).toBe(true);
@@ -162,8 +162,8 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     const onError = vi.fn();
     const handle = attachPointerLockCapture({ container, onError });
 
-    clickOn(container);
-    clickOn(serial);
+    pointerDownOn(container);
+    pointerDownOn(serial);
 
     expect(document.pointerLockElement).toBeNull();
     expect(mock.requestCalls).toBe(0);
@@ -181,7 +181,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
       onCaptureChange: (captured) => states.push(captured),
     });
 
-    clickOn(canvas);
+    pointerDownOn(canvas);
     expect(handle.isCaptured()).toBe(true);
 
     // Échap est géré nativement par le navigateur : il libère et émet l'événement.
@@ -193,7 +193,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     expect(states).toEqual([true, false]);
 
     // Nouveau clic explicite => recapture.
-    clickOn(screen);
+    pointerDownOn(screen);
     expect(handle.isCaptured()).toBe(true);
     expect(document.pointerLockElement).toBe(screen);
 
@@ -205,9 +205,9 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     const { container, canvas } = makeFixture();
     const handle = attachPointerLockCapture({ container });
 
-    clickOn(canvas);
-    clickOn(canvas);
-    clickOn(canvas);
+    pointerDownOn(canvas);
+    pointerDownOn(canvas);
+    pointerDownOn(canvas);
 
     expect(mock.requestCalls).toBe(1);
     handle.dispose();
@@ -219,7 +219,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     const onError = vi.fn();
     const handle = attachPointerLockCapture({ container, onError });
 
-    clickOn(canvas);
+    pointerDownOn(canvas);
 
     // Rejet asynchrone + repli sans option : on laisse les micro-tâches finir.
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -247,7 +247,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     const { container, canvas } = makeFixture();
     const handle = attachPointerLockCapture({ container });
 
-    clickOn(canvas);
+    pointerDownOn(canvas);
     expect(handle.isCaptured()).toBe(true);
 
     handle.dispose();
@@ -258,7 +258,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
 
     // Après dispose : plus aucun écouteur actif.
     const callsAfterDispose = mock.requestCalls;
-    clickOn(canvas);
+    pointerDownOn(canvas);
     expect(mock.requestCalls).toBe(callsAfterDispose);
   });
 
@@ -266,7 +266,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     mock = installPointerLock();
     const { container, canvas } = makeFixture();
     const handle = attachPointerLockCapture({ container });
-    clickOn(canvas);
+    pointerDownOn(canvas);
     expect(handle.isCaptured()).toBe(true);
 
     const original = Object.getOwnPropertyDescriptor(document, 'visibilityState');
@@ -288,7 +288,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     mock = installPointerLock();
     const { container, canvas } = makeFixture();
     const handle: PointerLockCaptureHandle = attachPointerLockCapture({ container });
-    clickOn(canvas);
+    pointerDownOn(canvas);
     expect(handle.isCaptured()).toBe(true);
 
     window.dispatchEvent(new Event('blur'));
@@ -311,7 +311,7 @@ describe('pointer-lock — support absent', () => {
     const handle = attachPointerLockCapture({ container, onError });
 
     expect(handle.isSupported()).toBe(false);
-    clickOn(canvas);
+    pointerDownOn(canvas);
     expect(onError).not.toHaveBeenCalled(); // le clic est simplement ignoré
 
     handle.requestCapture();

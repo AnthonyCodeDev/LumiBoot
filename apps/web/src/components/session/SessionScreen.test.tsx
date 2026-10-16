@@ -67,7 +67,7 @@ describe('SessionScreen — indicateur de capture souris', () => {
     mock = null;
   });
 
-  it('affiche un indicateur released puis captured au clic dans l’écran', () => {
+  it('affiche un indicateur released puis captured dès l’appui dans l’écran', () => {
     const consoleRef = { current: null as HTMLDivElement | null };
     render(
       <SessionScreen
@@ -92,7 +92,7 @@ describe('SessionScreen — indicateur de capture souris', () => {
     expect(hint.getAttribute('data-state')).toBe('released');
 
     act(() => {
-      canvas.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      canvas.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     });
 
     expect(hint.getAttribute('data-state')).toBe('captured');

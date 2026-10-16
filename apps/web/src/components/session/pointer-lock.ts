@@ -2,7 +2,7 @@
  * Orchestration générique de la capture souris (Pointer Lock API) pour l'écran
  * d'une VM.
  *
- * Objectif UX : un SEUL curseur visible — celui de l'invité. Un clic explicite
+ * Objectif UX : un SEUL curseur visible — celui de l'invité. Un appui explicite
  * dans l'écran verrouille le pointeur sur l'élément écran ; le navigateur masque
  * alors le curseur hôte et livre les mouvements RELATIFS (`movementX/Y`) à v86,
  * qui les relaie déjà à l'invité. `Échap` (géré nativement par le navigateur)
@@ -62,7 +62,7 @@ export function isPointerLockSupported(doc: Document): boolean {
 /**
  * Attache l'orchestration Pointer Lock au conteneur d'écran.
  *
- * Le clic de capture est écouté sur le conteneur puis filtré : seuls les clics
+ * L'appui de capture est écouté sur le conteneur puis filtré : seuls les appuis
  * dont la cible est DANS l'écran capturent. Les clics sur les contrôles hors
  * écran (barre d'outils, logs…) ne déclenchent donc jamais de capture.
  */
@@ -141,8 +141,10 @@ export function attachPointerLockCapture(
     requestLock(screen);
   };
 
-  const onClick = (event: MouseEvent): void => {
+  const onPointerDown = (event: PointerEvent): void => {
     if (disposed || !supported) return;
+    // Comme l'ancien événement `click`, seul le bouton principal capture.
+    if (event.button !== 0) return;
     if (doc.pointerLockElement !== null) return;
     const screen = getScreen();
     if (screen === null) return;
@@ -176,7 +178,9 @@ export function attachPointerLockCapture(
     doc.addEventListener('pointerlockchange', onPointerLockChange);
     doc.addEventListener('pointerlockerror', onPointerLockError);
     doc.addEventListener('visibilitychange', onVisibilityChange);
-    container.addEventListener('click', onClick);
+    // `pointerdown` capture dès l'appui, sans attendre le relâchement qui
+    // déclenche `click`.
+    container.addEventListener('pointerdown', onPointerDown);
     win?.addEventListener('blur', onWindowBlur);
   }
   // Synchronise au montage : un verrou déjà actif (StrictMode, remount) est
@@ -194,7 +198,7 @@ export function attachPointerLockCapture(
         doc.removeEventListener('pointerlockchange', onPointerLockChange);
         doc.removeEventListener('pointerlockerror', onPointerLockError);
         doc.removeEventListener('visibilitychange', onVisibilityChange);
-        container.removeEventListener('click', onClick);
+        container.removeEventListener('pointerdown', onPointerDown);
         win?.removeEventListener('blur', onWindowBlur);
       }
       releaseOurLock();

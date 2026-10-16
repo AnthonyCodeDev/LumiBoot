@@ -427,13 +427,17 @@
 }
 
 /* Session */
+/* Hauteur bornée à l'espace sous la barre d'en-tête (64px), avec débordement
+   coupé : l'écran de session ne peut jamais pousser la page sous la fenêtre
+   (aucun scroll vertical parasite), quelle que soit la résolution invitée. */
 .session-screen {
   width: 100%;
   margin: 0;
   padding: 28px clamp(16px, 3vw, 40px) 44px;
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - 64px);
+  height: calc(100dvh - 64px);
+  overflow: hidden;
 }
 .session-toolbar {
   display: flex;
@@ -475,13 +479,22 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+/* Plafond absolu : jamais plus de 80 % de la hauteur de la fenêtre. La
+   hauteur est résolue en flex (le conteneur de session est borné), ce qui
+   permet au canvas et au mode texte d'utiliser des `max-height: 100%`.
+   Repli assumé sur `width: 100%` : un `width: fit-content` sur la coque se
+   base sur la taille INTRINSÈQUE du canvas (résolution invitée, ex. 1024px)
+   et non sur sa taille finale contrainte en hauteur (voir E2E screen-sizing).
+   La surface noire `.v86-screen` épouse, elle, le contenu rendu et est centrée. */
 .session-viewport {
   position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
+  max-width: 100%;
   flex: 1 1 auto;
-  min-height: min(620px, calc(100dvh - 260px));
+  min-height: 0;
+  max-height: 80dvh;
   margin-top: 16px;
   overflow: hidden;
   border: 1px solid #282c33;
@@ -512,32 +525,43 @@
   min-height: 0;
   height: 100%;
 }
-/* Écran VGA : le résultat, dominant — prend l'essentiel de la hauteur. */
+/* Écran VGA : le résultat, dominant. Sa largeur s'ajuste à son contenu
+   (ratio invité préservé) et il est centré ; la hauteur se partage avec les
+   logs via flex, sous le plafond 80dvh du viewport. */
 .v86-screen {
   flex: 1 1 auto;
   min-height: 0;
-  width: 100%;
+  min-width: 0;
+  width: fit-content;
+  max-width: 100%;
+  align-self: center;
   background: #000;
   border-bottom: 1px solid #282c33;
   display: flex; /* au lieu de grid/place-items */
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
 }
-/* Le canvas reçoit des styles inline px de v86 : neutralisés avec !important. */
+/* v86 pose des styles inline `width`/`height` en px sur le canvas : neutralisés
+   avec !important. En `auto`, le canvas est un élément remplacé : ses
+   `max-width`/`max-height` le réduisent SANS déformer son ratio intrinsèque. */
 .v86-screen canvas {
   display: block;
-  width: 100% !important;
-  height: 100% !important;
+  width: auto !important;
+  height: auto !important;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
   object-position: center;
 }
 .v86-screen-text {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
   min-height: 0;
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -978,9 +1002,7 @@
   .session-actions .btn {
     flex: 1;
   }
-  .session-viewport {
-    min-height: 420px;
-  }
+  /* Pas de min-height ici : elle réintroduirait un débordement vertical. */
   .v86-serial {
     height: 140px;
     min-height: 120px;

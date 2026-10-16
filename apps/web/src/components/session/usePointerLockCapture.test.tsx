@@ -84,7 +84,7 @@ describe('usePointerLockCapture', () => {
     document.body.innerHTML = '';
   });
 
-  it('capture au clic quand la session est active et reflète l’état', () => {
+  it('capture dès l’appui quand la session est active et reflète l’état', () => {
     const { ref, screen, canvas } = makeFixture();
     const { result } = renderHook(() => usePointerLockCapture(ref, true));
 
@@ -92,7 +92,7 @@ describe('usePointerLockCapture', () => {
     expect(result.current.supported).toBe(true);
 
     act(() => {
-      canvas.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      canvas.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     });
 
     expect(result.current.captured).toBe(true);
@@ -104,7 +104,7 @@ describe('usePointerLockCapture', () => {
     const { result } = renderHook(() => usePointerLockCapture(ref, false));
 
     act(() => {
-      canvas.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      canvas.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     });
 
     expect(result.current.captured).toBe(false);
@@ -118,7 +118,7 @@ describe('usePointerLockCapture', () => {
     );
 
     act(() => {
-      canvas.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      canvas.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     });
     expect(result.current.captured).toBe(true);
 
@@ -134,7 +134,7 @@ describe('usePointerLockCapture', () => {
     const { result, unmount } = renderHook(() => usePointerLockCapture(ref, true));
 
     act(() => {
-      canvas.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      canvas.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     });
     expect(result.current.captured).toBe(true);
 

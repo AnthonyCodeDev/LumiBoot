@@ -14,6 +14,8 @@
 
 `local-network` désigne un réseau virtuel entre invités, pas le LAN physique de l'hôte.
 
+Un invité **Windows** n'a pas de pilote NE2000 en standard : le pilote réseau doit être installé dans son image avant utilisation, sinon aucun réseau n'apparaît. Voir [`windows-7.md`](windows-7.md).
+
 ## Niveau de preuve
 
 - Configuré : le profil est valide et sélectionné.
