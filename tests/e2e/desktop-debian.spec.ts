@@ -38,9 +38,7 @@ const assetsPresent = process.env.VM_E2E_ASSETS === '1';
  * de l'invité. Si rien n'arrive dans le délai, on renvoie `timeout` et le test
  * échoue en imprimant la sortie série complète pour diagnostic.
  */
-async function waitForDesktopProof(
-  page: Page,
-): Promise<'ready' | 'failed' | 'error' | 'timeout'> {
+async function waitForDesktopProof(page: Page): Promise<'ready' | 'failed' | 'error' | 'timeout'> {
   try {
     const handle = await page.waitForFunction(
       ([ready, failed]) => {

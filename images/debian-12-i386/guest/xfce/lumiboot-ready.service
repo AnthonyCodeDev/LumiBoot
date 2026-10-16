@@ -1,0 +1,16 @@
+[Unit]
+Description=LumiBoot guest boot readiness marker (flavor xfce)
+# Émis uniquement quand le système multi-utilisateur est atteint.
+After=systemd-user-sessions.service
+Wants=systemd-user-sessions.service
+
+[Service]
+Type=oneshot
+# La balise provient du système invité réel, jamais de JavaScript. Elle atteste
+# que l'OS est opérationnel (pas encore que la session graphique l'est : c'est
+# le rôle du marqueur LUMIBOOT_DESKTOP_READY, distinct).
+ExecStart=/bin/sh -c 'printf "LUMIBOOT_GUEST_READY:debian-12-i386-xfce\n" > /dev/ttyS0'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

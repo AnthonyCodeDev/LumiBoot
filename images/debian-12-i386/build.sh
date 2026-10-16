@@ -4,6 +4,7 @@
 #
 #   sudo ./images/debian-12-i386/build.sh              # flavor « minimal » (console, défaut)
 #   sudo FLAVOR=desktop ./images/debian-12-i386/build.sh   # flavor « desktop » (Xorg + Openbox)
+#   sudo FLAVOR=xfce ./images/debian-12-i386/build.sh      # flavor « xfce » (Xorg + XFCE)
 #   sudo ./images/debian-12-i386/build.sh desktop          # équivalent (flavor en 1er argument)
 #
 # À exécuter sous Linux ou WSL2, jamais sous Windows natif ni dans un pipeline
@@ -14,7 +15,7 @@
 #     construite ni bootée ici). Il doit être testé sur une machine Linux/WSL2
 #     adaptée AVANT toute publication. Aucun boot réel n'est prouvé à ce stade.
 #
-# Deux flavors partagent le MÊME socle ci-dessous (aucun copier-coller) :
+# Trois flavors partagent le MÊME socle ci-dessous (aucun copier-coller) :
 #
 #   * minimal  (défaut) — baseline E2E validée : console série + VGA, marqueur
 #              LUMIBOOT_GUEST_READY:debian-12-i386. Comportement/compatibilité
@@ -25,11 +26,17 @@
 #              LUMIBOOT_GUEST_READY:debian-12-i386-desktop (OS opérationnel)
 #              PUIS, seulement après le démarrage effectif du serveur X et de la
 #              session, LUMIBOOT_DESKTOP_READY:debian-12-i386-desktop.
+#   * xfce     — socle minimal + pile graphique Xorg/XFCE (environnement de
+#              bureau complet). Mêmes marqueurs, préfixés
+#              LUMIBOOT_GUEST_READY:debian-12-i386-xfce puis
+#              LUMIBOOT_DESKTOP_READY:debian-12-i386-xfce. Sa configuration X
+#              (fbdev/modesetting) est PARTAGÉE avec le flavor desktop. ⚠️ XFCE
+#              n'a PAS encore été construit ni testé : aucun boot réel prouvé.
 #
-#     Les deux marqueurs sont émis par le système INVITÉ via systemd (voir
-#     guest/), jamais par JavaScript, et écrits sur la console série (ttyS0).
+#     Les marqueurs sont émis par le système INVITÉ via systemd (voir guest/),
+#     jamais par JavaScript, et écrits sur la console série (ttyS0).
 #
-# Résultat dans images/debian-12-i386/build[-desktop]/ :
+# Résultat dans images/debian-12-i386/build[-desktop|-xfce]/ :
 #   rootfs.img      disque ext4 brut (racine Debian)
 #   vmlinuz-686     noyau (bzimage) de la même version que l'initrd
 #   initrd.img      initramfs correspondant
@@ -52,6 +59,8 @@ case "$FLAVOR" in
     VGA_MIB="16"
     BUILD_SUFFIX=""
     READY_SERVICE_SRC=""
+    GUEST_DIR=""
+    DISK_SIZE_DEFAULT="3G"
     ;;
   desktop)
     REF="debian-12-i386-desktop"
@@ -59,12 +68,32 @@ case "$FLAVOR" in
     VGA_MIB="16"
     BUILD_SUFFIX="-desktop"
     READY_SERVICE_SRC="desktop/lumiboot-ready.service"
+    GUEST_DIR="desktop"
+    DISK_SIZE_DEFAULT="3G"
+    ;;
+  xfce)
+    REF="debian-12-i386-xfce"
+    MEMORY_MIB="1024"
+    VGA_MIB="16"
+    BUILD_SUFFIX="-xfce"
+    READY_SERVICE_SRC="xfce/lumiboot-ready.service"
+    GUEST_DIR="xfce"
+    # XFCE est nettement plus volumineux que le socle : disque élargi à 4 Gio
+    # (surchargeable par DISK_SIZE=… comme avant).
+    DISK_SIZE_DEFAULT="4G"
     ;;
   *)
-    echo "Flavor inconnu : « $FLAVOR » (attendu : minimal | desktop)." >&2
+    echo "Flavor inconnu : « $FLAVOR » (attendu : minimal | desktop | xfce)." >&2
     exit 1
     ;;
 esac
+
+# Flavor graphique (Xorg + gestionnaire de session) : desktop (Openbox) ou xfce.
+# Pilote le partage de la plupart des étapes (pile graphique, session, marqueur).
+GRAPHICAL=""
+if [ "$FLAVOR" = "desktop" ] || [ "$FLAVOR" = "xfce" ]; then
+  GRAPHICAL="true"
+fi
 
 RELEASE="bookworm"
 ARCH="i386"
@@ -72,13 +101,14 @@ DEBIAN_MIRROR="${DEBIAN_MIRROR:-https://deb.debian.org/debian}"
 SECURITY_MIRROR="${SECURITY_MIRROR:-http://security.debian.org/debian-security}"
 # Snapshot daté optionnel (format snapshot.debian.org : 20240101T000000Z).
 SNAPSHOT="${SNAPSHOT:-}"
-DISK_SIZE="${DISK_SIZE:-3G}"
+DISK_SIZE="${DISK_SIZE:-$DISK_SIZE_DEFAULT}"
 
-# Cmdline noyau du flavor desktop. Identique au socle (V86Provider.DEFAULT_BOOT_CMDLINE)
-# PLUS « vga=0x318 » (1024×768×24) : sous v86 il n'y a pas de DRM, on force donc
-# la console framebuffer VBE du noyau pour obtenir /dev/fb0, requis par le repli
-# Xorg « fbdev ». Le flavor minimal n'émet PAS de boot.cmdline : il garde la
-# console VGA texte et le DEFAULT_BOOT_CMDLINE du provider (comportement inchangé).
+# Cmdline noyau des flavors graphiques (desktop et xfce). Identique au socle
+# (V86Provider.DEFAULT_BOOT_CMDLINE) PLUS « vga=0x318 » (1024×768×24) : sous v86
+# il n'y a pas de DRM, on force donc la console framebuffer VBE du noyau pour
+# obtenir /dev/fb0, requis par le repli Xorg « fbdev ». Le flavor minimal
+# n'émet PAS de boot.cmdline : il garde la console VGA texte et le
+# DEFAULT_BOOT_CMDLINE du provider (comportement inchangé).
 DESKTOP_CMDLINE="console=tty0 console=ttyS0,115200 root=/dev/sda rw vga=0x318"
 
 if [ -n "$SNAPSHOT" ]; then
@@ -91,11 +121,11 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ext4 natif sous WSL) via LUMIBOOT_BUILD_DIR. Nécessaire car debootstrap et le
 # chroot échouent sur les systèmes de fichiers 9p/DrvFs (/mnt/c) : l'extraction
 # de certains paquets (ex. libpam-runtime) fait échouer tar. Par défaut, le
-# comportement est inchangé (build/ ou build-desktop/ dans le dépôt).
+# comportement est inchangé (build/, build-desktop/ ou build-xfce/ dans le dépôt).
 BUILD_DIR="${LUMIBOOT_BUILD_DIR:-$HERE/build$BUILD_SUFFIX}"
 ROOTFS="$BUILD_DIR/rootfs"
 
-# Paquets du socle commun (identiques aux deux flavors : la baseline console
+# Paquets du socle commun (identiques à TOUS les flavors : la baseline console
 # reste strictement la même).
 BASE_PACKAGES="linux-image-686 initramfs-tools systemd-sysv systemd-resolved udev kmod \
 bash coreutils util-linux mount login passwd sudo \
@@ -107,27 +137,35 @@ iproute2 iputils-ping dnsutils \
 python3 perl \
 console-setup kbd locales"
 
-# Paquets additionnels du flavor desktop : Xorg minimal + Openbox + xterm.
-# Volontairement SANS GNOME/KDE ni Wayland.
+# Paquets graphiques PARTAGÉS par les flavors desktop (Openbox) et xfce : pile
+# Xorg minimale (serveur, pilotes, entrée, xinit, utilitaires), polices et bus
+# D-Bus de session. Volontairement SANS GNOME/KDE ni Wayland.
 #
 # Pilote vidéo : sous v86 le noyau attache un pilote KMS `bochs-drm` (framebuffer
 # /dev/fb0). Un pilote VBE (`vesa`) refuse alors de s'attacher et X échoue avec
 # « no screens found ». On utilise donc `fbdev` (framebuffer noyau) en primaire
 # et `modesetting` (KMS, fourni par `xserver-xorg-core`) en repli — voir
-# guest/desktop/xorg.conf.d/20-lumiboot-fbdev.conf. `vesa` reste installé mais
-# n'est plus sélectionné.
+# guest/xorg.conf.d/20-lumiboot-fbdev.conf (fichier PARTAGÉ).
 #
 # `xserver-xorg-legacy` est conservé : il fournit le wrapper setuid
 # `/usr/lib/xorg/Xorg.wrap` (+ `/etc/X11/Xwrapper.config`), requis car Xorg est
 # lancé par le compte non privilégié « lumiboot » avec `needs_root_rights=yes`.
-DESKTOP_PACKAGES="xserver-xorg-core xserver-xorg-legacy xserver-xorg-video-vesa xserver-xorg-video-fbdev \
+X_PACKAGES="xserver-xorg-core xserver-xorg-legacy xserver-xorg-video-vesa xserver-xorg-video-fbdev \
 xserver-xorg-input-libinput xinit x11-xserver-utils x11-utils x11-xkb-utils xauth \
-xterm openbox fonts-dejavu-core dbus-x11"
+fonts-dejavu-core dbus-x11"
+
+# Ajout propre au flavor desktop : Openbox + xterm (session de bureau minimale).
+DESKTOP_PACKAGES="$X_PACKAGES xterm openbox"
+
+# Ajout propre au flavor xfce : environnement de bureau XFCE complet. Pas de
+# gestionnaire de connexion (lightdm/GDM) : démarrage direct via startx+~/.xinitrc.
+XFCE_PACKAGES="$X_PACKAGES xfce4 xfce4-session xfwm4 xfconf xfce4-panel xfce4-terminal thunar"
 
 PACKAGES="$BASE_PACKAGES"
-if [ "$FLAVOR" = "desktop" ]; then
-  PACKAGES="$BASE_PACKAGES $DESKTOP_PACKAGES"
-fi
+case "$FLAVOR" in
+  desktop) PACKAGES="$BASE_PACKAGES $DESKTOP_PACKAGES" ;;
+  xfce) PACKAGES="$BASE_PACKAGES $XFCE_PACKAGES" ;;
+esac
 
 require() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -248,21 +286,22 @@ if [ -x "$ROOTFS/usr/bin/vim.tiny" ] && [ ! -e "$ROOTFS/usr/bin/vim" ]; then
   chroot "$ROOTFS" update-alternatives --install /usr/bin/vim vim /usr/bin/vim.tiny 10
 fi
 
-# ── 4d. Pile graphique (flavor desktop uniquement) ───────────────────────────
-if [ "$FLAVOR" = "desktop" ]; then
-  echo "== 4d. Pile graphique Xorg/Openbox =="
+# ── 4d. Pile graphique (flavors graphiques : desktop et xfce) ────────────────
+if [ "$GRAPHICAL" = "true" ]; then
+  echo "== 4d. Pile graphique Xorg / gestionnaire de session =="
   # Pilote vidéo : le noyau attache KMS « bochs-drm » (framebuffer /dev/fb0). On
   # définit DEUX ServerLayout (fbdev primaire, modesetting en repli), sélectionnés
   # par /usr/local/bin/lumiboot-startx. « vesa » n'est plus utilisé (il refuse de
-  # s'attacher quand un pilote KMS est lié → « no screens found »).
+  # s'attacher quand un pilote KMS est lié → « no screens found »). Cette
+  # configuration est PARTAGÉE par desktop et xfce (un seul fichier source).
   install -d -m 0755 "$ROOTFS/etc/X11/xorg.conf.d"
-  install -D -m 0644 "$HERE/guest/desktop/xorg.conf.d/20-lumiboot-fbdev.conf" \
+  install -D -m 0644 "$HERE/guest/xorg.conf.d/20-lumiboot-fbdev.conf" \
     "$ROOTFS/etc/X11/xorg.conf.d/20-lumiboot-fbdev.conf"
 
   # Xwrapper.config : autorise un lancement de Xorg par le compte NON
   # privilégié « lumiboot » avec des droits root (needs_root_rights=yes). Le
-  # wrapper setuid Xorg.wrap vient de xserver-xorg-legacy. La SESSION
-  # (openbox/xterm) reste, elle, non privilégiée.
+  # wrapper setuid Xorg.wrap vient de xserver-xorg-legacy. La SESSION (Openbox ou
+  # XFCE) reste, elle, non privilégiée.
   cat > "$ROOTFS/etc/X11/Xwrapper.config" <<'EOF'
 # Configuration du wrapper Xorg (xserver-xorg-legacy) pour v86.
 # Le serveur X doit disposer des droits root (needs_root_rights=yes) pour
@@ -281,8 +320,9 @@ EOF
     chmod u+s "$ROOTFS/usr/lib/xorg/Xorg.wrap"
   fi
 
-  # Lanceur de session : tente « fbdev » puis « modesetting » en repli.
-  install -D -m 0755 "$HERE/guest/desktop/lumiboot-startx" \
+  # Lanceur de session : tente « fbdev » puis « modesetting » en repli (partagé
+  # desktop/xfce ; le choix de la session est fait par ~/.xinitrc du flavor).
+  install -D -m 0755 "$HERE/guest/lumiboot-startx" \
     "$ROOTFS/usr/local/bin/lumiboot-startx"
 fi
 
@@ -313,10 +353,11 @@ install -D -m 0644 "$HERE/guest/serial-getty-autologin.conf" \
 install -D -m 0644 "$HERE/guest/getty-autologin.conf" \
   "$ROOTFS/etc/systemd/system/getty@tty1.service.d/autologin.conf"
 # Console VGA texte : le flavor minimal blackliste le DRM `bochs` pour rester en
-# mode texte (vérifications `vga-console`). Le flavor desktop veut au contraire
-# un framebuffer RÉEL /dev/fb0 (repli Xorg `fbdev`) : sous v86 le seul
-# fournisseur de framebuffer est `bochs-drm` (le noyau Debian 6.1 n'honore plus
-# `vga=` au démarrage). On ne blackliste donc PAS `bochs` en desktop.
+# mode texte (vérifications `vga-console`). Les flavors graphiques (desktop,
+# xfce) veulent au contraire un framebuffer RÉEL /dev/fb0 (repli Xorg `fbdev`) :
+# sous v86 le seul fournisseur de framebuffer est `bochs-drm` (le noyau Debian
+# 6.1 n'honore plus `vga=` au démarrage). On ne blackliste donc PAS `bochs` en
+# desktop/xfce.
 if [ "$FLAVOR" = "minimal" ]; then
   install -D -m 0644 "$HERE/guest/no-drm.conf" \
     "$ROOTFS/etc/modprobe.d/lumiboot-no-drm.conf"
@@ -332,16 +373,17 @@ else
     "$ROOTFS/etc/systemd/system/lumiboot-ready.service"
 fi
 
-# Session graphique (flavor desktop) : autologin tty1 → ~/.bash_profile lance
-# startx → ~/.xinitrc démarre Openbox + un xterm. Le marqueur DESKTOP_READY
-# n'est émis qu'après vérification réelle du serveur X et de la session.
-if [ "$FLAVOR" = "desktop" ]; then
-  install -D -m 0755 "$HERE/guest/desktop/lumiboot-desktop-ready.sh" \
+# Session graphique (flavors desktop/xfce) : autologin tty1 → ~/.bash_profile
+# lance startx → ~/.xinitrc démarre la session (Openbox ou XFCE). Le marqueur
+# DESKTOP_READY n'est émis qu'après vérification réelle du serveur X et de la
+# session. Les overlays proviennent du dossier `guest/<flavor>/`.
+if [ "$GRAPHICAL" = "true" ]; then
+  install -D -m 0755 "$HERE/guest/$GUEST_DIR/lumiboot-desktop-ready.sh" \
     "$ROOTFS/usr/local/bin/lumiboot-desktop-ready"
-  install -D -m 0644 "$HERE/guest/desktop/lumiboot-desktop-ready.service" \
+  install -D -m 0644 "$HERE/guest/$GUEST_DIR/lumiboot-desktop-ready.service" \
     "$ROOTFS/etc/systemd/system/lumiboot-desktop-ready.service"
-  install -D -m 0644 "$HERE/guest/desktop/bash_profile" "$ROOTFS/home/lumiboot/.bash_profile"
-  install -D -m 0755 "$HERE/guest/desktop/xinitrc" "$ROOTFS/home/lumiboot/.xinitrc"
+  install -D -m 0644 "$HERE/guest/$GUEST_DIR/bash_profile" "$ROOTFS/home/lumiboot/.bash_profile"
+  install -D -m 0755 "$HERE/guest/$GUEST_DIR/xinitrc" "$ROOTFS/home/lumiboot/.xinitrc"
   chroot "$ROOTFS" chown lumiboot:lumiboot /home/lumiboot/.bash_profile /home/lumiboot/.xinitrc
 fi
 
@@ -356,7 +398,7 @@ chroot "$ROOTFS" bash -e -c '
     systemctl enable console-setup.service
   fi
 '
-if [ "$FLAVOR" = "desktop" ]; then
+if [ "$GRAPHICAL" = "true" ]; then
   chroot "$ROOTFS" systemctl enable lumiboot-desktop-ready.service
 fi
 
@@ -446,9 +488,14 @@ chroot "$ROOTFS" env FLAVOR="$FLAVOR" bash -c '
   test -x /lib/systemd/systemd-networkd && echo "systemd-networkd: present" || echo "systemd-networkd: MISSING"
   test -x /lib/systemd/systemd-resolved && echo "systemd-resolved: present" || echo "systemd-resolved: MISSING"
 
-  if [ "$FLAVOR" = "desktop" ]; then
+  if [ "$FLAVOR" = "desktop" ] || [ "$FLAVOR" = "xfce" ]; then
     echo "--- pile graphique"
-    for b in Xorg startx xterm openbox xdpyinfo; do
+    if [ "$FLAVOR" = "xfce" ]; then
+      GRAPHICAL_BINS="Xorg startx startxfce4 xfce4-session xfwm4 xdpyinfo"
+    else
+      GRAPHICAL_BINS="Xorg startx xterm openbox xdpyinfo"
+    fi
+    for b in $GRAPHICAL_BINS; do
       if command -v "$b" >/dev/null 2>&1; then
         echo "OK   $b -> $(command -v "$b")"
       else
@@ -510,7 +557,7 @@ e2fsck -fn "$BUILD_DIR/rootfs.img"
 # Vérification post-copie : `mkfs.ext4 -d` DOIT préserver le bit setuid de
 # Xorg.wrap (extraction/copie de l'arbre sans perte de permissions). On le
 # contrôle directement DANS l'image produite, pas seulement dans le chroot.
-if [ "$FLAVOR" = "desktop" ]; then
+if [ "$GRAPHICAL" = "true" ]; then
   echo "== 9b. Contrôle du bit setuid dans rootfs.img (debugfs) =="
   if debugfs -R 'stat /usr/lib/xorg/Xorg.wrap' "$BUILD_DIR/rootfs.img" 2>/dev/null | grep -qE 'Mode: *0?[4-7][0-7]{3}'; then
     echo "Xorg.wrap dans rootfs.img : setuid présent"
@@ -522,11 +569,11 @@ if [ "$FLAVOR" = "desktop" ]; then
 fi
 
 echo "== 10. Manifeste + provenance (tailles + SHA réels) =="
-# Le flavor desktop publie une cmdline noyau propre (framebuffer VBE pour le
-# repli Xorg fbdev) ; le flavor minimal ne l'émet pas et garde le défaut du
-# provider (console texte) — comportement inchangé.
+# Les flavors graphiques (desktop, xfce) publient une cmdline noyau propre
+# (framebuffer VBE pour le repli Xorg fbdev) ; le flavor minimal ne l'émet pas
+# et garde le défaut du provider (console texte) — comportement inchangé.
 MANIFEST_CMDLINE=""
-if [ "$FLAVOR" = "desktop" ]; then
+if [ "$GRAPHICAL" = "true" ]; then
   MANIFEST_CMDLINE="$DESKTOP_CMDLINE"
 fi
 IMAGE_REF="$REF" IMAGE_ARCH="$ARCH" IMAGE_MEMORY_MIB="$MEMORY_MIB" IMAGE_VGA_MIB="$VGA_MIB" \
@@ -561,7 +608,8 @@ Pour publier dans l'application :
 Vérifiez ensuite les requêtes HTTP Range puis le smoke test réel.
 Pour le flavor minimal : images/debian-12-i386/tests/boot-smoke-test.md
 Pour le flavor desktop : images/debian-12-i386/tests/desktop-smoke-test.md
+Pour le flavor xfce    : images/debian-12-i386/tests/xfce-smoke-test.md (NON CONSTRUIT / NON TESTÉ)
 
 Ne passer un système à availability:'ready' (et v86.integrated à true) qu'APRÈS
-un boot réellement prouvé. Le flavor desktop n'est PAS prêt par défaut.
+un boot réellement prouvé. Les flavors desktop et xfce ne sont PAS prêts par défaut.
 EOF

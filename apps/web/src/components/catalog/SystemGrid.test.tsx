@@ -28,9 +28,9 @@ beforeEach(() => {
 });
 
 describe('SystemGrid', () => {
-  it('affiche les neuf cartes du catalogue', () => {
+  it('affiche toutes les cartes du catalogue', () => {
     renderGrid();
-    expect(screen.getAllByRole('article')).toHaveLength(9);
+    expect(screen.getAllByRole('article')).toHaveLength(systems.length);
   });
 
   it('filtre les cartes selon la recherche', () => {
@@ -38,8 +38,8 @@ describe('SystemGrid', () => {
     act(() => {
       useCatalogStore.getState().setQuery('debian');
     });
-    // Debian (console) et Debian (Bureau) correspondent à « debian ».
-    expect(screen.getAllByRole('article')).toHaveLength(2);
+    // Debian (console), Debian (Bureau) et Debian (XFCE) correspondent à « debian ».
+    expect(screen.getAllByRole('article')).toHaveLength(3);
   });
 
   it('affiche un état vide et le réinitialise', async () => {
@@ -50,13 +50,13 @@ describe('SystemGrid', () => {
     });
     expect(screen.queryAllByRole('article')).toHaveLength(0);
     await user.click(screen.getByRole('button', { name: 'Réinitialiser les filtres' }));
-    expect(screen.getAllByRole('article')).toHaveLength(9);
+    expect(screen.getAllByRole('article')).toHaveLength(systems.length);
   });
 
   it('affiche le badge de statut de disponibilité sur chaque carte', () => {
     renderGrid();
     const cards = screen.getAllByRole('article');
-    expect(cards).toHaveLength(9);
+    expect(cards).toHaveLength(systems.length);
     for (const card of cards) {
       // On ne recode pas la disponibilité en dur : on la lit dans le catalogue.
       const id = card.getAttribute('data-id');

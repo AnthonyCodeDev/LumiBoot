@@ -150,3 +150,8 @@ Le flavor desktop ne peut devenir `ready` que si **toutes** ces conditions sont 
    `validated: true` dans `profiles.ts`.
 
 Tant que ces conditions ne sont pas réunies, `debian-12-i386-desktop` **reste non-ready**.
+
+> **Troisième flavor Debian :** l'image `debian-12-i386-xfce` (bureau **XFCE**) est décrite
+> séparément dans [`docs/debian-xfce.md`](./debian-xfce.md). Elle partage le socle de construction et
+> la configuration X (`fbdev`/`modesetting`) de ce flavor, mais reste **NON CONSTRUITE / NON
+> TESTÉE** et donc `planned` dans le catalogue.

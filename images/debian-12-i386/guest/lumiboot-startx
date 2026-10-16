@@ -1,5 +1,9 @@
 #!/bin/sh
-# Démarrage de la session X sous v86 (flavor desktop).
+# Démarrage de la session X sous v86 (flavors desktop ET xfce).
+#
+# Fichier PARTAGÉ par les deux flavors graphiques : le choix de la session
+# (Openbox ou XFCE) est fait par le ~/.xinitrc propre à chaque flavor ; seul le
+# lancement du serveur X (fbdev puis modesetting) est commun.
 #
 # Sous v86 le noyau attache un pilote KMS « bochs-drm » (framebuffer /dev/fb0).
 # Un pilote VBE comme « vesa » refuse alors de s'attacher (« Ignoring device

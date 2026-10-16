@@ -141,7 +141,7 @@ describe('catalogue : flavor Debian Desktop (image publiée + boot validé)', ()
     expect(profile?.hardwareProfile?.network).toBe('virtio');
   });
 
-  it("devient disponible : image publiée (`imageRef`) + boot graphique réel validé", () => {
+  it('devient disponible : image publiée (`imageRef`) + boot graphique réel validé', () => {
     const desktop = getSystemById('debian-12-i386-desktop');
     const profile = launchProfiles.find((candidate) => candidate.id === 'debian-12-i386-desktop');
     // Image publiée et boot Xorg+Openbox prouvé (voir docs/debian-desktop.md).
@@ -156,5 +156,28 @@ describe('catalogue : flavor Debian Desktop (image publiée + boot validé)', ()
     expect(consoleSystem?.imageRef).toBeDefined();
     expect(profile?.validated).toBe(true);
     expect(consoleSystem?.availability).toBe('ready');
+  });
+});
+
+describe('catalogue : flavor Debian XFCE (image publiée, boot validé TEMPORAIREMENT)', () => {
+  it('expose le profil graphique XFCE avec son marqueur Desktop dédié', () => {
+    const xfce = getSystemById('debian-12-i386-xfce');
+    const profile = xfce?.launchProfiles[0];
+    expect(profile?.engineId).toBe('v86');
+    expect(profile?.executionMode).toBe('browser');
+    expect(profile?.minMemoryMiB).toBe(1024);
+    expect(profile?.readiness?.marker).toBe('LUMIBOOT_DESKTOP_READY:debian-12-i386-xfce');
+    expect(profile?.hardwareProfile?.network).toBe('virtio');
+  });
+
+  it('temporairement validé : image publiée (`imageRef`) + `validated` pour le test manuel', () => {
+    const xfce = getSystemById('debian-12-i386-xfce');
+    const profile = launchProfiles.find((candidate) => candidate.id === 'debian-12-i386-xfce');
+    // Image publiée ; `validated` posé TEMPORAIREMENT pour débloquer le boot
+    // réel de test (voir docs/debian-xfce.md). Le résultat de ce boot fixera la
+    // valeur finale.
+    expect(xfce?.imageRef).toBe('debian-12-i386-xfce');
+    expect(profile?.validated).toBe(true);
+    expect(xfce?.availability).toBe('ready');
   });
 });

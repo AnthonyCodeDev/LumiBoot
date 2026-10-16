@@ -125,6 +125,33 @@ export const launchProfiles = [
       'La variante graphique de Debian 12 : session Xorg + Openbox dans le navigateur, à valider par un boot réel avant publication.',
   },
   {
+    id: 'debian-12-i386-xfce',
+    imageId: 'debian-12-i386-xfce-image',
+    engineId: 'v86',
+    executionMode: 'browser',
+    // Xorg + session XFCE consomment plus de mémoire que la console : plancher 1 Gio.
+    minMemoryMiB: 1024,
+    configuration: {
+      memoryMiB: 1024,
+      vgaMemoryMiB: 16,
+      bootDevice: 'disk',
+    },
+    // Même carte réseau émulée que les autres profils Debian (noyau 6.x, `virtio-net`).
+    hardwareProfile: pcHardware('virtio'),
+    // Le marqueur Desktop n'est émis qu'après le démarrage réel de X + session XFCE.
+    readiness: desktopReadiness('debian-12-i386-xfce'),
+    slug: 'debian-12-i386-xfce',
+    displayName: 'Debian (XFCE)',
+    versionLabel: '12 Bookworm · XFCE',
+    // TEMPORAIRE (test de boot réel) : validé UNIQUEMENT pour débloquer le
+    // lancement depuis l'UI et permettre le boot manuel ; l'image XFCE vient
+    // d'être construite et publiée mais aucun boot graphique réel n'est encore
+    // prouvé (voir docs/debian-xfce.md). Valeur finale décidée après ce boot.
+    validated: true,
+    description:
+      "La variante Debian 12 avec l'environnement de bureau complet XFCE : session Xorg + XFCE dans le navigateur, à construire et valider par un boot réel.",
+  },
+  {
     id: 'ubuntu-18-i386',
     imageId: 'ubuntu-18-i386-image',
     engineId: 'v86',

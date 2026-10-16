@@ -1,0 +1,16 @@
+# ~/.bash_profile — LumiBoot (flavor xfce)
+#
+# La console VGA est tty1. Après l'autologin du compte non privilégié
+# « lumiboot » sur tty1 (jamais root), ce profil démarre la session graphique
+# XFCE via startx. La console série (ttyS0) conserve un shell normal, hors
+# graphique.
+if [ -f "$HOME/.profile" ]; then
+  . "$HOME/.profile"
+fi
+
+if [ -z "${DISPLAY:-}" ] \
+  && [ "$(tty 2>/dev/null)" = "/dev/tty1" ] \
+  && command -v startx >/dev/null 2>&1; then
+  # lumiboot-startx tente « fbdev » (framebuffer noyau) puis « modesetting » en repli.
+  exec /usr/local/bin/lumiboot-startx
+fi

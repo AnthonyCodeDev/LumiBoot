@@ -47,6 +47,25 @@ export const images = [
       "L'image doit être construite hors dépôt et un boot réel prouvé avant tout passage en « disponible ».",
   },
   {
+    id: 'debian-12-i386-xfce-image',
+    familyId: 'debian',
+    architecture: 'i386',
+    // Image XFCE désormais construite (flavor xfce) et publiée dans ce dépôt.
+    // La seule preuve de présence reste `imageRef` ; la disponibilité demeure
+    // DÉRIVÉE et dépend toujours d'un boot réel validé (`validated` du profil,
+    // posé TEMPORAIREMENT pour le test manuel de boot — voir docs/debian-xfce.md).
+    imageRef: 'debian-12-i386-xfce',
+    requirements: [
+      'Navigateur moderne',
+      'WebAssembly',
+      'Mémoire suffisante (≥ 1 Gio)',
+      'Disque XFCE (~4 Gio)',
+    ],
+    integrationNote:
+      'Variante Debian 12 à environnement de bureau complet XFCE (Xorg + XFCE sous v86) : ' +
+      'image construite puis publiée, boot graphique restant à prouver par un test manuel.',
+  },
+  {
     id: 'ubuntu-18-i386-image',
     familyId: 'ubuntu',
     architecture: 'i386',

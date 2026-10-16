@@ -1,19 +1,20 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Bibliothèque', () => {
-  test('affiche les neuf systèmes du catalogue', async ({ page }) => {
+  test('affiche les dix systèmes du catalogue', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Bibliothèque' })).toBeVisible();
-    await expect(page.locator('.os-card')).toHaveCount(9);
+    await expect(page.locator('.os-card')).toHaveCount(10);
   });
 
   test('recherche un système et filtre par famille', async ({ page }) => {
     await page.goto('/');
     await page.getByLabel('Rechercher un système').fill('debian');
-    // « debian » correspond à la console ET à la variante Bureau.
-    await expect(page.locator('.os-card')).toHaveCount(2);
+    // « debian » correspond à la console, à la variante Bureau ET à la variante XFCE.
+    await expect(page.locator('.os-card')).toHaveCount(3);
     await expect(page.locator('.os-card[data-id="debian-12-i386"]')).toHaveCount(1);
     await expect(page.locator('.os-card[data-id="debian-12-i386-desktop"]')).toHaveCount(1);
+    await expect(page.locator('.os-card[data-id="debian-12-i386-xfce"]')).toHaveCount(1);
 
     await page.getByLabel('Rechercher un système').fill('');
     await page.getByRole('button', { name: 'Windows' }).click();
