@@ -1,5 +1,12 @@
 import { z } from 'zod';
 import { AssetError } from './errors';
+import {
+  createSharedRequestRegistry,
+  fetchJsonDocument,
+  probeRangeAvailability,
+  type AssetAvailability,
+  type AssetAvailabilityOptions,
+} from './manifest-loader';
 
 /**
  * Manifeste d'un disque fourni **localement** (fichier présent sur la machine de
@@ -10,6 +17,12 @@ import { AssetError } from './errors';
  * local n'a ni noyau ni binaire embarqué. Ce module décrit donc uniquement le
  * disque, les binaires du moteur v86 qui l'exécutent, et les paramètres de
  * lecture par HTTP Range (`hda.async`).
+ *
+ * Deux formes coexistent, volontairement distinctes :
+ * - la forme **privée** (fichier du dépôt) peut documenter `source` (chemin réel
+ *   de la machine) et `provenance` ;
+ * - la forme **publique** (diffusée par HTTP) INTERDIT ces champs internes :
+ *   aucun chemin absolu source ne doit jamais sortir du poste de l'opérateur.
  *
  * Rien ici n'est spécifique à Windows : le même format décrit un disque XP,
  * Vista ou tout autre système x86 amorçable fourni par l'utilisateur.
@@ -83,40 +96,108 @@ export const localDiskBootSchema = z
   })
   .strict();
 
+/** Champs communs aux formes publique et privée. */
+const localDiskCoreShape = {
+  version: z.literal(1),
+  ref: z.string().regex(IMAGE_REF, 'référence : minuscules, chiffres et tirets'),
+  displayName: z.string().min(1),
+  architecture: z.enum(ARCHITECTURES),
+  memoryMiB: z.number().int().positive(),
+  vgaMemoryMiB: z.number().int().positive().optional(),
+  license: z.string().min(1),
+  disk: localDiskFileSchema,
+  engine: localDiskEngineSchema,
+  boot: localDiskBootSchema,
+  notes: z.array(z.string().min(1)).optional(),
+} as const;
+
+/**
+ * Manifeste **public** : exactement ce qui est diffusé par HTTP. `.strict()`
+ * rejette toute clé inconnue, donc notamment `source` et `provenance` : un
+ * manifeste qui tenterait d'exposer un chemin source est refusé, pas servi.
+ */
+export const localDiskPublicManifestSchema = z.object(localDiskCoreShape).strict();
+
+/**
+ * Manifeste **privé** (fichier du dépôt) : la forme publique, plus `source` et
+ * `provenance` optionnels (documentation interne jamais diffusée).
+ */
 export const localDiskManifestSchema = z
   .object({
-    version: z.literal(1),
-    ref: z.string().regex(IMAGE_REF, 'référence : minuscules, chiffres et tirets'),
-    displayName: z.string().min(1),
-    architecture: z.enum(ARCHITECTURES),
-    memoryMiB: z.number().int().positive(),
-    vgaMemoryMiB: z.number().int().positive().optional(),
-    license: z.string().min(1),
-    provenance: z.string().min(1),
-    source: localDiskSourceSchema,
-    disk: localDiskFileSchema,
-    engine: localDiskEngineSchema,
-    boot: localDiskBootSchema,
-    notes: z.array(z.string().min(1)).optional(),
+    ...localDiskCoreShape,
+    provenance: z.string().min(1).optional(),
+    source: localDiskSourceSchema.optional(),
   })
   .strict();
 
 export type LocalDiskEngineBinary = z.infer<typeof localDiskEngineBinarySchema>;
 export type LocalDiskFile = z.infer<typeof localDiskFileSchema>;
+export type LocalDiskPublicManifest = z.infer<typeof localDiskPublicManifestSchema>;
 export type LocalDiskManifest = z.infer<typeof localDiskManifestSchema>;
 
+function formatIssues(error: z.ZodError): string {
+  return error.issues
+    .map((issue) => `${issue.path.join('.') || 'manifeste'} : ${issue.message}`)
+    .join(' ; ');
+}
+
 /**
- * Valide un manifeste disque local. Lève un `AssetError` explicite (chemins de
- * champs inclus) : un manifeste incohérent ne doit jamais produire un
- * démarrage partiel silencieux.
+ * Valide un manifeste disque (forme privée ou publique). Lève un `AssetError`
+ * explicite (chemins de champs inclus) : un manifeste incohérent ne doit jamais
+ * produire un démarrage partiel silencieux.
  */
 export function parseLocalDiskManifest(input: unknown): LocalDiskManifest {
   const parsed = localDiskManifestSchema.safeParse(input);
   if (!parsed.success) {
-    const details = parsed.error.issues
-      .map((issue) => `${issue.path.join('.') || 'manifeste'} : ${issue.message}`)
-      .join(' ; ');
-    throw new AssetError('ASSET_INVALID_MANIFEST', `Manifeste disque local invalide — ${details}`);
+    throw new AssetError(
+      'ASSET_INVALID_MANIFEST',
+      `Manifeste disque local invalide — ${formatIssues(parsed.error)}`,
+    );
+  }
+  return parsed.data;
+}
+
+/**
+ * Valide la forme **publique** uniquement. Utilisé pour garantir qu'un
+ * manifeste diffusé par HTTP ne contient aucun champ interne.
+ */
+export function parseLocalDiskPublicManifest(input: unknown): LocalDiskPublicManifest {
+  const parsed = localDiskPublicManifestSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new AssetError(
+      'ASSET_INVALID_MANIFEST',
+      `Manifeste disque public invalide — ${formatIssues(parsed.error)}`,
+    );
+  }
+  return parsed.data;
+}
+
+/**
+ * Sérialise la forme **publique** d'un manifeste disque : retire `source`
+ * (chemin réel de la machine) et `provenance` (interne). C'est LA seule forme
+ * qui doit être écrite sur le réseau ; le résultat est revalidé pour qu'aucun
+ * champ interne ne puisse s'y glisser.
+ */
+export function toPublicLocalDiskManifest(manifest: LocalDiskManifest): LocalDiskPublicManifest {
+  const candidate = {
+    version: manifest.version,
+    ref: manifest.ref,
+    displayName: manifest.displayName,
+    architecture: manifest.architecture,
+    memoryMiB: manifest.memoryMiB,
+    license: manifest.license,
+    disk: manifest.disk,
+    engine: manifest.engine,
+    boot: manifest.boot,
+    ...(manifest.vgaMemoryMiB === undefined ? {} : { vgaMemoryMiB: manifest.vgaMemoryMiB }),
+    ...(manifest.notes === undefined ? {} : { notes: manifest.notes }),
+  };
+  const parsed = localDiskPublicManifestSchema.safeParse(candidate);
+  if (!parsed.success) {
+    throw new AssetError(
+      'ASSET_INVALID_MANIFEST',
+      `Manifeste disque public invalide — ${formatIssues(parsed.error)}`,
+    );
   }
   return parsed.data;
 }
@@ -158,8 +239,11 @@ export function toLocalDiskMedia(manifest: LocalDiskManifest): LocalDiskMedia {
 
 /** Manifestes disque local déjà résolus, indexés par référence. */
 const localDiskManifests = new Map<string, LocalDiskManifest>();
-/** Chargements en vol, pour dédupliquer les appels concurrents. */
-const inflightLocalDisks = new Map<string, Promise<LocalDiskManifest>>();
+
+/** Registre partagé : déduplique sans dépendre du signal du premier demandeur. */
+const localDiskRequests = createSharedRequestRegistry<LocalDiskManifest>(
+  () => new AssetError('ASSET_ABORTED', 'Chargement du manifeste disque annulé.'),
+);
 
 export function getLocalDiskManifest(ref: string): LocalDiskManifest | null {
   return localDiskManifests.get(ref) ?? null;
@@ -179,6 +263,9 @@ export function clearLocalDiskManifests(): void {
  * Le manifeste est petit (`/images/<ref>/manifest.json`) ; le disque lui-même
  * n'est jamais téléchargé ici : v86 le lira par HTTP Range. Un manifeste déjà
  * enregistré n'est pas rechargé (vider via `clearLocalDiskManifests()`).
+ *
+ * L'annulation d'un appelant n'interrompt jamais le chargement partagé des
+ * autres : voir `createSharedRequestRegistry`.
  */
 export async function ensureLocalDiskManifest(
   ref: string,
@@ -187,14 +274,9 @@ export async function ensureLocalDiskManifest(
   const known = getLocalDiskManifest(ref);
   if (known) return known;
 
-  const pending = inflightLocalDisks.get(ref);
-  if (pending) return pending;
-
-  const task = loadLocalDiskManifest(ref, signal).finally(() => {
-    inflightLocalDisks.delete(ref);
-  });
-  inflightLocalDisks.set(ref, task);
-  return task;
+  return localDiskRequests.run(ref, signal, (requestSignal) =>
+    loadLocalDiskManifest(ref, requestSignal),
+  );
 }
 
 export async function loadLocalDiskManifest(
@@ -210,6 +292,7 @@ export async function loadLocalDiskManifest(
     response = await fetch(`/images/${ref}/manifest.json`, {
       signal: signal ?? null,
       cache: 'no-cache',
+      headers: { Accept: 'application/json' },
     });
   } catch (error) {
     if (signal?.aborted) {
@@ -223,6 +306,15 @@ export async function loadLocalDiskManifest(
 
   if (!response.ok) {
     throw new AssetError('ASSET_NOT_FOUND', `Manifeste disque HTTP ${response.status}.`, { ref });
+  }
+
+  const contentType = response.headers?.get?.('content-type') ?? '';
+  if (contentType.includes('text/html')) {
+    throw new AssetError(
+      'ASSET_INVALID_MANIFEST',
+      'Le serveur a renvoyé du HTML (repli SPA) au lieu d’un manifeste disque JSON.',
+      { ref },
+    );
   }
 
   let json: unknown;
@@ -249,23 +341,77 @@ export async function loadLocalDiskManifest(
 }
 
 /**
+ * Vérifie qu'un disque local est réellement servable : manifeste JSON valide,
+ * référence cohérente, puis disque servi en HTTP Range (206 + `Content-Range`).
+ * Toute indisponibilité est motivée (404, repli HTML SPA, absence de Range…).
+ */
+export async function checkLocalDiskAvailability(
+  ref: string,
+  options: AssetAvailabilityOptions = {},
+): Promise<AssetAvailability> {
+  if (!IMAGE_REF.test(ref)) {
+    return {
+      ref,
+      available: false,
+      reason: 'ref-invalid',
+      message: 'Référence de disque local invalide.',
+    };
+  }
+
+  const document = await fetchJsonDocument(`/images/${ref}/manifest.json`, options);
+  if (document.kind === 'unavailable') {
+    return { ref, available: false, reason: document.reason, message: document.message };
+  }
+
+  const parsed = localDiskManifestSchema.safeParse(document.json);
+  if (!parsed.success) {
+    return {
+      ref,
+      available: false,
+      reason: 'manifest-schema',
+      message: `Manifeste disque invalide — ${formatIssues(parsed.error)}`,
+    };
+  }
+  if (parsed.data.ref !== ref) {
+    return {
+      ref,
+      available: false,
+      reason: 'ref-mismatch',
+      message: 'La référence du manifeste disque diffère de la demande.',
+    };
+  }
+
+  const probe = await probeRangeAvailability(parsed.data.boot.url, {
+    ...options,
+    expectedSize: parsed.data.disk.size,
+  });
+  return { ref, ...probe };
+}
+
+/**
  * Compare un manifeste aux faits mesurés sur le fichier (taille, mtime,
  * empreinte éventuelle). Retourne la liste des incohérences (vide = conforme) :
  * aucune exception, l'appelant décide du niveau de sévérité.
+ *
+ * `source` étant optionnel (une forme publique n'en a pas), la comparaison de
+ * taille retombe sur la taille du disque et le mtime n'est vérifié que si la
+ * source est documentée.
  */
 export function diffLocalDiskIntegrity(
   manifest: LocalDiskManifest,
   observed: { size: number; mtimeMs: number; sha256?: string },
 ): string[] {
   const problems: string[] = [];
-  if (observed.size !== manifest.source.size || observed.size !== manifest.disk.size) {
+  const source = manifest.source;
+  const expectedSize = source?.size ?? manifest.disk.size;
+  if (observed.size !== expectedSize || observed.size !== manifest.disk.size) {
     problems.push(
-      `taille : ${observed.size} (source ${manifest.source.size}, disque ${manifest.disk.size})`,
+      `taille : ${observed.size} (source ${expectedSize}, disque ${manifest.disk.size})`,
     );
   }
-  if (Math.trunc(observed.mtimeMs) !== Math.trunc(manifest.source.mtimeMs)) {
+  if (source !== undefined && Math.trunc(observed.mtimeMs) !== Math.trunc(source.mtimeMs)) {
     problems.push(
-      `mtime source : ${Math.trunc(observed.mtimeMs)} au lieu de ${Math.trunc(manifest.source.mtimeMs)}`,
+      `mtime source : ${Math.trunc(observed.mtimeMs)} au lieu de ${Math.trunc(source.mtimeMs)}`,
     );
   }
   if (

@@ -73,6 +73,18 @@ describe('GuestReadyDetector', () => {
     expect(new GuestReadyDetector({ marker: MARKER }).mode).toBe('guest-marker');
   });
 
+  it('décrit la preuve attendue selon le mode (étiquette disk-boot correcte)', () => {
+    const marker = new GuestReadyDetector({ marker: MARKER, channel: 'vga' });
+    expect(marker.describeExpectedProof()).toContain(MARKER);
+    expect(marker.describeExpectedProof()).toContain('VGA');
+
+    const disk = new GuestReadyDetector({ marker: MARKER, mode: 'disk-boot' });
+    const description = disk.describeExpectedProof();
+    expect(description).toMatch(/disque/i);
+    // La preuve disque n'est jamais présentée comme un marqueur invité.
+    expect(description).not.toContain(MARKER);
+  });
+
   it('markDiskBoot ne prouve le démarrage disque qu’une seule fois', () => {
     const detector = new GuestReadyDetector({ marker: MARKER, mode: 'disk-boot' });
     expect(detector.markDiskBoot()).toBe(true);

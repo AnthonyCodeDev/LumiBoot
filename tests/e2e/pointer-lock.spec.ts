@@ -34,7 +34,8 @@ test.describe('Capture souris (Pointer Lock) — module réel dans Chromium', ()
 
       const screen = document.createElement('div');
       screen.id = 'pl-screen';
-      screen.className = 'v86-screen';
+      // Contrat d'affichage standard : la cible n'est plus liée à `.v86-screen`.
+      screen.setAttribute('data-vm-display', 'screen');
       screen.style.cssText = 'width:240px;height:120px;background:#000;';
 
       const canvas = document.createElement('canvas');

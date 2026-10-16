@@ -3,7 +3,9 @@ import { AssetError } from './errors';
 import {
   diffLocalDiskIntegrity,
   parseLocalDiskManifest,
+  parseLocalDiskPublicManifest,
   toLocalDiskMedia,
+  toPublicLocalDiskManifest,
   toV86AsyncDrive,
   type LocalDiskManifest,
 } from './local-disk';
@@ -53,6 +55,15 @@ describe('parseLocalDiskManifest', () => {
     expect(manifest.ref).toBe('windows-7-x86');
     expect(manifest.disk.size).toBe(SIZE);
     expect(manifest.boot.async).toBe(true);
+  });
+
+  it('accepte une forme publique (sans source ni provenance)', () => {
+    const raw = validManifest();
+    delete raw.source;
+    delete raw.provenance;
+    const manifest = parseLocalDiskManifest(raw);
+    expect(manifest.source).toBeUndefined();
+    expect(manifest.provenance).toBeUndefined();
   });
 
   it('accepte un manifeste sans SHA-256 (taille + mtime documentés)', () => {
@@ -142,5 +153,37 @@ describe('diffLocalDiskIntegrity', () => {
       sha256: 'f'.repeat(64),
     });
     expect(problems).toHaveLength(3);
+  });
+});
+
+describe('sérialisation publique/privée', () => {
+  const privateManifest = parseLocalDiskManifest(validManifest());
+
+  it('toPublicLocalDiskManifest retire source et provenance', () => {
+    const publicManifest = toPublicLocalDiskManifest(privateManifest);
+    expect(publicManifest).not.toHaveProperty('source');
+    expect(publicManifest).not.toHaveProperty('provenance');
+    expect(publicManifest.disk).toEqual(privateManifest.disk);
+    expect(publicManifest.boot).toEqual(privateManifest.boot);
+  });
+
+  it('ne diffuse AUCUN chemin source absolu dans le JSON public', () => {
+    const json = JSON.stringify(toPublicLocalDiskManifest(privateManifest));
+    expect(json).not.toContain('C:/Windows7.img');
+    expect(json).not.toContain('source');
+    expect(json).not.toContain('provenance');
+  });
+
+  it('parseLocalDiskPublicManifest rejette un manifeste exposant source/provenance', () => {
+    expect(() => parseLocalDiskPublicManifest(validManifest())).toThrow(AssetError);
+  });
+
+  it('parseLocalDiskPublicManifest accepte la forme publique sérialisée', () => {
+    const publicManifest = parseLocalDiskPublicManifest(
+      toPublicLocalDiskManifest(privateManifest),
+    );
+    expect(publicManifest.ref).toBe('windows-7-x86');
+    expect(publicManifest).not.toHaveProperty('source');
+    expect(publicManifest).not.toHaveProperty('provenance');
   });
 });

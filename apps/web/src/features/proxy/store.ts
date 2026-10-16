@@ -213,15 +213,17 @@ function beginPairingPolling(url: string, pairingId: string, fetchImpl: FetchLik
  * refusé (`401`/`403`) est effacé puis `pairing-required`. `reachable` et
  * `authenticated` exposent ces niveaux distincts sans casser l'API existante.
  *
- * Persistance : le token de session est conservé dans `localStorage`
- * (`lumiboot.proxy.session`) afin de survivre à un rechargement de page
- * (F5). À la restauration, il est revalidé par `verifyToken` **avant** de
- * déclarer `connected`. Compromis sécurité assumé : le token est **loopback
+ * Persistance : le token de session est conservé dans `sessionStorage`
+ * (`lumiboot.proxy.session`) afin de survivre à un rechargement de page (F5)
+ * **dans le même onglet**, sans persister au-delà de sa fermeture. À la
+ * restauration, il est revalidé par `verifyToken` **avant** de déclarer
+ * `connected`. Compromis sécurité assumé : le token est **loopback
  * uniquement**, **lié à l'origine** LumiBoot, à **TTL** (expiration vérifiée à
- * la relecture) et **révocable** ; il est **supprimé à la révocation, à
- * l'expiration ou sur refus authentifié**. `getProxyRuntimeCredentials()`
- * continue de lire le token mémoire, jamais le stockage, et ne le renvoie que
- * si l'état est réellement authentifié.
+ * la relecture) et **révocable** ; il est **supprimé à la révocation
+ * (déconnexion), à l'expiration ou sur refus authentifié**. L'ancienne clé
+ * `localStorage` d'une version antérieure est purgée sans migration.
+ * `getProxyRuntimeCredentials()` continue de lire le token mémoire, jamais le
+ * stockage, et ne le renvoie que si l'état est réellement authentifié.
  */
 export const useProxyStore = create<ProxyStoreState>((set, get) => ({
   state: 'not-running',

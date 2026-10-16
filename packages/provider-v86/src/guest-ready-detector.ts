@@ -5,19 +5,25 @@ import type {
 } from '@lumiboot/contracts';
 
 /**
- * Détection du marqueur de disponibilité émis par le système invité.
+ * Détection de la preuve de démarrage invité.
  *
- * La balise est écrite par le système réellement démarré (unité systemd
- * `lumiboot-ready.service`, `ttyS0` par défaut). Elle ne doit JAMAIS être
- * produite côté JavaScript : c'est le chemin rapide vers l'état `running`. Si
- * elle n'arrive pas dans le délai, la session est considérée démarrée par repli
- * (l'émulateur tourne) ; le marqueur n'est donc plus l'unique condition.
+ * Deux modes, tous deux adossés au contrat `readiness` du PROFIL (catalogue) :
+ *
+ * - `guest-marker` : la balise est écrite par le système réellement démarré
+ *   (unité systemd `lumiboot-ready.service`, `ttyS0` par défaut). Elle ne doit
+ *   JAMAIS être produite côté JavaScript : c'est l'UNIQUE preuve d'un OS
+ *   opérationnel. Son absence dans le délai n'est jamais un `running` : c'est un
+ *   échec non vérifié (voir `V86Instance`).
+ * - `disk-boot` : aucun marqueur n'existe (média importé/BIOS). La preuve est une
+ *   lecture réelle du disque dur (`hda`). Elle est PLUS FAIBLE : elle atteste une
+ *   activité d'amorçage, pas un OS opérationnel. Elle ne doit jamais être
+ *   présentée comme un marqueur invité.
  *
  * Correctif audit #20 : le marqueur, le canal et le délai proviennent du contrat
- * `readiness` du PROFIL (catalogue) et ne sont plus codés en dur. Le flux est lu
- * octet par octet : le marqueur peut être réparti sur plusieurs notifications,
- * on conserve donc un tampon borné, dimensionné sur la longueur du marqueur DE
- * L'INSTANCE (pas d'une constante globale).
+ * `readiness` et ne sont plus codés en dur. Le flux est lu octet par octet : le
+ * marqueur peut être réparti sur plusieurs notifications, on conserve donc un
+ * tampon borné, dimensionné sur la longueur du marqueur DE L'INSTANCE (pas d'une
+ * constante globale).
  */
 const DEFAULT_CHANNEL: GuestReadinessChannel = 'serial';
 const DEFAULT_MODE: GuestReadinessMode = 'guest-marker';
@@ -61,9 +67,22 @@ export class GuestReadyDetector {
     return this.#mode;
   }
 
-  /** Délai maximal d'attente du marqueur, en millisecondes. */
+  /** Délai maximal d'attente de la preuve, en millisecondes. */
   get timeoutMs(): number {
     return this.#timeoutMs;
+  }
+
+  /**
+   * Description factuelle de la preuve attendue par cette instance. Sert aux
+   * messages d'échec : un profil `disk-boot` est étiqueté comme tel (lecture
+   * disque) et n'est jamais présenté comme un marqueur invité.
+   */
+  describeExpectedProof(): string {
+    if (this.#mode === 'disk-boot') {
+      return 'la première lecture du disque dur (hda)';
+    }
+    const channel = this.#channel === 'vga' ? 'VGA' : 'série';
+    return `le marqueur « ${this.#marker} » sur le canal ${channel}`;
   }
 
   /**
@@ -81,7 +100,8 @@ export class GuestReadyDetector {
 
   /**
    * Mode `disk-boot` : la preuve est une lecture réelle du disque dur, pas un
-   * marqueur. Retourne `true` une seule fois, au premier accès disque observé.
+   * marqueur invité. Retourne `true` une seule fois, au premier accès disque
+   * observé. Cette preuve reste plus faible qu'un marqueur (voir doc de classe).
    */
   markDiskBoot(): boolean {
     if (this.#detected) return false;

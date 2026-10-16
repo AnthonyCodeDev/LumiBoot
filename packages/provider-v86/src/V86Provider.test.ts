@@ -407,6 +407,17 @@ describe('V86Provider', () => {
     expect(captured[0]?.net_device).toBeUndefined();
     expect(createdControllers[0]?.snapshot().status).toBe('offline');
   });
+
+  it('n’annonce pas de snapshots (absents de VMInstance)', () => {
+    const { provider } = setup();
+    const capabilities = provider.capabilities();
+    // `VMInstance` n'expose aucun point d'entrée de snapshot : ne jamais
+    // promettre RAM/disque à l'UI.
+    expect(capabilities.ramSnapshots).toBe(false);
+    expect(capabilities.diskSnapshots).toBe(false);
+    expect(capabilities.partialDownload).toBe(true);
+    expect(capabilities.configurableMemory).toBe(true);
+  });
 });
 
 describe('V86Provider : média importé (Windows 7)', () => {
@@ -455,6 +466,47 @@ describe('V86Provider : média importé (Windows 7)', () => {
     // ACPI activée par le profil matériel (requis par la famille Vista+).
     expect(options?.acpi).toBe(true);
     expect(options?.memory_size).toBe(1536 * MiB);
+  });
+
+  it('média ISO destine CD-ROM et ordre de boot CD (jamais hda)', async () => {
+    const { provider, captured } = setup();
+    const liveOS = makeOS({
+      id: 'live-iso',
+      slug: 'live-iso',
+      launchProfiles: [
+        {
+          id: 'live',
+          engineId: 'v86',
+          executionMode: 'browser',
+          configuration: { memoryMiB: 512, vgaMemoryMiB: 16, bootDevice: 'cdrom' },
+        },
+      ],
+    });
+    await provider.start(liveOS, document.createElement('div'), {
+      media: { kind: 'disk', url: 'blob:live.iso', size: 700_000_000, format: 'iso' },
+    });
+
+    const options = captured[0];
+    expect(options?.cdrom).toMatchObject({
+      url: 'blob:live.iso',
+      async: true,
+      size: 700_000_000,
+    });
+    // Une ISO n'est jamais montée comme disque dur.
+    expect(options?.hda).toBeUndefined();
+    // Ordre de boot : CD d'abord (CD_HARDDISK_FLOPPY = 0x123).
+    expect(options?.boot_order).toBe(0x123);
+  });
+
+  it('média ISO d’installation (profil disk-boot) : refuse sans simuler la persistance', async () => {
+    const { provider, captured } = setup();
+    await expect(
+      provider.start(makeWindowsOS(), document.createElement('div'), {
+        media: { kind: 'disk', url: 'blob:win7.iso', size: 3_000_000_000, format: 'iso' },
+      }),
+    ).rejects.toMatchObject({ code: 'UNSUPPORTED_ENVIRONMENT' });
+    // Aucun émulateur construit : la limitation est affichée avant tout montage.
+    expect(captured).toHaveLength(0);
   });
 
   it('échoue honnêtement (MEDIA_REQUIRED) sans média importé', async () => {

@@ -18,10 +18,25 @@ import { createDiskAssetMiddleware } from '../../scripts/lib/disk-asset-dev.mjs'
  * `process` est lu via `globalThis` pour ne pas exiger `@types/node` dans un
  * fichier de configuration front.
  */
-const nodeEnv = (
-  globalThis as { process?: { env?: Record<string, string | undefined> } }
-).process?.env;
+const nodeEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
+  ?.env;
 const crossOriginIsolation = nodeEnv?.LUMIBOOT_COOP_COEP === '1';
+
+/**
+ * Sourcemaps de production.
+ *
+ * DÉSACTIVÉES PAR DÉFAUT : une sourcemap publique expose le code source original
+ * (`sourcesContent`), ce qui abaisse fortement le coût d'exploitation d'une XSS
+ * (lecture des constantes, des chemins, des gardes) et peut divulguer des
+ * fragments sensibles. Un déploiement qui en a réellement besoin (suivi
+ * d'erreurs interne) doit l'activer EXPLICITEMENT :
+ *   - `LUMIBOOT_SOURCEMAP=1`      → sourcemap classique (servie) ;
+ *   - `LUMIBOOT_SOURCEMAP=hidden` → `.map` non référencée par le bundle (à ne
+ *     PAS publier sur le webroot statique).
+ */
+const sourcemapSetting = nodeEnv?.LUMIBOOT_SOURCEMAP;
+const productionSourcemap: boolean | 'hidden' =
+  sourcemapSetting === '1' ? true : sourcemapSetting === 'hidden' ? 'hidden' : false;
 const isolationHeaders: Record<string, string> | undefined = crossOriginIsolation
   ? {
       'Cross-Origin-Opener-Policy': 'same-origin',
@@ -62,6 +77,6 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    sourcemap: true,
+    sourcemap: productionSourcemap,
   },
 });

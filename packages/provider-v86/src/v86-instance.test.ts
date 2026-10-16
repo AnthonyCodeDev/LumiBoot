@@ -86,7 +86,7 @@ function emitMarker(emulator: FakeV86): void {
 }
 
 describe('V86Instance', () => {
-  it('sur emulator-ready émet booting et lance run, sans passer running', () => {
+  it('sur emulator-ready émet emulator-ready puis booting et lance run, sans passer running', () => {
     const emulator = new FakeV86();
     const instance = createInstance(emulator);
     const events: SessionEvent[] = [];
@@ -95,7 +95,12 @@ describe('V86Instance', () => {
     emulator.emit('emulator-ready', undefined);
 
     expect(emulator.calls.run).toBe(1);
-    expect(events).toEqual([{ type: 'progress', phase: 'booting' }]);
+    // WASM prêt (emulator-ready) est distinct du démarrage du noyau (booting).
+    expect(events).toEqual([
+      { type: 'progress', phase: 'emulator-ready' },
+      { type: 'progress', phase: 'booting' },
+    ]);
+    expect(instance.readiness).toBe('booting');
     expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(false);
   });
 
@@ -109,6 +114,9 @@ describe('V86Instance', () => {
 
     const running = events.filter((event) => event.type === 'state' && event.state === 'running');
     expect(running).toHaveLength(1);
+    // La transition est explicitement étiquetée « guest-ready » (preuve forte).
+    expect(events).toContainEqual({ type: 'progress', phase: 'guest-ready' });
+    expect(instance.readiness).toBe('guest-ready');
   });
 
   it('lit la preuve sur le canal VGA quand readiness.channel = vga', () => {
@@ -168,17 +176,29 @@ describe('V86Instance', () => {
     expect(
       events.filter((event) => event.type === 'state' && event.state === 'running'),
     ).toHaveLength(1);
+    // La preuve disque est étiquetée `disk-boot`, jamais présentée comme un
+    // marqueur invité (`guest-ready`).
+    expect(events).toContainEqual({ type: 'progress', phase: 'disk-boot' });
+    expect(events).not.toContainEqual({ type: 'progress', phase: 'guest-ready' });
   });
 
-  it('passe en running si le marqueur n’arrive pas dans le délai', async () => {
+  it('timeout sans marqueur : BOOT_TIMEOUT, jamais running, console préservée', async () => {
     vi.useFakeTimers();
     try {
       const emulator = new FakeV86();
+      const detach = vi.fn();
       const instance = new V86Instance({
         providerId: 'v86',
         systemId: 'sample',
         emulator: emulator as unknown as V86,
-        console: createConsoleStub(),
+        console: {
+          screen: null,
+          attach: vi.fn(() => ({
+            screenContainer: document.createElement('div'),
+            serialTextarea: document.createElement('textarea'),
+          })),
+          detach,
+        },
         readiness: { marker: GUEST_READY_MARKER, timeoutMs: 1000 },
       });
       instance.wire();
@@ -188,65 +208,86 @@ describe('V86Instance', () => {
       emulator.emit('emulator-ready', undefined);
       await vi.advanceTimersByTimeAsync(1000);
 
-      // Le délai dépassé n'est plus fatal : repli sur `running`, sans erreur.
-      expect(events.some((event) => event.type === 'error')).toBe(false);
-      expect(
-        events.filter((event) => event.type === 'state' && event.state === 'running'),
-      ).toHaveLength(1);
-      // La session continue : les listeners ne sont plus retirés au timeout.
+      // Aucun `running` simulé : l'échec est explicite et l'état non vérifié.
+      expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(
+        false,
+      );
+      expect(events).toEqual(
+        expect.arrayContaining([
+          { type: 'progress', phase: 'boot-timeout' },
+          expect.objectContaining({ type: 'error', code: 'BOOT_TIMEOUT' }),
+        ]),
+      );
+      expect(instance.readiness).toBe('unverified');
+
+      // L'écran (console) et l'émulateur restent vivants : aucun nettoyage.
+      expect(detach).not.toHaveBeenCalled();
+      expect(emulator.calls.stop).toBe(0);
+      expect(emulator.calls.destroy).toBe(0);
       expect(emulator.listenerCount('serial0-output-byte')).toBe(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
 
-  it('n’émet pas GUEST_READY_TIMEOUT si le marqueur arrive avant le délai', async () => {
-    vi.useFakeTimers();
-    try {
-      const emulator = new FakeV86();
-      const instance = new V86Instance({
-        providerId: 'v86',
-        systemId: 'sample',
-        emulator: emulator as unknown as V86,
-        console: createConsoleStub(),
-        readiness: { marker: GUEST_READY_MARKER, timeoutMs: 1000 },
-      });
-      instance.wire();
-      const events: SessionEvent[] = [];
-      instance.subscribe((event) => events.push(event));
-
-      emulator.emit('emulator-ready', undefined);
+      // Une preuve TARDIVE ne doit jamais produire de `running`.
       emitMarker(emulator);
-      await vi.advanceTimersByTimeAsync(2000);
-
-      expect(events.some((event) => event.type === 'error')).toBe(false);
-      expect(
-        events.filter((event) => event.type === 'state' && event.state === 'running'),
-      ).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(
+        false,
+      );
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('n’émet running qu’une seule fois si le marqueur arrive après le repli du délai', async () => {
+  it('disk-boot : timeout sans lecture disque => BOOT_TIMEOUT étiqueté disque', async () => {
     vi.useFakeTimers();
     try {
       const emulator = new FakeV86();
       const instance = new V86Instance({
         providerId: 'v86',
-        systemId: 'sample',
+        systemId: 'windows-7-pro-sp1-x86',
         emulator: emulator as unknown as V86,
         console: createConsoleStub(),
-        readiness: { marker: GUEST_READY_MARKER, timeoutMs: 1000 },
+        readiness: {
+          marker: 'LUMIBOOT_DISK_BOOT:windows-7-pro-sp1-x86',
+          mode: 'disk-boot',
+          channel: 'vga',
+          timeoutMs: 1000,
+        },
       });
       instance.wire();
       const events: SessionEvent[] = [];
       instance.subscribe((event) => events.push(event));
 
       emulator.emit('emulator-ready', undefined);
-      // Repli : running est émis à l'échéance du délai…
       await vi.advanceTimersByTimeAsync(1000);
-      // …puis le marqueur arrive tardivement : aucun second running.
+
+      const error = events.find((event) => event.type === 'error');
+      expect(error).toMatchObject({ code: 'BOOT_TIMEOUT' });
+      // Le message décrit la preuve réelle (lecture disque), pas un marqueur invité.
+      expect(error && error.type === 'error' ? error.message : '').toMatch(/disque/i);
+      expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(
+        false,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('n’émet pas BOOT_TIMEOUT si le marqueur arrive avant le délai', async () => {
+    vi.useFakeTimers();
+    try {
+      const emulator = new FakeV86();
+      const instance = new V86Instance({
+        providerId: 'v86',
+        systemId: 'sample',
+        emulator: emulator as unknown as V86,
+        console: createConsoleStub(),
+        readiness: { marker: GUEST_READY_MARKER, timeoutMs: 1000 },
+      });
+      instance.wire();
+      const events: SessionEvent[] = [];
+      instance.subscribe((event) => events.push(event));
+
+      emulator.emit('emulator-ready', undefined);
       emitMarker(emulator);
       await vi.advanceTimersByTimeAsync(2000);
 
@@ -254,6 +295,38 @@ describe('V86Instance', () => {
       expect(
         events.filter((event) => event.type === 'state' && event.state === 'running'),
       ).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('n’émet aucun running après BOOT_TIMEOUT, même si le marqueur arrive', async () => {
+    vi.useFakeTimers();
+    try {
+      const emulator = new FakeV86();
+      const instance = new V86Instance({
+        providerId: 'v86',
+        systemId: 'sample',
+        emulator: emulator as unknown as V86,
+        console: createConsoleStub(),
+        readiness: { marker: GUEST_READY_MARKER, timeoutMs: 1000 },
+      });
+      instance.wire();
+      const events: SessionEvent[] = [];
+      instance.subscribe((event) => events.push(event));
+
+      emulator.emit('emulator-ready', undefined);
+      // Échec à l'échéance : état non vérifié…
+      await vi.advanceTimersByTimeAsync(1000);
+      // …puis le marqueur arrive tardivement : jamais de `running`.
+      emitMarker(emulator);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(events.filter((event) => event.type === 'error')).toHaveLength(1);
+      expect(
+        events.filter((event) => event.type === 'state' && event.state === 'running'),
+      ).toHaveLength(0);
+      expect(instance.readiness).toBe('unverified');
     } finally {
       vi.useRealTimers();
     }
@@ -302,6 +375,74 @@ describe('V86Instance', () => {
     emitMarker(emulator);
 
     expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(false);
+  });
+
+  it('arrêt spontané : publie stopped, nettoie idempotemment et ne se répète pas', async () => {
+    const emulator = new FakeV86();
+    const detach = vi.fn();
+    const instance = new V86Instance({
+      providerId: 'v86',
+      systemId: 'sample',
+      emulator: emulator as unknown as V86,
+      console: {
+        screen: null,
+        attach: vi.fn(() => ({
+          screenContainer: document.createElement('div'),
+          serialTextarea: document.createElement('textarea'),
+        })),
+        detach,
+      },
+      readiness: READINESS,
+    });
+    instance.wire();
+    const events: SessionEvent[] = [];
+    instance.subscribe((event) => events.push(event));
+
+    // Arrêt spontané de l'émulateur (extinction/crash invité).
+    emulator.emit('emulator-stopped', undefined);
+    await flushMicrotasks();
+
+    // `stopping` puis `stopped` : le cycle de vie peut réconcilier la transition.
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'state', state: 'stopping' },
+        { type: 'state', state: 'stopped' },
+      ]),
+    );
+    expect(emulator.calls.stop).toBe(1);
+    expect(emulator.calls.destroy).toBe(1);
+    expect(detach).toHaveBeenCalledTimes(1);
+    expect(emulator.listenerCount('serial0-output-byte')).toBe(0);
+
+    // Un `stop()`/`dispose()` ultérieur de l'hôte est sans effet supplémentaire.
+    await instance.stop();
+    await instance.dispose();
+    expect(emulator.calls.stop).toBe(1);
+    expect(emulator.calls.destroy).toBe(1);
+    expect(
+      events.filter((event) => event.type === 'state' && event.state === 'stopped'),
+    ).toHaveLength(1);
+    expect(
+      events.filter((event) => event.type === 'state' && event.state === 'stopping'),
+    ).toHaveLength(1);
+  });
+
+  it('ignore tout événement tardif après dispose', async () => {
+    const emulator = new FakeV86();
+    const instance = createInstance(emulator);
+    const events: SessionEvent[] = [];
+    instance.subscribe((event) => events.push(event));
+
+    await instance.dispose();
+    const after = events.length;
+
+    emulator.emit('emulator-ready', undefined);
+    emulator.emit('download-progress', { loaded: 1, total: 2, lengthComputable: true });
+    emulator.emit('emulator-stopped', undefined);
+    emitMarker(emulator);
+    await flushMicrotasks();
+
+    expect(events.length).toBe(after);
   });
 
   it('relaie les diagnostics réseau et détache tout à dispose', async () => {

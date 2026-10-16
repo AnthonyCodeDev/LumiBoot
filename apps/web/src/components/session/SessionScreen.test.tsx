@@ -80,10 +80,11 @@ describe('SessionScreen — indicateur de capture souris', () => {
     );
 
     // Le provider injecte l'écran APRÈS le montage, dans le conteneur de console.
+    // Écran conforme au contrat d'affichage standard, SANS classe `.v86-screen`.
     const container = consoleRef.current;
     expect(container).not.toBeNull();
     const screen = document.createElement('div');
-    screen.className = 'v86-screen';
+    screen.setAttribute('data-vm-display', 'screen');
     const canvas = document.createElement('canvas');
     screen.append(canvas);
     container!.append(screen);

@@ -72,14 +72,56 @@ type SessionInfo struct {
 	ExpiresAt time.Time
 }
 
+// CloseFunc ferme un transport (WebSocket + connexions TCP associées). Il est
+// invoqué par le registre de sessions lors d'une révocation, d'une expiration
+// ou de l'arrêt du serveur, jamais sous verrou.
+type CloseFunc func()
+
 type session struct {
 	hash      string
 	origin    string
 	expiresAt time.Time
-	// onClose est le callback de fermeture du transport associé (WebSocket +
-	// net.Conn). Renseigné par AttachSession, appelé à la révocation ou à
-	// l'expiration de la session, jamais sous verrou.
-	onClose func()
+	// closes associe CHAQUE transport actif (WebSocket + net.Conn) de la session
+	// à son callback de fermeture, indexé par identifiant de transport. Plusieurs
+	// transports peuvent partager le même token sans s'écraser mutuellement.
+	// Protégé par le mutex de l'Authenticator.
+	closes map[string]*transport
+}
+
+// takeCloses retire et renvoie tous les transports de la session. L'appelant
+// DOIT détenir le mutex de l'Authenticator et invoquer les callbacks HORS verrou.
+func (s *session) takeCloses() []*transport {
+	if len(s.closes) == 0 {
+		return nil
+	}
+	out := make([]*transport, 0, len(s.closes))
+	for id, t := range s.closes {
+		out = append(out, t)
+		delete(s.closes, id)
+	}
+	return out
+}
+
+// transport encapsule un callback de fermeture afin qu'il ne soit invoqué
+// qu'une seule fois, quel que soit le nombre de chemins de fermeture concurrents
+// (révocation, expiration, arrêt, fermeture normale). Évite tout double close.
+type transport struct {
+	once sync.Once
+	fn   CloseFunc
+}
+
+func (t *transport) close() {
+	if t == nil {
+		return
+	}
+	t.once.Do(t.fn)
+}
+
+// closeAll invoque des callbacks de fermeture hors verrou.
+func closeAll(ts []*transport) {
+	for _, t := range ts {
+		t.close()
+	}
 }
 
 // Authenticator gère origines, appairages et sessions. Thread-safe.
@@ -289,81 +331,106 @@ func (a *Authenticator) VerifySession(token, origin string) (SessionInfo, bool) 
 	return SessionInfo{ID: id, Origin: s.origin, ExpiresAt: s.expiresAt}, true
 }
 
-// AttachSession vérifie atomiquement le token et associe à la session un
-// callback de fermeture, invoqué lors de Revoke/AdminRevoke/expiration (ou
-// CloseAllSessions). Atomique : aucune fenêtre où une révocation concurrente
-// pourrait passer inaperçue. Renvoie les métadonnées de la session.
-func (a *Authenticator) AttachSession(token, origin string, onClose func()) (SessionInfo, bool) {
+// AttachSession vérifie atomiquement le token et enregistre un NOUVEAU transport
+// de fermeture pour la session, identifié par un ID de transport distinct.
+// Plusieurs transports peuvent être attachés au même token sans s'écraser : la
+// révocation ou l'expiration les ferme TOUS. Atomique : aucune fenêtre où une
+// révocation concurrente pourrait passer inaperçue. Renvoie les métadonnées de
+// la session et l'ID de transport à repasser à DetachSession.
+func (a *Authenticator) AttachSession(token, origin string, onClose CloseFunc) (SessionInfo, string, bool) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	id, s, ok := a.lookupLocked(token, origin)
+	id, s, expired, ok := a.lookupLocked(token, origin)
 	if !ok {
-		return SessionInfo{}, false
+		a.mu.Unlock()
+		closeAll(expired)
+		return SessionInfo{}, "", false
 	}
-	s.onClose = onClose
-	return SessionInfo{ID: id, Origin: s.origin, ExpiresAt: s.expiresAt}, true
+	tid, err := randomString(a.randSource, 8)
+	if err != nil {
+		a.mu.Unlock()
+		return SessionInfo{}, "", false
+	}
+	if s.closes == nil {
+		s.closes = make(map[string]*transport)
+	}
+	s.closes[tid] = &transport{fn: onClose}
+	info := SessionInfo{ID: id, Origin: s.origin, ExpiresAt: s.expiresAt}
+	a.mu.Unlock()
+	return info, tid, true
 }
 
-// DetachSession retire le callback de fermeture sans révoquer la session
-// (fermeture normale du transport).
-func (a *Authenticator) DetachSession(id string) {
-	if id == "" {
+// DetachSession retire UNIQUEMENT le transport identifié (fermeture normale du
+// WebSocket) sans révoquer la session : les autres transports attachés au même
+// token restent actifs. Le token brut identifie la session ; l'ID de transport
+// provient d'AttachSession.
+func (a *Authenticator) DetachSession(token, transportID string) {
+	if token == "" || transportID == "" {
 		return
 	}
+	want := hashToken(token)
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	if s, ok := a.sessions[id]; ok {
-		s.onClose = nil
-	}
-}
-
-// CloseAllSessions invoque tous les callbacks de fermeture (arrêt du serveur).
-// Les sessions ne sont pas supprimées (le serveur s'arrête).
-func (a *Authenticator) CloseAllSessions() {
-	a.mu.Lock()
-	cbs := make([]func(), 0, len(a.sessions))
-	for _, s := range a.sessions {
-		if s.onClose != nil {
-			cbs = append(cbs, s.onClose)
+	for h, s := range a.sessions {
+		if subtle.ConstantTimeCompare([]byte(h), []byte(want)) == 1 {
+			delete(s.closes, transportID)
+			break
 		}
 	}
 	a.mu.Unlock()
-	for _, cb := range cbs {
-		cb()
-	}
 }
 
-// lookup vérifie un token (verrou interne) ; voir lookupLocked.
+// CloseAllSessions invoque tous les callbacks de fermeture (arrêt du serveur).
+// Les sessions ne sont pas supprimées (le serveur s'arrête). L'invocation est
+// idempotente par transport (sync.Once).
+func (a *Authenticator) CloseAllSessions() {
+	a.mu.Lock()
+	var closes []*transport
+	for _, s := range a.sessions {
+		for _, t := range s.closes {
+			closes = append(closes, t)
+		}
+	}
+	a.mu.Unlock()
+	closeAll(closes)
+}
+
+// lookup vérifie un token hors verrou ; voir lookupLocked. Les transports d'une
+// session expirée sont fermés HORS verrou (jamais de callback sous mutex).
 func (a *Authenticator) lookup(token, origin string) (string, *session, bool) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.lookupLocked(token, origin)
+	id, s, expired, ok := a.lookupLocked(token, origin)
+	a.mu.Unlock()
+	closeAll(expired)
+	return id, s, ok
 }
 
 // lookupLocked résout une session valide à partir d'un token et d'une origine.
-// Purge une session expirée rencontrée. L'appelant DOIT détenir a.mu.
-func (a *Authenticator) lookupLocked(token, origin string) (string, *session, bool) {
+// Une session expirée est purgée ; ses transports sont renvoyés à l'appelant
+// pour fermeture HORS verrou : une session expirée ne peut jamais laisser un
+// WebSocket ouvert (purge et fermeture atomiques du point de vue du verrou).
+// L'appelant DOIT détenir a.mu.
+func (a *Authenticator) lookupLocked(token, origin string) (string, *session, []*transport, bool) {
 	if token == "" {
-		return "", nil, false
+		return "", nil, nil, false
 	}
 	n := NormalizeOrigin(origin)
 	if n == "" {
-		return "", nil, false
+		return "", nil, nil, false
 	}
 	want := hashToken(token)
 	for h, s := range a.sessions {
 		if subtle.ConstantTimeCompare([]byte(h), []byte(want)) == 1 {
 			if a.now().After(s.expiresAt) {
+				expired := s.takeCloses()
 				delete(a.sessions, h)
-				return "", nil, false
+				return "", nil, expired, false
 			}
 			if subtle.ConstantTimeCompare([]byte(s.origin), []byte(n)) != 1 {
-				return "", nil, false
+				return "", nil, nil, false
 			}
-			return h, s, true
+			return h, s, nil, true
 		}
 	}
-	return "", nil, false
+	return "", nil, nil, false
 }
 
 // Revoke révoque la session correspondant au token brut. Renvoie false si
@@ -373,37 +440,40 @@ func (a *Authenticator) Revoke(token string) bool {
 		return false
 	}
 	want := hashToken(token)
-	var cb func()
+	var closes []*transport
 	found := false
 	a.mu.Lock()
 	for h, s := range a.sessions {
 		if subtle.ConstantTimeCompare([]byte(h), []byte(want)) == 1 {
-			cb = s.onClose
+			closes = s.takeCloses()
 			delete(a.sessions, h)
 			found = true
 			break
 		}
 	}
 	a.mu.Unlock()
-	if cb != nil {
-		cb()
-	}
+	closeAll(closes)
 	return found
 }
 
-// ListSessions liste les sessions actives (sans secret), expirées purgées.
+// ListSessions liste les sessions actives (sans secret). Une session expirée est
+// purgée ET ses transports fermés (hors verrou) : lister ne laisse jamais une
+// connexion expirée ouverte.
 func (a *Authenticator) ListSessions() []SessionInfo {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	now := a.now()
 	out := make([]SessionInfo, 0, len(a.sessions))
+	var closes []*transport
 	for h, s := range a.sessions {
 		if now.After(s.expiresAt) {
+			closes = append(closes, s.takeCloses()...)
 			delete(a.sessions, h)
 			continue
 		}
 		out = append(out, SessionInfo{ID: h, Origin: s.origin, ExpiresAt: s.expiresAt})
 	}
+	a.mu.Unlock()
+	closeAll(closes)
 	return out
 }
 
@@ -413,29 +483,27 @@ func (a *Authenticator) AdminRevoke(id string) bool {
 	if id == "" {
 		return false
 	}
-	var cb func()
+	var closes []*transport
 	found := false
 	a.mu.Lock()
 	for h, s := range a.sessions {
 		if subtle.ConstantTimeCompare([]byte(h), []byte(id)) == 1 {
-			cb = s.onClose
+			closes = s.takeCloses()
 			delete(a.sessions, h)
 			found = true
 			break
 		}
 	}
 	a.mu.Unlock()
-	if cb != nil {
-		cb()
-	}
+	closeAll(closes)
 	return found
 }
 
 // CleanupExpired purge appairages et sessions expirés. Une session expirée voit
-// son transport fermé (callback invoqué hors verrou) : une expiration ferme
-// réellement le WebSocket et les net.Conn associés.
+// TOUS ses transports fermés (callbacks invoqués hors verrou) : une expiration
+// ferme réellement chaque WebSocket et ses net.Conn associés.
 func (a *Authenticator) CleanupExpired() {
-	var cbs []func()
+	var closes []*transport
 	a.mu.Lock()
 	now := a.now()
 	for id, p := range a.pairings {
@@ -445,16 +513,12 @@ func (a *Authenticator) CleanupExpired() {
 	}
 	for h, s := range a.sessions {
 		if now.After(s.expiresAt) {
-			if s.onClose != nil {
-				cbs = append(cbs, s.onClose)
-			}
+			closes = append(closes, s.takeCloses()...)
 			delete(a.sessions, h)
 		}
 	}
 	a.mu.Unlock()
-	for _, cb := range cbs {
-		cb()
-	}
+	closeAll(closes)
 }
 
 // PendingPairings liste les appairages en attente non expirés (console).

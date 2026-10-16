@@ -17,6 +17,108 @@ func TestDefaultValid(t *testing.T) {
 	if cfg.AllowNonLoopback || cfg.AllowPrivateNetworks {
 		t.Fatal("les permissions sensibles doivent être refusées par défaut")
 	}
+	if cfg.Environment != EnvProduction {
+		t.Fatalf("environnement par défaut: %q", cfg.Environment)
+	}
+	for _, origin := range cfg.AllowedOrigins {
+		if isLoopbackOrigin(origin) {
+			t.Fatalf("origine loopback %q interdite par défaut en production", origin)
+		}
+	}
+}
+
+func TestDefaultOriginsAreProductionOnly(t *testing.T) {
+	for _, origin := range ProdOrigins() {
+		if isLoopbackOrigin(origin) {
+			t.Fatalf("ProdOrigins contient une origine locale: %q", origin)
+		}
+	}
+	if len(DevOrigins()) <= len(ProdOrigins()) {
+		t.Fatal("DevOrigins doit élargir ProdOrigins aux boucles locales")
+	}
+	if got := DefaultOrigins(); len(got) != len(ProdOrigins()) {
+		t.Fatalf("DefaultOrigins doit rester l'allowlist de production: %v", got)
+	}
+}
+
+func TestDevelopmentEnvironmentExpandsOrigins(t *testing.T) {
+	t.Setenv("LUMIBOOT_PROXY_ENV", "development")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("chargement en développement: %v", err)
+	}
+	if cfg.Environment != EnvDevelopment {
+		t.Fatalf("environnement: %q", cfg.Environment)
+	}
+	found := false
+	for _, origin := range cfg.AllowedOrigins {
+		if origin == "http://localhost:5173" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("allowlist de développement attendue, obtenu: %v", cfg.AllowedOrigins)
+	}
+}
+
+func TestProductionRejectsLocalhostOriginWithoutOptIn(t *testing.T) {
+	cfg := Default()
+	cfg.AllowedOrigins = append(cfg.AllowedOrigins, "http://localhost:5173")
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("origine locale acceptée en production sans allowLocalOrigins")
+	}
+	cfg.AllowLocalOrigins = true
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("appairage local explicite refusé: %v", err)
+	}
+}
+
+func TestDevelopmentAllowsLocalhostOrigin(t *testing.T) {
+	cfg := DefaultFor(EnvDevelopment)
+	cfg.AllowedOrigins = []string{"http://localhost:5173"}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("origine locale de développement refusée: %v", err)
+	}
+}
+
+func TestEnvironmentEnvInvalidIsProduction(t *testing.T) {
+	t.Setenv("LUMIBOOT_PROXY_ENV", "staging-nawak")
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("chargement: %v", err)
+	}
+	if cfg.Environment != EnvProduction {
+		t.Fatalf("environnement inconnu doit retomber sur production: %q", cfg.Environment)
+	}
+}
+
+func TestLoadJSONEnvironmentDevelopment(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{
+		"environment": "development",
+		"allowedOrigins": ["http://localhost:5173"]
+	}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("chargement JSON développement: %v", err)
+	}
+	if cfg.Environment != EnvDevelopment {
+		t.Fatalf("environnement JSON: %q", cfg.Environment)
+	}
+}
+
+func TestProductionJSONRejectsLocalhostOrigin(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{"allowedOrigins": ["http://localhost:5173"]}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("origine locale en production acceptée sans allowLocalOrigins")
+	}
 }
 
 func TestLoadMissingFile(t *testing.T) {

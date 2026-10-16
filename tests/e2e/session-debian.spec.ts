@@ -23,6 +23,12 @@ test.describe('Session Debian 12 i386 (v86, boot réel)', () => {
     await page.getByLabel('Rechercher un système').fill('debian');
     await page.locator('.os-card').first().click();
     await expect(page).toHaveURL(/\/systems\//);
+    // La fiche mère présélectionne la MEILLEURE variante Debian (XFCE, qui
+    // démarre Xorg et bascule l'écran en mode graphique). Ce test cible la
+    // variante console : on la sélectionne EXPLICITEMENT pour garantir un
+    // démarrage en mode texte (login VGA/tty1, aucune session X).
+    await page.getByRole('button', { name: 'Choisir la variante' }).click();
+    await page.getByRole('button', { name: 'Debian CLI', exact: true }).click();
     await page.getByRole('button', { name: 'Lancer une session' }).click();
     await expect(page).toHaveURL(/\/session\//);
 

@@ -14,19 +14,21 @@
 // aucun contrôle de licence n'est possible côté HTTP, l'image serait
 // téléchargeable par quiconque peut joindre le port. `--expose` (host non
 // loopback) exige un consentement explicite et n'est jamais recommandé.
+//
+// Le manifeste diffusé est la forme PUBLIQUE du manifeste disque : `source`
+// (chemin réel de la machine) et `provenance` (interne) ne sont JAMAIS servis.
 
 import { readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createAssetServer } from './lib/range-server.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
 
-const args = process.argv.slice(2);
-const options = {
+const DEFAULTS = {
   manifest: join(repoRoot, 'images', 'windows-7-pro-sp1-x86', 'manifest.json'),
   source: undefined,
   host: '127.0.0.1',
@@ -36,40 +38,90 @@ const options = {
   expose: false,
 };
 
-for (let i = 0; i < args.length; i += 1) {
-  const [name, inline] = args[i].startsWith('--') && args[i].includes('=')
-    ? [args[i].slice(0, args[i].indexOf('=')), args[i].slice(args[i].indexOf('=') + 1)]
-    : [args[i], undefined];
-  const value = () => {
-    if (inline !== undefined) return inline;
-    i += 1;
-    if (i >= args.length) throw new Error(`Option ${name} sans valeur.`);
-    return args[i];
-  };
-  switch (name) {
-    case '--manifest': options.manifest = value(); break;
-    case '--source': options.source = value(); break;
-    case '--host': options.host = value(); break;
-    case '--port': options.port = Number(value()); break;
-    case '--token': options.token = value(); break;
-    case '--no-token': options.noToken = true; break;
-    case '--expose': options.expose = true; break;
-    case '--help': case '-h':
-      process.stdout.write(
-        'Usage : node scripts/serve-windows7-asset.mjs [--manifest <json>] [--source <img>]\n' +
-          '       [--host 127.0.0.1] [--port 37893] [--token <jeton> | --no-token] [--expose]\n',
-      );
-      process.exit(0);
-      break;
-    default:
-      throw new Error(`Option inconnue : ${name}`);
+/**
+ * Analyse les arguments de la ligne de commande. Extrait dans une fonction pour
+ * que l'import du module (tests) n'exécute NI parsing NI serveur.
+ */
+export function parseArgs(args) {
+  const options = { ...DEFAULTS };
+
+  for (let i = 0; i < args.length; i += 1) {
+    const [name, inline] = args[i].startsWith('--') && args[i].includes('=')
+      ? [args[i].slice(0, args[i].indexOf('=')), args[i].slice(args[i].indexOf('=') + 1)]
+      : [args[i], undefined];
+    const value = () => {
+      if (inline !== undefined) return inline;
+      i += 1;
+      if (i >= args.length) throw new Error(`Option ${name} sans valeur.`);
+      return args[i];
+    };
+    switch (name) {
+      case '--manifest': options.manifest = value(); break;
+      case '--source': options.source = value(); break;
+      case '--host': options.host = value(); break;
+      case '--port': options.port = Number(value()); break;
+      case '--token': options.token = value(); break;
+      case '--no-token': options.noToken = true; break;
+      case '--expose': options.expose = true; break;
+      case '--help': case '-h':
+        process.stdout.write(
+          'Usage : node scripts/serve-windows7-asset.mjs [--manifest <json>] [--source <img>]\n' +
+            '       [--host 127.0.0.1] [--port 37893] [--token <jeton> | --no-token] [--expose]\n',
+        );
+        process.exit(0);
+        break;
+      default:
+        throw new Error(`Option inconnue : ${name}`);
+    }
   }
+
+  return options;
 }
 
 const isLoopback = (host) =>
   host === '127.0.0.1' || host === '::1' || host === 'localhost';
 
+/**
+ * Construit la forme PUBLIQUE du manifeste servi : retire `source` et
+ * `provenance` (internes), puis applique le jeton (`suffix`) aux URL du disque
+ * et des binaires du moteur pour que v86 puisse lire sans configuration.
+ *
+ * On construit explicitement la sortie autorisée : aucun champ interne inconnu
+ * du manifeste privé ne peut être diffusé par accident.
+ *
+ * @param {Record<string, any>} manifest manifeste privé lu sur disque
+ * @param {{ suffix?: string }} [options] suffixe d'URL (`?token=…` ou vide)
+ */
+export function toPublicServedManifest(manifest, options = {}) {
+  const suffix = options.suffix ?? '';
+  const ref = manifest.ref;
+  const diskUrl = `/images/${ref}/${manifest.disk?.fileName ?? 'disk.img'}${suffix}`;
+
+  const engine = manifest.engine === undefined ? undefined : structuredClone(manifest.engine);
+  if (engine !== undefined) {
+    for (const binary of [engine.wasm, engine.bios?.seabios, engine.bios?.vgabios]) {
+      if (binary?.url) binary.url = `${binary.url}${suffix}`;
+    }
+  }
+
+  const publicManifest = {
+    version: manifest.version,
+    ref,
+    displayName: manifest.displayName,
+    architecture: manifest.architecture,
+    memoryMiB: manifest.memoryMiB,
+    license: manifest.license,
+    disk: { ...manifest.disk, url: diskUrl },
+    engine,
+    boot: { ...manifest.boot, url: diskUrl },
+  };
+  if (manifest.vgaMemoryMiB !== undefined) publicManifest.vgaMemoryMiB = manifest.vgaMemoryMiB;
+  if (manifest.notes !== undefined) publicManifest.notes = manifest.notes;
+  return publicManifest;
+}
+
 async function main() {
+  const options = parseArgs(process.argv.slice(2));
   const manifestPath = resolve(options.manifest);
   let manifest;
   try {
@@ -114,14 +166,9 @@ async function main() {
   const diskRoute = `/images/${ref}/${manifest.disk.fileName ?? 'disk.img'}`;
   const manifestRoute = `/images/${ref}/manifest.json`;
 
-  // Copie servie du manifeste : les URL portent le jeton pour que v86 puisse
-  // lire le disque (et les binaires) sans configuration supplémentaire.
-  const servedManifest = structuredClone(manifest);
-  servedManifest.disk.url = `${diskRoute}${suffix}`;
-  servedManifest.boot = { ...servedManifest.boot, url: `${diskRoute}${suffix}` };
-  for (const binary of [servedManifest.engine?.wasm, servedManifest.engine?.bios?.seabios, servedManifest.engine?.bios?.vgabios]) {
-    if (binary?.url) binary.url = `${binary.url}${suffix}`;
-  }
+  // Copie servie du manifeste : forme publique (sans source/provenance) et URL
+  // portant le jeton pour que v86 lise le disque et les binaires sans config.
+  const servedManifest = toPublicServedManifest(manifest, { suffix });
 
   const routes = {
     [diskRoute]: { file: diskPath, contentType: 'application/octet-stream' },
@@ -174,7 +221,12 @@ async function main() {
   process.on('SIGTERM', () => void shutdown());
 }
 
-main().catch((error) => {
-  process.stderr.write(`✗ ${error.message}\n`);
-  process.exitCode = 1;
-});
+const isMain =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMain) {
+  main().catch((error) => {
+    process.stderr.write(`✗ ${error.message}\n`);
+    process.exitCode = 1;
+  });
+}

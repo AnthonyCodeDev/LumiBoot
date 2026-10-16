@@ -3,6 +3,8 @@ package auth
 import (
 	"crypto/rand"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -229,15 +231,15 @@ func TestTransportClosedOnRevoke(t *testing.T) {
 	token := issueToken(t, a)
 
 	closed := make(chan struct{}, 1)
-	info, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
-	if !ok || info.ID == "" {
+	info, tid, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
+	if !ok || info.ID == "" || tid == "" {
 		t.Fatal("attachement de transport refusé")
 	}
 	// Token invalide / origine différente : pas d'attachement.
-	if _, ok := a.AttachSession("mauvais", "http://localhost:5200", func() {}); ok {
+	if _, _, ok := a.AttachSession("mauvais", "http://localhost:5200", func() {}); ok {
 		t.Fatal("attachement d'un token invalide accepté")
 	}
-	if _, ok := a.AttachSession(token, "https://lumiboot.app", func() {}); ok {
+	if _, _, ok := a.AttachSession(token, "https://lumiboot.app", func() {}); ok {
 		t.Fatal("attachement depuis une autre origine accepté")
 	}
 
@@ -259,7 +261,7 @@ func TestTransportClosedOnAdminRevokeAndExpiry(t *testing.T) {
 	attach := func() (token, id string, closed chan struct{}) {
 		token = issueToken(t, a)
 		closed = make(chan struct{}, 1)
-		info, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
+		info, _, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
 		if !ok {
 			t.Fatal("attachement refusé")
 		}
@@ -294,11 +296,11 @@ func TestDetachSessionPreventsCallback(t *testing.T) {
 	a := testAuth(&now)
 	token := issueToken(t, a)
 	closed := make(chan struct{}, 1)
-	info, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
+	_, tid, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
 	if !ok {
 		t.Fatal("attachement refusé")
 	}
-	a.DetachSession(info.ID)
+	a.DetachSession(token, tid)
 	if !a.Revoke(token) {
 		t.Fatal("révocation échouée")
 	}
@@ -329,5 +331,220 @@ func TestPairingFloodLimit(t *testing.T) {
 	now = now.Add(11 * time.Minute)
 	if _, err := a.RequestPairing("http://localhost:5200"); err != nil {
 		t.Fatalf("après nettoyage: %v", err)
+	}
+}
+
+// --- Régressions P0 : registre multi-transports par token ---
+
+// expectClosed attend l'invocation d'un callback de fermeture.
+func expectClosed(t *testing.T, ch <-chan struct{}, label string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("%s: callback de fermeture non invoqué", label)
+	}
+}
+
+// TestTwoTransportsSameTokenRevokeClosesBoth : bug P0 — deux WebSocket attachés
+// au même token ne doivent plus s'écraser (onClose unique) ; Revoke ferme 2/2.
+func TestTwoTransportsSameTokenRevokeClosesBoth(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+	token := issueToken(t, a)
+
+	closedA := make(chan struct{}, 1)
+	closedB := make(chan struct{}, 1)
+	_, tidA, okA := a.AttachSession(token, "http://localhost:5200", func() { closedA <- struct{}{} })
+	_, tidB, okB := a.AttachSession(token, "http://localhost:5200", func() { closedB <- struct{}{} })
+	if !okA || !okB || tidA == "" || tidB == "" || tidA == tidB {
+		t.Fatalf("attachements: okA=%v okB=%v tidA=%q tidB=%q", okA, okB, tidA, tidB)
+	}
+	if !a.Revoke(token) {
+		t.Fatal("révocation échouée")
+	}
+	expectClosed(t, closedA, "transport A")
+	expectClosed(t, closedB, "transport B")
+}
+
+// TestDetachOnlyRemovesTargetTransport : bug P0 — detach A ne doit PAS fermer B.
+func TestDetachOnlyRemovesTargetTransport(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+	token := issueToken(t, a)
+
+	closedA := make(chan struct{}, 1)
+	closedB := make(chan struct{}, 1)
+	_, tidA, _ := a.AttachSession(token, "http://localhost:5200", func() { closedA <- struct{}{} })
+	a.AttachSession(token, "http://localhost:5200", func() { closedB <- struct{}{} })
+	a.DetachSession(token, tidA)
+
+	if !a.Revoke(token) {
+		t.Fatal("révocation échouée")
+	}
+	expectClosed(t, closedB, "transport B")
+	select {
+	case <-closedA:
+		t.Fatal("transport A fermé alors qu'il avait été détaché")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+// TestVerifyExpiredClosesAllTransports : une session expirée rencontrée par
+// Verify est purgée ET tous ses transports sont fermés (aucune fuite).
+func TestVerifyExpiredClosesAllTransports(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+	token := issueToken(t, a)
+
+	closedA := make(chan struct{}, 1)
+	closedB := make(chan struct{}, 1)
+	a.AttachSession(token, "http://localhost:5200", func() { closedA <- struct{}{} })
+	a.AttachSession(token, "http://localhost:5200", func() { closedB <- struct{}{} })
+
+	now = now.Add(2 * time.Hour) // au-delà de SessionTokenTTL
+	if a.Verify(token, "http://localhost:5200") {
+		t.Fatal("session expirée acceptée")
+	}
+	expectClosed(t, closedA, "Verify transport A")
+	expectClosed(t, closedB, "Verify transport B")
+}
+
+// TestListSessionsExpiredClosesAllTransports : ListSessions ne purge jamais une
+// session expirée sans fermer ses connexions.
+func TestListSessionsExpiredClosesAllTransports(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+	token := issueToken(t, a)
+
+	closedA := make(chan struct{}, 1)
+	closedB := make(chan struct{}, 1)
+	a.AttachSession(token, "http://localhost:5200", func() { closedA <- struct{}{} })
+	a.AttachSession(token, "http://localhost:5200", func() { closedB <- struct{}{} })
+
+	now = now.Add(2 * time.Hour)
+	if got := a.ListSessions(); len(got) != 0 {
+		t.Fatalf("sessions expirées listées: %d", len(got))
+	}
+	expectClosed(t, closedA, "ListSessions transport A")
+	expectClosed(t, closedB, "ListSessions transport B")
+}
+
+// TestCleanupExpiredClosesAllTransports : le balayage périodique (sweeper) ferme
+// TOUS les transports d'une session expirée.
+func TestCleanupExpiredClosesAllTransports(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+	token := issueToken(t, a)
+
+	closedA := make(chan struct{}, 1)
+	closedB := make(chan struct{}, 1)
+	a.AttachSession(token, "http://localhost:5200", func() { closedA <- struct{}{} })
+	a.AttachSession(token, "http://localhost:5200", func() { closedB <- struct{}{} })
+
+	now = now.Add(2 * time.Hour)
+	a.CleanupExpired()
+	expectClosed(t, closedA, "sweep transport A")
+	expectClosed(t, closedB, "sweep transport B")
+}
+
+// TestCloseAllSessionsClosesEveryTransport : l'arrêt du serveur ferme tous les
+// transports de toutes les sessions (tokens distincts).
+func TestCloseAllSessionsClosesEveryTransport(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+
+	chans := make([]chan struct{}, 0, 4)
+	attach := func(token string) {
+		ch := make(chan struct{}, 1)
+		chans = append(chans, ch)
+		a.AttachSession(token, "http://localhost:5200", func() { ch <- struct{}{} })
+	}
+	attach(issueToken(t, a))
+	attach(issueToken(t, a))
+	attach(issueToken(t, a))
+	attach(issueToken(t, a))
+
+	a.CloseAllSessions()
+	for i, ch := range chans {
+		expectClosed(t, ch, "CloseAllSessions"+string(rune('A'+i)))
+	}
+}
+
+// TestCloseAllSessionsIdempotent : le sync.Once par transport évite tout double
+// close même si CloseAllSessions est rappelé.
+func TestCloseAllSessionsIdempotent(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+	token := issueToken(t, a)
+
+	var calls int32
+	a.AttachSession(token, "http://localhost:5200", func() { atomic.AddInt32(&calls, 1) })
+	a.CloseAllSessions()
+	a.CloseAllSessions()
+	a.CloseAllSessions()
+
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("callback invoqué %d fois, attendu 1 (double close)", got)
+	}
+}
+
+// TestConcurrentAttachDetachRevoke : sous -race, pas de deadlock ni de double
+// close lorsque attach/detach/revoke se chevauchent.
+func TestConcurrentAttachDetachRevoke(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+	token := issueToken(t, a)
+
+	const n = 32
+	var closed int32
+	tids := make([]string, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, tid, ok := a.AttachSession(token, "http://localhost:5200", func() {
+				atomic.AddInt32(&closed, 1)
+			})
+			if ok {
+				tids[i] = tid
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Détache la moitié des transports : la révocation ne doit fermer que le reste.
+	for i := 0; i < n; i += 2 {
+		if tids[i] != "" {
+			a.DetachSession(token, tids[i])
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		a.Revoke(token)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Revoke bloqué (deadlock ?)")
+	}
+
+	got := atomic.LoadInt32(&closed)
+	if got > n {
+		t.Fatalf("double close: %d fermetures pour %d transports", got, n)
+	}
+	if got != int32(n/2) {
+		t.Fatalf("fermetures=%d, attendu %d (transports non détachés)", got, n/2)
 	}
 }

@@ -202,6 +202,89 @@ class FixedEngine implements VMEngine {
   }
 }
 
+/**
+ * Instance pilotable : `subscribe` rejoue un état initial (`booting` ou
+ * `running`) puis laisse le test émettre n'importe quel événement. `leaky`
+ * simule un moteur fautif dont le désabonnement est inopérant (événements
+ * tardifs reçus après libération).
+ */
+class ManualInstance implements VMInstance {
+  readonly id = 'manual-instance';
+  readonly providerId = 'manual';
+  readonly systemId = 'debian-12-i386';
+  readonly stop = vi.fn(async () => undefined);
+  readonly dispose = vi.fn(async () => undefined);
+  readonly listeners = new Set<(event: SessionEvent) => void>();
+
+  constructor(
+    private readonly initial: 'booting' | 'running',
+    private readonly leaky = false,
+  ) {}
+
+  subscribe(listener: (event: SessionEvent) => void): () => void {
+    this.listeners.add(listener);
+    listener({ type: 'progress', phase: 'booting' });
+    if (this.initial === 'running') listener({ type: 'state', state: 'running' });
+    return () => {
+      if (!this.leaky) this.listeners.delete(listener);
+    };
+  }
+
+  emit(event: SessionEvent): void {
+    for (const listener of this.listeners) listener(event);
+  }
+}
+
+class ManualEngine implements VMEngine {
+  readonly id = 'manual';
+  readonly instances: ManualInstance[] = [];
+
+  constructor(
+    private readonly initial: 'booting' | 'running' = 'running',
+    private readonly leaky = false,
+  ) {}
+
+  capabilities(): VMCapabilities {
+    return NO_CAPABILITIES;
+  }
+
+  canRun(): boolean {
+    return true;
+  }
+
+  async start(): Promise<VMInstance> {
+    const instance = new ManualInstance(this.initial, this.leaky);
+    this.instances.push(instance);
+    return instance;
+  }
+}
+
+/** Instance dont `stop()` et `dispose()` rejettent (échec de destroy). */
+class FailingCleanupInstance implements VMInstance {
+  readonly id = 'failing-cleanup';
+  readonly providerId = 'failing';
+  readonly systemId = 'debian-12-i386';
+  readonly stop = vi.fn(async () => {
+    throw new Error('stop boom');
+  });
+  readonly dispose = vi.fn(async () => {
+    throw new Error('dispose boom');
+  });
+  #listener: ((event: SessionEvent) => void) | null = null;
+
+  subscribe(listener: (event: SessionEvent) => void): () => void {
+    this.#listener = listener;
+    listener({ type: 'state', state: 'running' });
+    return () => {
+      this.#listener = null;
+    };
+  }
+
+  emit(event: SessionEvent): void {
+    this.#listener?.(event);
+  }
+}
+
 describe('SessionLifecycle', () => {
   it('passe de idle a preparing puis running et peut redemarrer apres stop', async () => {
     const engine = new ControlledEngine();
@@ -496,5 +579,110 @@ describe('SessionLifecycle', () => {
 
     expect(lifecycle.snapshot.state).toBe('stopped');
     expect(lifecycle.snapshot.error).toBeUndefined();
+  });
+
+  it('arrêt spontané depuis running : traverse stopping, libère et permet un redémarrage', async () => {
+    const engine = new ManualEngine('running');
+    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-spont-running');
+    const states: VMState[] = [];
+    lifecycle.subscribe((snapshot) => states.push(snapshot.state));
+
+    await lifecycle.start(document.createElement('div'));
+    expect(lifecycle.snapshot.state).toBe('running');
+
+    const instance = engine.instances[0]!;
+    // Autant le signal direct `stopped` que la séquence `stopping` -> `stopped`
+    // émise par le provider v86 doivent être réconciliés.
+    instance.emit({ type: 'state', state: 'stopping' });
+    instance.emit({ type: 'state', state: 'stopped' });
+    // `stop()` terminal attend le nettoyage en vol (stop puis dispose).
+    await lifecycle.stop();
+
+    expect(lifecycle.snapshot.state).toBe('stopped');
+    expect(states).toContain('stopping');
+    expect(instance.stop).toHaveBeenCalledTimes(1);
+    expect(instance.dispose).toHaveBeenCalledTimes(1);
+
+    // Aucune VM zombie : l'instance libérée n'empêche plus un redémarrage.
+    await lifecycle.start(document.createElement('div'));
+    expect(lifecycle.snapshot.state).toBe('running');
+    expect(engine.instances).toHaveLength(2);
+  });
+
+  it('arrêt spontané depuis running (stopped direct) : atteint stopped sans ignore', async () => {
+    const engine = new ManualEngine('running');
+    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-spont-direct');
+
+    await lifecycle.start(document.createElement('div'));
+    expect(lifecycle.snapshot.state).toBe('running');
+
+    engine.instances[0]!.emit({ type: 'state', state: 'stopped' });
+    await lifecycle.stop();
+
+    expect(lifecycle.snapshot.state).toBe('stopped');
+    expect(engine.instances[0]!.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('arrêt spontané depuis booting : atteint stopped sans jamais running', async () => {
+    const engine = new ManualEngine('booting');
+    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-spont-booting');
+    const states: VMState[] = [];
+    lifecycle.subscribe((snapshot) => states.push(snapshot.state));
+
+    await lifecycle.start(document.createElement('div'));
+    expect(lifecycle.snapshot.state).toBe('booting');
+
+    engine.instances[0]!.emit({ type: 'state', state: 'stopped' });
+    await lifecycle.stop();
+
+    expect(lifecycle.snapshot.state).toBe('stopped');
+    expect(states).not.toContain('running');
+    expect(engine.instances[0]!.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('arrêt spontané idempotent : un seul nettoyage et aucun événement tardif', async () => {
+    const engine = new ManualEngine('running', true);
+    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-spont-idem');
+
+    await lifecycle.start(document.createElement('div'));
+    const instance = engine.instances[0]!;
+
+    instance.emit({ type: 'state', state: 'stopped' });
+    // Événements tardifs d'un moteur fautif (désabonnement inopérant) : ignorés.
+    instance.emit({ type: 'state', state: 'stopped' });
+    instance.emit({ type: 'state', state: 'running' });
+    instance.emit({ type: 'progress', phase: 'booting', loadedBytes: 5, totalBytes: 10 });
+    instance.emit({ type: 'error', code: 'LATE', message: 'tardif' });
+    await lifecycle.stop();
+
+    expect(lifecycle.snapshot.state).toBe('stopped');
+    expect(lifecycle.snapshot.error).toBeUndefined();
+    expect(lifecycle.snapshot.phase).toBeUndefined();
+    expect(lifecycle.snapshot.loadedBytes).toBeUndefined();
+    expect(instance.stop).toHaveBeenCalledTimes(1);
+    expect(instance.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('arrêt spontané : un échec de destroy est rapporté sans rejeter', async () => {
+    const errors: string[] = [];
+    const instance = new FailingCleanupInstance();
+    const lifecycle = new SessionLifecycle(
+      makeOS(),
+      new VMRegistry([new FixedEngine(instance)]),
+      's-spont-destroy',
+      (_error, context) => errors.push(context),
+    );
+
+    await lifecycle.start(document.createElement('div'));
+    expect(lifecycle.snapshot.state).toBe('running');
+
+    instance.emit({ type: 'state', state: 'stopped' });
+    // `stop()` terminal attend le nettoyage en vol pour ne rendre la main
+    // qu'une fois la libération terminée (même si elle échoue).
+    await lifecycle.stop();
+
+    expect(lifecycle.snapshot.state).toBe('stopped');
+    expect(errors).toContain('stop');
+    expect(errors).toContain('dispose');
   });
 });

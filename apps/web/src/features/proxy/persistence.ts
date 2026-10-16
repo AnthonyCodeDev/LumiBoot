@@ -6,16 +6,44 @@ export interface PersistedProxySession {
   proxyUrl: string;
 }
 
+/**
+ * Stockage de session du bearer d'appairage.
+ *
+ * Choix P2 sécurité : `sessionStorage` (et non `localStorage`). Le jeton ne
+ * survit plus à la fermeture de l'onglet et reste cloisonné à l'onglet courant,
+ * ce qui réduit fortement la fenêtre d'exposition en cas de XSS ou d'accès
+ * physique ultérieur. La persistance dans l'onglet (F5 compris) est conservée :
+ * l'UX de reconnexion n'est pas dégradée.
+ *
+ * Aucun secret n'est écrit ailleurs. L'ancienne clé `localStorage` d'une version
+ * antérieure est purgée à la première interaction (voir {@link purgeLegacyStorage}).
+ */
 function storage(): Storage | null {
   try {
-    return typeof localStorage === 'undefined' ? null : localStorage;
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage;
   } catch {
     return null;
   }
 }
 
+/**
+ * Supprime l'ancienne entrée `localStorage` (bearer longue durée des versions
+ * précédentes). Aucune migration : l'exposition d'un bearer persistant est
+ * précisément ce que cette évolution corrige. Ne lève jamais.
+ */
+function purgeLegacyStorage(): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  } catch {
+    // Accès refusé au stockage : rien à purger.
+  }
+}
+
 /** Persiste la session d'appairage ; ne lève jamais (quota, accès refusé…). */
 export function saveProxySession(session: PersistedProxySession): void {
+  purgeLegacyStorage();
   const store = storage();
   if (store === null) return;
   try {
@@ -35,6 +63,8 @@ export function saveProxySession(session: PersistedProxySession): void {
  * - `expiresAt` est absent, illisible ou déjà dépassé.
  */
 export function loadProxySession(proxyUrl: string): PersistedProxySession | null {
+  // Purge opportuniste de l'ancien bearer persistant avant toute relecture.
+  purgeLegacyStorage();
   const store = storage();
   if (store === null) return null;
   let raw: string | null;
@@ -76,6 +106,7 @@ export function loadProxySession(proxyUrl: string): PersistedProxySession | null
 
 /** Supprime la session persistée ; ne lève jamais. */
 export function clearProxySession(): void {
+  purgeLegacyStorage();
   const store = storage();
   if (store === null) return;
   try {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { STANDARD_VM_DISPLAY } from '@lumiboot/vm-core';
 import {
   attachPointerLockCapture,
   DEFAULT_SCREEN_SELECTOR,
@@ -99,11 +100,16 @@ interface Fixture {
   serial: HTMLTextAreaElement;
 }
 
+/**
+ * Écran FACTICE conforme au seul contrat d'affichage provider-agnostique :
+ * marqueur `data-vm-display="screen"`, AUCUNE classe `.v86-screen`. Une capture
+ * réussie sur cet élément prouve que l'UI ne dépend pas du moteur v86.
+ */
 function makeFixture(): Fixture {
   const container = document.createElement('div');
   container.className = 'session-console';
   const screen = document.createElement('div');
-  screen.className = 'v86-screen';
+  screen.setAttribute('data-vm-display', 'screen');
   const canvas = document.createElement('canvas');
   canvas.className = 'v86-screen-canvas';
   screen.append(canvas);
@@ -298,8 +304,54 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     handle.dispose();
   });
 
-  it('expose le sélecteur d’écran par défaut `.v86-screen`', () => {
-    expect(DEFAULT_SCREEN_SELECTOR).toBe('.v86-screen');
+  it('expose un sélecteur d’écran provider-agnostique (contrat standard)', () => {
+    expect(DEFAULT_SCREEN_SELECTOR).toBe(STANDARD_VM_DISPLAY.screenSelector);
+    expect(DEFAULT_SCREEN_SELECTOR).toBe('[data-vm-display="screen"]');
+    // Plus aucune trace de sélecteur spécifique à v86 dans l'UI générique.
+    expect(DEFAULT_SCREEN_SELECTOR).not.toContain('v86');
+  });
+
+  it('ignore un écran purement v86 dépourvu du marqueur d’affichage standard', () => {
+    mock = installPointerLock();
+    const container = document.createElement('div');
+    container.className = 'session-console';
+    // Écran legacy : classe v86 uniquement, aucun marqueur de contrat.
+    const legacy = document.createElement('div');
+    legacy.className = 'v86-screen';
+    const canvas = document.createElement('canvas');
+    legacy.append(canvas);
+    container.append(legacy);
+    document.body.append(container);
+
+    const handle = attachPointerLockCapture({ container });
+    pointerDownOn(canvas);
+
+    expect(document.pointerLockElement).toBeNull();
+    expect(mock.requestCalls).toBe(0);
+    handle.dispose();
+  });
+
+  it('accepte un contrat d’affichage explicite fourni par un futur moteur', () => {
+    mock = installPointerLock();
+    const container = document.createElement('div');
+    const screen = document.createElement('div');
+    screen.setAttribute('data-vm-display', 'framebuffer');
+    const canvas = document.createElement('canvas');
+    screen.append(canvas);
+    container.append(screen);
+    document.body.append(container);
+
+    const handle = attachPointerLockCapture({
+      container,
+      display: {
+        screenSelector: '[data-vm-display="framebuffer"]',
+        textSelector: '[data-vm-display="text"]',
+      },
+    });
+    pointerDownOn(canvas);
+
+    expect(document.pointerLockElement).toBe(screen);
+    handle.dispose();
   });
 });
 

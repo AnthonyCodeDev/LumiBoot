@@ -60,6 +60,9 @@ export class SessionLifecycle {
   #starting = false;
   #runToken = 0;
   #disposed = false;
+  // Arrêt terminal réconcilié (arrêt spontané du moteur) : neutralise tout
+  // événement tardif du moteur jusqu'au prochain `start()`.
+  #halted = false;
   #cleanupPromise: Promise<void> | null = null;
   readonly #onCleanupError: ((error: unknown, context: string) => void) | undefined;
 
@@ -106,6 +109,7 @@ export class SessionLifecycle {
 
     const startToken = ++this.#runToken;
     this.#starting = true;
+    this.#halted = false;
     // Nouvelle génération : la précédente (éventuellement déjà nettoyée) ne
     // doit pas court-circuiter la libération de la nouvelle instance.
     this.#cleanupPromise = null;
@@ -135,7 +139,15 @@ export class SessionLifecycle {
           return;
         }
         this.#instance = instance;
-        this.#unsubscribe = instance.subscribe((event) => this.#onEvent(event));
+        const unsubscribe = instance.subscribe((event) => this.#onEvent(event));
+        // Un arrêt spontané survenu PENDANT l'abonnement (rejeu d'événements
+        // mémorisés) a déjà libéré l'instance : on neutralise alors le
+        // désabonnement au lieu de le conserver sur une référence morte.
+        if (this.#instance === instance) {
+          this.#unsubscribe = unsubscribe;
+        } else {
+          unsubscribe();
+        }
         if (controller.signal.aborted || startToken !== this.#runToken) {
           await this.#stopInstance();
           // Un événement `error` reçu pendant `subscribe()` a déjà lancé le
@@ -181,7 +193,12 @@ export class SessionLifecycle {
       this.#startPromise = null;
     }
     const state = this.#machine.state;
-    if (state === 'idle' || state === 'stopped' || state === 'error') return;
+    if (state === 'idle' || state === 'stopped' || state === 'error') {
+      // Un arrêt spontané a pu lancer un nettoyage : on l'attend pour ne jamais
+      // rendre la main avec une libération encore en vol.
+      if (this.#cleanupPromise !== null) await this.#cleanupPromise;
+      return;
+    }
     if (this.#machine.canTransition('stopping')) {
       this.#machine.transition('stopping');
       this.#emit();
@@ -190,6 +207,9 @@ export class SessionLifecycle {
     // un `dispose()`/`#fail()` concurrent, donc une seule libération effective.
     await this.#releaseResources('stop');
     if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
+    // Terminal : un événement tardif d'un moteur fautif ne doit pas ressusciter
+    // la session (un `start()` ultérieur réarme `#halted`).
+    this.#halted = true;
     this.#phase = undefined;
     this.#loadedBytes = undefined;
     this.#totalBytes = undefined;
@@ -230,17 +250,17 @@ export class SessionLifecycle {
   }
 
   #onEvent(event: SessionEvent): void {
-    // Un événement tardif après destruction n'a aucun effet observable.
-    if (this.#disposed) return;
+    // Un événement tardif après destruction, ou après un arrêt terminal
+    // (arrêt spontané réconcilié / arrêt volontaire) n'a aucun effet observable.
+    if (this.#disposed || this.#halted) return;
     if (event.type === 'state') {
-      if (this.#machine.canTransition(event.state)) {
-        this.#machine.transition(event.state);
-      } else if (event.state === 'running' && this.#machine.canTransition('booting')) {
-        // Preuve de démarrage reçue sans phase « booting » explicite : on
-        // traverse `booting` pour respecter l'invariant de la machine à états
-        // tout en honorant la preuve réelle (`running`).
-        this.#machine.transition('booting');
-        this.#machine.transition('running');
+      // `stopped` est traité à part : c'est le signal d'un arrêt SPONTANÉ
+      // (extinction/crash de l'invité) qui doit traverser `stopping`, libérer
+      // réellement les ressources puis atteindre `stopped` — jamais être ignoré.
+      if (event.state === 'stopped') {
+        this.#reconcileSpontaneousStop();
+      } else {
+        this.#applyState(event.state);
       }
       this.#emit();
       return;
@@ -274,6 +294,48 @@ export class SessionLifecycle {
       return;
     }
     this.#fail(event.code, event.message);
+  }
+
+  /**
+   * Applique une transition d'état ordinaire émise par le moteur. `running`
+   * prouvé sans phase `booting` explicite traverse `booting` pour respecter
+   * l'invariant de la machine à états.
+   */
+  #applyState(state: VMState): void {
+    if (this.#machine.canTransition(state)) {
+      this.#machine.transition(state);
+    } else if (state === 'running' && this.#machine.canTransition('booting')) {
+      this.#machine.transition('booting');
+      this.#machine.transition('running');
+    }
+  }
+
+  /**
+   * Réconcilie un arrêt spontané (`stopped` émis par le moteur sans passer par
+   * `stop()`), y compris depuis `running` ou `booting`.
+   *
+   * La transition directe `running -> stopped` n'existe pas : on traverse
+   * `stopping`, on libère réellement les ressources de façon supervisée et
+   * idempotente (`#releaseResources` coupe immédiatement la référence à
+   * l'instance puis nettoie), puis on atteint `stopped`. Aucune VM zombie,
+   * aucun redémarrage bloqué ; un échec de `destroy()` sous-jacent est rapporté
+   * via `onCleanupError`. `#halted` neutralise ensuite tout événement tardif.
+   */
+  #reconcileSpontaneousStop(): void {
+    const state = this.#machine.state;
+    if (state === 'stopped' || state === 'idle' || state === 'error') return;
+    this.#halted = true;
+    if (this.#machine.canTransition('stopping')) {
+      this.#machine.transition('stopping');
+    }
+    void this.#releaseResources('stop');
+    if (this.#machine.canTransition('stopped')) {
+      this.#machine.transition('stopped');
+    }
+    this.#phase = undefined;
+    this.#loadedBytes = undefined;
+    this.#totalBytes = undefined;
+    this.#network = undefined;
   }
 
   #fail(code: string, message: string): void {
@@ -332,6 +394,9 @@ export class SessionLifecycle {
   #settleCancelledStart(): void {
     if (this.#machine.canTransition('stopping')) this.#machine.transition('stopping');
     if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
+    // Un démarrage annulé est terminal : tout événement tardif de l'instance
+    // supplantée est neutralisé jusqu'au prochain `start()`.
+    this.#halted = true;
     this.#phase = undefined;
     this.#loadedBytes = undefined;
     this.#totalBytes = undefined;

@@ -33,7 +33,61 @@ La VM, son CPU et sa RAM s'exécutent dans le navigateur. Le proxy local et les 
 | `images` | scripts et métadonnées de construction ; gros binaires ignorés |
 | `infra` | Nginx, développement local et relais WISP optionnel |
 
-Les tests d'architecture interdisent à `contracts`, `catalog`, `vm-core` et `provider-v86` d'importer React, Zustand ou `apps/web`.
+## Garde-fous d'architecture
+
+Les règles ci-dessous sont vérifiées automatiquement par
+`tests/architecture.test.ts`, adossé à l'outil d'analyse de graphe
+`tests/arch/dependency-graph.ts` (aucune dépendance externe). `pnpm test` les
+exécute en local comme en CI : une violation échoue le build, elle n'est jamais
+un simple avertissement.
+
+### Frontières de paquets
+
+Le sens des dépendances est figé dans `ALLOWED_INTERNAL_DEPS` :
+
+```text
+apps/web
+  ├─ @lumiboot/catalog      → @lumiboot/contracts
+  ├─ @lumiboot/vm-core      → @lumiboot/vm-network → @lumiboot/contracts
+  ├─ @lumiboot/vm-assets    → @lumiboot/contracts
+  └─ @lumiboot/provider-v86 → {contracts, vm-assets, vm-core, vm-network}
+```
+
+Règles appliquées :
+
+- `@lumiboot/contracts` est une **feuille** : aucun `@lumiboot/*` ;
+- un paquet ne dépend jamais d'un paquet hors de sa frontière, ni d'un
+  `@lumiboot/*` non déclaré (pas de dépendance fantôme) ;
+- aucun paquet ne dépend de `@lumiboot/web`, de React ou de Zustand ;
+- aucun import profond `@lumiboot/<pkg>/…` ni chemin relatif traversant un autre
+  paquet : la surface publique est `src/index.ts` ;
+- ajouter un paquet impose de **déclarer explicitement** sa frontière (test
+  « chaque paquet de l'espace de travail déclare ses frontières »).
+
+### Cycles
+
+Le graphe déclaré (`package.json`) **et** le graphe des imports réels sont
+acycliques (détection Tarjan, `findCycles`). Un cycle est une régression de
+conception : il doit être cassé, jamais toléré.
+
+### Compatibilité runtime profil / `engineId`
+
+- tout `engineId` de profil appartient au catalogue (`packages/catalog/src/engines.ts`) ;
+- l'architecture du système est servie par le moteur du profil (table
+  `ENGINE_ARCHITECTURES` du test) ;
+- un système `ready` ne s'appuie que sur un moteur `integrated` ;
+- `checkEngineCompatibility` accepte tout profil intégré lorsque WebAssembly est
+  disponible, et le refuse sinon.
+
+### Concurrence
+
+Garanties vérifiées sur le vrai `SessionLifecycle`/`VMRegistry`, sans disque
+propriétaire :
+
+- deux `start()` concurrents ne créent qu'une seule instance (single-flight) ;
+- deux sessions concurrentes restent isolées : aucun état partagé ;
+- `dispose()` pendant un `start()` en vol libère l'instance, sans orpheline ;
+- `register()` est idempotent pour un même moteur.
 
 ## Flux de lancement
 
@@ -85,3 +139,7 @@ Il n'existe pas de route Settings. La configuration globale est chargée depuis 
 - Pas de secret dans une variable `VITE_*` ou un JSON public.
 - Pas de logique moteur dans les composants React.
 - Pas d'état `ready`, `running` ou `connected` sans preuve correspondante.
+- Pas de dépendance inter-paquets hors frontière autorisée, ni de cycle entre
+  paquets (`tests/architecture.test.ts`).
+- Un profil de lancement ne peut associer une architecture à un moteur qui ne la
+  sert pas (`ENGINE_ARCHITECTURES`).

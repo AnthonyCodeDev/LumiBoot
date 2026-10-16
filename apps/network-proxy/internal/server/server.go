@@ -447,13 +447,16 @@ func (s *Server) handleWisp(w http.ResponseWriter, r *http.Request) {
 
 	// Enregistrement atomique du transport : si la session a été révoquée
 	// entre la vérification et l'upgrade, l'attachement échoue et on ferme.
-	info, ok := s.auth.AttachSession(token, origin, h.Close)
+	// Chaque WebSocket reçoit son propre ID de transport : plusieurs connexions
+	// peuvent partager le même token sans s'écraser, et le detach normal ne
+	// retire que cette connexion-là.
+	_, transportID, ok := s.auth.AttachSession(token, origin, h.Close)
 	if !ok {
 		_ = conn.Close()
 		s.stats.IncRejectedAuth()
 		return
 	}
-	defer s.auth.DetachSession(info.ID)
+	defer s.auth.DetachSession(token, transportID)
 
 	s.ws.Add(1)
 	defer s.ws.Done()

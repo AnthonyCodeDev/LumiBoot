@@ -33,6 +33,7 @@ beforeEach(() => {
   // Arrête toute surveillance résiduelle entre les tests.
   useProxyStore.getState().dismissError();
   localStorage.clear();
+  sessionStorage.clear();
   clearProxySession();
   useProxyStore.setState({
     state: 'not-running',
@@ -130,7 +131,7 @@ describe('useProxyStore', () => {
 
       expect(useProxyStore.getState().state).toBe('pairing-required');
       expect(useProxyStore.getState().token).toBeNull();
-      expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+      expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
     } finally {
       useProxyStore.getState().dismissError();
       vi.useRealTimers();
@@ -245,7 +246,8 @@ describe('useProxyStore', () => {
     useProxyStore.setState({ pairingId: 'p1' });
     await useProxyStore.getState().connect('p1', fetchImpl);
     expect(useProxyStore.getState().state).toBe('connected');
-    expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
+    expect(sessionStorage.getItem(STORAGE_KEY)).not.toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
   it('connect ne persiste PAS un token refusé par verifyToken', async () => {
@@ -261,7 +263,7 @@ describe('useProxyStore', () => {
     await useProxyStore.getState().connect('p1', fetchImpl);
     expect(useProxyStore.getState().state).toBe('pairing-required');
     expect(useProxyStore.getState().token).toBeNull();
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
   it('refresh restaure un token persisté valide (verifyToken OK) → connected', async () => {
@@ -301,7 +303,7 @@ describe('useProxyStore', () => {
       '/api/session/revoke': { status: 200, body: { revoked: true } },
     });
     await useProxyStore.getState().revoke(fetchImpl);
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
   it('/health OK mais verifyToken KO (401) → pairing-required, jeton persisté effacé', async () => {
@@ -320,7 +322,7 @@ describe('useProxyStore', () => {
     expect(state).toBe('pairing-required');
     expect(token).toBeNull();
     expect(authenticated).toBe(false);
-    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
   it('/health OK, jeton mémoire refusé (403) → pairing-required, jamais connected', async () => {

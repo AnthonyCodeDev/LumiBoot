@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { OSDefinition } from '@lumiboot/contracts';
-import type { SessionSnapshot } from '@lumiboot/vm-core';
+import { STANDARD_VM_DISPLAY, type SessionSnapshot } from '@lumiboot/vm-core';
 import { SessionToolbar } from './SessionToolbar';
 import { StatusOverlay } from './StatusOverlay';
 import { usePointerLockCapture } from './usePointerLockCapture';
@@ -45,10 +45,12 @@ export function SessionScreen({
     error: pointerLockError,
   } = usePointerLockCapture(consoleRef, running);
 
-  // Cible du plein écran : uniquement l'écran résultat (le VGA `.v86-screen`
-  // injecté par le provider dans `.session-console`), pas la page entière.
+  // Cible du plein écran : uniquement l'écran résultat, repéré par le contrat
+  // d'affichage standard (`data-vm-display="screen"`) que le provider pose dans
+  // `.session-console`. Aucun moteur n'est ciblé en dur : pas de `.v86-screen`.
   const getScreenElement = useCallback(
-    (): HTMLElement | null => consoleRef.current?.querySelector<HTMLElement>('.v86-screen') ?? null,
+    (): HTMLElement | null =>
+      consoleRef.current?.querySelector<HTMLElement>(STANDARD_VM_DISPLAY.screenSelector) ?? null,
     [consoleRef],
   );
 

@@ -5,7 +5,9 @@ export type { NetworkProfile } from '@lumiboot/vm-network';
 
 export * from './contracts/VMCapabilities';
 export * from './contracts/VMConfiguration';
+export * from './contracts/VMDisplay';
 export * from './contracts/VMEvents';
+export * from './contracts/VMInput';
 export * from './contracts/VMInstance';
 export * from './contracts/VMEngine';
 

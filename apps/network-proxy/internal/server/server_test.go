@@ -19,6 +19,8 @@ func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
 	cfg := config.Default()
 	cfg.AllowedOrigins = []string{testOrigin}
+	// Tests sur loopback : appairage local explicitement autorisé.
+	cfg.AllowLocalOrigins = true
 	s, err := New(cfg)
 	if err != nil {
 		t.Fatalf("new server: %v", err)

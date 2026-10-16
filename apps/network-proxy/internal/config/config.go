@@ -9,10 +9,25 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+)
+
+// Environment identifie le profil de déploiement qui détermine l'allowlist
+// d'origines par défaut. La valeur par défaut est toujours `production` :
+// l'élargissement aux boucles locales est un choix EXPLICITE.
+type Environment string
+
+const (
+	// EnvProduction : allowlist stricte, production LumiBoot uniquement.
+	// Aucune origine `localhost` générique n'est acceptée sans opt-in.
+	EnvProduction Environment = "production"
+	// EnvDevelopment : allowlist élargie aux boucles locales du monorepo
+	// (ports 5173/5200/3000/4173/8080).
+	EnvDevelopment Environment = "development"
 )
 
 // Duration est un time.Duration sérialisable en JSON soit comme chaîne
@@ -48,7 +63,13 @@ func (d Duration) Std() time.Duration { return time.Duration(d) }
 
 // Config est la configuration du proxy réseau local.
 type Config struct {
-	ListenAddr                   string   `json:"listenAddr"`
+	ListenAddr string `json:"listenAddr"`
+	// Environment sélectionne l'allowlist par défaut (production stricte ou
+	// développement local). Vide = production.
+	Environment Environment `json:"environment"`
+	// AllowLocalOrigins autorise explicitement des origines loopback en
+	// production, uniquement quand un appairage local est réellement nécessaire.
+	AllowLocalOrigins            bool     `json:"allowLocalOrigins"`
 	AllowedOrigins               []string `json:"allowedOrigins"`
 	MaxConnections               int      `json:"maxConnections"`
 	MaxConnectionsPerSession     int      `json:"maxConnectionsPerSession"`
@@ -67,12 +88,21 @@ type Config struct {
 // ErrNonLoopback signale un refus d'écoute sur une adresse non-loopback.
 var ErrNonLoopback = errors.New("config: écoute non-loopback refusée sans allowNonLoopback explicite")
 
-// DefaultOrigins liste les origines autorisées par défaut : production LumiBoot
-// et boucles locales de développement (ports courants du monorepo et génériques).
-func DefaultOrigins() []string {
+// ProdOrigins liste les origines de PRODUCTION LumiBoot. Aucune boucle locale
+// générique n'y figure : un déploiement local (UI servie depuis le poste) doit
+// ajouter explicitement son origine ou activer `allowLocalOrigins`.
+func ProdOrigins() []string {
 	return []string{
 		"https://lumiboot.app",
 		"https://www.lumiboot.app",
+	}
+}
+
+// DevOrigins liste les origines de DÉVELOPPEMENT : production + boucles locales
+// courantes du monorepo (port de dev 5173, port E2E 5200, divers ports de
+// prévisualisation). Jamais utilisé en production.
+func DevOrigins() []string {
+	return append(ProdOrigins(),
 		"http://127.0.0.1:5173",
 		"http://localhost:5173",
 		"http://127.0.0.1:5200",
@@ -83,14 +113,35 @@ func DefaultOrigins() []string {
 		"http://localhost:4173",
 		"http://127.0.0.1:8080",
 		"http://localhost:8080",
-	}
+	)
 }
 
-// Default renvoie la configuration par défaut (sécurisée).
+// OriginsForEnvironment renvoie l'allowlist par défaut pour un environnement.
+func OriginsForEnvironment(env Environment) []string {
+	if env == EnvDevelopment {
+		return DevOrigins()
+	}
+	return ProdOrigins()
+}
+
+// DefaultOrigins est l'alias historique de production : allowlist stricte.
+// Conservé pour compatibilité ; préférer {@link ProdOrigins}.
+func DefaultOrigins() []string {
+	return ProdOrigins()
+}
+
+// Default renvoie la configuration par défaut (sécurisée, production).
 func Default() Config {
+	return DefaultFor(EnvProduction)
+}
+
+// DefaultFor renvoie la configuration par défaut pour un environnement donné.
+func DefaultFor(env Environment) Config {
 	return Config{
 		ListenAddr:                   "127.0.0.1:37892",
-		AllowedOrigins:               DefaultOrigins(),
+		Environment:                  env,
+		AllowLocalOrigins:            false,
+		AllowedOrigins:               OriginsForEnvironment(env),
 		MaxConnections:               64,
 		MaxConnectionsPerSession:     16,
 		ConnectTimeout:               Duration(10 * time.Second),
@@ -106,12 +157,28 @@ func Default() Config {
 	}
 }
 
-// Load charge la configuration : défauts, puis fichier JSON (si path non vide),
-// puis variables d'environnement LUMIBOOT_PROXY_*, puis validation.
+// environmentFromEnv lit LUMIBOOT_PROXY_ENV. Toute valeur autre que
+// « development »/« dev » (ou absence) est traitée comme production.
+func environmentFromEnv() Environment {
+	v, ok := lookupEnv("LUMIBOOT_PROXY_ENV")
+	if !ok {
+		return EnvProduction
+	}
+	switch strings.ToLower(v) {
+	case "development", "dev":
+		return EnvDevelopment
+	default:
+		return EnvProduction
+	}
+}
+
+// Load charge la configuration : défauts (allowlist selon l'environnement),
+// puis fichier JSON (si path non vide), puis variables d'environnement
+// LUMIBOOT_PROXY_*, puis validation.
 // Un fichier inexistant n'est pas une erreur (premier lancement) ; un JSON
 // invalide en est une.
 func Load(path string) (Config, error) {
-	cfg := Default()
+	cfg := DefaultFor(environmentFromEnv())
 	if path != "" {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -133,6 +200,12 @@ func Load(path string) (Config, error) {
 func (c *Config) ApplyEnv() {
 	if v, ok := lookupEnv("LUMIBOOT_PROXY_LISTEN_ADDR"); ok {
 		c.ListenAddr = v
+	}
+	if _, ok := lookupEnv("LUMIBOOT_PROXY_ENV"); ok {
+		c.Environment = environmentFromEnv()
+	}
+	if v, ok := lookupEnvBool("LUMIBOOT_PROXY_ALLOW_LOCAL_ORIGINS"); ok {
+		c.AllowLocalOrigins = v
 	}
 	if v, ok := lookupEnv("LUMIBOOT_PROXY_ALLOWED_ORIGINS"); ok {
 		var origins []string
@@ -197,6 +270,19 @@ func (c *Config) Validate() error {
 	if len(c.AllowedOrigins) == 0 {
 		return errors.New("config: allowedOrigins ne doit pas être vide")
 	}
+	// Ségrégation DEV/PROD : en production, une origine loopback générique
+	// n'est acceptée que si un appairage local est explicitement nécessaire
+	// (`allowLocalOrigins`) ou si l'environnement est `development`.
+	if c.Environment != EnvDevelopment && !c.AllowLocalOrigins {
+		for _, origin := range c.AllowedOrigins {
+			if isLoopbackOrigin(origin) {
+				return fmt.Errorf(
+					"config: origine locale %q refusée en production : activez allowLocalOrigins (appairage local explicite) ou LUMIBOOT_PROXY_ENV=development",
+					origin,
+				)
+			}
+		}
+	}
 	if c.MaxConnections <= 0 {
 		return errors.New("config: maxConnections doit être > 0")
 	}
@@ -244,6 +330,21 @@ func isLoopbackHost(host string) bool {
 		return false
 	}
 	return ip.IsLoopback()
+}
+
+// isLoopbackOrigin indique si une origine HTTP(S) cible une adresse loopback
+// (`http://localhost:5173`, `http://127.0.0.1:5200`, `https://[::1]:8443`…).
+// Une origine illisible n'est pas considérée comme loopback (échec sûr côté
+// validation : elle est laissée au filtrage exact côté authentification).
+func isLoopbackOrigin(origin string) bool {
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return false
+	}
+	return isLoopbackHost(parsed.Hostname())
 }
 
 func lookupEnv(key string) (string, bool) {

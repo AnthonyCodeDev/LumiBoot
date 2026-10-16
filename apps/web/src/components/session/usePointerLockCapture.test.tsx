@@ -63,7 +63,8 @@ function makeFixture(): Fixture {
   const container = document.createElement('div');
   container.className = 'session-console';
   const screen = document.createElement('div');
-  screen.className = 'v86-screen';
+  // Écran factice conforme au contrat d'affichage (aucune classe `.v86-screen`).
+  screen.setAttribute('data-vm-display', 'screen');
   const canvas = document.createElement('canvas');
   screen.append(canvas);
   container.append(screen);

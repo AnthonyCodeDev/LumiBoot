@@ -22,6 +22,35 @@ import { createJsonHandler, createRangeHandler } from './range-server.mjs';
 /** Référence valide (identique au schéma `LocalDiskManifest`). */
 const REF_PATTERN = /^[a-z0-9-]+$/;
 
+/**
+ * Sérialise la forme PUBLIQUE d'un manifeste disque, telle que servie par HTTP.
+ *
+ * `source` (chemin réel de la machine de l'opérateur) et `provenance` (interne)
+ * ne doivent JAMAIS sortir du poste : on construit explicitement la sortie
+ * autorisée, de sorte qu'aucun champ interne inconnu présent dans le fichier
+ * privé ne puisse être diffusé. Le schéma public correspondant vit dans
+ * `@lumiboot/vm-assets` (`localDiskPublicManifestSchema`).
+ *
+ * @param {Record<string, unknown>} manifest manifeste privé lu sur disque
+ * @returns {Record<string, unknown>} manifeste public (sans source/provenance)
+ */
+export function toPublicDiskManifest(manifest) {
+  const publicManifest = {
+    version: manifest.version,
+    ref: manifest.ref,
+    displayName: manifest.displayName,
+    architecture: manifest.architecture,
+    memoryMiB: manifest.memoryMiB,
+    license: manifest.license,
+    disk: manifest.disk,
+    engine: manifest.engine,
+    boot: manifest.boot,
+  };
+  if (manifest.vgaMemoryMiB !== undefined) publicManifest.vgaMemoryMiB = manifest.vgaMemoryMiB;
+  if (manifest.notes !== undefined) publicManifest.notes = manifest.notes;
+  return publicManifest;
+}
+
 /** Vrai si `dir` contient au moins un sous-dossier portant un `manifest.json`. */
 function hasDiskManifest(dir) {
   try {
@@ -139,7 +168,7 @@ function discoverLocalDisks(imagesDir) {
     routes.set(
       manifestRoute,
       createJsonHandler({
-        body: `${JSON.stringify(manifest, null, 2)}\n`,
+        body: `${JSON.stringify(toPublicDiskManifest(manifest), null, 2)}\n`,
         contentType: 'application/json; charset=utf-8',
         token: null,
       }),

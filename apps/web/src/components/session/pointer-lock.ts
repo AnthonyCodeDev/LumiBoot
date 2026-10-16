@@ -8,15 +8,22 @@
  * qui les relaie déjà à l'invité. `Échap` (géré nativement par le navigateur)
  * libère le pointeur et restaure le curseur hôte ; un nouveau clic recapture.
  *
- * Ce module est volontairement indépendant de v86 et de tout OS :
+ * Ce module est volontairement indépendant de v86 et de tout OS : il consomme le
+ * contrat d'affichage provider-agnostique `VMDisplay` (marqueur
+ * `data-vm-display="screen"`) au lieu d'un sélecteur propre à un moteur ;
  * - il ne réinjecte JAMAIS de mouvement souris (v86 le fait déjà) ;
  * - il ne pose `cursor: none` QUE lorsque `document.pointerLockElement` est
  *   réellement l'élément écran (synchronisation via `pointerlockchange`) ;
  * - il reste testable sans navigateur réel (jsdom + mock Pointer Lock).
  */
+import { STANDARD_VM_DISPLAY, type VMDisplay } from '@lumiboot/vm-core';
 
-/** Sélecteur de l'écran émulé injecté par le provider (ex. `.v86-screen`). */
-export const DEFAULT_SCREEN_SELECTOR = '.v86-screen';
+/**
+ * Sélecteur de l'écran par défaut, issu du contrat d'affichage standard
+ * (`data-vm-display="screen"`). Aucun moteur n'est ciblé en dur : un futur
+ * moteur non v86 qui pose le même marqueur est pris en charge sans changement.
+ */
+export const DEFAULT_SCREEN_SELECTOR = STANDARD_VM_DISPLAY.screenSelector;
 
 /** Classe posée sur l'écran UNIQUEMENT pendant le verrouillage effectif. */
 export const POINTER_LOCKED_CLASS = 'is-pointer-locked';
@@ -29,7 +36,12 @@ type PointerLockElementLike = HTMLElement & {
 export interface PointerLockCaptureOptions {
   /** Conteneur (ex. `.session-console`) dans lequel se trouve l'écran. */
   readonly container: HTMLElement;
-  /** Sélecteur de l'élément écran à verrouiller (défaut `.v86-screen`). */
+  /**
+   * Contrat d'affichage du moteur (repli : contrat standard). Sa cible `screen`
+   * est verrouillée.
+   */
+  readonly display?: VMDisplay;
+  /** Réglage explicite du sélecteur d'écran (prime sur `display`). */
   readonly screenSelector?: string;
   /** Notifié à chaque changement réel d'état de capture. */
   readonly onCaptureChange?: (captured: boolean) => void;
@@ -72,7 +84,8 @@ export function attachPointerLockCapture(
   const { container } = options;
   const doc = container.ownerDocument;
   const win = doc.defaultView;
-  const selector = options.screenSelector ?? DEFAULT_SCREEN_SELECTOR;
+  const selector =
+    options.screenSelector ?? (options.display ?? STANDARD_VM_DISPLAY).screenSelector;
   const supported = isPointerLockSupported(doc);
 
   let captured = false;

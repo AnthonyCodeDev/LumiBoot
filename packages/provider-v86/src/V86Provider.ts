@@ -1,4 +1,4 @@
-import { DEFAULT_GUEST_READINESS, type OSDefinition } from '@lumiboot/contracts';
+import { DEFAULT_GUEST_READINESS, type OSDefinition, type VMMedia } from '@lumiboot/contracts';
 import {
   VMError,
   isVMError,
@@ -18,7 +18,7 @@ import {
   type ImageManifest,
   type LocalDiskManifest,
 } from '@lumiboot/vm-assets';
-import type { V86Options } from 'v86';
+import type { BootOrder, V86Options } from 'v86';
 import { createBrowserV86, type V86Factory } from './browser-v86';
 import { DomConsoleAdapter, type V86ConsoleAdapter, type V86ConsoleMount } from './console-adapter';
 import {
@@ -45,11 +45,27 @@ export const V86_ASSET_PATHS = {
  */
 export const DEFAULT_BOOT_CMDLINE = 'console=tty0 console=ttyS0,115200 root=/dev/sda rw';
 
+/**
+ * Valeurs de `BootOrder` (v86) dont on a besoin, dupliquées en nombre pour ne
+ * JAMAIS importer `v86` au chargement du provider (le moteur reste chargé
+ * paresseusement par `browser-v86`). `CD_HARDDISK_FLOPPY = 0x123` démarre le
+ * CD-ROM en premier, puis le disque dur.
+ */
+const BOOT_ORDER_CD_HARDDISK_FLOPPY = 0x123 as BootOrder;
+
+/**
+ * Capacités RÉELLES du moteur. `VMInstance` n'expose aucun point d'entrée de
+ * snapshot (RAM ou disque) : le provider ne doit donc jamais annoncer
+ * `ramSnapshots`/`diskSnapshots`, même si la classe `V86` possède un
+ * `save_state`/`restore_state` interne non câblé au contrat. Annoncer une
+ * capacité absente de `VMInstance` ferait promettre à l'UI une fonction qui
+ * n'existe pas.
+ */
 const V86_CAPABILITIES: VMCapabilities = {
   runtime: 'browser',
   architectures: ['i386'],
-  ramSnapshots: true,
-  diskSnapshots: true,
+  ramSnapshots: false,
+  diskSnapshots: false,
   // v86 lit le disque par requêtes HTTP Range (`hda.async`).
   partialDownload: true,
   resumable: false,
@@ -230,18 +246,19 @@ export class V86Provider implements VMEngine {
     const kernelDisk = manifest?.files['disk'];
     const bzimage = manifest?.files['bzimage'];
     const initrd = manifest?.files['initrd'];
-    // Trois plans de démarrage réels :
-    // - média importé -> BIOS + disque (`hda`), aucun noyau Linux ;
+    // Plans de démarrage réels :
+    // - média importé RAW -> BIOS + disque (`hda`), aucun noyau Linux ;
+    // - média importé ISO -> BIOS + CD-ROM (`cdrom`) + ordre de boot CD d'abord ;
     // - disque RAW local -> BIOS + disque (`hda`), aucun noyau Linux ;
     // - image publiée -> boot direct du noyau (`bzimage`/`initrd` + `hda`).
     //
-    // Le disque est TOUJOURS monté en disque dur (`hda`, jamais `cdrom` : ce
-    // n'est pas une ISO). v86 le lit en lecture seule via des requêtes Range
-    // (`async`) : la base n'est jamais réécrite, les écritures invitées restent
-    // dans le tampon mémoire de l'instance et disparaissent à l'arrêt de la
-    // session (aucune persistance revendiquée, voir docs/windows-7.md).
+    // Un disque RAW est lu en lecture seule via des requêtes Range (`async`) : la
+    // base n'est jamais réécrite, les écritures invitées restent dans le tampon
+    // mémoire et disparaissent à l'arrêt (aucune persistance revendiquée, voir
+    // docs/windows-7.md). Une ISO est un média optique : elle n'est JAMAIS montée
+    // comme disque dur.
     const bootMedia: V86Options = media
-      ? { hda: { url: media.url, async: true, size: media.size } }
+      ? resolveMediaBootOptions(media, launchProfile, configuration, os.id)
       : diskManifest
         ? {
             hda: {
@@ -401,8 +418,7 @@ function resolveMemoryMiB(
  * puissance de deux n'est PAS requise. 1536 Mio est donc valide et accepté.
  */
 function assertSupportedMemoryMiB(value: number, label: string, systemId: string): void {
-  const supported =
-    Number.isInteger(value) && value > 0 && value * MiB <= 0x7fffffff;
+  const supported = Number.isInteger(value) && value > 0 && value * MiB <= 0x7fffffff;
   if (!supported) {
     throw new VMError(
       'START_FAILED',
@@ -427,4 +443,46 @@ function toStartFailure(error: unknown, systemId: string): VMError {
     systemId,
     cause: error,
   });
+}
+
+/**
+ * Traduit un média importé par l'utilisateur en options v86, selon son format :
+ *
+ * - `raw` : disque dur (`hda`), lu en lecture seule via requêtes Range (`async`).
+ * - `iso` : média optique monté en CD-ROM (`cdrom`) avec un ordre de boot
+ *   privilégiant le CD.
+ *
+ * L'installation d'un OS sur un disque vierge n'est PAS supportée : LumiBoot ne
+ * fournit aucun disque inscriptible persistant et v86 écrit en mémoire (perdu à
+ * l'arrêt). Une ISO destinée à l'installation est donc refusée par une
+ * `VMError` explicite (`UNSUPPORTED_ENVIRONMENT`) plutôt que de simuler une
+ * persistance. Seule une ISO amorçable « live » (profil non `disk-boot` et
+ * `bootDevice: 'cdrom'`) est acceptée.
+ */
+function resolveMediaBootOptions(
+  media: VMMedia,
+  launchProfile: OSDefinition['launchProfiles'][number],
+  configuration: VMConfiguration | undefined,
+  systemId: string,
+): V86Options {
+  if (media.format === 'raw') {
+    return { hda: { url: media.url, async: true, size: media.size } };
+  }
+
+  const bootTarget = configuration?.bootDevice ?? launchProfile.configuration?.bootDevice;
+  const installsToDisk = launchProfile.readiness?.mode === 'disk-boot' || bootTarget === 'disk';
+  if (installsToDisk) {
+    throw new VMError(
+      'UNSUPPORTED_ENVIRONMENT',
+      'Installation sur disque vierge non supportée : LumiBoot ne monte aucun disque ' +
+        'inscriptible et ne persiste aucune écriture (v86 écrit en mémoire, perdu à l’arrêt). ' +
+        'Fournissez un disque déjà installé au format RAW au lieu d’une ISO d’installation.',
+      { systemId },
+    );
+  }
+
+  return {
+    cdrom: { url: media.url, async: true, size: media.size },
+    boot_order: BOOT_ORDER_CD_HARDDISK_FLOPPY,
+  };
 }

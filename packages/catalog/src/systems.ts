@@ -1,4 +1,4 @@
-import type { OSDefinition } from '@lumiboot/contracts';
+import type { Availability, OSDefinition } from '@lumiboot/contracts';
 import { validateCatalog } from './validation';
 import { families, type OSFamilyDefinition } from './families';
 import { images, type SystemImageDefinition } from './images';
@@ -40,7 +40,10 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
       hasCompatibleProfile: launchProfile.executionMode === 'browser',
       engineIntegrated: isEngineIntegrated(launchProfile.engineId),
       validated: launchProfile.validated,
-      requiresUserMedia: image.requiresUserMedia === true,
+      // `mediaStrategy: 'user-import'` IMPLIQUE un média utilisateur, même si le
+      // drapeau explicite est absent : l'état reste honnêtement
+      // `resource-required` au lieu d'un `planned` indifférencié.
+      requiresUserMedia: image.requiresUserMedia === true || image.mediaStrategy === 'user-import',
     })),
   );
 
@@ -154,7 +157,8 @@ export function getVariantGroup(system: OSDefinition): OSDefinition[] {
   // `Array.prototype.sort` est stable (ES2019) : à `variantOrder` égal, l'ordre
   // du catalogue est préservé. `undefined` passe en dernier (infini).
   return [...members].sort(
-    (a, b) => (a.variantOrder ?? Number.POSITIVE_INFINITY) - (b.variantOrder ?? Number.POSITIVE_INFINITY),
+    (a, b) =>
+      (a.variantOrder ?? Number.POSITIVE_INFINITY) - (b.variantOrder ?? Number.POSITIVE_INFINITY),
   );
 }
 
@@ -179,4 +183,47 @@ export function getVariantParent(system: OSDefinition): OSDefinition {
 /** Vrai si ce système appartient à un groupe de plus d'une entrée. */
 export function hasVariants(system: OSDefinition): boolean {
   return getVariantGroup(system).length > 1;
+}
+
+/**
+ * Origine du média d'un système, telle que DÉCLARÉE par le catalogue. Sert à
+ * l'UI pour choisir la vérification runtime adaptée :
+ * - `bundled-image` : manifeste d'image publié (`/images/<ref>/manifest.json`)
+ *   + disque servi en HTTP Range ;
+ * - `local-disk` : manifeste de disque local (`disk-boot`) + disque servi en
+ *   HTTP Range (ex. Windows 7, disque gitignoré) ;
+ * - `user-import` : média fourni localement par l'utilisateur (jamais distribué,
+ *   jamais vérifié par HTTP) — seule sa présence importée compte.
+ */
+export type DeclaredMediaSource = 'bundled-image' | 'local-disk' | 'user-import';
+
+/**
+ * Readiness DÉCLARÉE par le catalogue, volontairement séparée de la
+ * disponibilité RUNTIME.
+ *
+ * `availability` est un état de catalogue : `ready` signifie que l'image est
+ * référencée, qu'un profil compatible existe, que le moteur est intégré et que
+ * le fonctionnement a été validé. Il ne présume JAMAIS que le média est
+ * réellement servable sur la machine : manifeste JSON valide, disque présent,
+ * HTTP Range (206), compatibilité architecture/mémoire restent à vérifier au
+ * runtime (voir `getLaunchReadiness` / `checkSystemRuntimeAvailability` côté
+ * `apps/web`). Confondre les deux produirait un faux `ready` et un bouton de
+ * lancement mensonger.
+ */
+export interface DeclaredReadiness {
+  readonly availability: Availability;
+  readonly mediaSource: DeclaredMediaSource;
+}
+
+export function getDeclaredReadiness(
+  system: Pick<OSDefinition, 'availability' | 'mediaStrategy' | 'launchProfiles'>,
+): DeclaredReadiness {
+  const profile =
+    system.launchProfiles.find((candidate) => candidate.featured) ?? system.launchProfiles[0];
+
+  let mediaSource: DeclaredMediaSource = 'bundled-image';
+  if (system.mediaStrategy === 'user-import') mediaSource = 'user-import';
+  else if (profile?.readiness?.mode === 'disk-boot') mediaSource = 'local-disk';
+
+  return { availability: system.availability, mediaSource };
 }

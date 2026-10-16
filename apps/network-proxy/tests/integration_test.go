@@ -52,6 +52,8 @@ func proxyFixture(t *testing.T, mutate func(*config.Config)) (*server.Server, *h
 	t.Helper()
 	cfg := config.Default()
 	cfg.AllowedOrigins = []string{itOrigin}
+	// Tests sur loopback : appairage local explicitement autorisé.
+	cfg.AllowLocalOrigins = true
 	cfg.AllowPrivateNetworks = true // pour joindre l'écho local ; métadonnées toujours bloquées
 	if mutate != nil {
 		mutate(&cfg)
@@ -309,6 +311,27 @@ func TestRevocationClosesWebSocketAndTCP(t *testing.T) {
 		t.Fatal("révocation échouée")
 	}
 	expectTransportClosed(t, conn, closed, "révocation")
+}
+
+// TestRevocationClosesMultipleWebSocketsSameToken : régression P0 — deux
+// WebSocket partageant le même token ne s'écrasent plus ; la révocation ferme
+// les 2/2 (WebSocket et TCP associés).
+func TestRevocationClosesMultipleWebSocketsSameToken(t *testing.T) {
+	srv, ts := proxyFixture(t, nil)
+	token := pair(t, srv, ts)
+	_, echoPortA, closedA := trackedEchoServer(t)
+	_, echoPortB, closedB := trackedEchoServer(t)
+
+	connA := dialWISP(t, ts, token, itOrigin)
+	openEchoStream(t, connA, echoPortA)
+	connB := dialWISP(t, ts, token, itOrigin)
+	openEchoStream(t, connB, echoPortB)
+
+	if !srv.Authenticator().Revoke(token) {
+		t.Fatal("révocation échouée")
+	}
+	expectTransportClosed(t, connA, closedA, "révocation A")
+	expectTransportClosed(t, connB, closedB, "révocation B")
 }
 
 func TestExpirationClosesTransport(t *testing.T) {
