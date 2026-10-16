@@ -85,6 +85,26 @@ La configuration publique se trouve dans `apps/web/public/lumiboot.config.json`.
 
 Voir [`docs/windows-7.md`](docs/windows-7.md) et [`docs/LICENSES.md`](docs/LICENSES.md).
 
+## Windows 10 (expérimental, non validé)
+
+Windows 10 32 bits peut être tenté depuis un disque RAW **que vous fournissez**
+(installation personnelle convertie depuis QEMU/VirtualBox). Ce chemin est
+**expérimental et non validé** : boot très lent, stockage invité éphémère (source
+en lecture seule), réseau invité probablement absent (pas de pilote NE2000
+inbox). Aucune ISO ni image Windows n'est téléchargée ou redistribuée : une
+licence Windows vous est requise. Windows 10 n'étant plus maintenu (support
+standard terminé en 2025), n'utilisez pas une session connectée à Internet.
+
+```powershell
+pnpm assets:windows10:prepare -- --source "D:\VM\Windows10-32bit.img"
+pnpm assets:windows10:check
+pnpm dev
+```
+
+Windows 10 64 bits reste bloqué (moteur `wasm-x86_64` non intégré). Conversion
+légitime du disque, RAM 2048 Mio, matériel ACPI/ne2k et checklist de validation
+réelle : [`docs/windows-10.md`](docs/windows-10.md).
+
 ## Documentation
 
 - [`docs/AGENT_BRIEF.md`](docs/AGENT_BRIEF.md) — règles de contribution techniques

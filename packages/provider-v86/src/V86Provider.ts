@@ -411,18 +411,23 @@ function resolveMemoryMiB(
 }
 
 /**
- * Valide la mémoire invitée selon les contraintes RÉELLES de v86 0.5.471 :
- * un entier de Mio strictement positif dont la taille en octets tient dans un
- * entier signé 32 bits (`0x7FFFFFFF`, soit 2047 Mio). v86 arrondit
- * `create_memory` à un multiple de 128 Kio et clampe au-delà de 2 Gio : une
- * puissance de deux n'est PAS requise. 1536 Mio est donc valide et accepté.
+ * Valide la mémoire invitée selon les contraintes RÉELLES de v86 0.5.471.
+ *
+ * `create_memory` reçoit la taille en octets et la ramène à un multiple de
+ * 128 Kio. Au-delà de 2 Gio (`0x80000000`), l'entier 32 bits déborde et devient
+ * négatif ; v86 ne fait PAS confiance à cette valeur et la clampe à
+ * `2^31 - 128 Kio` (≈ 2047,875 Mio). La borne haute utile est donc 2048 Mio
+ * (2 Gio), que v86 accepte et ramène lui-même en interne. Une valeur
+ * strictement supérieure (ex. 4096) serait silencieusement ramenée à ~2 Gio :
+ * on la refuse ici plutôt que de promettre une mémoire non tenue. Une puissance
+ * de deux n'est PAS requise : 1536 Mio est valide et accepté.
  */
 function assertSupportedMemoryMiB(value: number, label: string, systemId: string): void {
-  const supported = Number.isInteger(value) && value > 0 && value * MiB <= 0x7fffffff;
+  const supported = Number.isInteger(value) && value > 0 && value * MiB <= 0x80000000;
   if (!supported) {
     throw new VMError(
       'START_FAILED',
-      `« ${label} » doit être un entier de Mio <= 2047 (reçu : ${value} MiB).`,
+      `« ${label} » doit être un entier de Mio <= 2048 (reçu : ${value} MiB).`,
       { systemId },
     );
   }

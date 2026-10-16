@@ -73,6 +73,7 @@ function parseArgs(argv) {
   };
   let copyTo;
   let outDir;
+  let notes;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -96,6 +97,7 @@ function parseArgs(argv) {
       case '--provenance': options.provenance = value(); break;
       case '--served-name': options.servedName = value(); break;
       case '--format': options.format = value(); break;
+      case '--note': (notes ??= []).push(value()); break;
       case '--out': outDir = value(); break;
       case '--copy-to': copyTo = value(); break;
       case '--skip-hash': flags.skipHash = true; break;
@@ -108,6 +110,9 @@ function parseArgs(argv) {
         throw new Error(`Option inconnue : ${name}`);
     }
   }
+  // `--note` (répétable) remplace les notes par défaut ; sans option, on garde
+  // les notes Windows 7 de `DEFAULTS` (comportement historique inchangé).
+  if (notes !== undefined) options.notes = notes;
   return { options, flags, copyTo, outDir };
 }
 
@@ -126,6 +131,7 @@ function usage() {
   --provenance <texte>    Origine du média
   --served-name <nom>     Nom servi sous /images/<ref>/ (défaut disk.img)
   --format <raw|iso>      Format (défaut : déduit de l'extension)
+  --note <texte>          Note du manifeste (répétable ; remplace les notes par défaut)
   --out <dossier>         Dossier de sortie (défaut images/<ref>)
   --copy-to <chemin>      Copie vérifiée optionnelle (jamais la source, jamais public/)
   --skip-hash             Ne pas calculer le SHA-256 (documente taille + mtime)
@@ -405,7 +411,7 @@ async function main() {
     },
     engine: engineFromLock(lock),
     boot: { mode: 'disk-boot', url: diskUrl, async: true, size: sourceInfo.size },
-    notes: DEFAULTS.notes,
+    notes: options.notes,
   };
 
   await mkdir(outputDir, { recursive: true });

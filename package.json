@@ -21,6 +21,8 @@
     "assets:windows7:prepare": "node scripts/prepare-windows7-asset.mjs",
     "assets:windows7:check": "node scripts/prepare-windows7-asset.mjs --check",
     "assets:windows7:serve": "node scripts/serve-windows7-asset.mjs",
+    "assets:windows10:prepare": "node scripts/prepare-windows10-asset.mjs",
+    "assets:windows10:check": "node scripts/prepare-windows10-asset.mjs --check",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"

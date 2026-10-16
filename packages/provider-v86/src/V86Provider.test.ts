@@ -205,7 +205,7 @@ describe('V86Provider', () => {
     expect(captured[0]?.memory_size).toBe(1536 * MiB);
   });
 
-  it('refuse une mémoire hors des bornes réelles de v86 (> 2047 Mio)', async () => {
+  it('refuse une mémoire hors des bornes réelles de v86 (> 2048 Mio)', async () => {
     const { provider, captured } = setup();
     const os = makeOS({
       launchProfiles: [
@@ -563,5 +563,99 @@ describe('V86Provider : disque RAW local bundled (Windows 7)', () => {
     // ACPI activée par le profil matériel (requis par la famille Vista+).
     expect(options?.acpi).toBe(true);
     expect(options?.memory_size).toBe(1536 * MiB);
+  });
+});
+
+describe('V86Provider : disque RAW local bundled (Windows 10 x86)', () => {
+  function makeWin10DiskManifest(): LocalDiskManifest {
+    return {
+      version: 1,
+      ref: 'windows-10-x86',
+      displayName: 'Windows 10 x86 (disque local)',
+      architecture: 'i386',
+      memoryMiB: 2048,
+      vgaMemoryMiB: 16,
+      license: 'Disque local de la codebase',
+      provenance: 'images/windows-10-x86/disk.img',
+      source: { path: 'images/windows-10-x86/disk.img', size: 20_000_000_000, mtimeMs: 0 },
+      disk: {
+        fileName: 'disk.img',
+        format: 'raw',
+        url: '/images/windows-10-x86/disk.img',
+        size: 20_000_000_000,
+        mtimeMs: 0,
+        sha256: 'd'.repeat(64),
+      },
+      engine: {
+        id: 'v86',
+        wasm: { url: '/v86/v86.wasm', size: 1, sha256: 'e'.repeat(64) },
+        bios: {
+          seabios: { url: '/v86/seabios.bin', size: 1, sha256: 'f'.repeat(64) },
+          vgabios: { url: '/v86/vgabios.bin', size: 1, sha256: '0'.repeat(64) },
+        },
+      },
+      boot: {
+        mode: 'disk-boot',
+        url: '/images/windows-10-x86/disk.img',
+        async: true,
+        size: 20_000_000_000,
+      },
+    };
+  }
+
+  function makeWin10DiskBootOS(): OSDefinition {
+    return makeOS({
+      id: 'windows-10-x86',
+      slug: 'windows-10-x86',
+      family: 'windows',
+      imageRef: 'windows-10-x86',
+      architecture: 'i386',
+      availability: 'planned',
+      launchProfiles: [
+        {
+          id: 'windows-10-x86',
+          engineId: 'v86',
+          executionMode: 'browser',
+          minMemoryMiB: 2048,
+          configuration: { memoryMiB: 2048, vgaMemoryMiB: 16, bootDevice: 'disk' },
+          hardwareProfile: { network: 'ne2k', acpi: true },
+          readiness: {
+            marker: 'LUMIBOOT_DISK_BOOT:windows-10-x86',
+            mode: 'disk-boot',
+            channel: 'vga',
+          },
+        },
+      ],
+    });
+  }
+
+  it('démarre le disque local en BIOS (hda/ACPI, 2048 Mio), sans noyau ni ISO', async () => {
+    const { provider, captured } = setup(makeManifest(), makeWin10DiskManifest());
+    await provider.start(makeWin10DiskBootOS(), document.createElement('div'));
+
+    const options = captured[0];
+    // Disque RAW lu par plages HTTP Range (`async`), mémoire 2048 Mio.
+    expect(options?.hda).toMatchObject({
+      url: '/images/windows-10-x86/disk.img',
+      async: true,
+      size: 20_000_000_000,
+    });
+    expect(options?.memory_size).toBe(2048 * MiB);
+    // ACPI activée par le profil matériel (invités NT Vista+).
+    expect(options?.acpi).toBe(true);
+    // Démarrage BIOS disque : aucun noyau Linux, jamais de CD-ROM/ISO.
+    expect(options?.bzimage).toBeUndefined();
+    expect(options?.initrd).toBeUndefined();
+    expect(options?.cmdline).toBeUndefined();
+    expect(options?.cdrom).toBeUndefined();
+    expect(options?.boot_order).toBeUndefined();
+  });
+
+  it('NIC ne2k pilotée par le profil matériel du catalogue', async () => {
+    const { provider, captured } = setup(makeManifest(), makeWin10DiskManifest());
+    await provider.start(makeWin10DiskBootOS(), document.createElement('div'), {
+      network: { mode: 'browser-fetch' },
+    });
+    expect(captured[0]?.net_device).toEqual({ relay_url: 'fetch', type: 'ne2k' });
   });
 });

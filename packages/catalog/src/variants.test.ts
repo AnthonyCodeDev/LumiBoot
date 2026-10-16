@@ -15,6 +15,9 @@ const debianDesktop = getSystemById('debian-12-i386-desktop')!;
 const debianXfce = getSystemById('debian-12-i386-xfce')!;
 const windowsMother = getSystemById('windows-7-x86')!;
 const windowsPro = getSystemById('windows-7-pro-sp1-x86')!;
+// Groupe Windows 10 : la mère x86 (expérimentale) + le stub x64 (non intégré).
+const windows10Mother = getSystemById('windows-10-x86')!;
+const windows10X64 = getSystemById('windows-10-x64')!;
 // Système réellement autonome (aucun groupe de variantes).
 const ubuntu = getSystemById('ubuntu-18-i386')!;
 
@@ -66,10 +69,7 @@ describe('groupe de variantes Windows 7', () => {
   it('trie la variante par défaut en premier (Professionnel → Lite)', () => {
     const group = getVariantGroup(windowsMother);
     expect(group).toHaveLength(2);
-    expect(group.map((system) => system.id)).toEqual([
-      'windows-7-pro-sp1-x86',
-      'windows-7-x86',
-    ]);
+    expect(group.map((system) => system.id)).toEqual(['windows-7-pro-sp1-x86', 'windows-7-x86']);
   });
 
   it('retrouve le même groupe depuis la mère comme depuis l’enfant', () => {
@@ -107,6 +107,46 @@ describe('groupe de variantes Windows 7', () => {
   });
 });
 
+describe('groupe de variantes Windows 10', () => {
+  it('trie la variante x86 (expérimentale) en premier, x64 en second', () => {
+    const group = getVariantGroup(windows10Mother);
+    expect(group).toHaveLength(2);
+    expect(group.map((system) => system.id)).toEqual(['windows-10-x86', 'windows-10-x64']);
+  });
+
+  it('retrouve le même groupe depuis la mère comme depuis l’enfant x64', () => {
+    const expected = ['windows-10-x86', 'windows-10-x64'];
+    expect(getVariantGroup(windows10X64).map((system) => system.id)).toEqual(expected);
+  });
+
+  it('retrouve la mère x86 depuis l’enfant x64', () => {
+    expect(getVariantParent(windows10X64).id).toBe('windows-10-x86');
+    expect(getVariantParentId(windows10X64)).toBe('windows-10-x86');
+    expect(getVariantParentId(windows10Mother)).toBe('windows-10-x86');
+  });
+
+  it('expose la mère neutre (32 bits) et le libellé du stub x64', () => {
+    // La mère porte le groupe (id neutre `windows-10-x86`) sans `variantGroupId`.
+    expect(windows10Mother.variantGroupId).toBeUndefined();
+    expect(windows10Mother.variantName).toBe('32 bits (expérimental)');
+    expect(windows10X64.variantGroupId).toBe('windows-10-x86');
+    expect(windows10X64.variantName).toBe('64 bits (non intégré)');
+  });
+
+  it('expose un variantOrder croissant (x86 < x64) et x86 par défaut', () => {
+    expect(windows10Mother.variantOrder).toBe(1);
+    expect(windows10X64.variantOrder).toBe(2);
+    expect(getDefaultVariant(windows10Mother).id).toBe('windows-10-x86');
+    expect(getDefaultVariant(windows10X64).id).toBe('windows-10-x86');
+  });
+
+  it('ne perd pas le stub x64 (même id, même slug, reste non intégré)', () => {
+    expect(windows10X64.id).toBe('windows-10-x64');
+    expect(windows10X64.slug).toBe('windows-10-x64');
+    expect(windows10X64.availability).toBe('resource-required');
+  });
+});
+
 describe('getDefaultVariant', () => {
   it('renvoie la meilleure variante du groupe Debian (la mère comme un enfant)', () => {
     expect(getDefaultVariant(debianMother).id).toBe('debian-12-i386-xfce');
@@ -126,6 +166,7 @@ describe('getDisplaySystems', () => {
     expect(display.some((system) => system.id === 'debian-12-i386-desktop')).toBe(false);
     expect(display.some((system) => system.id === 'debian-12-i386-xfce')).toBe(false);
     expect(display.some((system) => system.id === 'windows-7-pro-sp1-x86')).toBe(false);
+    expect(display.some((system) => system.id === 'windows-10-x64')).toBe(false);
   });
 
   it('conserve la mère Debian, la mère Windows 7 et les systèmes autonomes', () => {
@@ -134,10 +175,13 @@ describe('getDisplaySystems', () => {
     // La carte Windows 7 affichée est la MÈRE neutre, pas l'enfant Professionnel.
     expect(ids).toContain('windows-7-x86');
     expect(ids).not.toContain('windows-7-pro-sp1-x86');
+    // La carte Windows 10 affichée est la MÈRE x86, pas le stub x64.
+    expect(ids).toContain('windows-10-x86');
+    expect(ids).not.toContain('windows-10-x64');
     expect(ids).toContain('ubuntu-18-i386');
     expect(ids).toContain('macos-sequoia');
-    // 3 enfants repliés (2 Debian + 1 Windows).
-    expect(getDisplaySystems()).toHaveLength(systems.length - 3);
+    // 4 enfants repliés (2 Debian + 1 Windows 7 + 1 Windows 10).
+    expect(getDisplaySystems()).toHaveLength(systems.length - 4);
   });
 });
 
@@ -150,6 +194,11 @@ describe('hasVariants', () => {
   it('est vrai pour Windows 7 (mère comme enfant)', () => {
     expect(hasVariants(windowsMother)).toBe(true);
     expect(hasVariants(windowsPro)).toBe(true);
+  });
+
+  it('est vrai pour Windows 10 (mère x86 comme stub x64)', () => {
+    expect(hasVariants(windows10Mother)).toBe(true);
+    expect(hasVariants(windows10X64)).toBe(true);
   });
 
   it('est faux pour un système autonome', () => {

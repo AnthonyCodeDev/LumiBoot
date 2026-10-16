@@ -138,6 +138,33 @@ export const images = [
       'invitées restent en mémoire le temps de la session.',
   },
   {
+    id: 'windows-10-x86-image',
+    familyId: 'windows',
+    architecture: 'i386',
+    // Disque RAW installé de l'opérateur (images/windows-10-x86/disk.img, ignoré
+    // par Git) servi localement en HTTP Range et démarré par BIOS sous v86 —
+    // exactement le pipeline de Windows 7. Aucune ISO n'est distribuée : le
+    // disque n'est pas importé, il est lu directement par l'émulateur x86 32 bits.
+    // Variante principale (mère) du groupe Windows 10.
+    imageRef: 'windows-10-x86',
+    requirements: [
+      'Navigateur moderne avec WebAssembly (v86, 32 bits)',
+      'Disque RAW local servi en HTTP Range (images/windows-10-x86/disk.img)',
+      'Mémoire invitée 2048 Mio',
+      'Démarrage disque (MBR) ; pas de noyau Linux',
+      'Compatibilité Windows 10 / v86 32 bits NON validée',
+    ],
+    licenseNotes:
+      'Licence Windows requise (détenue par l’utilisateur). Aucune ISO ni aucun ' +
+      'disque propriétaire n’est distribué par LumiBoot.',
+    integrationNote:
+      'Réutilise le pipeline disque RAW local + v86 32 bits de Windows 7 (hda ' +
+      'IDE, HTTP Range, écritures invitées en mémoire le temps de la session). ' +
+      'Aucune ISO n’est distribuée. Windows 10 n’est PAS annoncé comme ' +
+      'démarrant tant qu’un boot réel n’a pas été prouvé : `validated` reste ' +
+      'faux et la disponibilité dérivée reste `planned`.',
+  },
+  {
     id: 'windows-10-x64-image',
     familyId: 'windows',
     architecture: 'x86_64',

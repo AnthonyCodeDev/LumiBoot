@@ -331,8 +331,52 @@ export const launchProfiles = [
       'installation ni média à importer.',
   },
   {
+    id: 'windows-10-x86',
+    imageId: 'windows-10-x86-image',
+    // v86 est le seul moteur navigateur x86 32 bits intégré : la variante x86
+    // démarre directement le disque RAW local par BIOS, sans média à importer
+    // ni noyau Linux — même pipeline que Windows 7.
+    engineId: 'v86',
+    executionMode: 'browser',
+    // Plancher 2 Gio (aligné sur le lot matériel) : Windows 10 exige plus de
+    // mémoire que Windows 7. v86 arrondit `memory_size` à un multiple de 128 Kio.
+    minMemoryMiB: 2048,
+    configuration: {
+      memoryMiB: 2048,
+      vgaMemoryMiB: 16,
+      bootDevice: 'disk',
+    },
+    // Invité NT : pilotes virtio absents, `ne2k` est le support commun émulé par
+    // v86 (seuls `ne2k` et `virtio` existent). ACPI est requise par la famille
+    // Vista+ (voir docs/windows-nt.md de v86). Pas de virtio.
+    hardwareProfile: { ...pcHardware('ne2k'), acpi: true },
+    // Disque local : le démarrage est prouvé par une lecture disque réelle (le
+    // BIOS/l'amorce exécute l'image), jamais par un marqueur LumiBoot simulé.
+    readiness: diskBootReadiness('windows-10-x86'),
+    slug: 'windows-10-x86',
+    // Système MÈRE du groupe de variantes Windows 10 : pas de `variantGroupId`.
+    // Le nom de base est complété par le `variantName` dans le sélecteur.
+    displayName: 'Windows 10',
+    versionLabel: 'x86 (32 bits)',
+    variantName: '32 bits (expérimental)',
+    // x86 est la variante mise en avant du groupe : `variantOrder` le plus petit,
+    // donc sélectionnée par défaut.
+    variantOrder: 1,
+    // Aucun boot réel de Windows 10 x86 sous v86 n'a été prouvé : `validated`
+    // reste faux et la disponibilité dérivée reste `planned` (aucun faux `ready`).
+    validated: false,
+    description:
+      'Variante expérimentale : Windows 10 x86 (32 bits) tenté sous v86 à partir ' +
+      'd’un disque RAW local démarré par BIOS. Compatibilité Windows 10 / v86 ' +
+      'non validée — aucun boot réel prouvé à ce jour.',
+  },
+  {
     id: 'windows-10-x64',
     imageId: 'windows-10-x64-image',
+    // Moteur x86-64 NON intégré : le stub est conservé tel quel (même id, même
+    // moteur, même média user-import) et rattaché comme variante FUTURE du
+    // groupe Windows 10 x86. Aucun lancement n'est possible tant que le moteur
+    // n'est pas branché.
     engineId: 'wasm-x86_64',
     executionMode: 'browser',
     minMemoryMiB: 4096,
@@ -345,6 +389,11 @@ export const launchProfiles = [
     slug: 'windows-10-x64',
     displayName: 'Windows 10',
     versionLabel: '64 bits',
+    // Variant enfant rattaché à la mère x86 `windows-10-x86` : variante future
+    // NON intégrée (v86 ne supporte pas le 64 bits), affichée après la mère.
+    variantGroupId: 'windows-10-x86',
+    variantName: '64 bits (non intégré)',
+    variantOrder: 2,
     validated: false,
     description: 'Une version moderne de Windows pensée pour un moteur navigateur adapté.',
   },

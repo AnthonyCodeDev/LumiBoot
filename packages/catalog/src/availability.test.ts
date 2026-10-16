@@ -143,9 +143,7 @@ describe('catalogue : Windows 7 Professionnel (enfant validé) sous v86', () => 
   it('est sélectionnable, moteur v86 intégré, disponibilité dérivée de validated', () => {
     const windows = getSystemById('windows-7-pro-sp1-x86');
     const profile = windows?.launchProfiles[0];
-    const definition = launchProfiles.find(
-      (candidate) => candidate.id === 'windows-7-pro-sp1-x86',
-    );
+    const definition = launchProfiles.find((candidate) => candidate.id === 'windows-7-pro-sp1-x86');
     expect(windows).not.toBeNull();
     expect(windows?.family).toBe('windows');
     expect(windows?.architecture).toBe('i386');
@@ -237,6 +235,53 @@ describe('catalogue : Windows 7 Lite (mère du groupe) sous v86', () => {
   });
 });
 
+describe('catalogue : Windows 10 x86 (mère expérimentale) sous v86', () => {
+  it('a une image + moteur v86 intégré mais reste `planned` (non validé)', () => {
+    const system = getSystemById('windows-10-x86');
+    const profile = system?.launchProfiles[0];
+    const definition = launchProfiles.find((candidate) => candidate.id === 'windows-10-x86');
+    expect(system).not.toBeNull();
+    expect(system?.family).toBe('windows');
+    expect(system?.architecture).toBe('i386');
+    expect(system?.imageRef).toBe('windows-10-x86');
+    expect(profile?.engineId).toBe('v86');
+    expect(profile && isEngineIntegrated(profile.engineId)).toBe(true);
+    // `validated` reste faux tant qu'aucun boot réel n'est prouvé.
+    expect(definition?.validated).toBe(false);
+    // La disponibilité DÉRIVÉE ne ment pas : pas de `ready` sans validation.
+    expect(system?.availability).toBe('planned');
+  });
+
+  it('n’est jamais promu `ready` par un contournement de `validated`', () => {
+    // Le moteur est intégré et l'image est référencée : le SEUL frein honnête
+    // est `validated: false`. On le vérifie explicitement sur la définition.
+    const definition = launchProfiles.find((candidate) => candidate.id === 'windows-10-x86');
+    expect(definition?.validated).toBe(false);
+    expect(getSystemById('windows-10-x86')?.availability).not.toBe('ready');
+  });
+});
+
+describe('catalogue : Windows 10 x64 (stub futur, moteur non intégré)', () => {
+  it('reste `resource-required` : média utilisateur + moteur x86-64 non intégré', () => {
+    const system = getSystemById('windows-10-x64');
+    const profile = system?.launchProfiles[0];
+    expect(system).not.toBeNull();
+    expect(system?.architecture).toBe('x86_64');
+    expect(system?.imageRef).toBeUndefined();
+    expect(system?.mediaStrategy).toBe('user-import');
+    expect(profile?.engineId).toBe('wasm-x86_64');
+    expect(profile && isEngineIntegrated(profile.engineId)).toBe(false);
+    expect(system?.availability).toBe('resource-required');
+  });
+
+  it('reste rattaché au groupe Windows 10 x86 comme variante future', () => {
+    const system = getSystemById('windows-10-x64');
+    expect(system?.variantGroupId).toBe('windows-10-x86');
+    expect(system?.variantName).toBe('64 bits (non intégré)');
+    expect(system?.variantOrder).toBe(2);
+  });
+});
+
 describe('catalogue : profils matériels et preuves de démarrage', () => {
   it('chaque profil porte un matériel et un marqueur explicites', () => {
     for (const system of systems) {
@@ -260,9 +305,9 @@ describe('catalogue : profils matériels et preuves de démarrage', () => {
     expect(getSystemById('ubuntu-18-i386')?.launchProfiles[0]?.hardwareProfile?.network).toBe(
       'virtio',
     );
-    expect(getSystemById('windows-7-pro-sp1-x86')?.launchProfiles[0]?.hardwareProfile?.network).toBe(
-      'ne2k',
-    );
+    expect(
+      getSystemById('windows-7-pro-sp1-x86')?.launchProfiles[0]?.hardwareProfile?.network,
+    ).toBe('ne2k');
   });
 
   it('conserve le marqueur Debian historique', () => {

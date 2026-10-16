@@ -41,4 +41,21 @@ describe('validateCatalog', () => {
       expect((error as CatalogValidationError).issues[0]?.message).toContain('dupliqué');
     }
   });
+
+  it('rejette un variant pointant vers un groupe inexistant', () => {
+    const catalog = cloneCatalog();
+    const child = catalog.find((entry) => entry.id === 'windows-10-x64')!;
+    child.variantGroupId = 'windows-10-inexistant';
+    expect(() => validateCatalog(catalog)).toThrow(CatalogValidationError);
+  });
+
+  it('accepte le groupe Windows 10 : mère x86 sans groupe, stub x64 rattaché', () => {
+    const catalog = cloneCatalog();
+    const mother = catalog.find((entry) => entry.id === 'windows-10-x86')!;
+    const child = catalog.find((entry) => entry.id === 'windows-10-x64')!;
+    expect(mother.variantGroupId).toBeUndefined();
+    expect(child.variantGroupId).toBe('windows-10-x86');
+    // Le catalogue complet (dont la mère x86 + l'enfant x64) passe Zod.
+    expect(() => validateCatalog(catalog)).not.toThrow();
+  });
 });

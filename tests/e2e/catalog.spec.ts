@@ -45,3 +45,27 @@ test.describe('Bibliothèque', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 });
+
+/**
+ * Groupe Windows 10 : la carte affichée est la MÈRE x86 (expérimentale, non
+ * validée), le stub x64 (moteur x86-64 non intégré) est replié comme variante.
+ * Ces attentes restent honnêtes : aucun `ready` n'est promis tant que le boot
+ * réel n'est pas prouvé (voir tests/e2e/windows10-desktop.spec.ts).
+ */
+test.describe('Windows 10 (groupe de variantes)', () => {
+  test('affiche la mère x86 et replie la variante x64 non intégrée', async ({ page }) => {
+    await page.goto('/');
+    await page.getByLabel('Rechercher un système').fill('windows');
+
+    const mother = page.locator('.os-card[data-id="windows-10-x86"]');
+    await expect(mother).toHaveCount(1);
+    // Le stub x64 n'apparaît PAS comme carte autonome : il se choisit depuis la
+    // fiche de la mère.
+    await expect(page.locator('.os-card[data-id="windows-10-x64"]')).toHaveCount(0);
+    // Non validée : jamais annoncée « Disponible » (disponibilité `planned`).
+    await expect(mother.locator('.card-status')).toHaveAttribute('data-state', 'planned');
+
+    await mother.click();
+    await expect(page).toHaveURL(/\/systems\/windows-10-x86$/);
+  });
+});

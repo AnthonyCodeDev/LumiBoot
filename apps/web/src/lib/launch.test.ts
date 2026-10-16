@@ -127,6 +127,15 @@ describe('getLaunchReadiness', () => {
     expect(readiness.canLaunch).toBe(false);
     expect(readiness.reason).toMatch(/x86_64/);
   });
+
+  it('bloque Windows 10 64 bits tant que le moteur wasm-x86_64 n’est pas intégré', () => {
+    // v86 n’émule que le x86 32 bits : le profil Windows 10 64 bits cible
+    // `wasm-x86_64`, non intégré. Le lancement doit être refusé explicitement,
+    // sans jamais promettre un boot (voir docs/windows-10.md).
+    const readiness = getLaunchReadiness(system('windows-10-x64'));
+    expect(readiness.canLaunch).toBe(false);
+    expect(readiness.reason).toMatch(/wasm-x86_64/);
+  });
 });
 
 describe('checkSystemRuntimeAvailability', () => {

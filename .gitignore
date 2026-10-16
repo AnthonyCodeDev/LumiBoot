@@ -80,6 +80,7 @@ lerna-debug.log*
 # (*.img/*.iso, cf. plus haut) n'est jamais versionné.
 /images/windows-7-x86/
 /images/windows-7-pro-sp1-x86/
+/images/windows-10-x86/
 /images/*/provenance.txt
 /media/
 

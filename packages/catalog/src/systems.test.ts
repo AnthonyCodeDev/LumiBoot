@@ -42,3 +42,40 @@ describe('getDeclaredReadiness — séparation déclaré / runtime', () => {
     }
   });
 });
+
+/**
+ * Windows 10 x86 réutilise le pipeline disque RAW local de Windows 7 sous v86.
+ * Aucun boot réel n'étant prouvé, la disponibilité reste `planned` : `validated`
+ * ne doit JAMAIS être forcé à `true` pour maquiller un `ready`.
+ */
+describe('Windows 10 x86 — pipeline disque local sous v86 (non validé)', () => {
+  it('expose le disque local RAW installé et le média « bundled » par défaut', () => {
+    const system = getSystemById('windows-10-x86')!;
+    expect(system.architecture).toBe('i386');
+    expect(system.imageRef).toBe('windows-10-x86');
+    expect(system.mediaStrategy).toBe('bundled');
+    expect(getDeclaredReadiness(system)).toEqual({
+      availability: 'planned',
+      mediaSource: 'local-disk',
+    });
+  });
+
+  it('utilise v86, ne2k + ACPI, 2048 Mio et le démarrage disque', () => {
+    const profile = getSystemById('windows-10-x86')!.launchProfiles[0]!;
+    expect(profile.engineId).toBe('v86');
+    expect(profile.executionMode).toBe('browser');
+    expect(profile.hardwareProfile?.network).toBe('ne2k');
+    expect(profile.hardwareProfile?.acpi).toBe(true);
+    expect(profile.configuration?.memoryMiB).toBe(2048);
+    expect(profile.minMemoryMiB).toBe(2048);
+    expect(profile.configuration?.bootDevice).toBe('disk');
+    expect(profile.readiness?.mode).toBe('disk-boot');
+    expect(profile.readiness?.marker).toBe('LUMIBOOT_DISK_BOOT:windows-10-x86');
+  });
+
+  it('reste `planned` : aucun faux `ready` sans boot réel', () => {
+    const system = getSystemById('windows-10-x86')!;
+    expect(system.availability).toBe('planned');
+    expect(system.availability).not.toBe('ready');
+  });
+});
