@@ -9,8 +9,9 @@ import type {
  *
  * La balise est écrite par le système réellement démarré (unité systemd
  * `lumiboot-ready.service`, `ttyS0` par défaut). Elle ne doit JAMAIS être
- * produite côté JavaScript : elle est l'unique preuve que le noyau invité est
- * opérationnel, et donc la seule condition d'entrée dans l'état `running`.
+ * produite côté JavaScript : c'est le chemin rapide vers l'état `running`. Si
+ * elle n'arrive pas dans le délai, la session est considérée démarrée par repli
+ * (l'émulateur tourne) ; le marqueur n'est donc plus l'unique condition.
  *
  * Correctif audit #20 : le marqueur, le canal et le délai proviennent du contrat
  * `readiness` du PROFIL (catalogue) et ne sont plus codés en dur. Le flux est lu

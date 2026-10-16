@@ -170,7 +170,7 @@ describe('V86Instance', () => {
     ).toHaveLength(1);
   });
 
-  it('émet GUEST_READY_TIMEOUT si le marqueur n’arrive pas dans le délai', async () => {
+  it('passe en running si le marqueur n’arrive pas dans le délai', async () => {
     vi.useFakeTimers();
     try {
       const emulator = new FakeV86();
@@ -188,12 +188,13 @@ describe('V86Instance', () => {
       emulator.emit('emulator-ready', undefined);
       await vi.advanceTimersByTimeAsync(1000);
 
-      expect(events).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ type: 'error', code: 'GUEST_READY_TIMEOUT' }),
-        ]),
-      );
-      expect(emulator.listenerCount('serial0-output-byte')).toBe(0);
+      // Le délai dépassé n'est plus fatal : repli sur `running`, sans erreur.
+      expect(events.some((event) => event.type === 'error')).toBe(false);
+      expect(
+        events.filter((event) => event.type === 'state' && event.state === 'running'),
+      ).toHaveLength(1);
+      // La session continue : les listeners ne sont plus retirés au timeout.
+      expect(emulator.listenerCount('serial0-output-byte')).toBe(1);
     } finally {
       vi.useRealTimers();
     }
@@ -215,6 +216,37 @@ describe('V86Instance', () => {
       instance.subscribe((event) => events.push(event));
 
       emulator.emit('emulator-ready', undefined);
+      emitMarker(emulator);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(events.some((event) => event.type === 'error')).toBe(false);
+      expect(
+        events.filter((event) => event.type === 'state' && event.state === 'running'),
+      ).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('n’émet running qu’une seule fois si le marqueur arrive après le repli du délai', async () => {
+    vi.useFakeTimers();
+    try {
+      const emulator = new FakeV86();
+      const instance = new V86Instance({
+        providerId: 'v86',
+        systemId: 'sample',
+        emulator: emulator as unknown as V86,
+        console: createConsoleStub(),
+        readiness: { marker: GUEST_READY_MARKER, timeoutMs: 1000 },
+      });
+      instance.wire();
+      const events: SessionEvent[] = [];
+      instance.subscribe((event) => events.push(event));
+
+      emulator.emit('emulator-ready', undefined);
+      // Repli : running est émis à l'échéance du délai…
+      await vi.advanceTimersByTimeAsync(1000);
+      // …puis le marqueur arrive tardivement : aucun second running.
       emitMarker(emulator);
       await vi.advanceTimersByTimeAsync(2000);
 

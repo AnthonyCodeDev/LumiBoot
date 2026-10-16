@@ -138,6 +138,10 @@ export const guestReadinessModeSchema = z.enum(['guest-marker', 'disk-boot']);
  * ne doit jamais être produite côté JavaScript. Valeurs par défaut documentées :
  * `mode` = `'guest-marker'`, `channel` = `'serial'` (ttyS0), `timeoutMs` = 120 000 ms.
  * En mode `disk-boot`, `marker` sert d'identifiant documentaire (jamais scanné).
+ *
+ * `timeoutMs` est un **seuil de repli**, pas un délai d'échec : le marqueur
+ * reste le chemin rapide (transition plus tôt vers `running`) ; s'il n'arrive
+ * pas avant l'échéance, la session est tout de même considérée démarrée (repli).
  */
 export const guestReadinessSchema = z.object({
   marker: z.string().min(1),
@@ -249,6 +253,8 @@ export const DEFAULT_HARDWARE_PROFILE: HardwareProfile = {
 /**
  * Valeurs par défaut documentées de la preuve de démarrage (voir
  * {@link guestReadinessSchema}). Utilisées lorsqu'un profil omet `readiness`.
+ * `timeoutMs` est un seuil de repli : au-delà sans marqueur, la session est
+ * considérée démarrée, sans erreur.
  */
 export const DEFAULT_GUEST_READINESS: GuestReadiness = {
   marker: 'LUMIBOOT_GUEST_READY',

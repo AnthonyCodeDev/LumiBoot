@@ -28,7 +28,8 @@ export interface V86InstanceDeps {
  *   rejoués dans l'ordre (aucune perte de la phase `booting`) ;
  * - `stop()` / `dispose()` sont idempotents et partagent une même promesse de
  *   nettoyage, même si `destroy()` rejette ;
- * - `running` n'est émis qu'une seule fois, sur preuve du marqueur invité ;
+ * - `running` n'est émis qu'une seule fois : tôt sur preuve du marqueur invité,
+ *   ou par repli à l'échéance du délai si le marqueur n'arrive pas ;
  * - aucun événement tardif (`running`, `stopped`) n'est émis après `dispose()`.
  */
 export class V86Instance implements VMInstance {
@@ -52,6 +53,7 @@ export class V86Instance implements VMInstance {
   #stopping = false;
   #stopSignalled = false;
   #disposed = false;
+  #runningEmitted = false;
   #readyTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(deps: V86InstanceDeps) {
@@ -140,6 +142,19 @@ export class V86Instance implements VMInstance {
     for (const listener of this.#listeners) listener(event);
   }
 
+  /**
+   * Émet `running` au plus une fois. Le marqueur invité est le chemin rapide ;
+   * l'échéance du délai de disponibilité est un repli (l'émulateur tourne, donc
+   * la session est considérée démarrée). Quoi qu'il arrive, un seul `running`
+   * est publié.
+   */
+  #emitRunning(): void {
+    if (this.#runningEmitted) return;
+    this.#runningEmitted = true;
+    this.#clearReadyTimeout();
+    this.#emit({ type: 'state', state: 'running' });
+  }
+
   readonly #onEmulatorReady = (): void => {
     if (this.#disposed || this.#stopping) return;
     // L'émulateur (WASM) est prêt : le noyau invité COMMENCE à démarrer.
@@ -154,19 +169,18 @@ export class V86Instance implements VMInstance {
   };
 
   /**
-   * Arme le délai d'attente du marqueur, issu de `readiness.timeoutMs`. Le
-   * marqueur reste l'unique preuve d'un démarrage réel : un délai dépassé est
-   * donc un échec, jamais un faux `running`.
+   * Arme le délai de disponibilité, issu de `readiness.timeoutMs`. Le marqueur
+   * reste le chemin rapide : s'il arrive avant l'échéance, `running` est émis
+   * plus tôt. Passé le délai sans marqueur, on ne fait PLUS échouer la session :
+   * l'émulateur tourne et l'écran est visible, on considère donc la session
+   * démarrée (`running` par repli). Un dépassement n'est plus une erreur.
    */
   #armReadyTimeout(): void {
     if (this.#readyTimer !== null) return;
     this.#readyTimer = setTimeout(() => {
       this.#readyTimer = null;
       if (this.#disposed || this.#stopping || this.#detector.detected) return;
-      this.#failBoot(
-        'GUEST_READY_TIMEOUT',
-        `Le marqueur de disponibilité « ${this.#detector.marker} » n'a pas été détecté dans le délai imparti.`,
-      );
+      this.#emitRunning();
     }, this.#detector.timeoutMs);
   }
 
@@ -193,8 +207,7 @@ export class V86Instance implements VMInstance {
   readonly #onSerialByte = (byte: number): void => {
     if (this.#disposed || this.#stopping) return;
     if (this.#detector.pushByte(byte)) {
-      this.#clearReadyTimeout();
-      this.#emit({ type: 'state', state: 'running' });
+      this.#emitRunning();
     }
   };
 
@@ -202,8 +215,7 @@ export class V86Instance implements VMInstance {
   readonly #onScreenChar = (arg: V86Event['screen-put-char']): void => {
     if (this.#disposed || this.#stopping) return;
     if (this.#detector.pushByte(arg[2])) {
-      this.#clearReadyTimeout();
-      this.#emit({ type: 'state', state: 'running' });
+      this.#emitRunning();
     }
   };
 
@@ -219,8 +231,7 @@ export class V86Instance implements VMInstance {
     const [channelNr, byteCount] = arg;
     if (channelNr !== 0 || byteCount <= 0) return;
     if (this.#detector.markDiskBoot()) {
-      this.#clearReadyTimeout();
-      this.#emit({ type: 'state', state: 'running' });
+      this.#emitRunning();
     }
   };
 
