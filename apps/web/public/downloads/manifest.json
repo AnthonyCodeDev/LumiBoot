@@ -1,41 +1,41 @@
 {
-  "version": "1.0.1",
+  "version": "1.0.2",
   "wispVersion": 1,
-  "generatedAt": "2026-10-15T20:34:44Z",
+  "generatedAt": "2026-10-16T00:11:36Z",
   "platforms": {
     "windows-x64": {
       "file": "LumiBoot-Network-windows-amd64.exe",
       "url": "/downloads/LumiBoot-Network-windows-amd64.exe",
-      "size": 5603328,
-      "sha256": "4c5f2db54fb94929fd0db72d9af487c2fe21891a148a5e8d1c8a0e6a79cbf82f",
+      "size": 5623808,
+      "sha256": "472828fb1a1335cef6b536a51a2f7ba5affad69af182ef02eade8ea27fc0bfc9",
       "published": true
     },
     "windows-arm64": {
       "file": "LumiBoot-Network-windows-arm64.exe",
       "url": "/downloads/LumiBoot-Network-windows-arm64.exe",
-      "size": 5249024,
-      "sha256": "14490af0aed2bf8c23417c0290d5904c2e184f9bb39d791d9f05bb585d1f7449",
+      "size": 5270016,
+      "sha256": "13708081651a202843c59a4d1745cbcd774be4fc8e8be8642ebbf01064136d42",
       "published": true
     },
     "linux-x64": {
       "file": "LumiBoot-Network-linux-amd64.tar.gz",
       "url": "/downloads/LumiBoot-Network-linux-amd64.tar.gz",
-      "size": 2345378,
-      "sha256": "9b1b25b8766bfea3b21e07680b24a91778aeb45eba54a58d16234a6e85f9eccc",
+      "size": 2354992,
+      "sha256": "58cd25f5f5ed899053ca9e4bd078466063bb6f920b0fc2ec93ce4ece6676d96e",
       "published": true
     },
     "linux-arm64": {
       "file": "LumiBoot-Network-linux-arm64.tar.gz",
       "url": "/downloads/LumiBoot-Network-linux-arm64.tar.gz",
-      "size": 2148356,
-      "sha256": "d61b0833f6bab22ac14afccf3cbd30803f99bedc3a8115774f5d4df4b18c002d",
+      "size": 2158718,
+      "sha256": "b2ce48a34848ab174f10c27eb28b6677105cecb3d16fa225738b2e08e505dfa8",
       "published": true
     },
     "macos": {
       "file": "LumiBoot-Network-macos-universal.tar.gz",
       "url": "/downloads/LumiBoot-Network-macos-universal.tar.gz",
-      "size": 4603677,
-      "sha256": "3bbb4bb957163656653905e43fbb8203849632b0109eea809947d149fc79874a",
+      "size": 4618845,
+      "sha256": "3ba34445a992c8b375db0f6dcaeab1147c75ec8c77379cd3d2a7765f34817d4c",
       "published": true,
       "signed": false,
       "notarized": false
