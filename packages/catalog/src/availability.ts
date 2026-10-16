@@ -15,6 +15,12 @@ export interface SystemAvailabilityFacts {
   readonly engineIntegrated: boolean;
   /** Le fonctionnement a été validé par un boot réel prouvé. */
   readonly validated: boolean;
+  /**
+   * Le média système doit être fourni par l'utilisateur (aucune ressource
+   * distribuée). Facteur d'honnêteté : tant que `hasImage` est faux, l'état
+   * effectif devient `resource-required` au lieu d'un `planned` indifférencié.
+   */
+  readonly requiresUserMedia?: boolean;
   /** Statut de repli lorsque les conditions ne sont pas réunies. */
   readonly declared?: Availability;
 }
@@ -36,7 +42,13 @@ export function getEffectiveAvailability(facts: SystemAvailabilityFacts): Availa
   if (available) return 'ready';
 
   const declared = facts.declared ?? 'planned';
-  return declared === 'ready' ? 'planned' : declared;
+  // Un `ready` déclaré mais non prouvé est toujours rétrogradé.
+  if (declared === 'ready') return 'planned';
+  // Un média utilisateur requis et non encore importé est un état à part
+  // entière : le système est intégré, seul le média manque. On ne le déguise
+  // ni en `ready` (fausse promesse) ni en `planned` (perte d'information).
+  if (facts.requiresUserMedia === true && declared === 'planned') return 'resource-required';
+  return declared;
 }
 
 /**
@@ -53,7 +65,13 @@ export function getEffectiveAvailability(facts: SystemAvailabilityFacts): Availa
 export function getAggregatedAvailability(
   candidates: readonly SystemAvailabilityFacts[],
 ): Availability {
-  if (candidates.some((facts) => getEffectiveAvailability(facts) === 'ready')) return 'ready';
+  if (candidates.length === 0) return 'planned';
+
+  const effective = candidates.map((facts) => getEffectiveAvailability(facts));
+  if (effective.includes('ready')) return 'ready';
+  // `resource-required` prime sur `planned` : l'information « média à fournir »
+  // ne doit jamais être masquée par un état plus générique.
+  if (effective.includes('resource-required')) return 'resource-required';
 
   const declared = candidates.find((facts) => facts.declared !== undefined)?.declared;
   return declared !== undefined && declared !== 'ready' ? declared : 'planned';

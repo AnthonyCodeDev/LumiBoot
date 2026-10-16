@@ -206,7 +206,8 @@ dans [`adr/0007-network-proxy.md`](adr/0007-network-proxy.md) et documenté dans
 | Debian 12 i386 Desktop | Navigateur avec v86 | Flavor graphique (Xorg + Openbox) ; NON construit, NON testé, non-`ready` (voir [`debian-desktop.md`](debian-desktop.md)) |
 | Ubuntu historique i386 | Navigateur avec v86 | Étude de compatibilité, version par version |
 | Fedora, Ubuntu et Mint modernes x64 | Navigateur avec moteur compatible local | Support local uniquement, sans backend de virtualisation |
-| Windows anciens x86 | Navigateur avec moteur compatible local | Comportement et licence à vérifier |
+| Windows 7 x86 | Navigateur avec v86 (média importé par l'utilisateur) | Sélectionnable, moteur intégré, média non distribué : état `resource-required`, jamais `ready` sans boot réel validé (voir [`windows-7.md`](windows-7.md)) |
+| Windows anciens x86 (autres) | Navigateur avec moteur compatible local | Comportement et licence à vérifier |
 | Windows 10/11 x64 | Non prioritaire | Aucun support direct par v86 ; dépend d'un moteur compatible local |
 | macOS modernes | Navigateur avec moteur compatible local | Étude de faisabilité, sans infrastructure distante |
 | macOS historiques Intel | Étude séparée par version | Ne pas promettre « toutes les versions » |

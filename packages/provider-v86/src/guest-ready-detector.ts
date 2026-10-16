@@ -1,4 +1,8 @@
-import type { GuestReadiness, GuestReadinessChannel } from '@lumiboot/contracts';
+import type {
+  GuestReadiness,
+  GuestReadinessChannel,
+  GuestReadinessMode,
+} from '@lumiboot/contracts';
 
 /**
  * Détection du marqueur de disponibilité émis par le système invité.
@@ -15,6 +19,7 @@ import type { GuestReadiness, GuestReadinessChannel } from '@lumiboot/contracts'
  * L'INSTANCE (pas d'une constante globale).
  */
 const DEFAULT_CHANNEL: GuestReadinessChannel = 'serial';
+const DEFAULT_MODE: GuestReadinessMode = 'guest-marker';
 const DEFAULT_TIMEOUT_MS = 120_000;
 
 /** Marge du tampon au-delà du marqueur, pour absorber le bruit du reste du flux. */
@@ -26,6 +31,7 @@ export class GuestReadyDetector {
   readonly #marker: string;
   readonly #tailLength: number;
   readonly #channel: GuestReadinessChannel;
+  readonly #mode: GuestReadinessMode;
   readonly #timeoutMs: number;
 
   constructor(readiness: GuestReadiness) {
@@ -35,6 +41,7 @@ export class GuestReadyDetector {
     this.#marker = readiness.marker;
     this.#tailLength = readiness.marker.length + EXTRA_TAIL_LENGTH;
     this.#channel = readiness.channel ?? DEFAULT_CHANNEL;
+    this.#mode = readiness.mode ?? DEFAULT_MODE;
     this.#timeoutMs = readiness.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
@@ -46,6 +53,11 @@ export class GuestReadyDetector {
   /** Canal surveillé (`serial` ou `vga`). */
   get channel(): GuestReadinessChannel {
     return this.#channel;
+  }
+
+  /** Mode de preuve (`guest-marker` par défaut, `disk-boot` pour un média importé). */
+  get mode(): GuestReadinessMode {
+    return this.#mode;
   }
 
   /** Délai maximal d'attente du marqueur, en millisecondes. */
@@ -62,6 +74,16 @@ export class GuestReadyDetector {
     // Le marqueur est ASCII : aucun problème de frontière UTF-8 ici.
     this.#tail = (this.#tail + String.fromCharCode(byte & 0xff)).slice(-this.#tailLength);
     if (!this.#tail.includes(this.#marker)) return false;
+    this.#detected = true;
+    return true;
+  }
+
+  /**
+   * Mode `disk-boot` : la preuve est une lecture réelle du disque dur, pas un
+   * marqueur. Retourne `true` une seule fois, au premier accès disque observé.
+   */
+  markDiskBoot(): boolean {
+    if (this.#detected) return false;
     this.#detected = true;
     return true;
   }

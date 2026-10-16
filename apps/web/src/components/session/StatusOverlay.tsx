@@ -18,18 +18,28 @@ export function StatusOverlay({ session, system }: StatusOverlayProps) {
   const launchProfile = getPrimaryLaunchProfile(system);
 
   if (session.state === 'error') {
+    const mediaRequired = session.error?.code === 'MEDIA_REQUIRED';
     return (
       <div className="status-overlay" role="alert">
         <span className="status-badge" data-tone="error">
-          INDISPONIBLE
+          {mediaRequired ? 'RESSOURCE REQUISE' : 'INDISPONIBLE'}
         </span>
-        <h2>Session non disponible pour le moment.</h2>
+        <h2>
+          {mediaRequired ? 'Média système manquant.' : 'Session non disponible pour le moment.'}
+        </h2>
         <p>{session.error?.message ?? 'Le moteur de ce système n’est pas encore prêt.'}</p>
-        <p>
-          {system.displayName} reste au statut « {system.availability} ». L&apos;écran apparaîtra
-          lorsque le profil de lancement réel (<code>{launchProfile.engineId}</code>) pourra
-          démarrer ce système.
-        </p>
+        {mediaRequired ? (
+          <p>
+            Retournez à la fiche de {system.displayName} pour importer un média que vous détenez
+            légalement. Aucune image n’est fournie par LumiBoot.
+          </p>
+        ) : (
+          <p>
+            {system.displayName} reste au statut « {system.availability} ». L’écran apparaîtra
+            lorsque le profil de lancement réel (<code>{launchProfile.engineId}</code>) pourra
+            démarrer ce système.
+          </p>
+        )}
         {session.error ? (
           <p>
             Code : <code>{session.error.code}</code>

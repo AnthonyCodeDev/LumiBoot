@@ -1,6 +1,72 @@
-import { Link } from 'react-router-dom';
+import { useEffect, useId, useRef, useState } from 'react';
+import type { MouseEvent } from 'react';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 
 export function Topbar() {
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
+  const menuId = useId();
+  const menuRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+
+  const onHome = location.pathname === '/';
+  const catalogueActive = onHome && location.hash === '#catalogue';
+
+  function scrollToCatalogue() {
+    document.getElementById('catalogue')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function handleCatalogueClick(event: MouseEvent<HTMLAnchorElement>) {
+    setOpen(false);
+    if (location.pathname === '/') {
+      event.preventDefault();
+      window.history.replaceState(null, '', '/#catalogue');
+      scrollToCatalogue();
+    }
+  }
+
+  // Arrivée sur /#catalogue depuis une autre page : descendre vers la section
+  // une fois le contenu d'accueil monté (ScrollToTop a déjà remis en haut).
+  useEffect(() => {
+    if (location.pathname === '/' && location.hash === '#catalogue') {
+      scrollToCatalogue();
+    }
+  }, [location.pathname, location.hash]);
+
+  // Fermer le menu mobile au changement de route.
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
+
+  // Fermer au clic hors menu + à Escape (focus rendu au bouton).
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target as Node | null;
+      if (
+        target &&
+        menuRef.current &&
+        !menuRef.current.contains(target) &&
+        toggleRef.current &&
+        !toggleRef.current.contains(target)
+      ) {
+        setOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        toggleRef.current?.focus();
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open ]);
+
   return (
     <header className="topbar">
       <Link to="/" className="wordmark" aria-label="LumiBoot, accueil">
@@ -38,6 +104,54 @@ export function Topbar() {
           Boot
         </span>
       </Link>
+
+      <div className="topbar-menu" id={menuId} ref={menuRef} data-open={open}>
+        <nav aria-label="Navigation principale">
+          <ul className="topbar-nav">
+            <li>
+              <NavLink
+                to="/"
+                end
+                className={({ isActive }) => (isActive ? 'topbar-link active' : 'topbar-link')}
+                onClick={() => setOpen(false)}
+              >
+                Accueil
+              </NavLink>
+            </li>
+            <li>
+              <Link
+                to="/#catalogue"
+                className={catalogueActive ? 'topbar-link active' : 'topbar-link'}
+                aria-current={catalogueActive ? 'true' : undefined}
+                onClick={handleCatalogueClick}
+              >
+                Catalogue
+              </Link>
+            </li>
+          </ul>
+        </nav>
+        <Link to="/#catalogue" className="btn btn-primary topbar-cta" onClick={handleCatalogueClick}>
+          Explorer le catalogue
+        </Link>
+      </div>
+
+      <button
+        type="button"
+        className="topbar-toggle"
+        ref={toggleRef}
+        aria-expanded={open}
+        aria-controls={menuId}
+        aria-label={open ? 'Fermer le menu de navigation' : 'Ouvrir le menu de navigation'}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          {open ? (
+            <path d="M6 6l12 12M18 6L6 18" />
+          ) : (
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          )}
+        </svg>
+      </button>
     </header>
   );
 }

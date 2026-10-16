@@ -40,6 +40,7 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
       hasCompatibleProfile: launchProfile.executionMode === 'browser',
       engineIntegrated: isEngineIntegrated(launchProfile.engineId),
       validated: launchProfile.validated,
+      requiresUserMedia: image.requiresUserMedia === true,
     })),
   );
 
@@ -55,6 +56,7 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
     iconUrl: family.iconUrl,
     minMemoryMiB: launchProfilesForImage[0]!.minMemoryMiB,
     imageRef: image.imageRef,
+    mediaStrategy: image.mediaStrategy ?? 'bundled',
     launchProfiles: launchProfilesForImage.map((launchProfile) => ({
       id: launchProfile.id,
       engineId: launchProfile.engineId,

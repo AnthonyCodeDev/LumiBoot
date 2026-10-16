@@ -135,6 +135,40 @@ describe('V86Instance', () => {
     expect(running).toHaveLength(1);
   });
 
+  it('mode disk-boot : running seulement après une lecture réelle du disque hda', () => {
+    const emulator = new FakeV86();
+    const instance = new V86Instance({
+      providerId: 'v86',
+      systemId: 'windows-7-x86',
+      emulator: emulator as unknown as V86,
+      console: createConsoleStub(),
+      readiness: {
+        marker: 'LUMIBOOT_DISK_BOOT:windows-7-x86',
+        mode: 'disk-boot',
+        channel: 'vga',
+      },
+    });
+    instance.wire();
+    const events: SessionEvent[] = [];
+    instance.subscribe((event) => events.push(event));
+
+    // Ni série ni VGA : la preuve vient du disque dur.
+    expect(emulator.listenerCount('serial0-output-byte')).toBe(0);
+    expect(emulator.listenerCount('screen-put-char')).toBe(0);
+    expect(emulator.listenerCount('ide-read-end')).toBe(1);
+
+    // Lecture du CD (canal 1) ou lecture nulle : aucune preuve de démarrage.
+    emulator.emit('ide-read-end', [1, 512, 1]);
+    emulator.emit('ide-read-end', [0, 0, 0]);
+    expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(false);
+
+    emulator.emit('ide-read-end', [0, 512, 1]);
+    emulator.emit('ide-read-end', [0, 512, 1]);
+    expect(
+      events.filter((event) => event.type === 'state' && event.state === 'running'),
+    ).toHaveLength(1);
+  });
+
   it('émet GUEST_READY_TIMEOUT si le marqueur n’arrive pas dans le délai', async () => {
     vi.useFakeTimers();
     try {

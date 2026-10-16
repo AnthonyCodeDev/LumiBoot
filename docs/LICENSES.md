@@ -18,7 +18,10 @@ dépôt.** Seuls des **manifestes** (URL, taille, `sha256`, licence, provenance)
 - **Debian** : images libres et redistribuables ; documenter la provenance et la licence dans
   `images/debian-12-i386/`.
 - **Windows 7 / 10 / 11** : média et licence **fournis par l'utilisateur**. Aucune redistribution
-  d'ISO propriétaire. Respecter les conditions Microsoft.
+  d'ISO propriétaire. Respecter les conditions Microsoft. Windows 7 x86 sous v86 est
+  **sélectionnable mais jamais `ready`** : l'utilisateur importe localement un disque qu'il détient
+  légalement (voir [`windows-7.md`](windows-7.md) et `images/windows-7/README.md`). Aucune clé ni
+  image n'est committée.
 - **macOS** : virtualisation soumise à la licence Apple et au matériel Apple compatible. Ne pas
   promettre de compatibilité multi-version globale. Voir https://www.apple.com/legal/sla/.
 

@@ -353,3 +353,60 @@ describe('V86Provider', () => {
     expect(createdControllers[0]?.snapshot().status).toBe('offline');
   });
 });
+
+describe('V86Provider : média importé (Windows 7)', () => {
+  function makeWindowsOS(): OSDefinition {
+    return makeOS({
+      id: 'windows-7-x86',
+      slug: 'windows-7-x86',
+      family: 'windows',
+      mediaStrategy: 'user-import',
+      architecture: 'i386',
+      availability: 'resource-required',
+      launchProfiles: [
+        {
+          id: 'windows-7-x86',
+          engineId: 'v86',
+          executionMode: 'browser',
+          minMemoryMiB: 1024,
+          configuration: { memoryMiB: 1024, vgaMemoryMiB: 16, bootDevice: 'disk' },
+          hardwareProfile: { network: 'ne2k', acpi: true },
+          readiness: {
+            marker: 'LUMIBOOT_DISK_BOOT:windows-7-x86',
+            mode: 'disk-boot',
+            channel: 'vga',
+          },
+        },
+      ],
+    });
+  }
+
+  it('démarre le disque importé en BIOS (hda) sans noyau Linux', async () => {
+    const { provider, captured } = setup();
+    await provider.start(makeWindowsOS(), document.createElement('div'), {
+      media: { kind: 'disk', url: 'blob:local-disk', size: 8_000_000_000, format: 'raw' },
+    });
+
+    const options = captured[0];
+    expect(options?.hda).toMatchObject({
+      url: 'blob:local-disk',
+      async: true,
+      size: 8_000_000_000,
+    });
+    // Aucun démarrage par noyau : pas de bzimage/initrd/cmdline.
+    expect(options?.bzimage).toBeUndefined();
+    expect(options?.initrd).toBeUndefined();
+    expect(options?.cmdline).toBeUndefined();
+    // ACPI activée par le profil matériel (requis par la famille Vista+).
+    expect(options?.acpi).toBe(true);
+    expect(options?.memory_size).toBe(1024 * MiB);
+  });
+
+  it('échoue honnêtement (MEDIA_REQUIRED) sans média importé', async () => {
+    const { provider, captured } = setup();
+    await expect(
+      provider.start(makeWindowsOS(), document.createElement('div')),
+    ).rejects.toMatchObject({ code: 'MEDIA_REQUIRED' });
+    expect(captured).toHaveLength(0);
+  });
+});

@@ -112,11 +112,6 @@ export class V86Provider implements VMEngine {
         { systemId: os.id },
       );
     }
-    if (!os.imageRef) {
-      throw new VMError('IMAGE_MISSING', `Aucune image n'est associée à « ${os.id} ».`, {
-        systemId: os.id,
-      });
-    }
 
     const signal = configuration?.signal;
     if (signal?.aborted) {
@@ -125,16 +120,37 @@ export class V86Provider implements VMEngine {
       });
     }
 
-    const manifest = await this.#loadManifest(os, signal);
-    const disk = manifest.files['disk'];
-    const bzimage = manifest.files['bzimage'];
-    const initrd = manifest.files['initrd'];
-    if (!disk || !bzimage || !initrd) {
+    // Média importé par l'utilisateur (ex. disque Windows 7 préinstallé) :
+    // démarrage BIOS direct, sans noyau Linux. LumiBoot ne distribue AUCUN
+    // média propriétaire : il doit avoir été fourni localement par l'utilisateur.
+    const media = configuration?.media;
+    if (os.mediaStrategy === 'user-import' && media === undefined) {
       throw new VMError(
-        'IMAGE_MISSING',
-        `Le manifeste « ${manifest.ref} » ne contient pas les fichiers disk/bzimage/initrd requis.`,
+        'MEDIA_REQUIRED',
+        `« ${os.displayName} » nécessite un média disque fourni par l'utilisateur. ` +
+          'Importez une image que vous détenez légalement pour démarrer la session.',
         { systemId: os.id },
       );
+    }
+
+    let manifest: ImageManifest | null = null;
+    if (media === undefined) {
+      if (!os.imageRef) {
+        throw new VMError('IMAGE_MISSING', `Aucune image n'est associée à « ${os.id} ».`, {
+          systemId: os.id,
+        });
+      }
+      manifest = await this.#loadManifest(os, signal);
+      const disk = manifest.files['disk'];
+      const bzimage = manifest.files['bzimage'];
+      const initrd = manifest.files['initrd'];
+      if (!disk || !bzimage || !initrd) {
+        throw new VMError(
+          'IMAGE_MISSING',
+          `Le manifeste « ${manifest.ref} » ne contient pas les fichiers disk/bzimage/initrd requis.`,
+          { systemId: os.id },
+        );
+      }
     }
 
     const memoryMiB = resolveMemoryMiB(manifest, launchProfile.configuration, configuration);
@@ -142,7 +158,7 @@ export class V86Provider implements VMEngine {
     const vgaMemoryMiB =
       configuration?.vgaMemoryMiB ??
       launchProfile.configuration?.vgaMemoryMiB ??
-      manifest.vgaMemoryMiB ??
+      manifest?.vgaMemoryMiB ??
       8;
 
     // Réseau fixé AVANT la construction de l'émulateur : changer d'interface
@@ -182,20 +198,33 @@ export class V86Provider implements VMEngine {
       );
     }
 
-    const bootOptions = manifest.boot ?? {};
+    const bootOptions = manifest?.boot ?? {};
+    const kernelDisk = manifest?.files['disk'];
+    const bzimage = manifest?.files['bzimage'];
+    const initrd = manifest?.files['initrd'];
+    // Deux plans de démarrage réels :
+    // - média importé -> BIOS + disque (`hda`), aucun noyau Linux ;
+    // - image publiée -> boot direct du noyau (`bzimage`/`initrd` + `hda`).
+    const bootMedia: V86Options = media
+      ? { hda: { url: media.url, async: true, size: media.size } }
+      : {
+          bzimage: { url: bzimage!.url },
+          initrd: { url: initrd!.url },
+          cmdline: bootOptions.cmdline ?? DEFAULT_BOOT_CMDLINE,
+          hda: { url: kernelDisk!.url, async: true, size: kernelDisk!.size },
+        };
     const options: V86Options = {
       wasm_path: bootOptions.wasmPath ?? V86_ASSET_PATHS.wasm,
       bios: { url: bootOptions.biosUrl ?? V86_ASSET_PATHS.bios },
       vga_bios: { url: bootOptions.vgaBiosUrl ?? V86_ASSET_PATHS.vgaBios },
       memory_size: memoryMiB * MiB,
       vga_memory_size: vgaMemoryMiB * MiB,
-      bzimage: { url: bzimage.url },
-      initrd: { url: initrd.url },
-      cmdline: bootOptions.cmdline ?? DEFAULT_BOOT_CMDLINE,
-      hda: { url: disk.url, async: true, size: disk.size },
       screen: { container: mounted.screenContainer },
       serial_console: { type: 'textarea', container: mounted.serialTextarea },
       autostart: false,
+      ...bootMedia,
+      // ACPI vient du profil matériel (requis par les invités NT modernes).
+      ...(media === undefined ? {} : { acpi: launchProfile.hardwareProfile?.acpi ?? false }),
       ...(netDevice === undefined ? {} : { net_device: netDevice }),
     };
 
@@ -281,12 +310,20 @@ interface MemoryHint {
   readonly memoryMiB?: number | undefined;
 }
 
+/** Mémoire par défaut (puissance de deux) si aucun niveau ne la fournit. */
+const DEFAULT_MEMORY_MIB = 512;
+
 function resolveMemoryMiB(
-  manifest: ImageManifest,
+  manifest: ImageManifest | null,
   profileConfiguration: MemoryHint | undefined,
   runtimeConfiguration: MemoryHint | undefined,
 ): number {
-  return runtimeConfiguration?.memoryMiB ?? profileConfiguration?.memoryMiB ?? manifest.memoryMiB;
+  return (
+    runtimeConfiguration?.memoryMiB ??
+    profileConfiguration?.memoryMiB ??
+    manifest?.memoryMiB ??
+    DEFAULT_MEMORY_MIB
+  );
 }
 
 function assertPowerOfTwoMiB(value: number, label: string, systemId: string): void {

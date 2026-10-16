@@ -1,4 +1,4 @@
-import type { Architecture } from '@lumiboot/contracts';
+import type { Architecture, MediaStrategy } from '@lumiboot/contracts';
 
 /**
  * Description factuelle d'une image système.
@@ -12,6 +12,17 @@ export interface SystemImageDefinition {
   readonly familyId: string;
   readonly architecture: Architecture;
   readonly imageRef?: string;
+  /**
+   * Origine du média : `bundled` (défaut, servi par LumiBoot) ou `user-import`
+   * (média fourni par l'utilisateur, jamais distribué). Voir docs/windows-7.md.
+   */
+  readonly mediaStrategy?: MediaStrategy;
+  /**
+   * Vrai si ce système ne peut PAS démarrer sans média local importé par
+   * l'utilisateur. Pilote l'état honnête `resource-required` tant que le média
+   * n'est pas présent (aucun `imageRef` n'est alors déclaré).
+   */
+  readonly requiresUserMedia?: boolean;
   readonly requirements: readonly string[];
   readonly licenseNotes?: string;
   readonly integrationNote: string;
@@ -90,14 +101,35 @@ export const images = [
     id: 'windows-7-x86-image',
     familyId: 'windows',
     architecture: 'i386',
-    requirements: ['WebAssembly', 'Licence et média autorisés', 'Mémoire suffisante'],
-    licenseNotes: 'Média et licence fournis par l’utilisateur. Aucune redistribution.',
-    integrationNote: 'Image de base à associer à un moteur navigateur x86 32 bits.',
+    // Aucun `imageRef` : LumiBoot ne distribue AUCUN média Windows. Le disque
+    // préinstallé (licence retail/OEM de l'utilisateur) est importé localement,
+    // puis démarré par BIOS sous v86 (voir docs/windows-7.md).
+    mediaStrategy: 'user-import',
+    requiresUserMedia: true,
+    requirements: [
+      'Navigateur moderne avec WebAssembly (v86)',
+      'Média disque Windows 7 x86 (Super Lite) préinstallé fourni par l’utilisateur',
+      'Licence Windows 7 valide (retail/OEM) détenue par l’utilisateur',
+      'Mémoire invitée ≥ 1 Gio (niveau puissance de deux ; 2 Gio possible)',
+      'Démarrage disque (MBR) ; pas de noyau Linux',
+    ],
+    licenseNotes:
+      'Média et licence Windows fournis par l’utilisateur. Aucune ISO ni clé n’est ' +
+      'distribuée, téléchargée ou committée par LumiBoot. L’utilisateur doit détenir une ' +
+      'licence valide et un support qu’il est autorisé à utiliser.',
+    integrationNote:
+      'Intégration navigateur réelle via v86 (démarrage BIOS du disque importé par hda, ' +
+      'jamais en cdrom). Aucun média n’étant distribué, l’état reste « ressource requise » ' +
+      'jusqu’à l’import d’un disque légal par l’utilisateur. Le disque source n’est jamais ' +
+      'modifié : v86 le lit en lecture seule et garde les écritures invitées en mémoire pour ' +
+      'la seule durée de la session. Le démarrage Windows n’est pas encore prouvé de bout en ' +
+      'bout : aucun état « disponible » n’est affiché sans boot réel validé.',
   },
   {
     id: 'windows-10-x64-image',
     familyId: 'windows',
     architecture: 'x86_64',
+    mediaStrategy: 'user-import',
     requirements: ['WebAssembly', 'Licence Windows valide', 'Mémoire suffisante'],
     licenseNotes: 'Licence Windows requise. Aucune ISO propriétaire fournie.',
     integrationNote: 'Image de base à associer à un moteur navigateur x86-64.',
@@ -106,6 +138,7 @@ export const images = [
     id: 'windows-11-x64-image',
     familyId: 'windows',
     architecture: 'x86_64',
+    mediaStrategy: 'user-import',
     requirements: ['WebAssembly', 'TPM virtuel selon configuration', 'Licence Windows'],
     licenseNotes: 'Licence Windows requise. Aucune ISO propriétaire fournie.',
     integrationNote: 'Image de base à associer à un moteur navigateur x86-64.',

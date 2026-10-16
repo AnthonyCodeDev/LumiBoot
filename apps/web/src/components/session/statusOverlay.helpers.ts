@@ -2,9 +2,9 @@ import type { SessionSnapshot } from '@lumiboot/vm-core';
 
 export const STEPS = [
   'Préparation',
-  'Téléchargement',
-  'Démarrage du noyau Debian',
-  'Système prêt',
+  'Chargement des ressources',
+  'Démarrage du système',
+  'Session active',
 ] as const;
 
 export interface StatusMessage {
@@ -46,11 +46,11 @@ export function stepIndexForState(state: SessionSnapshot['state']): number {
 export function statusTextForSession(session: SessionSnapshot): string {
   switch (session.state) {
     case 'downloading':
-      return 'Téléchargement des ressources…';
+      return 'Chargement des ressources…';
     case 'booting':
-      return 'Démarrage du noyau Debian…';
+      return 'Démarrage du système…';
     case 'running':
-      return 'Système prêt.';
+      return 'Session active.';
     case 'stopped':
       return 'Session arrêtée.';
     case 'stopping':

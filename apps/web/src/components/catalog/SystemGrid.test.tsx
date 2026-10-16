@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { getSystemById, systems } from '@lumiboot/catalog';
 import { SystemGrid } from './SystemGrid';
+import { availabilityLabels } from '../../lib/labels';
 import { useCatalogStore } from '../../features/catalog/catalog.store';
 
 function LocationProbe() {
@@ -63,7 +64,7 @@ describe('SystemGrid', () => {
       const system = id ? getSystemById(id) : null;
       expect(system).not.toBeNull();
       const availability = system!.availability;
-      const expected = availability === 'ready' ? 'Disponible' : 'En préparation';
+      const expected = availabilityLabels[availability];
       const badge = within(card).getByText(expected);
       expect(badge.getAttribute('data-state')).toBe(availability);
       expect(badge.className).toContain('card-status');

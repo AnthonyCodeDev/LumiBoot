@@ -68,6 +68,18 @@ describe('GuestReadyDetector', () => {
     expect(defaults.timeoutMs).toBe(120_000);
   });
 
+  it('expose le mode de preuve, avec `guest-marker` par défaut', () => {
+    expect(new GuestReadyDetector({ marker: MARKER, mode: 'disk-boot' }).mode).toBe('disk-boot');
+    expect(new GuestReadyDetector({ marker: MARKER }).mode).toBe('guest-marker');
+  });
+
+  it('markDiskBoot ne prouve le démarrage disque qu’une seule fois', () => {
+    const detector = new GuestReadyDetector({ marker: MARKER, mode: 'disk-boot' });
+    expect(detector.markDiskBoot()).toBe(true);
+    expect(detector.markDiskBoot()).toBe(false);
+    expect(detector.detected).toBe(true);
+  });
+
   it('rejette un marqueur vide', () => {
     expect(() => new GuestReadyDetector({ marker: '' })).toThrow();
   });

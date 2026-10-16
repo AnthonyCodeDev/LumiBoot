@@ -77,6 +77,9 @@ importers:
       '@lumiboot/provider-v86':
         specifier: workspace:*
         version: link:../../packages/provider-v86
+      '@lumiboot/vm-assets':
+        specifier: workspace:*
+        version: link:../../packages/vm-assets
       '@lumiboot/vm-core':
         specifier: workspace:*
         version: link:../../packages/vm-core

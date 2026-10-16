@@ -32,6 +32,7 @@ export const availabilityLabels: Record<Availability, string> = {
   experimental: 'Expérimental',
   ready: 'Disponible',
   unavailable: 'Indisponible',
+  'resource-required': 'Ressource requise',
 };
 
 export const executionShortLabel = (mode: ExecutionMode): string =>

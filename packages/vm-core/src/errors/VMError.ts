@@ -2,6 +2,9 @@ export type VMErrorCode =
   | 'PROVIDER_NOT_FOUND'
   | 'ENGINE_NOT_INTEGRATED'
   | 'IMAGE_MISSING'
+  // Le moteur est intégré mais le média système doit être importé localement par
+  // l'utilisateur (aucune ressource propriétaire n'est distribuée par LumiBoot).
+  | 'MEDIA_REQUIRED'
   | 'UNSUPPORTED_ENVIRONMENT'
   | 'INVALID_TRANSITION'
   | 'START_FAILED'

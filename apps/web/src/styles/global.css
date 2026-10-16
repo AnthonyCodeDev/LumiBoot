@@ -3,6 +3,24 @@
   background: var(--bg);
 }
 
+.skip-link {
+  position: absolute;
+  top: -48px;
+  left: 16px;
+  z-index: 50;
+  padding: 10px 16px;
+  border: 1px solid #303a63;
+  border-radius: var(--radius-md);
+  background: var(--primary-soft);
+  color: #b9c5ff;
+  font-size: 12px;
+  font-weight: 600;
+  transition: top var(--duration-fast) var(--ease);
+}
+.skip-link:focus-visible {
+  top: 8px;
+}
+
 .workarea {
   flex: 1;
   min-width: 0;

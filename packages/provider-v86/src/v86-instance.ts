@@ -70,8 +70,11 @@ export class V86Instance implements VMInstance {
     emulator.add_listener('emulator-stopped', this.#onEmulatorStopped);
     emulator.add_listener('download-progress', this.#onDownloadProgress);
     emulator.add_listener('download-error', this.#onDownloadError);
-    // Le canal de preuve vient du profil (`serial` par défaut, `vga` possible).
-    if (this.#detector.channel === 'vga') {
+    // Le mode de preuve vient du profil : marqueur invité (série/VGA) ou
+    // démarrage disque réel pour un média importé.
+    if (this.#detector.mode === 'disk-boot') {
+      emulator.add_listener('ide-read-end', this.#onDiskRead);
+    } else if (this.#detector.channel === 'vga') {
       emulator.add_listener('screen-put-char', this.#onScreenChar);
     } else {
       emulator.add_listener('serial0-output-byte', this.#onSerialByte);
@@ -197,6 +200,23 @@ export class V86Instance implements VMInstance {
     }
   };
 
+  /**
+   * Mode `disk-boot` : la preuve est la première lecture réelle du disque dur
+   * (`hda`, canal 0) après le démarrage de l'émulateur. Un média non amorçable
+   * n'en produit pas ; aucun état `running` n'est donc simulé. Ce signal prouve
+   * l'exécution de l'amorce invitée, pas que l'OS est pleinement opérationnel
+   * (voir docs/windows-7.md).
+   */
+  readonly #onDiskRead = (arg: V86Event['ide-read-end']): void => {
+    if (this.#disposed || this.#stopping) return;
+    const [channelNr, byteCount] = arg;
+    if (channelNr !== 0 || byteCount <= 0) return;
+    if (this.#detector.markDiskBoot()) {
+      this.#clearReadyTimeout();
+      this.#emit({ type: 'state', state: 'running' });
+    }
+  };
+
   readonly #onDownloadProgress = (arg: V86Event['download-progress']): void => {
     if (this.#disposed || this.#stopping) return;
     const event: SessionEvent = {
@@ -261,7 +281,9 @@ export class V86Instance implements VMInstance {
     emulator.remove_listener('emulator-stopped', this.#onEmulatorStopped);
     emulator.remove_listener('download-progress', this.#onDownloadProgress);
     emulator.remove_listener('download-error', this.#onDownloadError);
-    if (this.#detector.channel === 'vga') {
+    if (this.#detector.mode === 'disk-boot') {
+      emulator.remove_listener('ide-read-end', this.#onDiskRead);
+    } else if (this.#detector.channel === 'vga') {
       emulator.remove_listener('screen-put-char', this.#onScreenChar);
     } else {
       emulator.remove_listener('serial0-output-byte', this.#onSerialByte);

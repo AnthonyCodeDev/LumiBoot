@@ -75,6 +75,24 @@ function desktopReadiness(systemId: string): GuestReadiness {
   };
 }
 
+/**
+ * Preuve de démarrage d'un système à média importé (ex. Windows 7).
+ *
+ * Ce système n'émet AUCUN marqueur LumiBoot. La preuve est une **lecture réelle
+ * du disque dur** après le démarrage de l'émulateur (le BIOS/l'amorce exécute
+ * l'image fournie par l'utilisateur). `marker` sert d'identifiant documentaire
+ * et n'est jamais scanné. Le délai est large : le POST, l'amorce et le chargement
+ * NT prennent plusieurs minutes sous émulation logicielle.
+ */
+function diskBootReadiness(systemId: string): GuestReadiness {
+  return {
+    marker: `LUMIBOOT_DISK_BOOT:${systemId}`,
+    mode: 'disk-boot',
+    channel: 'vga',
+    timeoutMs: 300_000,
+  };
+}
+
 export const launchProfiles = [
   {
     id: 'debian-12-i386',
@@ -209,22 +227,38 @@ export const launchProfiles = [
   {
     id: 'windows-7-x86',
     imageId: 'windows-7-x86-image',
-    engineId: 'wasm-x86',
+    // v86 est le seul moteur navigateur x86 32 bits intégré : Windows 7 x86 est
+    // donc réellement rattachable (démarrage BIOS d'un disque importé), sans
+    // prétendre à un état « disponible » tant qu'aucun boot n'est validé.
+    engineId: 'v86',
     executionMode: 'browser',
-    minMemoryMiB: 2048,
+    // `memory_size` de v86 EXIGE une puissance de deux (assertPowerOfTwoMiB).
+    // Le disque de référence a été préparé sous QEMU à 1536 Mio, valeur qui
+    // n'est PAS un niveau v86 valide : 1024 Mio (plancher documenté par v86
+    // pour Vista+) est retenu. Une valeur supérieure peut être demandée à
+    // l'exécution (2048 Mio) sans changer le profil.
+    minMemoryMiB: 1024,
     configuration: {
-      memoryMiB: 2048,
+      memoryMiB: 1024,
+      vgaMemoryMiB: 16,
       bootDevice: 'disk',
     },
-    // Invité ancien : pilotes virtio fragiles, `ne2k` est le support commun.
-    hardwareProfile: pcHardware('ne2k'),
-    readiness: guestReadiness('windows-7-x86'),
+    // Invité NT ancien : pilotes virtio absents, `ne2k` est le support commun.
+    // v86 n'émule QUE `ne2k` ou `virtio` (`v86.d.ts` : `type?: "ne2k" | "virtio"`)
+    // — e1000/rtl8139 ne sont pas disponibles. ACPI est requise par la famille
+    // Vista+ (voir docs/windows-nt.md de v86 : « Enable ACPI and set the memory
+    // size to 512 MB or more »).
+    hardwareProfile: { ...pcHardware('ne2k'), acpi: true },
+    // Média importé : le démarrage est prouvé par une lecture disque réelle.
+    readiness: diskBootReadiness('windows-7-x86'),
     slug: 'windows-7-x86',
     displayName: 'Windows 7',
-    versionLabel: 'Édition x86',
+    versionLabel: 'Super Lite · x86',
+    // Aucun boot Windows réel prouvé : reste non `ready`, même média importé.
     validated: false,
     description:
-      'Une session Windows classique dans le navigateur, sous réserve d’une licence valide et d’un moteur compatible.',
+      'Une session Windows 7 x86 Super Lite dans le navigateur via v86, à partir d’un ' +
+      'disque que vous détenez légalement. Aucun média n’est distribué : importez le vôtre.',
   },
   {
     id: 'windows-10-x64',

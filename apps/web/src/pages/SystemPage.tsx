@@ -3,7 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { getSystemBySlug } from '@lumiboot/catalog';
 import { Button } from '../components/ui/Button';
 import { NetworkProxyCard } from '../components/network/NetworkProxyCard';
+import { UserMediaImportCard } from '../components/media/UserMediaImportCard';
 import { useSessionsStore } from '../features/sessions/sessions.store';
+import { useUserMediaStore } from '../features/media/user-media.store';
 import { getLaunchReadiness } from '../lib/launch';
 import {
   availabilityLabels,
@@ -18,6 +20,7 @@ export function SystemPage() {
   const { slug } = useParams<{ slug: string }>();
   const system = slug ? getSystemBySlug(slug) : null;
   const createSession = useSessionsStore((state) => state.create);
+  const mediaRecords = useUserMediaStore((state) => state.records);
   const navigate = useNavigate();
 
   if (!system) return <NotFoundPage />;
@@ -27,7 +30,12 @@ export function SystemPage() {
     '--accent-rgb': system.accentRgb,
   } as CSSProperties;
   const launchProfile = getPrimaryLaunchProfile(system);
-  const readiness = getLaunchReadiness(system);
+  const userMediaReady =
+    system.mediaStrategy === 'user-import' ? Boolean(mediaRecords[system.id]) : undefined;
+  const readiness = getLaunchReadiness(
+    system,
+    userMediaReady === undefined ? {} : { userMediaReady },
+  );
 
   return (
     <main className="system-detail">
@@ -74,6 +82,7 @@ export function SystemPage() {
               <p className="drawer-bodytext">{system.licenseNotes}</p>
             </>
           ) : null}
+          {system.mediaStrategy === 'user-import' ? <UserMediaImportCard system={system} /> : null}
           <div className="system-detail-actions">
             <Button
               variant="primary"

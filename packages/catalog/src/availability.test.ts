@@ -101,14 +101,104 @@ describe('catalogue : disponibilité effective cohérente', () => {
   });
 });
 
+describe('getEffectiveAvailability : média utilisateur requis', () => {
+  it('marque resource-required lorsque le média utilisateur manque', () => {
+    expect(
+      getEffectiveAvailability({
+        ...allFacts,
+        hasImage: false,
+        validated: false,
+        requiresUserMedia: true,
+      }),
+    ).toBe('resource-required');
+  });
+
+  it('ne masque pas un état unavailable déclaré', () => {
+    expect(
+      getEffectiveAvailability({
+        ...allFacts,
+        hasImage: false,
+        validated: false,
+        requiresUserMedia: true,
+        declared: 'unavailable',
+      }),
+    ).toBe('unavailable');
+  });
+
+  it('reste ready si un candidat coche les quatre conditions', () => {
+    expect(getAggregatedAvailability([{ ...allFacts, requiresUserMedia: true }])).toBe('ready');
+  });
+
+  it('resource-required prime sur planned dans l’agrégation', () => {
+    expect(
+      getAggregatedAvailability([
+        { ...allFacts, hasImage: false, validated: false },
+        { ...allFacts, hasImage: false, validated: false, requiresUserMedia: true },
+      ]),
+    ).toBe('resource-required');
+  });
+});
+
+describe('catalogue : Windows 7 sous v86 (média fourni par l’utilisateur)', () => {
+  it('est sélectionnable, moteur v86 intégré, mais jamais ready sans boot prouvé', () => {
+    const windows = getSystemById('windows-7-x86');
+    const profile = windows?.launchProfiles[0];
+    const definition = launchProfiles.find((candidate) => candidate.id === 'windows-7-x86');
+    expect(windows).not.toBeNull();
+    expect(windows?.family).toBe('windows');
+    expect(windows?.architecture).toBe('i386');
+    expect(profile?.engineId).toBe('v86');
+    expect(profile && isEngineIntegrated(profile.engineId)).toBe(true);
+    // `validated` vit sur la définition du catalogue, pas sur le contrat.
+    expect(definition?.validated).toBe(false);
+    expect(windows?.availability).not.toBe('ready');
+  });
+
+  it('déclare l’état honnête « resource-required » tant qu’aucun média n’est fourni', () => {
+    expect(getSystemById('windows-7-x86')?.availability).toBe('resource-required');
+    // Aucune image n'est distribuée : pas de `imageRef` (preuve d'image servie).
+    expect(getSystemById('windows-7-x86')?.imageRef).toBeUndefined();
+    expect(getSystemById('windows-7-x86')?.mediaStrategy).toBe('user-import');
+  });
+
+  it('utilise une preuve de démarrage disque (aucun marqueur invité simulé)', () => {
+    const profile = getSystemById('windows-7-x86')?.launchProfiles[0];
+    expect(profile?.readiness?.mode).toBe('disk-boot');
+    expect(profile?.readiness?.marker).toBe('LUMIBOOT_DISK_BOOT:windows-7-x86');
+  });
+
+  it('active l’ACPI et la NIC ne2k requises par l’invité', () => {
+    const profile = getSystemById('windows-7-x86')?.launchProfiles[0];
+    expect(profile?.hardwareProfile?.network).toBe('ne2k');
+    expect(profile?.hardwareProfile?.acpi).toBe(true);
+  });
+
+  it('expose l’identité Super Lite x86 et une mémoire puissance de deux', () => {
+    const system = getSystemById('windows-7-x86');
+    const profile = system?.launchProfiles[0];
+    expect(system?.displayName).toBe('Windows 7');
+    expect(system?.versionLabel).toBe('Super Lite · x86');
+    // v86 exige une puissance de deux : 1536 (préparé sous QEMU) est invalide.
+    const memoryMiB = profile?.configuration?.memoryMiB ?? 0;
+    expect(Number.isInteger(memoryMiB) && memoryMiB > 0 && (memoryMiB & (memoryMiB - 1)) === 0).toBe(
+      true,
+    );
+    expect(memoryMiB).toBe(1024);
+  });
+});
+
 describe('catalogue : profils matériels et preuves de démarrage', () => {
   it('chaque profil porte un matériel et un marqueur explicites', () => {
     for (const system of systems) {
       for (const profile of system.launchProfiles) {
         expect(profile.hardwareProfile?.network).toBeDefined();
         // L'OS opérationnel prouve son démarrage par LUMIBOOT_GUEST_READY ; une
-        // session graphique exige en plus LUMIBOOT_DESKTOP_READY (jamais simulé).
-        expect(profile.readiness?.marker).toMatch(/^LUMIBOOT_(GUEST|DESKTOP)_READY:/);
+        // session graphique exige en plus LUMIBOOT_DESKTOP_READY, et un média
+        // importé est prouvé par une lecture disque (LUMIBOOT_DISK_BOOT), jamais
+        // simulé côté JavaScript.
+        expect(profile.readiness?.marker).toMatch(
+          /^LUMIBOOT_(GUEST|DESKTOP)_READY:|^LUMIBOOT_DISK_BOOT:/,
+        );
       }
     }
   });

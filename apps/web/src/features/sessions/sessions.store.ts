@@ -1,16 +1,46 @@
 import { create } from 'zustand';
+import type { VMMedia } from '@lumiboot/contracts';
 import { getSystemById } from '@lumiboot/catalog';
 import { SessionLifecycle, VMError, type SessionSnapshot } from '@lumiboot/vm-core';
 import { selectEffectiveNetworkProfile, type NetworkMode } from '@lumiboot/vm-network';
 import { createRegistry } from './registry';
 import { resolveProxyConfig, resolveNetworkProfile } from '../../config/runtime';
 import { getProxyRuntimeCredentials } from '../proxy/store';
+import { getUserMediaStore } from '../media/user-media.storage';
 
 const registry = createRegistry();
 const lifecycles = new Map<string, SessionLifecycle>();
 const unsubscribers = new Map<string, () => void>();
 /** Ids détruits : interdit toute réinsertion par un snapshot tardif. */
 const disposedIds = new Set<string>();
+/** URLs de blob des médias importés, à révoquer à la libération de la session. */
+const mediaObjectUrls = new Map<string, string>();
+
+/**
+ * Résout le média local d'un système `user-import` : lit le blob importé et
+ * fabrique une URL locale pour v86. Aucune donnée ne quitte le navigateur.
+ * Retourne `undefined` si aucun média n'a été importé (le provider échouera
+ * alors honnêtement avec `MEDIA_REQUIRED`).
+ */
+async function resolveUserMedia(systemId: string): Promise<VMMedia | undefined> {
+  const store = await getUserMediaStore();
+  const descriptor = await store.get(systemId);
+  const bytes = await store.getBytes(systemId);
+  if (!descriptor || !bytes) return undefined;
+  if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return undefined;
+  const url = URL.createObjectURL(bytes);
+  mediaObjectUrls.set(systemId, url);
+  return { kind: 'disk', url, size: bytes.size, format: descriptor.format };
+}
+
+function releaseUserMedia(systemId: string): void {
+  const url = mediaObjectUrls.get(systemId);
+  if (url === undefined) return;
+  mediaObjectUrls.delete(systemId);
+  if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+    URL.revokeObjectURL(url);
+  }
+}
 
 export interface SessionsState {
   sessions: Record<string, SessionSnapshot>;
@@ -71,7 +101,13 @@ export const useSessionsStore = create<SessionsState>((set) => ({
     // Mémorise le mode effectif avant le démarrage : la barre d'outils affiche
     // ce qui tourne réellement, pas le mode configuré.
     set((s) => ({ networkModes: { ...s.networkModes, [id]: network.mode } }));
-    await lifecycle.start(mountElement, { network });
+    // Système à média importé : on branche le disque local fourni par
+    // l'utilisateur. Absent -> le provider échoue avec `MEDIA_REQUIRED`.
+    const media =
+      lifecycle.system.mediaStrategy === 'user-import'
+        ? await resolveUserMedia(lifecycle.system.id)
+        : undefined;
+    await lifecycle.start(mountElement, media === undefined ? { network } : { network, media });
   },
   stop: async (id) => {
     await lifecycles.get(id)?.stop();
@@ -83,6 +119,7 @@ export const useSessionsStore = create<SessionsState>((set) => ({
     try {
       await lifecycle.dispose();
     } finally {
+      releaseUserMedia(lifecycle.system.id);
       unsubscribers.get(id)?.();
       unsubscribers.delete(id);
       lifecycles.delete(id);
