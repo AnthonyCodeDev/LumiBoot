@@ -159,7 +159,7 @@ describe('catalogue : flavor Debian Desktop (image publiée + boot validé)', ()
   });
 });
 
-describe('catalogue : flavor Debian XFCE (image publiée, boot validé TEMPORAIREMENT)', () => {
+describe('catalogue : flavor Debian XFCE (image publiée + boot validé)', () => {
   it('expose le profil graphique XFCE avec son marqueur Desktop dédié', () => {
     const xfce = getSystemById('debian-12-i386-xfce');
     const profile = xfce?.launchProfiles[0];
@@ -170,12 +170,10 @@ describe('catalogue : flavor Debian XFCE (image publiée, boot validé TEMPORAIR
     expect(profile?.hardwareProfile?.network).toBe('virtio');
   });
 
-  it('temporairement validé : image publiée (`imageRef`) + `validated` pour le test manuel', () => {
+  it('devient disponible : image publiée (`imageRef`) + boot graphique réel validé', () => {
     const xfce = getSystemById('debian-12-i386-xfce');
     const profile = launchProfiles.find((candidate) => candidate.id === 'debian-12-i386-xfce');
-    // Image publiée ; `validated` posé TEMPORAIREMENT pour débloquer le boot
-    // réel de test (voir docs/debian-xfce.md). Le résultat de ce boot fixera la
-    // valeur finale.
+    // Image publiée et boot Xorg + XFCE prouvé (voir docs/debian-xfce.md).
     expect(xfce?.imageRef).toBe('debian-12-i386-xfce');
     expect(profile?.validated).toBe(true);
     expect(xfce?.availability).toBe('ready');

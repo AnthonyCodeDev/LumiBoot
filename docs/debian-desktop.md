@@ -2,7 +2,7 @@
 
 Ce document décrit la **deuxième image Debian** du catalogue, `debian-12-i386-desktop`, sans modifier
 le comportement de l'image console existante (`debian-12-i386`, baseline E2E). Il précise l'état réel
-du travail : **NON CONSTRUIT / NON TESTÉ**.
+du travail : **CONSTRUITE ET VALIDÉE PAR UN BOOT RÉEL** (Xorg + Openbox).
 
 ## 1. Objectifs
 
@@ -86,22 +86,39 @@ Ces marqueurs proviennent du système invité (unités systemd), **jamais** de J
 détecteur côté navigateur (`packages/provider-v86/src/guest-ready-detector.ts`) est agnostique au
 contenu du marqueur : il lit simplement celui déclaré par le profil.
 
-## 6. État réel — **NON CONSTRUIT / NON TESTÉ**
+## 6. Validation réelle
 
-> **Aucune image desktop n'existe.** Ce dépôt ne peut pas exécuter `debootstrap` (pas de WSL/Docker,
-> pas d'environnement Linux). Le script `build.sh` **n'a pas été exécuté**. Aucun boot graphique réel
-> n'a été prouvé.
+La variante `debian-12-i386-desktop` a été **construite puis prouvée par un boot réel** le
+**2026-10-15 / 2026-10-16** :
+
+- **Environnement de build** : WSL2 (Debian `bookworm`), `debootstrap` + `chroot`, exécution de
+  `sudo FLAVOR=desktop ./images/debian-12-i386/build.sh`.
+- **Boot réel** : image publiée dans `apps/web/public/images/debian-12-i386-desktop/` puis lancée
+  dans **v86** au sein du navigateur (non simulée côté JS/React).
+- **Marqueurs observés** (sortie série `ttyS0`) :
+  1. `LUMIBOOT_GUEST_READY:debian-12-i386-desktop` — OS opérationnel (`multi-user.target`).
+  2. `LUMIBOOT_DESKTOP_READY:debian-12-i386-desktop` — Xorg + Openbox réellement démarrés
+     (`xdpyinfo` répond, gestionnaire de fenêtres vivant).
+- **Bureau** : la session graphique s'affiche dans le navigateur (canvas VGA en mode graphique).
+
+Messages bénins observés sur la console série, sans incidence sur la disponibilité :
+
+- `romain.perier@gmail.com` : il s'agit du certificat de signature de la base de **cfg80211**
+  (`regulatory.db`), pas d'une erreur de l'image.
+- `regulatory.db` : firmware de régulation WiFi absent — **normal**, l'invité n'embarque pas de
+  firmware WiFi et n'en a pas besoin (réseau émulé `virtio-net`).
+
+## 7. État réel — **construite et validée**
 
 Au niveau du catalogue :
 
-- `packages/catalog/src/images.ts` : `debian-12-i386-desktop-image` est déclarée **sans `imageRef`** —
-  c'est la seule preuve qu'une image est présente, et elle est absente.
-- `packages/catalog/src/profiles.ts` : `debian-12-i386-desktop` a `validated: false`.
-- Conséquence : `getAggregatedAvailability` renvoie **`planned`** (jamais `ready`). Le manifeste
-  `apps/web/public/images/debian-12-i386-desktop/manifest.json` est un **placeholder volontairement
-  invalide** (rejeté par `ensureImageManifest`) : il ne peut pas simuler une image présente.
+- `packages/catalog/src/images.ts` : `debian-12-i386-desktop-image` déclare
+  `imageRef: 'debian-12-i386-desktop'` — l'image est présente.
+- `packages/catalog/src/profiles.ts` : `debian-12-i386-desktop` a `validated: true`.
+- Conséquence : `getAggregatedAvailability` renvoie **`ready`**. Le manifeste
+  `apps/web/public/images/debian-12-i386-desktop/manifest.json` est réel (SHA-256 calculés).
 
-## 7. Procédure de construction (hors dépôt)
+## 8. Procédure de construction (hors dépôt)
 
 ### Option A — machine Linux native ou WSL2 (recommandé)
 
@@ -135,23 +152,20 @@ wsl -e bash -lc "cd /mnt/c/Users/<vous>/Desktop/LumiBoot && sudo FLAVOR=desktop 
 
 Ne jamais exécuter sous Windows natif : `debootstrap` et `chroot` exigent Linux.
 
-## 8. Critères de passage en `ready`
+## 9. Critères de passage en `ready` — **réunis**
 
-Le flavor desktop ne peut devenir `ready` que si **toutes** ces conditions sont réunies :
+Le flavor desktop n'est passé `ready` qu'après que **toutes** ces conditions ont été réunies :
 
 1. Image réellement **construite** puis publiée dans `apps/web/public/images/debian-12-i386-desktop/`
    (avec `manifest.json` réel : SHA-256 calculés).
 2. `images/debian-12-i386/tests/desktop-smoke-test.md` **entièrement vert** sur au moins un
    navigateur supporté par la version de v86 intégrée.
 3. Le smoke test console (`boot-smoke-test.md`) reste vert (dépendance directe).
-4. Le marqueur `LUMIBOOT_DESKTOP_READY` n'est observé **qu'après** une session graphique réelle
+4. Le marqueur `LUMIBOOT_DESKTOP_READY` n'a été observé **qu'après** une session graphique réelle
    (Openbox + xterm visibles, `xdpyinfo` répondant).
-5. Alors seulement : renseigner `imageRef: 'debian-12-i386-desktop'` dans `images.ts` et
-   `validated: true` dans `profiles.ts`.
-
-Tant que ces conditions ne sont pas réunies, `debian-12-i386-desktop` **reste non-ready**.
+5. `imageRef: 'debian-12-i386-desktop'` dans `images.ts` et `validated: true` dans `profiles.ts`.
 
 > **Troisième flavor Debian :** l'image `debian-12-i386-xfce` (bureau **XFCE**) est décrite
 > séparément dans [`docs/debian-xfce.md`](./debian-xfce.md). Elle partage le socle de construction et
-> la configuration X (`fbdev`/`modesetting`) de ce flavor, mais reste **NON CONSTRUITE / NON
-> TESTÉE** et donc `planned` dans le catalogue.
+> la configuration X (`fbdev`/`modesetting`) de ce flavor et est, elle aussi, **construite et validée
+> par un boot réel**.

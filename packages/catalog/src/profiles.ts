@@ -68,8 +68,10 @@ function desktopReadiness(systemId: string): GuestReadiness {
   return {
     marker: `LUMIBOOT_DESKTOP_READY:${systemId}`,
     channel: 'serial',
-    // TEMPORAIRE (diagnostic) : délai élargi pour inspecter l'invité via série.
-    timeoutMs: 600_000,
+    // Délai normal : sous émulation logicielle (v86 sans accélération), Xorg et
+    // la session graphique demandent plusieurs minutes ; 240 s couvre les
+    // boots mesurés (voir docs/debian-desktop.md, docs/debian-xfce.md).
+    timeoutMs: 240_000,
   };
 }
 
@@ -118,11 +120,10 @@ export const launchProfiles = [
     slug: 'debian-12-i386-desktop',
     displayName: 'Debian (Bureau)',
     versionLabel: '12 Bookworm · X11',
-    // Validé TEMPORAIREMENT pour permettre le boot réel de test ; le résultat de
-    // ce boot décidera de la valeur finale (voir docs/debian-desktop.md).
+    // Validé par un boot RÉEL (Xorg + Openbox) : voir docs/debian-desktop.md.
     validated: true,
     description:
-      'La variante graphique de Debian 12 : session Xorg + Openbox dans le navigateur, à valider par un boot réel avant publication.',
+      'La variante graphique de Debian 12 : session Xorg + Openbox directement dans le navigateur, validée par un boot réel.',
   },
   {
     id: 'debian-12-i386-xfce',
@@ -143,13 +144,10 @@ export const launchProfiles = [
     slug: 'debian-12-i386-xfce',
     displayName: 'Debian (XFCE)',
     versionLabel: '12 Bookworm · XFCE',
-    // TEMPORAIRE (test de boot réel) : validé UNIQUEMENT pour débloquer le
-    // lancement depuis l'UI et permettre le boot manuel ; l'image XFCE vient
-    // d'être construite et publiée mais aucun boot graphique réel n'est encore
-    // prouvé (voir docs/debian-xfce.md). Valeur finale décidée après ce boot.
+    // Validé par un boot RÉEL (Xorg + session XFCE) : voir docs/debian-xfce.md.
     validated: true,
     description:
-      "La variante Debian 12 avec l'environnement de bureau complet XFCE : session Xorg + XFCE dans le navigateur, à construire et valider par un boot réel.",
+      "La variante Debian 12 avec l'environnement de bureau complet XFCE : session Xorg + XFCE directement dans le navigateur, validée par un boot réel.",
   },
   {
     id: 'ubuntu-18-i386',

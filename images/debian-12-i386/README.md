@@ -1,9 +1,8 @@
 # Image Debian 12 Bookworm i386 (v86)
 
-> **Statut : scripts de construction réels, images NON encore publiées, AUCUN boot réel prouvé.**
-> Aucun binaire n'est versionné. **Les flavors `desktop` et `xfce` n'ont jamais été construits ni
-> démarrés.**
-> Ne pas marquer Debian « Disponible » avant que les smoke tests passent en navigateur.
+> **Statut : scripts de construction réels ; images console, desktop et xfce construites et
+> validées par un boot réel** (voir `docs/debian-desktop.md` et `docs/debian-xfce.md`).
+> Aucun binaire n'est versionné (dossier `public` ignoré par Git).
 
 ## Objectif
 
@@ -16,11 +15,10 @@ navigateur via v86. Trois **flavors** partagent le même socle de construction (
 | `desktop` | `debian-12-i386-desktop` | Socle minimal + **Xorg + Openbox + xterm** | `LUMIBOOT_GUEST_READY:debian-12-i386-desktop` **puis** `LUMIBOOT_DESKTOP_READY:debian-12-i386-desktop` |
 | `xfce` | `debian-12-i386-xfce` | Socle minimal + **Xorg + XFCE** (bureau complet, disque 4 Gio) | `LUMIBOOT_GUEST_READY:debian-12-i386-xfce` **puis** `LUMIBOOT_DESKTOP_READY:debian-12-i386-xfce` |
 
-> **Vérité de l'état actuel :** aucune image réelle ne peut être construite ni bootée dans
-> l'environnement de développement (pas de `debootstrap`, ni WSL, ni Docker). Les flavors **desktop
-> et xfce sont NON CONSTRUITS / NON TESTÉS** et ne sont donc jamais annoncés comme disponibles par le
-> catalogue (voir `docs/debian-desktop.md` et `docs/debian-xfce.md`). La disponibilité est
-> **dérivée** et reste non-`ready`.
+> **Vérité de l'état actuel :** les flavours `desktop` (Xorg + Openbox) et `xfce` (Xorg + XFCE) ont
+> été **construits (hors dépôt, via WSL2) puis validés par un boot réel** ; le catalogue les annonce
+> donc `ready` (voir `docs/debian-desktop.md` et `docs/debian-xfce.md`). La disponibilité reste
+> **dérivée** des faits (image présente, moteur intégré, boot validé).
 
 ## Contenu
 
@@ -40,7 +38,7 @@ navigateur via v86. Trois **flavors** partagent le même socle de construction (
 | `guest/serial-getty-autologin.conf` | Autologin `lumiboot` sur la console série |
 | `tests/boot-smoke-test.md` | Smoke test console (flavor minimal) |
 | `tests/desktop-smoke-test.md` | Smoke test graphique (flavor desktop, Openbox) |
-| `tests/xfce-smoke-test.md` | Smoke test graphique (flavor xfce) — **NON EXÉCUTÉ / NON TESTÉ** |
+| `tests/xfce-smoke-test.md` | Smoke test graphique (flavor xfce) |
 | `manifest.json` | Manifeste **placeholder** (flavor minimal, jamais servi) : la vraie validation le rejetterait |
 | `manifest-desktop.json` | Manifeste **placeholder** (flavor desktop, versionné) ; la copie publiée est `apps/web/public/images/debian-12-i386-desktop/manifest.json` |
 
@@ -52,11 +50,11 @@ Sur une machine Linux ou WSL2 disposant de `debootstrap`, `e2fsprogs`, `node` :
 # Flavor console (défaut) — baseline E2E validée, comportement inchangé.
 sudo ./images/debian-12-i386/build.sh
 
-# Flavor graphique (Xorg + Openbox) — à tester sur machine adaptée.
+# Flavor graphique (Xorg + Openbox).
 sudo FLAVOR=desktop ./images/debian-12-i386/build.sh
 # ou : sudo ./images/debian-12-i386/build.sh desktop
 
-# Flavor graphique (Xorg + XFCE) — NON CONSTRUIT / NON TESTÉ, disque 4 Gio.
+# Flavor graphique (Xorg + XFCE) — disque 4 Gio.
 sudo FLAVOR=xfce ./images/debian-12-i386/build.sh
 # ou : sudo ./images/debian-12-i386/build.sh xfce
 ```

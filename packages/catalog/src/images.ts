@@ -32,28 +32,27 @@ export const images = [
     id: 'debian-12-i386-desktop-image',
     familyId: 'debian',
     architecture: 'i386',
-    // Image desktop désormais construite et publiée dans ce dépôt. La seule
-    // preuve de présence reste `imageRef` ; la disponibilité demeure DÉRIVÉE et
-    // dépend toujours d'un boot réel validé (`validated` du profil).
+    // Image desktop construite et publiée. La seule preuve de présence reste
+    // `imageRef` ; la disponibilité demeure DÉRIVÉE et dépend aussi d'un boot
+    // réel validé (`validated` du profil — voir docs/debian-desktop.md).
     imageRef: 'debian-12-i386-desktop',
     requirements: [
       'Navigateur moderne',
       'WebAssembly',
       'Mémoire suffisante (≥ 1 Gio)',
-      'Image graphique (Xorg) non encore publiée',
+      'Image graphique (Xorg) publiée',
     ],
     integrationNote:
-      'Variante graphique de Debian 12 (Xorg + Openbox sous v86) : NON validée. ' +
-      "L'image doit être construite hors dépôt et un boot réel prouvé avant tout passage en « disponible ».",
+      'Variante graphique de Debian 12 (Xorg + Openbox sous v86) : boot réel ' +
+      'validé (voir docs/debian-desktop.md).',
   },
   {
     id: 'debian-12-i386-xfce-image',
     familyId: 'debian',
     architecture: 'i386',
-    // Image XFCE désormais construite (flavor xfce) et publiée dans ce dépôt.
-    // La seule preuve de présence reste `imageRef` ; la disponibilité demeure
-    // DÉRIVÉE et dépend toujours d'un boot réel validé (`validated` du profil,
-    // posé TEMPORAIREMENT pour le test manuel de boot — voir docs/debian-xfce.md).
+    // Image XFCE construite (flavor xfce) et publiée. La seule preuve de
+    // présence reste `imageRef` ; la disponibilité demeure DÉRIVÉE et dépend
+    // aussi d'un boot réel validé (`validated` du profil — voir docs/debian-xfce.md).
     imageRef: 'debian-12-i386-xfce',
     requirements: [
       'Navigateur moderne',
@@ -63,7 +62,7 @@ export const images = [
     ],
     integrationNote:
       'Variante Debian 12 à environnement de bureau complet XFCE (Xorg + XFCE sous v86) : ' +
-      'image construite puis publiée, boot graphique restant à prouver par un test manuel.',
+      'boot réel validé (voir docs/debian-xfce.md).',
   },
   {
     id: 'ubuntu-18-i386-image',

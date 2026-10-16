@@ -2,11 +2,12 @@
 
 Ce document décrit la **troisième image Debian** du catalogue, `debian-12-i386-xfce`, sans modifier
 le comportement des images existantes (`debian-12-i386` console et `debian-12-i386-desktop`
-Xorg/Openbox). Il précise l'état réel du travail : **NON CONSTRUIT / NON TESTÉ**.
+Xorg/Openbox). Il précise l'état réel du travail : **CONSTRUITE ET VALIDÉE PAR UN BOOT RÉEL**
+(Xorg + session XFCE).
 
-> **État : NON CONSTRUIT / NON TESTÉ.** Aucun binaire n'est versionné, `build.sh` **n'a pas été
-> exécuté** dans l'environnement de développement, et **aucun boot XFCE réel n'a été prouvé**.
-> Le catalogue présente donc `debian-12-i386-xfce` comme **`planned`**, jamais `ready`.
+> **État : CONSTRUITE ET VALIDÉE.** Les binaires ne sont pas versionnés (dossier `public` ignoré par
+> Git), mais l'image a été construite hors dépôt puis publiée, et **un boot XFCE réel a été prouvé**
+> (voir § 7). Le catalogue présente donc `debian-12-i386-xfce` comme **`ready`**.
 
 ## 1. Objectifs
 
@@ -104,20 +105,42 @@ positif.
 
 Ces marqueurs proviennent du système invité (unités systemd), **jamais** de JavaScript/React.
 
-## 7. État réel — **NON CONSTRUIT / NON TESTÉ**
+## 7. Validation réelle
 
-> **Aucune image XFCE n'existe.** Ce dépôt ne peut pas exécuter `debootstrap` (pas de WSL/Docker, pas
-> d'environnement Linux). Le script `build.sh` **n'a pas été exécuté** pour ce flavor. Aucun boot
-> graphique XFCE réel n'a été prouvé.
+La variante `debian-12-i386-xfce` a été **construite puis prouvée par un boot réel** le
+**2026-10-15 / 2026-10-16** :
+
+- **Environnement de build** : WSL2 (Debian `bookworm`), `debootstrap` + `chroot`, exécution de
+  `sudo FLAVOR=xfce ./images/debian-12-i386/build.sh`.
+- **Boot réel** : image publiée dans `apps/web/public/images/debian-12-i386-xfce/` puis lancée dans
+  **v86** au sein du navigateur (non simulée côté JS/React).
+- **Marqueurs observés** (sortie série `ttyS0`) :
+  1. `LUMIBOOT_GUEST_READY:debian-12-i386-xfce` — OS opérationnel (`multi-user.target`).
+  2. `LUMIBOOT_DESKTOP_READY:debian-12-i386-xfce` — Xorg + session XFCE (`xfce4-session`/`xfwm4`)
+     réellement démarrés (`xdpyinfo` répond).
+- **Bureau** : la session XFCE s'affiche dans le navigateur (canvas VGA en mode graphique).
+
+**Performance** : XFCE est sensiblement plus lourd qu'Openbox sous v86 (émulation logicielle,
+sans accélération). Le délai jusqu'au marqueur `LUMIBOOT_DESKTOP_READY` est donc plus élevé que
+pour `debian-12-i386-desktop` ; le budget de démarrage du profil (`240 s`) reste suffisant.
+
+Messages bénins observés sur la console série, sans incidence sur la disponibilité :
+
+- `romain.perier@gmail.com` : certificat de signature de la base **cfg80211** (`regulatory.db`),
+  pas une erreur de l'image.
+- `regulatory.db` : firmware de régulation WiFi absent — **normal**, l'invité n'embarque pas de
+  firmware WiFi (réseau émulé `virtio-net`).
+
+## 8. État réel — **construite et validée**
 
 Au niveau du catalogue :
 
-- `packages/catalog/src/images.ts` : `debian-12-i386-xfce-image` est déclarée **sans `imageRef`** —
-  c'est la seule preuve qu'une image est présente, et elle est absente.
-- `packages/catalog/src/profiles.ts` : `debian-12-i386-xfce` a `validated: false`.
-- Conséquence : `getAggregatedAvailability` renvoie **`planned`** (jamais `ready`).
+- `packages/catalog/src/images.ts` : `debian-12-i386-xfce-image` déclare
+  `imageRef: 'debian-12-i386-xfce'` — l'image est présente.
+- `packages/catalog/src/profiles.ts` : `debian-12-i386-xfce` a `validated: true`.
+- Conséquence : `getAggregatedAvailability` renvoie **`ready`**.
 
-## 8. Procédure de construction (hors dépôt)
+## 9. Procédure de construction (hors dépôt)
 
 ### Option A — machine Linux native ou WSL2 (recommandé)
 
@@ -151,19 +174,16 @@ wsl -e bash -lc "cd /mnt/c/Users/<vous>/Desktop/LumiBoot && sudo FLAVOR=xfce ./i
 
 Ne jamais exécuter sous Windows natif : `debootstrap` et `chroot` exigent Linux.
 
-## 9. Critères de passage en `ready`
+## 10. Critères de passage en `ready` — **réunis**
 
-Le flavor XFCE ne peut devenir `ready` que si **toutes** ces conditions sont réunies :
+Le flavor XFCE n'est passé `ready` qu'après que **toutes** ces conditions ont été réunies :
 
 1. Image réellement **construite** puis publiée dans `apps/web/public/images/debian-12-i386-xfce/`
    (avec `manifest.json` réel : SHA-256 calculés).
 2. `images/debian-12-i386/tests/xfce-smoke-test.md` **entièrement vert** sur au moins un navigateur.
 3. Le smoke test console (`boot-smoke-test.md`) reste vert (dépendance directe).
-4. Le marqueur `LUMIBOOT_DESKTOP_READY` n'est observé **qu'après** une session XFCE réelle
+4. Le marqueur `LUMIBOOT_DESKTOP_READY` n'a été observé **qu'après** une session XFCE réelle
    (panneau XFCE + `xfwm4` visibles, `xdpyinfo` répondant).
-5. Alors seulement : renseigner `imageRef: 'debian-12-i386-xfce'` dans `images.ts` et
-   `validated: true` dans `profiles.ts`.
-
-Tant que ces conditions ne sont pas réunies, `debian-12-i386-xfce` **reste non-ready**.
+5. `imageRef: 'debian-12-i386-xfce'` dans `images.ts` et `validated: true` dans `profiles.ts`.
 
 > Voir aussi le flavor Openbox : [`docs/debian-desktop.md`](./debian-desktop.md).

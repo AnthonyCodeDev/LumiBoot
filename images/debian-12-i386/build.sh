@@ -608,8 +608,8 @@ Pour publier dans l'application :
 Vérifiez ensuite les requêtes HTTP Range puis le smoke test réel.
 Pour le flavor minimal : images/debian-12-i386/tests/boot-smoke-test.md
 Pour le flavor desktop : images/debian-12-i386/tests/desktop-smoke-test.md
-Pour le flavor xfce    : images/debian-12-i386/tests/xfce-smoke-test.md (NON CONSTRUIT / NON TESTÉ)
+Pour le flavor xfce    : images/debian-12-i386/tests/xfce-smoke-test.md
 
 Ne passer un système à availability:'ready' (et v86.integrated à true) qu'APRÈS
-un boot réellement prouvé. Les flavors desktop et xfce ne sont PAS prêts par défaut.
+un boot réellement prouvé (voir docs/debian-desktop.md et docs/debian-xfce.md).
 EOF
