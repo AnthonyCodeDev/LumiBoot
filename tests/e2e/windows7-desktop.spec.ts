@@ -123,7 +123,13 @@ async function waitForDesktopProof(page: Page): Promise<DesktopMetrics> {
     };
     return { proven: true, ...metrics };
   } catch {
-    return { proven: false, nonBlackRatio: null, distinctColors: null, canvasWidth: null, canvasHeight: null };
+    return {
+      proven: false,
+      nonBlackRatio: null,
+      distinctColors: null,
+      canvasWidth: null,
+      canvasHeight: null,
+    };
   }
 }
 
@@ -165,7 +171,11 @@ async function heapUsedBytes(page: Page): Promise<number | null> {
 async function attachDiagnostics(page: Page, consoleLogs: string[]): Promise<void> {
   const info = test.info();
 
-  const serial = (await page.locator('textarea.v86-serial').inputValue().catch(() => '')) || '';
+  const serial =
+    (await page
+      .locator('textarea.v86-serial')
+      .inputValue()
+      .catch(() => '')) || '';
   await info.attach('v86-serial', { body: serial, contentType: 'text/plain' });
 
   await info.attach('console', {
@@ -174,7 +184,10 @@ async function attachDiagnostics(page: Page, consoleLogs: string[]): Promise<voi
   });
 
   const sessionState =
-    (await page.locator('.session-toolbar').getAttribute('data-state').catch(() => null)) ?? 'inconnu';
+    (await page
+      .locator('.session-toolbar')
+      .getAttribute('data-state')
+      .catch(() => null)) ?? 'inconnu';
   await info.attach('session-state', {
     body: `data-state=${sessionState}`,
     contentType: 'text/plain',
@@ -303,12 +316,27 @@ async function bootWindowsDesktop(
 
 /**
  * Étapes post-boot communes : entrées réelles (souris/clavier atteignent
- * l'écran émulé), plein écran disponible, puis arrêt propre.
+ * l'écran émulé), capture Pointer Lock (un seul curseur : celui de l'invité),
+ * plein écran disponible, puis arrêt propre.
  */
 async function exerciseAndStop(page: Page, state: Locator): Promise<void> {
   const screen = page.locator('.v86-screen');
+
+  // Un clic explicite dans l'écran capture le pointeur : le navigateur masque
+  // le curseur hôte et v86 reçoit les mouvements RELATIFS (même aux bords).
   await screen.click();
-  await page.keyboard.press('Escape');
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.pointerLockElement?.classList.contains('v86-screen') ?? false),
+    )
+    .toBe(true);
+
+  // Échap est géré nativement par le navigateur ; en Chromium headless il n'est
+  // pas intercepté, on libère donc explicitement (même chemin `pointerlockchange`
+  // que celui déclenché par Échap en session réelle).
+  await page.evaluate(() => document.exitPointerLock());
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement === null)).toBe(true);
+
   await page.keyboard.press('ArrowUp');
   await page.keyboard.press('Enter');
 

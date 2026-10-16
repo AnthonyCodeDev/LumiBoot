@@ -1,245 +1,87 @@
-# LUMIBOOT — ARCHITECTURE TECHNIQUE
+# Architecture
 
-**État du dépôt livré :** ce document décrit l'**architecture cible** et son avancement. L'application
-React (`apps/web`) et les packages `contracts`, `catalog`, `vm-core`, `vm-assets`, `vm-storage`,
-`provider-v86` et `vm-network` existent. Le cœur `vm-core` est consolidé
-(voir [`adr/0004-vm-core-consolidation.md`](adr/0004-vm-core-consolidation.md)) et le premier moteur
-réel, v86, est branché derrière `VMEngine`. Le sous-système réseau commun est en place
-(voir [`network.md`](network.md)). Les lots de persistance et les moteurs supplémentaires restent à
-brancher. L'arbre ci-dessous reste une **cible d'évolution**, pas la liste exhaustive des fichiers.
-
-## 1. Arborescence proposée
+## Vue d'ensemble
 
 ```text
-lumiboot/
-├── apps/
-│   ├── web/                               # React + Vite + TypeScript
-│   └── network-proxy/                 # Proxy réseau local (Go natif, serveur WISP V1
-│   │                                      # sur loopback) — voir docs/network-proxy.md
-├── packages/
-│   ├── contracts/                         # Types et Zod schemas partagés
-│   ├── catalog/                           # Manifestes d'OS et compatibilités vérifiées
-│   ├── vm-core/                           # Interface stable / session state machine
-│   ├── vm-assets/                         # Manifeste d'assets, téléchargement, cache, SHA-256
-│   ├── vm-storage/                        # Stockage persistant versionné et quotas
-│   ├── vm-network/                        # Réseau commun agnostique (modes, capacités, profil,
-│   │                                      # cycle de vie, diagnostics) — voir network.md
-│   └── provider-v86/                      # Premier moteur réel côté client
-├── images/
-│   └── debian-12-i386/
-├── infra/
-│   ├── dev/docker-compose.yml             # Web et services de développement locaux
-│   └── nginx/{site.conf,security-headers.conf}
-├── tests/
-│   └── e2e/{catalog.spec,session-debian.spec}.ts
-├── docs/
-│   └── adr/
-├── .github/workflows/{ci,security}.yml
-├── .env.example
-├── eslint.config.js
-├── tsconfig.base.json
-├── pnpm-workspace.yaml
-├── package.json
-└── README.md
+React UI
+  ├─ catalogue validé (@lumiboot/catalog + @lumiboot/contracts)
+  └─ SessionLifecycle / VMRegistry (@lumiboot/vm-core)
+       └─ V86Provider chargé à la demande
+            ├─ assets et manifestes (@lumiboot/vm-assets)
+            ├─ stockage local (@lumiboot/vm-storage)
+            └─ profil réseau (@lumiboot/vm-network)
+                 ├─ Fetch v86
+                 ├─ proxy local WISP
+                 └─ relais WISP utilisateur
 ```
 
-La référence `prototype/` doit rester disponible tant que la migration React n'est pas terminée. Les
-fichiers `.img`, `.iso`, `.qcow2`, `.ext2` ne doivent pas être placés dans Git ; utiliser un stockage
-d'assets avec checksums et cache adapté.
+La VM, son CPU et sa RAM s'exécutent dans le navigateur. Le proxy local et les relais WISP ne transportent que le réseau.
 
-## 2. Architecture logique
+## Composants
 
-```mermaid
-flowchart TB
- U[Utilisateur] --> UI[React UI / catalogue / session]
- UI --> REG[VM Registry + SessionLifecycle]
- REG --> V86[V86Provider]
- V86 --> NET[vm-network: profil, capacités, diagnostics]
- V86 --> WASM[v86 WebAssembly]
- WASM --> DIMG[Debian 12 i386 image et console]
+| Chemin | Responsabilité |
+|---|---|
+| `apps/web` | React/Vite, catalogue, fiche système et écran de session |
+| `apps/network-proxy` | binaire Go WISP V1 sur loopback |
+| `packages/contracts` | types et schémas Zod partagés |
+| `packages/catalog` | familles, images, profils, variantes et disponibilité |
+| `packages/vm-core` | contrats moteur, registre et cycle de vie |
+| `packages/provider-v86` | intégration v86, console, readiness et réseau |
+| `packages/vm-assets` | manifestes, téléchargement, intégrité et disques locaux |
+| `packages/vm-storage` | stockage versionné et quotas |
+| `packages/vm-network` | modes, profils, capacités et diagnostics réseau |
+| `images` | scripts et métadonnées de construction ; gros binaires ignorés |
+| `infra` | Nginx, développement local et relais WISP optionnel |
+
+Les tests d'architecture interdisent à `contracts`, `catalog`, `vm-core` et `provider-v86` d'importer React, Zustand ou `apps/web`.
+
+## Flux de lancement
+
+1. Le catalogue construit et valide les `OSDefinition` depuis une image et un profil.
+2. L'UI crée une session avec l'identifiant du système ou de la variante.
+3. `VMRegistry` résout le moteur ; v86 est importé dynamiquement.
+4. `V86Provider` vérifie le manifeste et construit l'émulateur avec la configuration du profil.
+5. La session devient `running` après la preuve déclarée : marqueur série Debian ou première lecture disque en mode `disk-boot`.
+6. L'arrêt libère le contrôleur réseau, l'émulateur, les listeners et la session.
+
+États : `idle → preparing → downloading → booting → running → stopping → stopped`, avec `error` en cas d'échec.
+
+## Catalogue et disponibilité
+
+Le moteur appartient au profil, pas à l'image. La disponibilité est calculée, jamais saisie manuellement :
+
+```text
+imageRef présent
++ profil browser compatible
++ moteur intégré
++ validated = true
+= ready
 ```
 
-`V86Provider` n'appelle aucune API de calcul. Le téléchargement des assets depuis HTTP/CDN ne
-constitue pas du calcul distant. Le sous-système réseau (`vm-network`) est **local** : aucun backend
-ni serveur réseau LumiBoot.
+Les systèmes exigeant un média utilisateur ou un asset local manquant restent indisponibles au lancement. Les variantes sont décrites dans [`system-variants.md`](system-variants.md).
 
-## 3. Contrats du catalogue (proposition)
+## Routes
 
-```ts
-type OSFamily = 'linux' | 'windows' | 'macos';
-type ExecutionMode = 'browser';
-type EngineId = 'v86' | 'wasm-x86' | 'wasm-x86_64' | 'wasm-arm' | 'wasm-powerpc' | 'wasm-68k';
-type Availability = 'planned' | 'experimental' | 'ready' | 'unavailable';
-type Architecture = 'i386' | 'x86_64' | 'arm64';
+| Route | Vue |
+|---|---|
+| `/` | catalogue |
+| `/systems/:slug` | fiche et choix de variante |
+| `/session/:id` | session locale |
 
-interface OSDefinition {
-  id: string;
-  slug: string;
-  family: OSFamily;
-  displayName: string;
-  versionLabel: string;
-  architecture: Architecture;
-  executionMode: ExecutionMode;
-  engineId: EngineId;
-  availability: Availability;
-  description: string;
-  iconUrl: string;
-  minMemoryMiB?: number;
-  imageRef?: string; // identifiant de manifest, pas URL arbitraire de l'utilisateur
-  requirements: string[];
-  licenseNotes?: string;
-}
-```
+Il n'existe pas de route Settings. La configuration globale est chargée depuis `apps/web/public/lumiboot.config.json`.
 
-**Ne pas inférer la compatibilité du moteur à partir du nom ou du numéro de version.** Chaque entrée a
-un moteur explicitement assigné et un statut vérifié. Pour Windows/macOS, les assets peuvent être
-fournis par l'utilisateur ou la plateforme en fonction des droits/licences applicables, jamais
-automatiquement récupérés d'une source douteuse.
+## État fonctionnel
 
-**Groupes de variantes.** Plusieurs déclinaisons d'un même OS (console, bureau, flavour…) sont
-regroupées derrière une seule carte via les champs optionnels `variantGroupId` / `variantName`. Les
-helpers du catalogue (`getDisplaySystems`, `getVariantGroup`, `hasVariants`…) et le comportement
-grille/fiche sont détaillés dans [`system-variants.md`](system-variants.md).
+- Moteur intégré : v86, x86 32 bits.
+- Debian 12 : CLI, X11/Openbox et XFCE validés.
+- Windows 7 : variantes Lite et Professionnel, disques RAW locaux lus par HTTP Range.
+- Windows 10/11, Ubuntu, Fedora, Mint et macOS : catalogue seulement, moteurs ou images absents.
+- Réseau : `offline`, `browser-fetch`, `local-proxy`, `user-relay`; `local-network` prévu.
 
-## 4. Contrat providers (proposition)
+## Invariants
 
-```ts
-type VMState =
-  | 'idle' | 'preparing' | 'downloading' | 'booting'
-  | 'running' | 'stopping' | 'stopped' | 'error';
-
-type SessionEvent =
-  | { type: 'state'; state: VMState }
-  | { type: 'progress'; phase: string; loadedBytes?: number; totalBytes?: number }
-  | { type: 'error'; code: string; message: string }
-  | { type: 'network'; network: NetworkDiagnostics };
-
-interface VMConfiguration {
-  memoryMiB?: number;
-  vgaMemoryMiB?: number;
-  bootDevice?: string;
-  network?: NetworkProfile;   // @lumiboot/vm-network
-  signal?: AbortSignal;
-}
-
-interface VMInstance {
-  id: string;
-  systemId: string;
-  stop(): Promise<void>;
-  dispose(): Promise<void>;
-  subscribe(listener: (event: SessionEvent) => void): () => void;
-  // Une UI console est proposée par un adapter séparé :
-  // Browser v86 -> VGA/serial DOM.
-}
-
-interface VMEngine {
-  readonly id: string;
-  capabilities(): VMCapabilities;
-  canRun(os: OSDefinition): boolean;
-  start(os: OSDefinition, mountTarget: unknown, configuration?: VMConfiguration): Promise<VMInstance>;
-}
-```
-
-Invariants :
-- `canRun` doit rester déterministe et explicite ; les tests de compatibilité du navigateur s'ajoutent
-  avant le lancement.
-- Une seule transition `booting -> running` après preuve que le système invité est opérationnel, pas à
-  la fin d'un timer JavaScript.
-- `dispose()` est appelé en démontage composant et après `stop()` ; pas de worker WASM orphelin.
-- Les erreurs sont typées et traduites en messages utilisateurs.
-- Les snapshots et l'hibernation ne font **pas** partie du contrat minimal ; ajouter en capacités
-  optionnelles après validation.
-- La configuration réseau est appliquée **avant** le démarrage ; un changement de mode exige de
-  recréer la session (voir [`network.md`](network.md)).
-
-## 5. Routes UI et API
-
-### Frontend
-
-| Route | Contenu | Lot |
-|---|---|---|
-| `/` | Bibliothèque et système à la une | 0 |
-| `/systems/:slug` | Fiche complète système | 0 |
-| `/session/:id` | Console interactive et contrôles | 1 |
-| `/settings` | Préférences | 2 |
-
-La session navigateur peut avoir un ID généré localement. Elle n'a pas besoin d'un enregistrement dans
-une DB distante.
-
-## 6. Local only
-
-- Toutes les ressources CPU et RAM utilisées par les systèmes viennent de la machine du visiteur.
-- L'hébergement Web distribue uniquement l'application, les moteurs WebAssembly et les images système.
-- Aucun backend de virtualisation, aucune passerelle VNC/RDP, aucun streaming vidéo n'entre dans
-  l'architecture.
-- La persistance locale repose sur IndexedDB et OPFS, avec validation et quotas.
-
-## 7. Réseau
-
-Le réseau est **commun à tous les OS et moteurs** et vit dans `@lumiboot/vm-network`. Il ne suppose ni
-Ethernet ni VirtIO partout : il sépare la **NIC**, le **réseau local**, la **pile TCP-IP invitée** et le
-**transport d'accès Internet**. Les modes `offline`, `browser-fetch` et `user-relay` sont implémentés ;
-`local-network` est **prévu** (switch virtuel absent). `provider-v86` traduit un profil en `net_device`
-(backend `fetch` ou relais WISP `wisps://`). L'exécution reste locale : **aucun backend ni serveur
-réseau LumiBoot**.
-
-**Aucun mode ne garantit « Internet complet » par simple sélection.** Trois niveaux doivent être
-distingués : *configuré* (mode sélectionné), *techniquement supporté* (capacités déclarées par
-`capabilitiesForMode`) et *réellement vérifié* (sondes runtime `dns`/`http`/`https`/`tcp`, jamais
-déduites des compteurs `txBytes`/`rxBytes`). `fullInternet` est **faux pour tous les modes**.
-
-Limites connues avec `v86@0.5.471` : `browser-fetch` ne fonctionne qu'en **HTTP (port 80)** — le
-backend `fetch` de v86 n'enregistre pas le TCP 443, donc **HTTPS et `apt` échouent** — et reste
-**soumis à CORS** (hôtes sans `Access-Control-Allow-Origin` refusés). `user-relay` ne transporte TCP
-(dont 443) **que via un vrai relais WISP compatible v86** ; UDP est optionnel, ICMP non garanti, et
-**aucun relais public n'est livré**. La configuration est **globale** (`public/lumiboot.config.json`
-via `runtime.resolveNetworkProfile`) ; il n'y a **pas de page Settings**.
-
-Détails, modes, capacités, fiabilité, sécurité et validation : [`network.md`](network.md). Décisions
-structurantes : [`adr/0005-network-universal.md`](adr/0005-network-universal.md) et, pour un futur
-transport TCP/UDP brut en Isolated Web App (non disponible aujourd'hui),
-[`adr/0006-direct-sockets-iwa.md`](adr/0006-direct-sockets-iwa.md). Le **proxy réseau local**
-(`apps/network-proxy/`, serveur WISP V1 sur loopback, mode `local-proxy`) est décidé
-dans [`adr/0007-network-proxy.md`](adr/0007-network-proxy.md) et documenté dans
-[`network-proxy.md`](network-proxy.md).
-
-## 8. Compatibilité initiale et ambitions
-
-| OS / version | Exécution cible | Situation |
-|---|---|---|
-| Debian 12 i386 | Navigateur avec v86 | Premier système à réaliser et tester |
-| Debian 12 i386 Desktop | Navigateur avec v86 | Flavor graphique (Xorg + Openbox) ; NON construit, NON testé, non-`ready` (voir [`debian-desktop.md`](debian-desktop.md)) |
-| Ubuntu historique i386 | Navigateur avec v86 | Étude de compatibilité, version par version |
-| Fedora, Ubuntu et Mint modernes x64 | Navigateur avec moteur compatible local | Support local uniquement, sans backend de virtualisation |
-| Windows 7 x86 | Navigateur avec v86 (média importé par l'utilisateur) | Sélectionnable, moteur intégré, média non distribué : état `resource-required`, jamais `ready` sans boot réel validé (voir [`windows-7.md`](windows-7.md)) |
-| Windows anciens x86 (autres) | Navigateur avec moteur compatible local | Comportement et licence à vérifier |
-| Windows 10/11 x64 | Non prioritaire | Aucun support direct par v86 ; dépend d'un moteur compatible local |
-| macOS modernes | Navigateur avec moteur compatible local | Étude de faisabilité, sans infrastructure distante |
-| macOS historiques Intel | Étude séparée par version | Ne pas promettre « toutes les versions » |
-
-**Debian 13 n'est pas la bonne base pour le premier noyau i386 :** Debian a supprimé l'installateur et
-le noyau i386 natifs à partir de Trixie. Debian 12 i386 est donc une cible de démarrage plus réaliste
-pour v86.
-
-## 9. Ressources pour vérifications techniques
-
-- https://github.com/copy/v86
-- https://github.com/leaningtech/webvm
-- https://cheerpx.io/docs/licensing
-- https://www.debian.org/ports/i386/
-- https://guacamole.apache.org/doc/gug/
-- https://developer.apple.com/documentation/virtualization
-- https://www.apple.com/legal/sla/
-
-## 10. Convention de qualité
-
-- TypeScript strict, `noUncheckedIndexedAccess` conseillé, tests Vitest/Playwright.
-- Les versions et licences des dépendances doivent être verrouillées (`pnpm-lock.yaml`).
-- Suivre une convention de commit et documenter les choix structurants.
-- Secrets côté API/agents uniquement. Les variables `VITE_*` sont publiques.
-- Les composants UI ne font jamais `new V86(...)` directement.
-- Tests automatiques de la state machine, des erreurs de lancement, des favoris, de la recherche et de
-  l'accessibilité.
-- Chargement lazy du moteur v86 et des assets système.
-- Ajouter des en-têtes de sécurité compatibles avec les exigences réelles du WASM et de ses workers
-  locaux (vérifier COOP/COEP selon la version intégrée).
+- Pas de VM distante, VNC/RDP ni API d'orchestration.
+- Pas de gros disque ou média propriétaire dans Git.
+- Pas de secret dans une variable `VITE_*` ou un JSON public.
+- Pas de logique moteur dans les composants React.
+- Pas d'état `ready`, `running` ou `connected` sans preuve correspondante.

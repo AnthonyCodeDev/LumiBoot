@@ -1,22 +1,17 @@
-# ADR 0001 — Exécution locale exclusive
+# ADR 0001 — Exécution locale
 
-- **Statut :** accepté
-- **Date :** 2026-10-14
-- **Contexte :** LumiBoot doit rester un client Web pur, sans infrastructure de virtualisation distante,
-  sans service backend pour démarrer les machines et sans dépendance à un hôte de calcul externe.
+- Statut : accepté
+- Date : 2026-10-14
 
 ## Décision
 
-LumiBoot exécute les systèmes d'exploitation directement dans le navigateur de l'utilisateur via des
-moteurs WebAssembly. L'interface d'exécution est centralisée dans `VMProvider`, résolue par un
-`VMRegistry`, et les moteurs sont chargés de façon paresseuse uniquement au besoin.
+Les systèmes sont exécutés dans le navigateur par des moteurs WebAssembly chargés à la demande derrière `VMEngine` et `VMRegistry`.
 
-Aucune API distante, aucun worker d'hyperviseur, aucun service PostgreSQL et aucune passerelle de console
-ne font partie de la conception de l'application. Le runtime reste entièrement local.
+LumiBoot n'utilise aucun hôte de calcul, hyperviseur distant, VNC/RDP ou API d'orchestration de VM. Les assets peuvent être téléchargés et un auxiliaire réseau peut tourner sur la machine de l'utilisateur, mais aucune VM ne s'exécute côté serveur.
 
 ## Conséquences
 
-- Le catalogue définit l'`engineId` et le mode d'exécution au niveau du profil de lancement, pas au niveau du disque.
-- La compatibilité est explicite et vérifiée par le moteur disponible dans le navigateur du visiteur.
-- L'UI n'accède jamais à un environnement de calcul distant : elle n'interagit qu'avec un handle de session local.
-- Toute extension future doit rester compatible avec un modèle navigateur-only, sans infrastructure serveur fictive.
+- Le profil de lancement choisit explicitement le moteur et sa configuration.
+- La compatibilité est vérifiée avant le démarrage ; l'UI ne simule jamais une session.
+- Le cycle de vie local doit toujours libérer le moteur, ses workers et ses écouteurs.
+- Les services distants exploités par l'utilisateur, comme un relais WISP, restent optionnels et ne déplacent pas l'exécution de la VM.

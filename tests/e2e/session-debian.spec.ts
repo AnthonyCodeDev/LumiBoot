@@ -67,6 +67,18 @@ test.describe('Session Debian 12 i386 (v86, boot réel)', () => {
     expect(vgaText).toContain('automatic login');
     expect(vgaText.trim()).not.toMatch(/login:\s*$/);
 
+    // Capture Pointer Lock : un clic dans l'écran verrouille le pointeur (un
+    // seul curseur visible, celui de l'invité). Chromium headless n'intercepte
+    // pas Échap : on libère par le même chemin `pointerlockchange`.
+    await page.locator('.v86-screen').click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.pointerLockElement?.classList.contains('v86-screen') ?? false),
+      )
+      .toBe(true);
+    await page.evaluate(() => document.exitPointerLock());
+    await expect.poll(() => page.evaluate(() => document.pointerLockElement === null)).toBe(true);
+
     // sudo NOPASSWD pour lumiboot depuis la console série.
     await serial.pressSequentially('sudo -n whoami\n', { delay: 25 });
     await expect(serial).toHaveValue(/root/, { timeout: 30_000 });

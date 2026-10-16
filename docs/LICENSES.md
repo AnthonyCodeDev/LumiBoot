@@ -1,31 +1,26 @@
-# Licences et images système
+# Licences et médias système
 
-## Règle d'or
+## Règles
 
-**Aucun fichier d'image système (`.img`, `.iso`, `.qcow2`, `.ext2`, `.bin`) n'est committé dans ce
-dépôt.** Seuls des **manifestes** (URL, taille, `sha256`, licence, provenance) sont versionnés.
+- Aucun disque ou ISO propriétaire ne doit être committé ou distribué.
+- Les fichiers `.img`, `.iso`, `.qcow2`, `.ext2` et `.bin` volumineux restent hors Git.
+- Chaque manifeste doit indiquer provenance, taille et SHA-256 lorsque le média est publié.
 
-## Logiciels du projet
+## Composants
 
 | Composant | Licence |
 |---|---|
 | Code LumiBoot | à définir par le mainteneur |
 | v86 | BSD-2-Clause |
-| React, Vite, Fastify, Zod, Zustand | MIT |
+| React, Vite, Zod, Zustand | MIT |
+| gorilla/websocket | BSD-2-Clause |
+| wisp-python (`infra/wisp`) | AGPL-3.0 |
 
-## Images de systèmes
+## Systèmes
 
-- **Debian** : images libres et redistribuables ; documenter la provenance et la licence dans
-  `images/debian-12-i386/`.
-- **Windows 7 / 10 / 11** : média et licence **fournis par l'utilisateur**. Aucune redistribution
-  d'ISO propriétaire. Respecter les conditions Microsoft. Windows 7 x86 sous v86 est
-  **sélectionnable mais jamais `ready`** : l'utilisateur importe localement un disque qu'il détient
-  légalement (voir [`windows-7.md`](windows-7.md)). Aucune clé ni
-  image n'est committée.
-- **macOS** : virtualisation soumise à la licence Apple et au matériel Apple compatible. Ne pas
-  promettre de compatibilité multi-version globale. Voir https://www.apple.com/legal/sla/.
+- Debian : images construites depuis Bookworm avec provenance et paquets consignés.
+- Windows 7 : disques RAW locaux de l'opérateur, ignorés par Git et servis en développement par HTTP Range. Aucune image ni clé n'est distribuée.
+- Windows 10/11 : médias utilisateur requis ; aucun moteur x86-64 n'est intégré.
+- macOS : usage soumis à la licence Apple et au matériel autorisé.
 
-## Provenance des visuels
-
-Toutes les illustrations de cartes sont des SVG produits pour le projet, livrés localement dans
-`apps/web/public/icons/os/`. Aucune dépendance à un CDN d'illustrations.
+Les icônes de systèmes sont des SVG locaux dans `apps/web/public/icons/os/`.

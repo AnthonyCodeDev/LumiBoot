@@ -3,6 +3,7 @@ import type { OSDefinition } from '@lumiboot/contracts';
 import type { SessionSnapshot } from '@lumiboot/vm-core';
 import { SessionToolbar } from './SessionToolbar';
 import { StatusOverlay } from './StatusOverlay';
+import { usePointerLockCapture } from './usePointerLockCapture';
 
 export interface SessionScreenProps {
   session: SessionSnapshot;
@@ -35,6 +36,14 @@ export function SessionScreen({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(true);
   const [logsOpen, setLogsOpen] = useState(false);
+  // Capture souris unique (Pointer Lock) : un seul curseur visible, celui de
+  // l'invité. Un clic dans l'écran capture, Échap libère. v86 relaie déjà les
+  // mouvements relatifs : on ne réinjecte jamais de mouvement ici.
+  const {
+    captured,
+    supported: pointerLockSupported,
+    error: pointerLockError,
+  } = usePointerLockCapture(consoleRef, running);
 
   // Cible du plein écran : uniquement l'écran résultat (le VGA `.v86-screen`
   // injecté par le provider dans `.session-console`), pas la page entière.
@@ -114,6 +123,32 @@ export function SessionScreen({
         <div className={`session-console${logsOpen ? '' : ' logs-hidden'}`} ref={consoleRef} />
         {!running ? (
           <StatusOverlay session={session} system={system} consoleRef={consoleRef} />
+        ) : null}
+        {/*
+          Indicateur discret de capture : jamais cliquable (`pointer-events:
+          none`), il ne superpose AUCUN curseur — le navigateur masque le
+          curseur hôte nativement pendant le verrouillage.
+        */}
+        {running && pointerLockSupported ? (
+          <p
+            className="session-pointer-hint"
+            data-testid="pointer-lock-hint"
+            data-state={captured ? 'captured' : 'released'}
+            aria-live="polite"
+          >
+            {captured
+              ? 'Souris capturée · Échap pour libérer'
+              : 'Cliquez dans l’écran pour capturer la souris'}
+          </p>
+        ) : null}
+        {running && pointerLockError ? (
+          <p
+            className="session-pointer-hint session-pointer-hint--error"
+            data-testid="pointer-lock-error"
+            role="alert"
+          >
+            {pointerLockError}
+          </p>
         ) : null}
       </div>
     </div>

@@ -1,23 +1,22 @@
-# ADR 0003 — Sans infrastructure distante
+# ADR 0003 — Aucune infrastructure de VM distante
 
-- **Statut :** accepté
-- **Date :** 2026-10-14
-
-## Contexte
-
-Le projet a été clarifié autour d'une architecture purement locale. Toute tentative de conserver un
-cadre de VM distante, des workers externes ou une API d'orchestration créerait de la complexité,
-une surface d'attaque et des divergences avec le modèle navigateur-first.
+- Statut : accepté
+- Date : 2026-10-14
 
 ## Décision
 
-- Les moteurs sont chargés dynamiquement dans le navigateur au moment du lancement.
-- Le cycle de vie garantit `stop()` puis `dispose()` sans laisser de ressource orpheline.
-- Les données persistent via IndexedDB et OPFS, avec quotas et validation.
-- Aucun service de console, aucun proxy API et aucun système de VM distant ne sont ajoutés au dépôt.
+LumiBoot ne fournit ni calcul distant, ni API d'orchestration, ni console distante. Les moteurs s'exécutent dans le navigateur et les sessions appellent `stop()` puis `dispose()`.
+
+Cette décision n'interdit pas :
+
+- l'hébergement statique des moteurs et images ;
+- le proxy réseau natif exécuté en loopback sur la machine de l'utilisateur ;
+- un relais WISP que l'utilisateur administre explicitement.
+
+Ces composants transportent des données mais n'exécutent aucune VM.
 
 ## Conséquences
 
-- L'application reste portable, simple à déployer et conforme à la stratégie locale exclusive.
-- Les secrets, points d'entrée réseau et ressources d'orchestration ne doivent pas être ajoutés au codebase ou au dépôt.
-- Les évolutions futures doivent s'inscrire dans un modèle navigateur-local, sans réintroduire la logique distante.
+- Aucun secret d'infrastructure ne doit être exposé au frontend.
+- Aucun état « disponible » ou « connecté » ne peut être déduit d'une configuration seule.
+- Toute extension doit conserver l'exécution locale de la VM.

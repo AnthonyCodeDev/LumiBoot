@@ -541,6 +541,39 @@
   overflow: hidden;
   box-sizing: border-box;
 }
+/* Curseur hôte masqué UNIQUEMENT quand l'écran détient réellement le verrou
+   (classe posée en synchronisation avec `document.pointerLockElement`). */
+.v86-screen.is-pointer-locked {
+  cursor: none;
+}
+/* Indicateur discret de capture souris : jamais cliquable, ne superpose jamais
+   de faux curseur. */
+.session-pointer-hint {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2;
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid #2c333e;
+  border-radius: 999px;
+  background: rgba(11, 13, 16, 0.82);
+  color: #aeb5c0;
+  font-size: 11px;
+  line-height: 1.4;
+  pointer-events: none;
+  user-select: none;
+}
+.session-pointer-hint[data-state='captured'] {
+  border-color: #345e4b;
+  color: #aee6c9;
+}
+.session-pointer-hint--error {
+  left: auto;
+  right: 12px;
+  border-color: #5e3434;
+  color: #f0b4ae;
+}
 /* Logs série : plus petits, en dessous de l'écran, style terminal. */
 .v86-serial {
   display: block;
@@ -683,9 +716,24 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-.route-error h1 { margin: 0 0 8px; font-size: 26px; letter-spacing: -0.02em; }
-.route-error p { max-width: 460px; margin: 0 auto 20px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
-.route-error-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.route-error h1 {
+  margin: 0 0 8px;
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+.route-error p {
+  max-width: 460px;
+  margin: 0 auto 20px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.route-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
 .route-error-details {
   max-width: 520px;
   margin: 0 auto 20px;
