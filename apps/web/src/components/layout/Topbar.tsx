@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { MouseEvent } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 export function Topbar() {
   const [open, setOpen] = useState(false);
@@ -8,30 +7,6 @@ export function Topbar() {
   const menuId = useId();
   const menuRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
-
-  const onHome = location.pathname === '/';
-  const catalogueActive = onHome && location.hash === '#catalogue';
-
-  function scrollToCatalogue() {
-    document.getElementById('catalogue')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  function handleCatalogueClick(event: MouseEvent<HTMLAnchorElement>) {
-    setOpen(false);
-    if (location.pathname === '/') {
-      event.preventDefault();
-      window.history.replaceState(null, '', '/#catalogue');
-      scrollToCatalogue();
-    }
-  }
-
-  // Arrivée sur /#catalogue depuis une autre page : descendre vers la section
-  // une fois le contenu d'accueil monté (ScrollToTop a déjà remis en haut).
-  useEffect(() => {
-    if (location.pathname === '/' && location.hash === '#catalogue') {
-      scrollToCatalogue();
-    }
-  }, [location.pathname, location.hash]);
 
   // Fermer le menu mobile au changement de route.
   useEffect(() => {
@@ -106,33 +81,15 @@ export function Topbar() {
       </Link>
 
       <div className="topbar-menu" id={menuId} ref={menuRef} data-open={open}>
-        <nav aria-label="Navigation principale">
-          <ul className="topbar-nav">
-            <li>
-              <NavLink
-                to="/"
-                end
-                className={({ isActive }) => (isActive ? 'topbar-link active' : 'topbar-link')}
-                onClick={() => setOpen(false)}
-              >
-                Accueil
-              </NavLink>
-            </li>
-            <li>
-              <Link
-                to="/#catalogue"
-                className={catalogueActive ? 'topbar-link active' : 'topbar-link'}
-                aria-current={catalogueActive ? 'true' : undefined}
-                onClick={handleCatalogueClick}
-              >
-                Catalogue
-              </Link>
-            </li>
-          </ul>
-        </nav>
-        <Link to="/#catalogue" className="btn btn-primary topbar-cta" onClick={handleCatalogueClick}>
-          Explorer le catalogue
-        </Link>
+        <a
+          href="https://discord.gg/HcqduKt"
+          className="btn btn-primary topbar-cta"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => setOpen(false)}
+        >
+          Rejoindre le Discord
+        </a>
       </div>
 
       <button

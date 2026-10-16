@@ -21,6 +21,10 @@ export interface V86ConsoleAdapter {
 
 export class DomConsoleAdapter implements V86ConsoleAdapter {
   #root: HTMLElement | null = null;
+  #screen: HTMLElement | null = null;
+  #textMode: HTMLElement | null = null;
+  #fitObserver: ResizeObserver | null = null;
+  #fitFrame = 0;
 
   attach(container: HTMLElement): V86ConsoleMount {
     const doc = container.ownerDocument;
@@ -54,10 +58,59 @@ export class DomConsoleAdapter implements V86ConsoleAdapter {
     container.append(root);
 
     this.#root = root;
+    this.#screen = screen;
+    this.#textMode = textMode;
+    this.#observeFit();
     return { screenContainer: screen, serialTextarea };
   }
 
+  #observeFit(): void {
+    const screen = this.#screen;
+    const textMode = this.#textMode;
+    if (typeof ResizeObserver !== 'undefined' && screen && textMode) {
+      this.#fitObserver = new ResizeObserver(() => this.#applyFit());
+      this.#fitObserver.observe(screen);
+      this.#fitObserver.observe(textMode);
+    }
+    if (typeof requestAnimationFrame !== 'undefined') {
+      this.#fitFrame = requestAnimationFrame(() => this.#applyFit());
+    } else {
+      this.#applyFit();
+    }
+  }
+
+  #applyFit(): void {
+    const screen = this.#screen;
+    const textMode = this.#textMode;
+    if (!screen || !textMode) {
+      return;
+    }
+    const rect = screen.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) {
+      return;
+    }
+    if (getComputedStyle(textMode).display === 'none') {
+      screen.style.removeProperty('--v86-fit');
+      return;
+    }
+    const naturalWidth = textMode.offsetWidth;
+    const naturalHeight = textMode.offsetHeight;
+    if (naturalWidth < 1 || naturalHeight < 1) {
+      return;
+    }
+    const scale = Math.min(rect.width / naturalWidth, rect.height / naturalHeight);
+    screen.style.setProperty('--v86-fit', String(scale));
+  }
+
   detach(): void {
+    this.#fitObserver?.disconnect();
+    this.#fitObserver = null;
+    if (typeof cancelAnimationFrame !== 'undefined' && this.#fitFrame !== 0) {
+      cancelAnimationFrame(this.#fitFrame);
+    }
+    this.#fitFrame = 0;
+    this.#screen = null;
+    this.#textMode = null;
     this.#root?.remove();
     this.#root = null;
   }

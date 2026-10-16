@@ -139,8 +139,8 @@ describe('getEffectiveAvailability : média utilisateur requis', () => {
   });
 });
 
-describe('catalogue : Windows 7 sous v86 (média fourni par l’utilisateur)', () => {
-  it('est sélectionnable, moteur v86 intégré, mais jamais ready sans boot prouvé', () => {
+describe('catalogue : Windows 7 sous v86 (disque RAW local)', () => {
+  it('est sélectionnable, moteur v86 intégré, et ready (boot disque prouvé)', () => {
     const windows = getSystemById('windows-7-x86');
     const profile = windows?.launchProfiles[0];
     const definition = launchProfiles.find((candidate) => candidate.id === 'windows-7-x86');
@@ -150,15 +150,15 @@ describe('catalogue : Windows 7 sous v86 (média fourni par l’utilisateur)', (
     expect(profile?.engineId).toBe('v86');
     expect(profile && isEngineIntegrated(profile.engineId)).toBe(true);
     // `validated` vit sur la définition du catalogue, pas sur le contrat.
-    expect(definition?.validated).toBe(false);
-    expect(windows?.availability).not.toBe('ready');
+    expect(definition?.validated).toBe(true);
+    expect(windows?.availability).toBe('ready');
   });
 
-  it('déclare l’état honnête « resource-required » tant qu’aucun média n’est fourni', () => {
-    expect(getSystemById('windows-7-x86')?.availability).toBe('resource-required');
-    // Aucune image n'est distribuée : pas de `imageRef` (preuve d'image servie).
-    expect(getSystemById('windows-7-x86')?.imageRef).toBeUndefined();
-    expect(getSystemById('windows-7-x86')?.mediaStrategy).toBe('user-import');
+  it('référence le disque RAW local de la codebase (plus de média à importer)', () => {
+    expect(getSystemById('windows-7-x86')?.availability).toBe('ready');
+    // Le disque local est référencé : plus de `resource-required`.
+    expect(getSystemById('windows-7-x86')?.imageRef).toBe('windows-7-x86');
+    expect(getSystemById('windows-7-x86')?.mediaStrategy).toBe('bundled');
   });
 
   it('utilise une preuve de démarrage disque (aucun marqueur invité simulé)', () => {
@@ -173,11 +173,11 @@ describe('catalogue : Windows 7 sous v86 (média fourni par l’utilisateur)', (
     expect(profile?.hardwareProfile?.acpi).toBe(true);
   });
 
-  it('expose l’identité Super Lite x86 et une mémoire puissance de deux', () => {
+  it('expose l’identité Lite x86 et une mémoire puissance de deux', () => {
     const system = getSystemById('windows-7-x86');
     const profile = system?.launchProfiles[0];
-    expect(system?.displayName).toBe('Windows 7');
-    expect(system?.versionLabel).toBe('Super Lite · x86');
+    expect(system?.displayName).toBe('Windows 7 Lite');
+    expect(system?.versionLabel).toBe('Lite · x86');
     // v86 exige une puissance de deux : 1536 (préparé sous QEMU) est invalide.
     const memoryMiB = profile?.configuration?.memoryMiB ?? 0;
     expect(Number.isInteger(memoryMiB) && memoryMiB > 0 && (memoryMiB & (memoryMiB - 1)) === 0).toBe(

@@ -71,6 +71,38 @@ describe('SystemGrid', () => {
     }
   });
 
+  it('ordonne les cartes disponibles avant les non-disponibles', () => {
+    renderGrid();
+    const availabilities = screen.getAllByRole('article').map((card) => {
+      const id = card.getAttribute('data-id');
+      return getSystemById(id!)!.availability;
+    });
+    let seenUnavailable = false;
+    for (const availability of availabilities) {
+      if (availability !== 'ready') {
+        seenUnavailable = true;
+      } else {
+        expect(seenUnavailable).toBe(false);
+      }
+    }
+  });
+
+  it('affiche un séparateur entre les systèmes disponibles et les autres', () => {
+    renderGrid();
+    expect(screen.getByRole('separator').tagName).toBe('HR');
+  });
+
+  it('applique la classe is-muted uniquement aux cartes non-disponibles', () => {
+    renderGrid();
+    const cards = screen.getAllByRole('article');
+    for (const card of cards) {
+      const id = card.getAttribute('data-id');
+      const system = getSystemById(id!)!;
+      const isMuted = card.classList.contains('is-muted');
+      expect(isMuted).toBe(system.availability !== 'ready');
+    }
+  });
+
   it('navigue directement vers la fiche système au clic (sans popup)', async () => {
     const user = userEvent.setup();
     render(

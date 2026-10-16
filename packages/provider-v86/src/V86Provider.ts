@@ -12,7 +12,12 @@ import {
   defaultNetworkProfile,
   isNetworkError,
 } from '@lumiboot/vm-network';
-import { ensureImageManifest, type ImageManifest } from '@lumiboot/vm-assets';
+import {
+  ensureImageManifest,
+  ensureLocalDiskManifest,
+  type ImageManifest,
+  type LocalDiskManifest,
+} from '@lumiboot/vm-assets';
 import type { V86Options } from 'v86';
 import { createBrowserV86, type V86Factory } from './browser-v86';
 import { DomConsoleAdapter, type V86ConsoleAdapter, type V86ConsoleMount } from './console-adapter';
@@ -56,6 +61,11 @@ export interface V86ProviderOptions {
   createEngine?: V86Factory;
   /** Résolution du manifeste d'image (`ensureImageManifest` par défaut). */
   resolveManifest?: (ref: string, signal?: AbortSignal) => Promise<ImageManifest>;
+  /**
+   * Résolution du manifeste d'un disque local démarré par BIOS
+   * (`ensureLocalDiskManifest` par défaut).
+   */
+  resolveDiskManifest?: (ref: string, signal?: AbortSignal) => Promise<LocalDiskManifest>;
   /** Fabrique d'adaptateur de console (VGA + série), injectable en test. */
   createConsole?: () => V86ConsoleAdapter;
 }
@@ -72,12 +82,15 @@ export class V86Provider implements VMEngine {
   readonly id = V86_PROVIDER_ID;
   readonly #createEngine: V86Factory;
   readonly #resolveManifest: (ref: string, signal?: AbortSignal) => Promise<ImageManifest>;
+  readonly #resolveDiskManifest: (ref: string, signal?: AbortSignal) => Promise<LocalDiskManifest>;
   readonly #createConsole: () => V86ConsoleAdapter;
 
   constructor(options: V86ProviderOptions = {}) {
     this.#createEngine = options.createEngine ?? ((config) => createBrowserV86(config));
     this.#resolveManifest =
       options.resolveManifest ?? ((ref, signal) => ensureImageManifest(ref, signal));
+    this.#resolveDiskManifest =
+      options.resolveDiskManifest ?? ((ref, signal) => ensureLocalDiskManifest(ref, signal));
     this.#createConsole = options.createConsole ?? (() => new DomConsoleAdapter());
   }
 
@@ -120,9 +133,13 @@ export class V86Provider implements VMEngine {
       });
     }
 
-    // Média importé par l'utilisateur (ex. disque Windows 7 préinstallé) :
-    // démarrage BIOS direct, sans noyau Linux. LumiBoot ne distribue AUCUN
-    // média propriétaire : il doit avoir été fourni localement par l'utilisateur.
+    // Un profil `disk-boot` démarre un disque dur par BIOS (aucun noyau Linux) :
+    // soit un disque RAW de la codebase (ex. Windows 7), soit un média importé
+    // localement. Un profil `guest-marker` démarre une image publiée par noyau.
+    const isDiskBoot = launchProfile.readiness?.mode === 'disk-boot';
+
+    // Média importé par l'utilisateur : démarrage BIOS direct. LumiBoot ne
+    // distribue AUCUN média propriétaire : il doit avoir été fourni localement.
     const media = configuration?.media;
     if (os.mediaStrategy === 'user-import' && media === undefined) {
       throw new VMError(
@@ -134,31 +151,42 @@ export class V86Provider implements VMEngine {
     }
 
     let manifest: ImageManifest | null = null;
+    let diskManifest: LocalDiskManifest | null = null;
     if (media === undefined) {
       if (!os.imageRef) {
         throw new VMError('IMAGE_MISSING', `Aucune image n'est associée à « ${os.id} ».`, {
           systemId: os.id,
         });
       }
-      manifest = await this.#loadManifest(os, signal);
-      const disk = manifest.files['disk'];
-      const bzimage = manifest.files['bzimage'];
-      const initrd = manifest.files['initrd'];
-      if (!disk || !bzimage || !initrd) {
-        throw new VMError(
-          'IMAGE_MISSING',
-          `Le manifeste « ${manifest.ref} » ne contient pas les fichiers disk/bzimage/initrd requis.`,
-          { systemId: os.id },
-        );
+      if (isDiskBoot) {
+        // Disque RAW local de la codebase : démarré par BIOS via HTTP Range.
+        diskManifest = await this.#loadDiskManifest(os, signal);
+      } else {
+        manifest = await this.#loadManifest(os, signal);
+        const disk = manifest.files['disk'];
+        const bzimage = manifest.files['bzimage'];
+        const initrd = manifest.files['initrd'];
+        if (!disk || !bzimage || !initrd) {
+          throw new VMError(
+            'IMAGE_MISSING',
+            `Le manifeste « ${manifest.ref} » ne contient pas les fichiers disk/bzimage/initrd requis.`,
+            { systemId: os.id },
+          );
+        }
       }
     }
 
-    const memoryMiB = resolveMemoryMiB(manifest, launchProfile.configuration, configuration);
+    const memoryMiB = resolveMemoryMiB(
+      manifest?.memoryMiB ?? diskManifest?.memoryMiB,
+      launchProfile.configuration,
+      configuration,
+    );
     assertPowerOfTwoMiB(memoryMiB, 'memory_size', os.id);
     const vgaMemoryMiB =
       configuration?.vgaMemoryMiB ??
       launchProfile.configuration?.vgaMemoryMiB ??
       manifest?.vgaMemoryMiB ??
+      diskManifest?.vgaMemoryMiB ??
       8;
 
     // Réseau fixé AVANT la construction de l'émulateur : changer d'interface
@@ -202,17 +230,32 @@ export class V86Provider implements VMEngine {
     const kernelDisk = manifest?.files['disk'];
     const bzimage = manifest?.files['bzimage'];
     const initrd = manifest?.files['initrd'];
-    // Deux plans de démarrage réels :
+    // Trois plans de démarrage réels :
     // - média importé -> BIOS + disque (`hda`), aucun noyau Linux ;
+    // - disque RAW local -> BIOS + disque (`hda`), aucun noyau Linux ;
     // - image publiée -> boot direct du noyau (`bzimage`/`initrd` + `hda`).
+    //
+    // Le disque est TOUJOURS monté en disque dur (`hda`, jamais `cdrom` : ce
+    // n'est pas une ISO). v86 le lit en lecture seule via des requêtes Range
+    // (`async`) : la base n'est jamais réécrite, les écritures invitées restent
+    // dans le tampon mémoire de l'instance et disparaissent à l'arrêt de la
+    // session (aucune persistance revendiquée, voir docs/windows-7.md).
     const bootMedia: V86Options = media
       ? { hda: { url: media.url, async: true, size: media.size } }
-      : {
-          bzimage: { url: bzimage!.url },
-          initrd: { url: initrd!.url },
-          cmdline: bootOptions.cmdline ?? DEFAULT_BOOT_CMDLINE,
-          hda: { url: kernelDisk!.url, async: true, size: kernelDisk!.size },
-        };
+      : diskManifest
+        ? {
+            hda: {
+              url: diskManifest.boot.url,
+              async: true,
+              size: diskManifest.disk.size,
+            },
+          }
+        : {
+            bzimage: { url: bzimage!.url },
+            initrd: { url: initrd!.url },
+            cmdline: bootOptions.cmdline ?? DEFAULT_BOOT_CMDLINE,
+            hda: { url: kernelDisk!.url, async: true, size: kernelDisk!.size },
+          };
     const options: V86Options = {
       wasm_path: bootOptions.wasmPath ?? V86_ASSET_PATHS.wasm,
       bios: { url: bootOptions.biosUrl ?? V86_ASSET_PATHS.bios },
@@ -224,7 +267,10 @@ export class V86Provider implements VMEngine {
       autostart: false,
       ...bootMedia,
       // ACPI vient du profil matériel (requis par les invités NT modernes).
-      ...(media === undefined ? {} : { acpi: launchProfile.hardwareProfile?.acpi ?? false }),
+      // Une session à média importé OU à disque local en a besoin.
+      ...(media === undefined && diskManifest === null
+        ? {}
+        : { acpi: launchProfile.hardwareProfile?.acpi ?? false }),
       ...(netDevice === undefined ? {} : { net_device: netDevice }),
     };
 
@@ -304,24 +350,45 @@ export class V86Provider implements VMEngine {
       });
     }
   }
-}
 
-interface MemoryHint {
-  readonly memoryMiB?: number | undefined;
+  async #loadDiskManifest(
+    os: OSDefinition,
+    signal: AbortSignal | undefined,
+  ): Promise<LocalDiskManifest> {
+    const ref = os.imageRef;
+    if (!ref) {
+      throw new VMError('IMAGE_MISSING', `Aucun disque n'est associé à « ${os.id} ».`, {
+        systemId: os.id,
+      });
+    }
+    try {
+      return await this.#resolveDiskManifest(ref, signal);
+    } catch (error) {
+      if (error instanceof VMError) throw error;
+      throw new VMError('IMAGE_MISSING', `Disque « ${ref} » indisponible.`, {
+        systemId: os.id,
+        cause: error,
+      });
+    }
+  }
 }
 
 /** Mémoire par défaut (puissance de deux) si aucun niveau ne la fournit. */
 const DEFAULT_MEMORY_MIB = 512;
 
+interface MemoryHint {
+  readonly memoryMiB?: number | undefined;
+}
+
 function resolveMemoryMiB(
-  manifest: ImageManifest | null,
+  manifestMemoryMiB: number | undefined,
   profileConfiguration: MemoryHint | undefined,
   runtimeConfiguration: MemoryHint | undefined,
 ): number {
   return (
     runtimeConfiguration?.memoryMiB ??
     profileConfiguration?.memoryMiB ??
-    manifest?.memoryMiB ??
+    manifestMemoryMiB ??
     DEFAULT_MEMORY_MIB
   );
 }

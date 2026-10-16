@@ -156,6 +156,98 @@ export function toLocalDiskMedia(manifest: LocalDiskManifest): LocalDiskMedia {
   };
 }
 
+/** Manifestes disque local déjà résolus, indexés par référence. */
+const localDiskManifests = new Map<string, LocalDiskManifest>();
+/** Chargements en vol, pour dédupliquer les appels concurrents. */
+const inflightLocalDisks = new Map<string, Promise<LocalDiskManifest>>();
+
+export function getLocalDiskManifest(ref: string): LocalDiskManifest | null {
+  return localDiskManifests.get(ref) ?? null;
+}
+
+export function registerLocalDiskManifest(manifest: LocalDiskManifest): void {
+  localDiskManifests.set(manifest.ref, manifest);
+}
+
+export function clearLocalDiskManifests(): void {
+  localDiskManifests.clear();
+}
+
+/**
+ * Garantit qu'un manifeste de disque local est chargé, puis le retourne.
+ *
+ * Le manifeste est petit (`/images/<ref>/manifest.json`) ; le disque lui-même
+ * n'est jamais téléchargé ici : v86 le lira par HTTP Range. Un manifeste déjà
+ * enregistré n'est pas rechargé (vider via `clearLocalDiskManifests()`).
+ */
+export async function ensureLocalDiskManifest(
+  ref: string,
+  signal?: AbortSignal,
+): Promise<LocalDiskManifest> {
+  const known = getLocalDiskManifest(ref);
+  if (known) return known;
+
+  const pending = inflightLocalDisks.get(ref);
+  if (pending) return pending;
+
+  const task = loadLocalDiskManifest(ref, signal).finally(() => {
+    inflightLocalDisks.delete(ref);
+  });
+  inflightLocalDisks.set(ref, task);
+  return task;
+}
+
+export async function loadLocalDiskManifest(
+  ref: string,
+  signal?: AbortSignal,
+): Promise<LocalDiskManifest> {
+  if (!IMAGE_REF.test(ref)) {
+    throw new AssetError('ASSET_INVALID_MANIFEST', 'Référence de disque local invalide.', { ref });
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`/images/${ref}/manifest.json`, {
+      signal: signal ?? null,
+      cache: 'no-cache',
+    });
+  } catch (error) {
+    if (signal?.aborted) {
+      throw new AssetError('ASSET_ABORTED', 'Chargement du manifeste disque annulé.', {
+        ref,
+        cause: error,
+      });
+    }
+    throw new AssetError('ASSET_NOT_FOUND', 'Manifeste disque inaccessible.', { ref, cause: error });
+  }
+
+  if (!response.ok) {
+    throw new AssetError('ASSET_NOT_FOUND', `Manifeste disque HTTP ${response.status}.`, { ref });
+  }
+
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch (error) {
+    throw new AssetError('ASSET_INVALID_MANIFEST', 'Manifeste disque JSON illisible.', {
+      ref,
+      cause: error,
+    });
+  }
+
+  const manifest = parseLocalDiskManifest(json);
+  if (manifest.ref !== ref) {
+    throw new AssetError(
+      'ASSET_INVALID_MANIFEST',
+      'La référence du manifeste disque diffère de la demande.',
+      { ref },
+    );
+  }
+
+  registerLocalDiskManifest(manifest);
+  return manifest;
+}
+
 /**
  * Compare un manifeste aux faits mesurés sur le fichier (taille, mtime,
  * empreinte éventuelle). Retourne la liste des incohérences (vide = conforme) :
@@ -166,11 +258,10 @@ export function diffLocalDiskIntegrity(
   observed: { size: number; mtimeMs: number; sha256?: string },
 ): string[] {
   const problems: string[] = [];
-  if (observed.size !== manifest.source.size) {
-    problems.push(`taille source : ${observed.size} au lieu de ${manifest.source.size}`);
-  }
-  if (observed.size !== manifest.disk.size) {
-    problems.push(`taille disque : ${observed.size} au lieu de ${manifest.disk.size}`);
+  if (observed.size !== manifest.source.size || observed.size !== manifest.disk.size) {
+    problems.push(
+      `taille : ${observed.size} (source ${manifest.source.size}, disque ${manifest.disk.size})`,
+    );
   }
   if (Math.trunc(observed.mtimeMs) !== Math.trunc(manifest.source.mtimeMs)) {
     problems.push(

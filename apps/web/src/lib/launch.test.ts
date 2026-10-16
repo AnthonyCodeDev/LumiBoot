@@ -19,15 +19,7 @@ describe('getLaunchReadiness', () => {
     expect(readiness.reason).toMatch(/préparation|intégré/i);
   });
 
-  it('refuse Windows 7 sans média importé et explique la ressource requise', () => {
-    const readiness = getLaunchReadiness(system('windows-7-x86'));
-    expect(readiness.canLaunch).toBe(false);
-    expect(readiness.reason).toMatch(/ressource requise/i);
-  });
-
-  it('autorise Windows 7 dès que le média légal est importé', () => {
-    expect(getLaunchReadiness(system('windows-7-x86'), { userMediaReady: true })).toEqual({
-      canLaunch: true,
-    });
+  it('autorise Windows 7 directement depuis le disque local, sans média importé', () => {
+    expect(getLaunchReadiness(system('windows-7-x86'))).toEqual({ canLaunch: true });
   });
 });

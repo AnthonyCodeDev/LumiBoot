@@ -13,20 +13,13 @@ function renderTopbar(initialEntries: string[] = ['/']) {
 }
 
 describe('Topbar', () => {
-  it('affiche le wordmark, la navigation principale et le CTA catalogue', () => {
+  it('affiche le wordmark et le CTA Discord', () => {
     renderTopbar();
     expect(screen.getByRole('link', { name: 'LumiBoot, accueil' })).toBeTruthy();
-    expect(screen.getByRole('navigation', { name: 'Navigation principale' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Accueil' }).getAttribute('href')).toBe('/');
-    expect(screen.getByRole('link', { name: 'Catalogue' }).getAttribute('href')).toBe('/#catalogue');
-    expect(screen.getByRole('link', { name: 'Explorer le catalogue' }).getAttribute('href')).toBe(
-      '/#catalogue',
-    );
-  });
-
-  it('marque Accueil comme page courante sur /', () => {
-    renderTopbar(['/']);
-    expect(screen.getByRole('link', { name: 'Accueil' }).getAttribute('aria-current')).toBe('page');
+    const discord = screen.getByRole('link', { name: 'Rejoindre le Discord' });
+    expect(discord.getAttribute('href')).toBe('https://discord.gg/HcqduKt');
+    expect(discord.getAttribute('target')).toBe('_blank');
+    expect(discord.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
   it('ouvre et ferme le menu burger au clavier (Escape)', async () => {

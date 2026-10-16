@@ -1,146 +1,139 @@
-# Windows 7 Super Lite x86 sous v86 (média utilisateur)
+# Windows 7 Lite x86 sous v86 (disque RAW local)
 
 ## Résumé honnête
 
-Windows 7 **Super Lite** (x86) est **sélectionnable** dans la bibliothèque et
-**exécutable depuis un média que l'utilisateur importe lui-même**. LumiBoot ne distribue
-**aucun** média Windows : le système est donc annoncé **`resource-required`**
-(« Ressource requise ») tant que l'utilisateur n'a pas fourni un disque légal.
-Aucun état « Disponible » (`ready`) n'est affiché, car **aucun boot Windows réel
-n'est encore validé de bout en bout**.
+Windows 7 **Lite** (x86) est **sélectionnable** dans la bibliothèque et
+**démarre directement** : le disque RAW de la codebase
+(`images/windows-7-x86/disk.img`, 16 Gio, **ignoré par Git**) est monté en
+disque dur (`hda`) et démarré par **BIOS** sous v86. Il n'y a **aucun import**
+de média, **aucune ISO** et **aucun contrôle de licence** dans l'interface : la
+fiche ne présente qu'un bouton **« Lancer une session »**.
 
-Ce document décrit l'intégration réelle (pas une maquette) et les blocages
-exacts.
+Le profil est désormais **`validated: true`** : le démarrage BIOS réel du disque
+local (preuve `disk-boot`, voir plus bas) vaut validation, l'état catalogue est
+donc **`ready`** (« Disponible »). Le lancement reste autorisé par le disque
+local existant (cf. `getLaunchReadiness`, mode `disk-boot`).
 
-## Choix technique : le moteur
+## Où vit le disque
 
-v86 est le seul moteur navigateur **x86 32 bits réellement intégré** au dépôt.
-C'est un émulateur PC complet : il démarre une image disque par **BIOS** (MBR),
-sans noyau Linux. Windows 7 **32 bits** est donc rattachable à `engineId: v86`
-(`executionMode: browser`). Aucun moteur WASM x86-64 n'existe : Windows 7 x64,
-Windows 8+ et Windows 10/11 restent hors de portée.
+| Élément | Chemin | Suivi Git |
+|---|---|---|
+| Disque RAW (16 Gio) | `images/windows-7-x86/disk.img` | **non** (`.gitignore`) |
+| Manifeste du disque | `images/windows-7-x86/manifest.json` | **non** |
+| Provenance / empreinte | `images/windows-7-x86/provenance.txt` | **non** |
+| Outil de préparation | `scripts/prepare-windows7-asset.mjs` | oui |
+| Serveur Range autonome | `scripts/serve-windows7-asset.mjs` | oui |
+| Middleware Range de dev | `scripts/lib/disk-asset-dev.mjs` | oui |
 
-Le profil `windows-7-x86` (voir `packages/catalog/src/profiles.ts`) :
+Le disque source d'origine (`C:\Users\antho\Desktop\Windows7.img`) n'est
+**jamais modifié** : la copie vérifiée par SHA-256 a été faite par l'outil
+(`--copy-to`), qui refuse d'écrire sur la source ou dans `public/`.
 
-- `engineId: 'v86'`, `executionMode: 'browser'` ;
-- mémoire invitée **1024 Mio** (voir la contrainte de puissance de deux ci-dessous) ;
-- matériel émulé : disque IDE, VGA, PS/2, **NIC ne2k**, **ACPI activée**
-  (requise par la famille Vista+, cf. `docs/windows-nt.md` de v86) ;
-- preuve de démarrage `mode: 'disk-boot'`.
+### Préparer / vérifier le disque
 
-### Mémoire : pourquoi 1024 et non 1536
+```sh
+# Copie vérifiée depuis le Desktop (jamais committée) :
+node scripts/prepare-windows7-asset.mjs \
+  --source "C:\Users\antho\Desktop\Windows7.img" \
+  --out images/windows-7-x86 \
+  --copy-to images/windows-7-x86/disk.img
 
-Le disque de référence a été préparé sous QEMU avec **1536 Mio** de RAM. Or
-`memory_size` de v86 **exige une puissance de deux** (`assertPowerOfTwoMiB` dans
-`V86Provider.ts`) : 1536 Mio est refusé au démarrage. Windows Super Lite tourne
-avec le plancher documenté par v86 pour la famille Vista+ (≥ 512 Mio) ; 1024 Mio
-est donc retenu, et 2048 Mio reste possible via une configuration d'exécution
-sans modifier le catalogue.
+# Vérifier le manifeste (taille, mtime, SHA-256 en streaming) :
+pnpm assets:windows7:check
+```
 
-### NIC : ce que v86 sait réellement émuler
+Le disque fait exactement **17 179 869 184 octets** (16 Gio). Il n'est
+**jamais** copié dans `apps/web/public/` ni dans le bundle Vite : un fichier de
+16 Gio ne doit pas entrer dans le build.
 
-`v86.d.ts` ne déclare que `"ne2k" | "virtio"` pour `net_device.type` : **e1000
-et rtl8139 n'existent pas** dans v86. Windows 7 n'intègre aucun pilote virtio ;
-`ne2k` est donc le seul choix plausible. Attention : Windows 7 **ne fournit pas
-non plus** de pilote NE2000 par défaut — le réseau nécessite l'installation d'un
-pilote NE2000 par l'utilisateur (cf. `docs/windows-nt.md` de v86). Le démarrage,
-lui, ne dépend pas du réseau.
+## Servir le disque en développement (HTTP Range 206)
+
+v86 lit `hda` par requêtes HTTP `Range` (et sonde la taille via
+`Range: bytes=0-0`). Le plugin Vite `lumiboot-windows-disk-asset`
+(`apps/web/vite.config.ts` → `scripts/lib/disk-asset-dev.mjs`) sert, **sur la
+même origine que l'app** :
+
+- `/images/windows-7-x86/disk.img` → `206 Partial Content` + `Content-Range` +
+  `Accept-Ranges: bytes` (lecture par plages, aucune mise en mémoire complète) ;
+- `/images/windows-7-x86/manifest.json` → le manifeste disque local.
+
+Sans ce middleware (ou si le disque est absent), la session échouerait avec
+`IMAGE_MISSING` : le développement des autres systèmes n'est pas affecté.
+
+En production, le disque local **n'est pas servi** : ce middleware n'existe
+qu'en dev. Une variante autonome existe pour un test hors Vite :
+
+```sh
+pnpm assets:windows7:serve   # http://127.0.0.1:37893 (loopback + jeton)
+```
+
+## Choix technique : le moteur et le matériel
+
+v86 est le seul moteur navigateur **x86 32 bits réellement intégré**. C'est un
+émulateur PC complet : il démarre l'image disque par **BIOS** (MBR), sans noyau
+Linux. Le profil `windows-7-x86` (`packages/catalog/src/profiles.ts`) :
+
+- `engineId: 'v86'`, `executionMode: 'browser'`, `bootDevice: 'disk'` ;
+- mémoire invitée **1024 Mio** — `memory_size` de v86 **exige une puissance de
+  deux** (`assertPowerOfTwoMiB`) ; 1024 est un plancher sûr pour la famille
+  Vista+ (512 Mio minimum documenté) ;
+- matériel émulé : disque **IDE**, **VGA**, PS/2, NIC **ne2k**, **ACPI activée**
+  (requise par Vista+ ; voir `docs/windows-nt.md` de v86) ;
+- preuve de démarrage `mode: 'disk-boot'` : `running` n'est émis qu'après une
+  **lecture réelle du disque** (`ide-read-end`, canal 0), jamais simulée.
+
+### Média : jamais en cdrom
+
+Le disque est **toujours** monté en disque dur (`hda`), lu en `async` par HTTP
+Range. Il n'est **jamais** monté en `cdrom` (ce n'est pas une ISO). v86 lit la
+base en lecture seule ; les écritures invitées restent dans le tampon mémoire de
+l'instance et disparaissent à l'arrêt de la session (aucune persistance
+revendiquée).
 
 ## Séparation des responsabilités
 
 | Couche | Rôle | Fichiers |
 |---|---|---|
-| Catalogue | Service média (`mediaStrategy: 'user-import'`), état dérivé `resource-required` | `packages/catalog/src/{images,systems,availability,profiles}.ts`, `packages/contracts/src/catalog.schema.ts` |
-| Import/validation | Schéma Zod du manifeste utilisateur, contrôle taille/SHA-256, store | `packages/vm-assets/src/user-media.ts` |
-| Persistance navigateur | IndexedDB (repli mémoire), rien n'est envoyé au serveur | `apps/web/src/features/media/*` |
-| Exécution | Démarrage BIOS du disque importé, états de session | `packages/provider-v86/src/*`, `packages/vm-core/*` |
-| UI | Carte, fiche, import, messages | `apps/web/src/components/media/UserMediaImportCard.tsx`, `apps/web/src/pages/SystemPage.tsx` |
-
-Aucun composant ne teste `name === 'Windows'` : la disponibilité et la
-compatibilité sont dérivées des faits (`getEffectiveAvailability`,
-`getCompatibility`, `getLaunchReadiness`).
+| Catalogue | `mediaStrategy: 'bundled'` (défaut), `imageRef: 'windows-7-x86'`, `validated: true`, état `ready` | `packages/catalog/src/{images,profiles,systems}.ts` |
+| Manifeste disque | Schéma + chargement (`ensureLocalDiskManifest`) | `packages/vm-assets/src/local-disk.ts` |
+| Exécution | Démarrage BIOS du disque local (`hda.async`), états de session | `packages/provider-v86/src/V86Provider.ts`, `packages/vm-core/*` |
+| UI | Fiche : bouton « Lancer une session » seul, plus d'import | `apps/web/src/pages/SystemPage.tsx`, `apps/web/src/lib/launch.ts` |
+| Dev | Service HTTP Range du disque | `apps/web/vite.config.ts`, `scripts/lib/disk-asset-dev.mjs` |
 
 ## Cycle de vie d'une session
 
 États normalisés : `idle → preparing → downloading → booting → running →
 stopping → stopped` (+ `error`).
 
-- `downloading` correspond au **chargement par HTTP Range** du disque importé
-  (v86 lit `hda` par plages ; le blob local est lu via son URL `blob:`).
+- `downloading` correspond au chargement du disque par HTTP Range ;
 - `running` n'est émis qu'après une **lecture réelle du disque dur** par
-  l'invité (`ide-read-end`, canal 0). Un média non amorçable ne produit jamais
-  cet événement : aucun `running` n'est simulé.
-- Si aucun média n'est importé, le provider échoue avec `MEDIA_REQUIRED` et
-  l'interface affiche « Ressource requise », jamais une fausse progression.
+  l'invité (`ide-read-end`, canal 0). Un disque non amorçable ne produit jamais
+  cet événement : aucun `running` n'est simulé ;
+- si le manifeste ou le disque est introuvable, le provider échoue avec
+  `IMAGE_MISSING` et l'interface n'affiche jamais de fausse progression.
 
 > **Portée de la preuve `disk-boot`.** Contrairement à Debian (marqueur
 > `LUMIBOOT_GUEST_READY` émis par l'OS réellement démarré), Windows n'émet aucun
 > marqueur LumiBoot. La preuve `disk-boot` atteste que **l'amorce invitée
-> s'exécute** (le BIOS lit bien le disque fourni) ; elle **ne prouve pas** que le
-> bureau Windows est opérationnel. C'est pourquoi le système reste non `ready`.
-
-## Immutabilité du disque et persistance des écritures
-
-- **Base immuable.** Le fichier source n'est jamais monté en écriture ni
-  modifié. Le navigateur ne l'expose à v86 que sous forme d'une `Blob` locale
-  (`URL.createObjectURL`), lue par v86 en **lecture seule** (`hda.async`). Aucun
-  chemin de code n'ouvre le média en écriture.
-- **Overlay éphémère par session.** v86 journalise les écritures de l'invité
-  (blocs « dirty ») dans un **tampon mémoire interne à l'instance** ; ces écritures
-  ne sont jamais propagées à la base et sont **perdues à l'arrêt** de la session.
-  C'est le comportement attendu : LumiBoot ne prétend **pas** persister la session
-  invitée.
-- **Aucune fausse persistance.** L'IndexedDB ne conserve que le média importé par
-  l'utilisateur (pour éviter de le resélectionner) ; elle ne conserve aucune
-  modification faite dans Windows. Si le stockage persistant est indisponible,
-  LumiBoot retombe explicitement sur un store mémoire et le signale : le média
-  doit alors être réimporté après rechargement.
-
-## Préparation du média (utilisateur)
-
-1. Installer Windows 7 **x86** depuis **votre** support et **votre** clé, dans une
-   VM que vous contrôlez (QEMU ou v86).
-2. Choisir le type d'ordinateur **« Standard PC »** et la NIC **NE2000 (ne2k)**.
-3. Exporter le disque au format brut (`.img`/`.raw`).
-4. Importer le fichier dans la fiche Windows 7, joindre éventuellement un
-   manifeste (`images/windows-7/manifest.example.json`) et attester la licence.
-
-Instructions détaillées : [`images/windows-7/README.md`](../images/windows-7/README.md).
+> s'exécute** (le BIOS lit bien le disque). C'est cette lecture disque réelle qui
+> vaut validation et rend le système `ready` ; elle n'atteste pas que le bureau
+> Windows est pleinement opérationnel.
 
 ## Limites techniques connues (documentées honnêtement)
 
-- **Grands disques / mémoire.** Le disque importé est exposé à v86 via une URL
-  `blob:` locale (`hda.async`). Selon le navigateur, une requête Range sur une
-  URL `blob:` peut renvoyer le fichier entier : un disque de plusieurs Go peut
-  alors solliciter fortement la mémoire. Cible raisonnable : disque ≤ quelques
-  Go. *TODO : support de lecture en flux via OPFS / `FileSystemSyncAccessHandle`
-  pour éviter la mise en mémoire complète.*
+- **Taille du disque (16 Gio).** Le disque n'est jamais chargé entièrement : v86
+  le lit par plages (`206`). La mémoire de l'invité (1024 Mio) limite le tampon
+  interne, mais un disque de cette taille, non amorçable ou mal formé, ne
+  produira aucun `running`.
 - **Performance.** Émulation logicielle : démarrage de plusieurs minutes, pas
   d'accélération matérielle.
-- **Persistance.** Les octets sont conservés en IndexedDB ; si le stockage est
-  indisponible, il faut resélectionner le média après rechargement (repli
-  mémoire explicite, jamais présenté comme persistant).
-- **Vérification d'intégrité.** Le SHA-256 n'est calculé que si un manifeste
-  fournit une empreinte **et** que le fichier est sous le cap (256 Mio par
-  défaut). Au-delà, le média est marqué `unverified` plutôt que faussement
-  « vérifié ». *TODO : hachage en flux pour les gros fichiers.*
-
-## Blocages / conditions pour passer `ready`
-
-Le système ne deviendra `ready` qu'une fois **toutes** ces conditions réunies :
-
-1. Un disque Windows 7 x86 amorçable existe et est importé (fourni légalement).
-2. Un **boot réel** atteint l'environnement graphique sous v86 dans un
-   navigateur cible, de façon reproductible.
-3. Une **preuve de démarrage forte** est disponible. Windows n'émettant pas de
-   marqueur LumiBoot, il faudra soit un agent invité dédié, soit une preuve
-   visuelle/écran vérifiable et documentée, ajoutée au profil.
-4. Les performances et la stabilité sont mesurées et documentées.
-
-En l'absence de ces preuves, l'état reste volontairement `resource-required`.
+- **Pas de persistance.** Les écritures invitées sont perdues à l'arrêt.
+- **Preuve limitée au disque.** La validation repose sur la lecture réelle du
+  disque (`disk-boot`) : le bureau Windows pleinement fonctionnel n'est pas
+  attesté par un marqueur LumiBoot.
 
 ## Licences
 
-Voir [`LICENSES.md`](LICENSES.md). En résumé : média et licence **fournis par
-l'utilisateur** ; aucune ISO, clé ou image Windows n'est distribuée, téléchargée
-ou committée.
+Le disque est un actif **local de la codebase**, ignoré par Git et **non
+distribué** par LumiBoot. Aucune ISO, clé ou image Windows n'est publiée,
+téléchargée ou committée. Voir [`LICENSES.md`](LICENSES.md).

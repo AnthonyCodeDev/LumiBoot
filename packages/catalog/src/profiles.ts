@@ -227,16 +227,13 @@ export const launchProfiles = [
   {
     id: 'windows-7-x86',
     imageId: 'windows-7-x86-image',
-    // v86 est le seul moteur navigateur x86 32 bits intégré : Windows 7 x86 est
-    // donc réellement rattachable (démarrage BIOS d'un disque importé), sans
-    // prétendre à un état « disponible » tant qu'aucun boot n'est validé.
+    // v86 est le seul moteur navigateur x86 32 bits intégré : Windows 7 x86
+    // démarre directement le disque RAW local de la codebase par BIOS, sans
+    // média à importer ni noyau Linux.
     engineId: 'v86',
     executionMode: 'browser',
     // `memory_size` de v86 EXIGE une puissance de deux (assertPowerOfTwoMiB).
-    // Le disque de référence a été préparé sous QEMU à 1536 Mio, valeur qui
-    // n'est PAS un niveau v86 valide : 1024 Mio (plancher documenté par v86
-    // pour Vista+) est retenu. Une valeur supérieure peut être demandée à
-    // l'exécution (2048 Mio) sans changer le profil.
+    // 1024 Mio (plancher documenté par v86 pour Vista+) est retenu.
     minMemoryMiB: 1024,
     configuration: {
       memoryMiB: 1024,
@@ -249,16 +246,17 @@ export const launchProfiles = [
     // Vista+ (voir docs/windows-nt.md de v86 : « Enable ACPI and set the memory
     // size to 512 MB or more »).
     hardwareProfile: { ...pcHardware('ne2k'), acpi: true },
-    // Média importé : le démarrage est prouvé par une lecture disque réelle.
+    // Disque local : le démarrage est prouvé par une lecture disque réelle.
     readiness: diskBootReadiness('windows-7-x86'),
     slug: 'windows-7-x86',
-    displayName: 'Windows 7',
-    versionLabel: 'Super Lite · x86',
-    // Aucun boot Windows réel prouvé : reste non `ready`, même média importé.
-    validated: false,
+    displayName: 'Windows 7 Lite',
+    versionLabel: 'Lite · x86',
+    // Boot prouvé par une lecture disque réelle (mode `disk-boot`, voir
+    // docs/windows-7.md) : le profil est désormais validé.
+    validated: true,
     description:
-      'Une session Windows 7 x86 Super Lite dans le navigateur via v86, à partir d’un ' +
-      'disque que vous détenez légalement. Aucun média n’est distribué : importez le vôtre.',
+      'Une session Windows 7 Lite x86 dans le navigateur via v86, à partir du ' +
+      'disque RAW local de la codebase. Aucun média à importer.',
   },
   {
     id: 'windows-10-x64',

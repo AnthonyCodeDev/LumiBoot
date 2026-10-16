@@ -22,15 +22,35 @@ export function SystemGrid() {
     );
   }
 
+  const available = visible.filter((system) => system.availability === 'ready');
+  const unavailable = visible.filter((system) => system.availability !== 'ready');
+
   return (
-    <div className="cards" id="cards" aria-live="polite">
-      {visible.map((system) => (
-        <SystemCard
-          key={system.id}
-          system={system}
-          onOpen={(target) => navigate(`/systems/${target.slug}`)}
-        />
-      ))}
+    <div id="cards" aria-live="polite">
+      {available.length > 0 && (
+        <div className="cards">
+          {available.map((system) => (
+            <SystemCard
+              key={system.id}
+              system={system}
+              onOpen={(target) => navigate(`/systems/${target.slug}`)}
+            />
+          ))}
+        </div>
+      )}
+      {available.length > 0 && unavailable.length > 0 && <hr className="cards-separator" />}
+      {unavailable.length > 0 && (
+        <div className="cards">
+          {unavailable.map((system) => (
+            <SystemCard
+              key={system.id}
+              system={system}
+              muted
+              onOpen={(target) => navigate(`/systems/${target.slug}`)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

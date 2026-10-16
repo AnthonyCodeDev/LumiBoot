@@ -101,29 +101,20 @@ export const images = [
     id: 'windows-7-x86-image',
     familyId: 'windows',
     architecture: 'i386',
-    // Aucun `imageRef` : LumiBoot ne distribue AUCUN média Windows. Le disque
-    // préinstallé (licence retail/OEM de l'utilisateur) est importé localement,
-    // puis démarré par BIOS sous v86 (voir docs/windows-7.md).
-    mediaStrategy: 'user-import',
-    requiresUserMedia: true,
+    // Disque RAW de la codebase (images/windows-7-x86/disk.img, ignoré par Git)
+    // servi localement en HTTP Range. Aucun import : il est démarré directement
+    // par BIOS sous v86 (voir docs/windows-7.md).
+    imageRef: 'windows-7-x86',
     requirements: [
       'Navigateur moderne avec WebAssembly (v86)',
-      'Média disque Windows 7 x86 (Super Lite) préinstallé fourni par l’utilisateur',
-      'Licence Windows 7 valide (retail/OEM) détenue par l’utilisateur',
-      'Mémoire invitée ≥ 1 Gio (niveau puissance de deux ; 2 Gio possible)',
+      'Disque RAW local servi en HTTP Range (images/windows-7-x86/disk.img)',
+      'Mémoire invitée 1024 Mio (niveau puissance de deux)',
       'Démarrage disque (MBR) ; pas de noyau Linux',
     ],
-    licenseNotes:
-      'Média et licence Windows fournis par l’utilisateur. Aucune ISO ni clé n’est ' +
-      'distribuée, téléchargée ou committée par LumiBoot. L’utilisateur doit détenir une ' +
-      'licence valide et un support qu’il est autorisé à utiliser.',
     integrationNote:
-      'Intégration navigateur réelle via v86 (démarrage BIOS du disque importé par hda, ' +
-      'jamais en cdrom). Aucun média n’étant distribué, l’état reste « ressource requise » ' +
-      'jusqu’à l’import d’un disque légal par l’utilisateur. Le disque source n’est jamais ' +
-      'modifié : v86 le lit en lecture seule et garde les écritures invitées en mémoire pour ' +
-      'la seule durée de la session. Le démarrage Windows n’est pas encore prouvé de bout en ' +
-      'bout : aucun état « disponible » n’est affiché sans boot réel validé.',
+      'Démarrage BIOS direct du disque RAW local par hda (jamais en cdrom), lu en ' +
+      'HTTP Range via v86. Le disque n’est jamais modifié : les écritures invitées ' +
+      'restent en mémoire le temps de la session.',
   },
   {
     id: 'windows-10-x64-image',

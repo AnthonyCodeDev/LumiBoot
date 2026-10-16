@@ -170,6 +170,12 @@
   gap: 14px;
   padding-bottom: 24px;
 }
+.cards-separator {
+  height: 1px;
+  margin: 4px 0 20px;
+  border: 0;
+  background: var(--line);
+}
 .os-card {
   position: relative;
   overflow: hidden;
@@ -187,6 +193,14 @@
   border-color: #444c59;
   box-shadow: var(--shadow-sm);
   transform: translateY(-2px);
+}
+.os-card.is-muted {
+  opacity: 0.55;
+  filter: grayscale(0.7);
+}
+.os-card.is-muted:hover {
+  opacity: 0.9;
+  filter: grayscale(0.25);
 }
 .card-cover {
   position: relative;
@@ -277,22 +291,6 @@
   color: var(--text-secondary);
   font-size: 11px;
 }
-.card-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 13px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line-soft);
-  color: var(--text-tertiary);
-  font-size: 10px;
-}
-.card-mode {
-  margin-left: auto;
-  color: var(--text-secondary);
-  font-weight: 550;
-}
-
 /* Empty and error states */
 .empty-state {
   padding: 72px 20px;
@@ -432,7 +430,7 @@
 .session-screen {
   width: 100%;
   margin: 0;
-  padding: 36px clamp(24px, 4vw, 56px) 52px;
+  padding: 28px clamp(16px, 3vw, 40px) 44px;
   display: flex;
   flex-direction: column;
   min-height: calc(100dvh - 64px);
@@ -540,22 +538,27 @@
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  margin: 0 auto;
   background: #000;
   border-bottom: 1px solid #282c33;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: center;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
 }
+/* Le canvas reçoit des styles inline px de v86 : on les neutralise avec !important. */
 .v86-screen canvas {
   display: block;
-  width: 100%;
-  height: auto;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
 }
 .v86-screen-text {
-  width: 100%;
+  width: max-content !important;
   box-sizing: border-box;
+  transform: scale(var(--v86-fit, 1));
+  transform-origin: center center;
 }
 /* Logs série : plus petits, en dessous de l'écran, style terminal. */
 .v86-serial {
@@ -679,6 +682,43 @@
   font-size: 13px;
   line-height: 1.75;
 }
+/* Erreur de route (React Router ErrorBoundary) */
+.route-error {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 110px clamp(24px, 4vw, 56px);
+  text-align: center;
+}
+.route-error-badge {
+  display: inline-block;
+  margin: 0 0 14px;
+  padding: 5px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 999px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.route-error h1 { margin: 0 0 8px; font-size: 26px; letter-spacing: -0.02em; }
+.route-error p { max-width: 460px; margin: 0 auto 20px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
+.route-error-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.route-error-details {
+  max-width: 520px;
+  margin: 0 auto 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  color: var(--text-tertiary);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .system-detail {
   width: min(100%, 1080px);
   margin: 0 auto;
@@ -731,87 +771,6 @@
   margin-top: 26px;
   padding-top: 22px;
   border-top: 1px solid var(--line-soft);
-}
-/* Import de média utilisateur (Windows 7, etc.) */
-.media-import {
-  margin-top: 22px;
-  padding: 18px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-lg);
-  background: var(--surface-muted);
-}
-.media-import h3 {
-  margin: 0 0 8px;
-  font-size: 13px;
-}
-.media-import-fields {
-  display: grid;
-  gap: 6px;
-  margin: 14px 0;
-}
-.media-import-fields label {
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-.media-import-fields input[type='file'] {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-.media-import-license {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 6px;
-}
-.media-import-license label {
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.5;
-}
-.media-import-current {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 10px 0;
-  padding: 10px 12px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  font-size: 12px;
-}
-.media-import-current strong {
-  color: #dce0e6;
-}
-.media-import-current span {
-  color: var(--text-tertiary);
-}
-.media-import-remove,
-.media-import-submit {
-  align-self: flex-start;
-  padding: 7px 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.media-import-submit {
-  border-color: #46508f;
-  background: rgba(142, 184, 255, 0.14);
-  color: #a9c4ff;
-}
-.media-import-submit:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.media-import-error {
-  color: var(--danger);
-}
-.media-import-note {
-  margin-top: 10px;
-  color: var(--text-tertiary);
 }
 
 /* Footer */
@@ -951,39 +910,6 @@
   gap: 18px;
   margin-left: auto;
 }
-.topbar-nav {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.topbar-link {
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 13px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 550;
-  transition:
-    color var(--duration-fast),
-    background var(--duration-fast),
-    border-color var(--duration-fast);
-}
-.topbar-link:hover {
-  border-color: var(--line);
-  background: var(--surface-muted);
-  color: var(--text);
-}
-.topbar-link.active {
-  border-color: #303a63;
-  background: var(--primary-soft);
-  color: #b9c5ff;
-}
 .topbar-cta {
   min-height: 36px;
   padding: 0 14px;
@@ -1035,23 +961,6 @@
   }
   .topbar-menu[data-open='true'] {
     display: flex;
-  }
-  .topbar-menu nav {
-    width: 100%;
-  }
-  .topbar-nav {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 4px;
-  }
-  .topbar-nav li {
-    display: flex;
-  }
-  .topbar-link {
-    width: 100%;
-    min-height: 42px;
-    padding: 0 14px;
-    font-size: 13px;
   }
   .topbar-cta {
     width: 100%;
