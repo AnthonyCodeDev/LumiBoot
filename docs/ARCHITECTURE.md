@@ -96,6 +96,11 @@ un moteur explicitement assigné et un statut vérifié. Pour Windows/macOS, les
 fournis par l'utilisateur ou la plateforme en fonction des droits/licences applicables, jamais
 automatiquement récupérés d'une source douteuse.
 
+**Groupes de variantes.** Plusieurs déclinaisons d'un même OS (console, bureau, flavour…) sont
+regroupées derrière une seule carte via les champs optionnels `variantGroupId` / `variantName`. Les
+helpers du catalogue (`getDisplaySystems`, `getVariantGroup`, `hasVariants`…) et le comportement
+grille/fiche sont détaillés dans [`system-variants.md`](system-variants.md).
+
 ## 4. Contrat providers (proposition)
 
 ```ts

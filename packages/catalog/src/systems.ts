@@ -73,6 +73,17 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
     accentRgb: family.accentRgb,
     featured: launchProfilesForImage.some((launchProfile) => launchProfile.featured) || undefined,
     integrationNote: image.integrationNote,
+    // Rattachement éventuel au groupe de variantes. Spread conditionnel : on
+    // n'introduit jamais de clé `undefined` (rétro-compatibilité des manifestes).
+    ...(launchProfilesForImage[0]!.variantGroupId !== undefined
+      ? { variantGroupId: launchProfilesForImage[0]!.variantGroupId }
+      : {}),
+    ...(launchProfilesForImage[0]!.variantName !== undefined
+      ? { variantName: launchProfilesForImage[0]!.variantName }
+      : {}),
+    ...(launchProfilesForImage[0]!.variantOrder !== undefined
+      ? { variantOrder: launchProfilesForImage[0]!.variantOrder }
+      : {}),
   };
 });
 
@@ -99,5 +110,73 @@ export function getSystemBySlug(slug: string): OSDefinition | null {
 }
 
 export function getFeaturedSystem(): OSDefinition | null {
-  return systems.find((system) => system.featured) ?? systems[0] ?? null;
+  // La une se choisit parmi les systèmes AFFICHÉS (mères + autonomes), jamais
+  // parmi les variants enfants.
+  const display = getDisplaySystems();
+  return display.find((system) => system.featured) ?? display[0] ?? null;
+}
+
+/**
+ * Id de la mère du groupe de variantes : `variantGroupId` pour un enfant, ou
+ * l'id du système lui-même quand il est la mère (ou un système autonome).
+ */
+export function getVariantParentId(system: Pick<OSDefinition, 'id' | 'variantGroupId'>): string {
+  return system.variantGroupId ?? system.id;
+}
+
+/**
+ * Systèmes AFFICHÉS dans la grille : mères de groupe + systèmes autonomes
+ * (ceux qui ne portent PAS de `variantGroupId`). Les variants enfants en sont
+ * exclus : ils se choisissent depuis la fiche de leur mère.
+ */
+export function getDisplaySystems(): OSDefinition[] {
+  return systems.filter((system) => system.variantGroupId === undefined);
+}
+
+/**
+ * Groupe de variantes d'un système : tous les membres (mère + enfants) triés
+ * par `variantOrder` croissant (la plus petite valeur = meilleure variante, donc
+ * première et sélectionnée par défaut). Les membres sans `variantOrder` viennent
+ * après les membres ordonnés ; à égalité, l'ordre du catalogue est conservé
+ * (tri stable). Si aucune mère n'est trouvée, renvoie `[system]` (dégradation
+ * sûre).
+ */
+export function getVariantGroup(system: OSDefinition): OSDefinition[] {
+  const parentId = getVariantParentId(system);
+  const parent = systems.find((candidate) => candidate.id === parentId);
+  if (!parent) return [system];
+
+  // Tous les membres du groupe dans l'ordre du catalogue (mère + enfants).
+  const members = systems.filter(
+    (candidate) => candidate.id === parentId || candidate.variantGroupId === parentId,
+  );
+
+  // `Array.prototype.sort` est stable (ES2019) : à `variantOrder` égal, l'ordre
+  // du catalogue est préservé. `undefined` passe en dernier (infini).
+  return [...members].sort(
+    (a, b) => (a.variantOrder ?? Number.POSITIVE_INFINITY) - (b.variantOrder ?? Number.POSITIVE_INFINITY),
+  );
+}
+
+/**
+ * Meilleure variante du groupe d'un système : la première de `getVariantGroup`
+ * (celle au plus petit `variantOrder`), soit le système lui-même s'il est
+ * autonome.
+ */
+export function getDefaultVariant(system: OSDefinition): OSDefinition {
+  return getVariantGroup(system)[0] ?? system;
+}
+
+/**
+ * Système « mère » d'un variant (ou le système lui-même s'il est autonome ou
+ * déjà la mère).
+ */
+export function getVariantParent(system: OSDefinition): OSDefinition {
+  const parentId = getVariantParentId(system);
+  return systems.find((candidate) => candidate.id === parentId) ?? system;
+}
+
+/** Vrai si ce système appartient à un groupe de plus d'une entrée. */
+export function hasVariants(system: OSDefinition): boolean {
+  return getVariantGroup(system).length > 1;
 }

@@ -33,6 +33,7 @@ export function SystemGrid() {
             <SystemCard
               key={system.id}
               system={system}
+              // La carte ouvre la mère/base : la variante se choisit sur la fiche.
               onOpen={(target) => navigate(`/systems/${target.slug}`)}
             />
           ))}

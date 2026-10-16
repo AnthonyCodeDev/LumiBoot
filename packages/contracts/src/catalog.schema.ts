@@ -198,6 +198,19 @@ export const osDefinitionSchema = z.object({
   accentRgb: accentRgbSchema,
   featured: z.boolean().optional(),
   integrationNote: z.string().min(1),
+  /**
+   * Id du système « mère » de ce variant (absent = ce système EST la mère
+   * ou un système autonome).
+   */
+  variantGroupId: z.string().min(1).optional(),
+  /** Libellé court du variant (affiché dans un sélecteur côté fiche). */
+  variantName: z.string().min(1).optional(),
+  /**
+   * Ordre d'affichage de la variante dans son groupe (croissant). La plus
+   * petite valeur = meilleure variante = sélection par défaut. Absent = après
+   * les variantes ordonnées (ordre du catalogue).
+   */
+  variantOrder: z.number().int().optional(),
 });
 
 export const osCatalogSchema = z.array(osDefinitionSchema).min(1);

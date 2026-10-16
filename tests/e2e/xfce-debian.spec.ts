@@ -67,8 +67,10 @@ async function waitForDesktopProof(page: Page): Promise<'ready' | 'failed' | 'er
 async function openXfceSession(page: Page): Promise<{ serial: Locator; state: Locator }> {
   await page.goto('/');
   await page.getByLabel('Rechercher un système').fill('debian');
-  await page.locator('.os-card[data-id="debian-12-i386-xfce"]').click();
-  await expect(page).toHaveURL(/\/systems\/debian-12-i386-xfce/);
+  // La carte Debian ouvre la MÈRE ; XFCE est la meilleure variante, déjà
+  // présélectionnée dans le dropdown : on peut lancer directement.
+  await page.locator('.os-card[data-id="debian-12-i386"]').click();
+  await expect(page).toHaveURL(/\/systems\/debian-12-i386$/);
   await page.getByRole('button', { name: 'Lancer une session' }).click();
   await expect(page).toHaveURL(/\/session\//);
 

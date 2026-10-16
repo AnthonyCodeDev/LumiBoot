@@ -1,7 +1,13 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { getSystemBySlug } from '@lumiboot/catalog';
+import {
+  getDefaultVariant,
+  getSystemBySlug,
+  getVariantGroup,
+  getVariantParent,
+} from '@lumiboot/catalog';
 import { Button } from '../components/ui/Button';
+import { VariantDropdown } from '../components/catalog/VariantDropdown';
 import { NetworkProxyCard } from '../components/network/NetworkProxyCard';
 import { useSessionsStore } from '../features/sessions/sessions.store';
 import { getLaunchReadiness } from '../lib/launch';
@@ -19,15 +25,39 @@ export function SystemPage() {
   const system = slug ? getSystemBySlug(slug) : null;
   const createSession = useSessionsStore((state) => state.create);
   const navigate = useNavigate();
+  // Id de la variante À LANCER (état purement local : ne pilote ni l'URL ni le
+  // contenu affiché, qui reste toujours celui de la mère/base).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Synchronise la sélection quand le système résolu change :
+  // - mère (ou système autonome) → meilleure variante par défaut ;
+  // - lien direct sur un enfant → cet enfant.
+  // `system` provient du catalogue : sa référence est stable tant que le slug
+  // ne change pas (aucune boucle de rendu).
+  useEffect(() => {
+    if (!system) {
+      setSelectedId(null);
+      return;
+    }
+    const parent = getVariantParent(system);
+    setSelectedId(system.id === parent.id ? getDefaultVariant(parent).id : system.id);
+  }, [system]);
 
   if (!system) return <NotFoundPage />;
 
+  // Contenu affiché : TOUJOURS celui de la mère/base (« Debian de base »), quel
+  // que soit la variante choisie dans le dropdown.
+  const base = getVariantParent(system);
+  const variants = getVariantGroup(base);
+  // Variante à lancer : la sélection locale, ou la meilleure variante par défaut
+  // (couvre le premier rendu, avant l'exécution du `useEffect`).
+  const selected = variants.find((variant) => variant.id === selectedId) ?? getDefaultVariant(base);
   const style = {
-    '--accent': system.accent,
-    '--accent-rgb': system.accentRgb,
+    '--accent': base.accent,
+    '--accent-rgb': base.accentRgb,
   } as CSSProperties;
-  const launchProfile = getPrimaryLaunchProfile(system);
-  const readiness = getLaunchReadiness(system);
+  const launchProfile = getPrimaryLaunchProfile(base);
+  const readiness = getLaunchReadiness(selected);
 
   return (
     <main className="system-detail">
@@ -35,19 +65,19 @@ export function SystemPage() {
         <Link to="/">← Retour à la bibliothèque</Link>
       </p>
       <div className="system-detail-hero" style={style}>
-        <img src={system.iconUrl} alt="" />
+        <img src={base.iconUrl} alt="" />
         <div>
           <span className="drawer-family">
-            {familyLabels[system.family]} <span>·</span> {system.architecture.toUpperCase()}
+            {familyLabels[base.family]} <span>·</span> {base.architecture.toUpperCase()}
           </span>
           <h1>
-            {system.displayName} <span>{system.versionLabel}</span>
+            {base.displayName} <span>{base.versionLabel}</span>
           </h1>
-          <p className="drawer-description">{system.description}</p>
+          <p className="drawer-description">{base.description}</p>
           <div className="spec-box">
             <div>
               <span>Architecture</span>
-              <strong>{system.architecture}</strong>
+              <strong>{base.architecture}</strong>
             </div>
             <div>
               <span>Mode d&apos;exécution</span>
@@ -59,29 +89,48 @@ export function SystemPage() {
             </div>
             <div>
               <span>État actuel</span>
-              <strong className={system.availability === 'ready' ? '' : 'planned-label'}>
-                {availabilityLabels[system.availability]}
+              <strong className={base.availability === 'ready' ? '' : 'planned-label'}>
+                {availabilityLabels[base.availability]}
               </strong>
             </div>
           </div>
           <h3>Pré-requis</h3>
-          <p className="drawer-bodytext">{system.requirements.join(' · ')}</p>
+          <p className="drawer-bodytext">{base.requirements.join(' · ')}</p>
           <h3>État de l&apos;intégration</h3>
-          <p className="drawer-bodytext">{system.integrationNote}</p>
-          {system.licenseNotes ? (
+          <p className="drawer-bodytext">{base.integrationNote}</p>
+          {base.licenseNotes ? (
             <>
               <h3>Licences</h3>
-              <p className="drawer-bodytext">{system.licenseNotes}</p>
+              <p className="drawer-bodytext">{base.licenseNotes}</p>
             </>
           ) : null}
           <div className="system-detail-actions">
+            {variants.length > 1 ? (
+              <VariantDropdown
+                variants={variants.map((variant) => ({
+                  id: variant.id,
+                  slug: variant.slug,
+                  // Libellé « nom de base + spécificité » (ex. « Debian XFCE »).
+                  name: variant.variantName
+                    ? `${base.displayName} ${variant.variantName}`
+                    : variant.displayName,
+                }))}
+                value={selected.id}
+                onSelect={(variantSlug) => {
+                  // Le dropdown ne sert qu'à choisir la variante à lancer :
+                  // aucune navigation, le contenu de la page reste celui de base.
+                  const next = variants.find((variant) => variant.slug === variantSlug);
+                  if (next) setSelectedId(next.id);
+                }}
+              />
+            ) : null}
             <Button
               variant="primary"
               type="button"
               disabled={!readiness.canLaunch}
               onClick={() => {
                 if (!readiness.canLaunch) return;
-                const id = createSession(system.id);
+                const id = createSession(selected.id);
                 navigate(`/session/${id}`);
               }}
             >

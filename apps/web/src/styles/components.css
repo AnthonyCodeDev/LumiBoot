@@ -766,11 +766,95 @@
 }
 .system-detail-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 26px;
   padding-top: 22px;
   border-top: 1px solid var(--line-soft);
+}
+/* Dropdown de variante : à gauche du bouton « Lancer une session ». */
+.variant-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+.variant-dropdown-trigger {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease);
+}
+.variant-dropdown-trigger:hover {
+  border-color: #505968;
+  background: var(--surface-hover);
+}
+.variant-dropdown-trigger svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform var(--duration-fast) var(--ease);
+}
+.variant-dropdown[data-open='true'] .variant-dropdown-trigger svg {
+  transform: rotate(180deg);
+}
+.variant-dropdown-value {
+  color: var(--text);
+}
+.variant-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 40;
+  min-width: 100%;
+  max-height: 260px;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-md);
+}
+.variant-dropdown-item {
+  width: 100%;
+  display: block;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.variant-dropdown-item:hover {
+  background: var(--surface-muted);
+}
+.variant-dropdown [role='option'][aria-selected='true'] .variant-dropdown-item {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--text);
+  font-weight: 600;
+}
+.variant-dropdown-item:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* Footer */

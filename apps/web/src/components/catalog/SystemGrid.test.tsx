@@ -2,10 +2,16 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { getSystemById, systems } from '@lumiboot/catalog';
+import { getDisplaySystems, getSystemById, systems } from '@lumiboot/catalog';
 import { SystemGrid } from './SystemGrid';
 import { availabilityLabels } from '../../lib/labels';
 import { useCatalogStore } from '../../features/catalog/catalog.store';
+
+/**
+ * Nombre de cartes attendues : une par système AFFICHÉ (mères de groupe +
+ * autonomes). Les variantes enfants n'ont pas leur propre carte.
+ */
+const displayedCount = getDisplaySystems().length;
 
 function LocationProbe() {
   const location = useLocation();
@@ -29,18 +35,21 @@ beforeEach(() => {
 });
 
 describe('SystemGrid', () => {
-  it('affiche toutes les cartes du catalogue', () => {
+  it('affiche une seule carte par système affiché (mères + autonomes)', () => {
     renderGrid();
-    expect(screen.getAllByRole('article')).toHaveLength(systems.length);
+    expect(screen.getAllByRole('article')).toHaveLength(displayedCount);
   });
 
-  it('filtre les cartes selon la recherche', () => {
+  it('replie les variantes sur une seule carte Debian lors de la recherche', () => {
     renderGrid();
     act(() => {
       useCatalogStore.getState().setQuery('debian');
     });
-    // Debian (console), Debian (Bureau) et Debian (XFCE) correspondent à « debian ».
-    expect(screen.getAllByRole('article')).toHaveLength(3);
+    // Debian console, Bureau et XFCE matchent « debian », mais la grille ne
+    // montre que la carte de la mère : une seule carte.
+    const cards = screen.getAllByRole('article');
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.getAttribute('data-id')).toBe('debian-12-i386');
   });
 
   it('affiche un état vide et le réinitialise', async () => {
@@ -51,13 +60,13 @@ describe('SystemGrid', () => {
     });
     expect(screen.queryAllByRole('article')).toHaveLength(0);
     await user.click(screen.getByRole('button', { name: 'Réinitialiser les filtres' }));
-    expect(screen.getAllByRole('article')).toHaveLength(systems.length);
+    expect(screen.getAllByRole('article')).toHaveLength(displayedCount);
   });
 
   it('affiche le badge de statut de disponibilité sur chaque carte', () => {
     renderGrid();
     const cards = screen.getAllByRole('article');
-    expect(cards).toHaveLength(systems.length);
+    expect(cards).toHaveLength(displayedCount);
     for (const card of cards) {
       // On ne recode pas la disponibilité en dur : on la lit dans le catalogue.
       const id = card.getAttribute('data-id');
@@ -114,5 +123,22 @@ describe('SystemGrid', () => {
     await user.click(screen.getAllByRole('article')[0] as HTMLElement);
     expect(screen.getByTestId('location').textContent).toMatch(/^\/systems\//);
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('ouvre la mère/base (Debian) au clic sur la carte Debian', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SystemGrid />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+    const card = screen
+      .getAllByRole('article')
+      .find((article) => article.getAttribute('data-id') === 'debian-12-i386');
+    expect(card).toBeDefined();
+    await user.click(card as HTMLElement);
+    // La carte ouvre la mère : la variante se choisit ensuite sur la fiche.
+    expect(screen.getByTestId('location').textContent).toBe('/systems/debian-12-i386');
   });
 });

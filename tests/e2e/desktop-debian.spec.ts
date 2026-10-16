@@ -63,8 +63,15 @@ async function waitForDesktopProof(page: Page): Promise<'ready' | 'failed' | 'er
 async function openDesktopSession(page: Page): Promise<{ serial: Locator; state: Locator }> {
   await page.goto('/');
   await page.getByLabel('Rechercher un système').fill('debian');
-  await page.locator('.os-card[data-id="debian-12-i386-desktop"]').click();
-  await expect(page).toHaveURL(/\/systems\/debian-12-i386-desktop/);
+  // La carte Debian ouvre la MÈRE ; XFCE est présélectionné, on bascule sur la
+  // variante Bureau (X11) via le dropdown custom SANS changement d'URL, puis on
+  // lance.
+  await page.locator('.os-card[data-id="debian-12-i386"]').click();
+  await expect(page).toHaveURL(/\/systems\/debian-12-i386$/);
+  await page.getByRole('button', { name: 'Choisir la variante' }).click();
+  await page.getByRole('button', { name: 'Debian X11', exact: true }).click();
+  // Le dropdown ne navigue pas : on reste sur la fiche de la mère.
+  await expect(page).toHaveURL(/\/systems\/debian-12-i386$/);
   await page.getByRole('button', { name: 'Lancer une session' }).click();
   await expect(page).toHaveURL(/\/session\//);
 

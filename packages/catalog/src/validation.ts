@@ -33,6 +33,39 @@ export function validateCatalog(input: unknown): OSDefinition[] {
     seenSlugs.add(system.slug);
   });
 
+  // Intégrité des groupes de variantes : un enfant doit pointer vers une cible
+  // EXISTANTE qui est bien une mère (jamais un autre enfant), et ne peut pas
+  // être son propre groupe.
+  const systemsById = new Map(catalog.map((system) => [system.id, system] as const));
+  catalog.forEach((system, index) => {
+    const groupId = system.variantGroupId;
+    if (groupId === undefined) return;
+
+    if (groupId === system.id) {
+      issues.push({
+        path: `${index}.variantGroupId`,
+        message: `un système ne peut pas être son propre groupe de variantes « ${groupId} »`,
+      });
+      return;
+    }
+
+    const target = systemsById.get(groupId);
+    if (!target) {
+      issues.push({
+        path: `${index}.variantGroupId`,
+        message: `groupe de variantes introuvable « ${groupId} »`,
+      });
+      return;
+    }
+
+    if (target.variantGroupId !== undefined) {
+      issues.push({
+        path: `${index}.variantGroupId`,
+        message: `le groupe de variantes « ${groupId} » est lui-même un variant (la cible doit être une mère)`,
+      });
+    }
+  });
+
   if (issues.length > 0) throw new CatalogValidationError(issues);
 
   return catalog;

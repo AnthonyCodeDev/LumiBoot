@@ -33,6 +33,20 @@ export interface LaunchProfileDefinition {
   /** Boot réel prouvé pour ce profil (tests E2E). */
   readonly validated: boolean;
   readonly featured?: boolean;
+  /**
+   * Id du système « mère » de ce variant (absent = ce profil EST la mère ou un
+   * système autonome). Recopié dans l'`OSDefinition` par `systems.ts`.
+   */
+  readonly variantGroupId?: string;
+  /** Libellé court du variant (affiché dans un sélecteur côté fiche). */
+  readonly variantName?: string;
+  /**
+   * Ordre d'affichage de la variante dans son groupe (croissant). La plus
+   * petite valeur = meilleure variante = sélection par défaut. Absent = après
+   * les variantes ordonnées (ordre du catalogue). Recopié dans l'`OSDefinition`
+   * par `systems.ts`.
+   */
+  readonly variantOrder?: number;
 }
 
 /**
@@ -116,6 +130,11 @@ export const launchProfiles = [
     versionLabel: '12 Bookworm',
     validated: true,
     featured: true,
+    // Système MÈRE du groupe de variantes Debian : il n'a pas de
+    // `variantGroupId` (il porte le groupe) mais expose son libellé de variant.
+    // CLI est la variante la MOINS mise en avant : `variantOrder` le plus grand.
+    variantName: 'CLI',
+    variantOrder: 3,
     description:
       "Une distribution Linux stable, flexible et idéale pour découvrir un véritable système d'exploitation en navigateur.",
   },
@@ -138,6 +157,10 @@ export const launchProfiles = [
     slug: 'debian-12-i386-desktop',
     displayName: 'Debian (Bureau)',
     versionLabel: '12 Bookworm · X11',
+    // Variant enfant rattaché à la mère console `debian-12-i386`.
+    variantGroupId: 'debian-12-i386',
+    variantName: 'X11',
+    variantOrder: 2,
     // Validé par un boot RÉEL (Xorg + Openbox) : voir docs/debian-desktop.md.
     validated: true,
     description:
@@ -162,6 +185,12 @@ export const launchProfiles = [
     slug: 'debian-12-i386-xfce',
     displayName: 'Debian (XFCE)',
     versionLabel: '12 Bookworm · XFCE',
+    // Variant enfant rattaché à la mère console `debian-12-i386`.
+    variantGroupId: 'debian-12-i386',
+    variantName: 'XFCE',
+    // XFCE est la MEILLEURE variante Debian : `variantOrder` le plus petit, donc
+    // première du groupe et sélectionnée par défaut.
+    variantOrder: 1,
     // Validé par un boot RÉEL (Xorg + session XFCE) : voir docs/debian-xfce.md.
     validated: true,
     description:
