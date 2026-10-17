@@ -20,7 +20,7 @@
 
 - Debian : images construites depuis Bookworm avec provenance et paquets consignés.
 - Windows 7 : disques RAW locaux de l'opérateur, ignorés par Git et servis en développement par HTTP Range. Aucune image ni clé n'est distribuée.
-- Windows 10 (32 bits) : disque RAW **de l'opérateur**, converti depuis SA propre installation QEMU/VirtualBox, ignoré par Git et servi en développement par HTTP Range. Licence Windows de l'utilisateur requise ; aucune ISO, clé ou lien tiers n'est fourni, téléchargé ou redistribué. Chemin expérimental non validé (voir [`windows-10.md`](windows-10.md)).
+- Windows 10 (32 bits) : disque RAW **de l'opérateur**, converti depuis SA propre installation QEMU/VirtualBox, ignoré par Git et servi en développement par HTTP Range. Licence Windows de l'utilisateur requise ; aucune ISO, clé ou lien tiers n'est fourni, téléchargé ou redistribué. Même pipeline validé que Windows 7 (voir [`windows-10.md`](windows-10.md)).
 - Windows 10/11 (64 bits) : médias utilisateur requis ; aucun moteur x86-64 n'est intégré.
 - macOS : usage soumis à la licence Apple et au matériel autorisé.
 

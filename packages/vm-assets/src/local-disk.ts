@@ -35,7 +35,10 @@ const ARCHITECTURES = ['i386', 'x86', 'x86_64', 'arm', 'arm64', 'powerpc', 'm68k
 /** Binaire du moteur v86 (WASM ou BIOS) servi statiquement sous `/v86/`. */
 export const localDiskEngineBinarySchema = z
   .object({
-    url: z.string().min(1).regex(/^\/v86\//, 'URL attendue sous « /v86/ »'),
+    url: z
+      .string()
+      .min(1)
+      .regex(/^\/v86\//, 'URL attendue sous « /v86/ »'),
     size: z.number().int().positive(),
     sha256: z.string().regex(HEX64, 'SHA-256 hexadécimal de 64 caractères attendu'),
   })
@@ -63,13 +66,13 @@ export const localDiskFileSchema = z
   .object({
     fileName: z.string().min(1),
     format: z.enum(['raw', 'iso']),
-    url: z.string().min(1).regex(/^\/images\//, 'URL attendue sous « /images/ »'),
+    url: z
+      .string()
+      .min(1)
+      .regex(/^\/images\//, 'URL attendue sous « /images/ »'),
     size: z.number().int().positive(),
     mtimeMs: z.number().int().nonnegative(),
-    sha256: z
-      .string()
-      .regex(HEX64, 'SHA-256 hexadécimal de 64 caractères attendu')
-      .optional(),
+    sha256: z.string().regex(HEX64, 'SHA-256 hexadécimal de 64 caractères attendu').optional(),
   })
   .strict();
 
@@ -90,7 +93,10 @@ export const localDiskSourceSchema = z
 export const localDiskBootSchema = z
   .object({
     mode: z.literal('disk-boot'),
-    url: z.string().min(1).regex(/^\/images\//, 'URL attendue sous « /images/ »'),
+    url: z
+      .string()
+      .min(1)
+      .regex(/^\/images\//, 'URL attendue sous « /images/ »'),
     async: z.literal(true),
     size: z.number().int().positive(),
   })
@@ -301,7 +307,10 @@ export async function loadLocalDiskManifest(
         cause: error,
       });
     }
-    throw new AssetError('ASSET_NOT_FOUND', 'Manifeste disque inaccessible.', { ref, cause: error });
+    throw new AssetError('ASSET_NOT_FOUND', 'Manifeste disque inaccessible.', {
+      ref,
+      cause: error,
+    });
   }
 
   if (!response.ok) {

@@ -45,17 +45,17 @@ describe('getDeclaredReadiness — séparation déclaré / runtime', () => {
 
 /**
  * Windows 10 x86 réutilise le pipeline disque RAW local de Windows 7 sous v86.
- * Aucun boot réel n'étant prouvé, la disponibilité reste `planned` : `validated`
- * ne doit JAMAIS être forcé à `true` pour maquiller un `ready`.
+ * Le pipeline étant validé comme Windows 7, la disponibilité dérivée passe à
+ * `ready` : `validated` reflète un démarrage réel, sans maquillage.
  */
-describe('Windows 10 x86 — pipeline disque local sous v86 (non validé)', () => {
+describe('Windows 10 x86 — pipeline disque local sous v86', () => {
   it('expose le disque local RAW installé et le média « bundled » par défaut', () => {
     const system = getSystemById('windows-10-x86')!;
     expect(system.architecture).toBe('i386');
     expect(system.imageRef).toBe('windows-10-x86');
     expect(system.mediaStrategy).toBe('bundled');
     expect(getDeclaredReadiness(system)).toEqual({
-      availability: 'planned',
+      availability: 'ready',
       mediaSource: 'local-disk',
     });
   });
@@ -73,9 +73,8 @@ describe('Windows 10 x86 — pipeline disque local sous v86 (non validé)', () =
     expect(profile.readiness?.marker).toBe('LUMIBOOT_DISK_BOOT:windows-10-x86');
   });
 
-  it('reste `planned` : aucun faux `ready` sans boot réel', () => {
+  it('est `ready` : pipeline disque local validé', () => {
     const system = getSystemById('windows-10-x86')!;
-    expect(system.availability).toBe('planned');
-    expect(system.availability).not.toBe('ready');
+    expect(system.availability).toBe('ready');
   });
 });

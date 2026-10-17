@@ -63,9 +63,7 @@ export function NetworkProxyDownload(props: NetworkProxyDownloadProps) {
 
   if (!manifest) return null;
   const targets = listDownloadTargets(manifest);
-  const primary = platform?.key
-    ? targets.find((target) => target.key === platform.key)
-    : undefined;
+  const primary = platform?.key ? targets.find((target) => target.key === platform.key) : undefined;
 
   return (
     <>

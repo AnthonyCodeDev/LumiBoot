@@ -9,10 +9,7 @@ import {
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  createDiskAssetMiddleware,
-  toPublicDiskManifest,
-} from '../scripts/lib/disk-asset-dev.mjs';
+import { createDiskAssetMiddleware, toPublicDiskManifest } from '../scripts/lib/disk-asset-dev.mjs';
 import { parseArgs, toPublicServedManifest } from '../scripts/serve-windows7-asset.mjs';
 
 /**

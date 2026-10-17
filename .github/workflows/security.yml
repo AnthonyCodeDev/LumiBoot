@@ -1,0 +1,69 @@
+name: Security
+
+# Scan de sécurité de la chaîne d'approvisionnement. Complète `ci.yml` (qualité)
+# et `network-proxy.yml` (tests + build Go) sans les dupliquer :
+#   - secrets fuités (gitleaks, historique complet) ;
+#   - vulnérabilités des dépendances JavaScript (pnpm audit) ;
+#   - vulnérabilités Go atteignables (govulncheck).
+# Déclenché au push sur main, sur chaque PR, chaque lundi, et à la demande.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '27 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Secrets (gitleaks)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - name: Détecter les secrets versionnés
+        run: |
+          # Chemin de module canonique : gitleaks déclare « github.com/zricethezav/gitleaks/v8 »
+          # dans son go.mod ; l'org « gitleaks/gitleaks/v8 » échoue au build (conflit de chemin).
+          go install github.com/zricethezav/gitleaks/v8@latest
+          "$(go env GOPATH)/bin/gitleaks" detect --source . --redact --verbose
+
+  dependencies:
+    name: Dépendances JS (pnpm audit)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.14.2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Audit des dépendances livrées (échec si vulnérabilité high/critical)
+        # Scopé aux dépendances de PRODUCTION : les avis concernant l'outillage
+        # de dev/test (vitest/vite/tinypool) ne sont pas publiés ; leur mise à
+        # niveau est suivie séparément pour ne pas bloquer la CI.
+        run: pnpm audit --prod --audit-level high
+
+  go-vulnerabilities:
+    name: Go (govulncheck)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - name: Vulnérabilités Go atteignables
+        working-directory: apps/network-proxy
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...

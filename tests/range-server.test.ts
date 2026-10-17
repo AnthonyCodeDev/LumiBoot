@@ -33,20 +33,17 @@ function rawRequest(
   { method = 'GET', headers = {} }: { method?: string; headers?: Record<string, string> } = {},
 ): Promise<HttpResponse> {
   return new Promise((resolve, reject) => {
-    const req = httpRequest(
-      { host: '127.0.0.1', port, path, method, headers },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on('data', (chunk) => chunks.push(chunk));
-        res.on('end', () =>
-          resolve({
-            status: res.statusCode ?? 0,
-            headers: res.headers,
-            body: Buffer.concat(chunks),
-          }),
-        );
-      },
-    );
+    const req = httpRequest({ host: '127.0.0.1', port, path, method, headers }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () =>
+        resolve({
+          status: res.statusCode ?? 0,
+          headers: res.headers,
+          body: Buffer.concat(chunks),
+        }),
+      );
+    });
     req.on('error', reject);
     req.end();
   });

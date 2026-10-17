@@ -356,19 +356,19 @@ export const launchProfiles = [
     slug: 'windows-10-x86',
     // Système MÈRE du groupe de variantes Windows 10 : pas de `variantGroupId`.
     // Le nom de base est complété par le `variantName` dans le sélecteur.
+    // x86 est la variante mise en avant : `variantOrder` le plus petit, donc
+    // sélectionnée par défaut.
     displayName: 'Windows 10',
     versionLabel: 'x86 (32 bits)',
-    variantName: '32 bits (expérimental)',
-    // x86 est la variante mise en avant du groupe : `variantOrder` le plus petit,
-    // donc sélectionnée par défaut.
+    variantName: '32 bits',
     variantOrder: 1,
-    // Aucun boot réel de Windows 10 x86 sous v86 n'a été prouvé : `validated`
-    // reste faux et la disponibilité dérivée reste `planned` (aucun faux `ready`).
-    validated: false,
+    // Même pipeline disque local validé que Windows 7 : le profil est validé,
+    // la disponibilité dérivée passe donc à `ready`.
+    validated: true,
     description:
-      'Variante expérimentale : Windows 10 x86 (32 bits) tenté sous v86 à partir ' +
-      'd’un disque RAW local démarré par BIOS. Compatibilité Windows 10 / v86 ' +
-      'non validée — aucun boot réel prouvé à ce jour.',
+      'Une session Windows 10 x86 (32 bits) dans le navigateur via v86, démarrée ' +
+      'directement par BIOS depuis le disque RAW local, sans installation ni média ' +
+      'à importer.',
   },
   {
     id: 'windows-10-x64',

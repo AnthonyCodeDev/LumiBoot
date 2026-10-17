@@ -157,9 +157,7 @@ describe('NetworkProxyCard', () => {
     persistSession();
     useProxyStore.setState({ state: 'error', error: 'proxy injoignable' });
     render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
-    expect(
-      screen.getByRole('status').textContent,
-    ).toBe(
+    expect(screen.getByRole('status').textContent).toBe(
       'Vous êtes déjà appairé. Relancez le proxy, ou cliquez sur le bouton ci-dessus pour lancer un nouvel appairage.',
     );
     expect(screen.queryByRole('alert')).toBeNull();
@@ -209,7 +207,9 @@ describe('NetworkProxyDownload', () => {
   });
 
   it('ne rend rien si aucune cible publiée ne correspond', () => {
-    const { container } = render(<NetworkProxyDownload platform={WIN} manifest={manifestWith({})} />);
+    const { container } = render(
+      <NetworkProxyDownload platform={WIN} manifest={manifestWith({})} />,
+    );
     expect(container.querySelector('a')).toBeNull();
   });
 

@@ -468,7 +468,10 @@ export async function probeRangeAvailability(
   if (response.status === 200) {
     discardBody(response);
     if (contentType.includes('text/html')) {
-      return unavailable('disk-html', 'Le serveur a renvoyé du HTML (repli SPA) au lieu du disque.');
+      return unavailable(
+        'disk-html',
+        'Le serveur a renvoyé du HTML (repli SPA) au lieu du disque.',
+      );
     }
     return unavailable(
       'range-unsupported',

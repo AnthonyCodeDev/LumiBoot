@@ -179,9 +179,7 @@ describe('sérialisation publique/privée', () => {
   });
 
   it('parseLocalDiskPublicManifest accepte la forme publique sérialisée', () => {
-    const publicManifest = parseLocalDiskPublicManifest(
-      toPublicLocalDiskManifest(privateManifest),
-    );
+    const publicManifest = parseLocalDiskPublicManifest(toPublicLocalDiskManifest(privateManifest));
     expect(publicManifest.ref).toBe('windows-7-x86');
     expect(publicManifest).not.toHaveProperty('source');
     expect(publicManifest).not.toHaveProperty('provenance');

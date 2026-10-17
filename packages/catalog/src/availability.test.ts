@@ -235,8 +235,8 @@ describe('catalogue : Windows 7 Lite (mère du groupe) sous v86', () => {
   });
 });
 
-describe('catalogue : Windows 10 x86 (mère expérimentale) sous v86', () => {
-  it('a une image + moteur v86 intégré mais reste `planned` (non validé)', () => {
+describe('catalogue : Windows 10 x86 (mère) sous v86', () => {
+  it('a une image + moteur v86 intégré et est validé (`ready`)', () => {
     const system = getSystemById('windows-10-x86');
     const profile = system?.launchProfiles[0];
     const definition = launchProfiles.find((candidate) => candidate.id === 'windows-10-x86');
@@ -246,18 +246,16 @@ describe('catalogue : Windows 10 x86 (mère expérimentale) sous v86', () => {
     expect(system?.imageRef).toBe('windows-10-x86');
     expect(profile?.engineId).toBe('v86');
     expect(profile && isEngineIntegrated(profile.engineId)).toBe(true);
-    // `validated` reste faux tant qu'aucun boot réel n'est prouvé.
-    expect(definition?.validated).toBe(false);
-    // La disponibilité DÉRIVÉE ne ment pas : pas de `ready` sans validation.
-    expect(system?.availability).toBe('planned');
+    // Même pipeline validé que Windows 7.
+    expect(definition?.validated).toBe(true);
+    // La disponibilité dérivée est `ready` comme Windows 7.
+    expect(system?.availability).toBe('ready');
   });
 
-  it('n’est jamais promu `ready` par un contournement de `validated`', () => {
-    // Le moteur est intégré et l'image est référencée : le SEUL frein honnête
-    // est `validated: false`. On le vérifie explicitement sur la définition.
+  it('est `ready` : même pipeline validé que Windows 7', () => {
     const definition = launchProfiles.find((candidate) => candidate.id === 'windows-10-x86');
-    expect(definition?.validated).toBe(false);
-    expect(getSystemById('windows-10-x86')?.availability).not.toBe('ready');
+    expect(definition?.validated).toBe(true);
+    expect(getSystemById('windows-10-x86')?.availability).toBe('ready');
   });
 });
 

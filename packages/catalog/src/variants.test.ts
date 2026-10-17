@@ -15,7 +15,7 @@ const debianDesktop = getSystemById('debian-12-i386-desktop')!;
 const debianXfce = getSystemById('debian-12-i386-xfce')!;
 const windowsMother = getSystemById('windows-7-x86')!;
 const windowsPro = getSystemById('windows-7-pro-sp1-x86')!;
-// Groupe Windows 10 : la mère x86 (expérimentale) + le stub x64 (non intégré).
+// Groupe Windows 10 : la mère x86 + le stub x64 (non intégré).
 const windows10Mother = getSystemById('windows-10-x86')!;
 const windows10X64 = getSystemById('windows-10-x64')!;
 // Système réellement autonome (aucun groupe de variantes).
@@ -108,7 +108,7 @@ describe('groupe de variantes Windows 7', () => {
 });
 
 describe('groupe de variantes Windows 10', () => {
-  it('trie la variante x86 (expérimentale) en premier, x64 en second', () => {
+  it('trie la variante x86 en premier, x64 en second', () => {
     const group = getVariantGroup(windows10Mother);
     expect(group).toHaveLength(2);
     expect(group.map((system) => system.id)).toEqual(['windows-10-x86', 'windows-10-x64']);
@@ -128,7 +128,7 @@ describe('groupe de variantes Windows 10', () => {
   it('expose la mère neutre (32 bits) et le libellé du stub x64', () => {
     // La mère porte le groupe (id neutre `windows-10-x86`) sans `variantGroupId`.
     expect(windows10Mother.variantGroupId).toBeUndefined();
-    expect(windows10Mother.variantName).toBe('32 bits (expérimental)');
+    expect(windows10Mother.variantName).toBe('32 bits');
     expect(windows10X64.variantGroupId).toBe('windows-10-x86');
     expect(windows10X64.variantName).toBe('64 bits (non intégré)');
   });

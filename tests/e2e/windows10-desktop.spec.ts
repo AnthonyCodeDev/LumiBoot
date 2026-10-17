@@ -3,7 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
- * Windows 10 sous v86 — fiche groupée et boot réel EXPÉRIMENTAL.
+ * Windows 10 sous v86 — fiche groupée et boot réel (disque local).
  *
  * Ce fichier couvre deux niveaux, volontairement séparés :
  *
@@ -20,9 +20,11 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
  *    disque `ide-read-end`) et capture l'écran VGA + les logs. Sans l'un des
  *    deux garde-fous, le test est **ignoré** (jamais « réussi »).
  *
- * Windows 10 x86 porte `validated: false` (aucun boot prouvé à ce jour) : ce
- * fichier ne force JAMAIS `validated` et ne présente JAMAIS l'écran VGA coloré
- * comme une preuve garantie de bureau. Le parcours Windows 7
+ * Windows 10 x86 est désormais validé, comme Windows 7 : même pipeline disque
+ * local sous v86. En revanche, la variante x64 reste non intégrée (moteur
+ * `wasm-x86_64` absent) et bloquée, et le cas « sans disque » (manifeste 404)
+ * bloque toujours le lancement. Ce fichier ne présente JAMAIS l'écran VGA
+ * coloré comme une preuve garantie de bureau. Le parcours Windows 7
  * (`windows7-desktop.spec.ts`) reste inchangé et fait foi pour Windows 7.
  *
  * Commande du boot réel :
@@ -367,13 +369,14 @@ test.describe('Windows 10 : fiche groupée et disponibilité (sans disque)', () 
     expect(defaultLabel).toBe(selectedLabel);
     await page.keyboard.press('Escape');
 
-    // 2. La mère x86 non validée n'est JAMAIS annoncée « Disponible ».
+    // 2. La mère x86 est validée (même pipeline que Windows 7) : elle est
+    //    annoncée « Disponible » comme Windows 7.
     const stateValue = page
       .locator('.spec-box > div')
       .filter({ hasText: 'État' })
       .locator('strong');
     await expect(stateValue).toBeVisible();
-    await expect(stateValue).not.toHaveText('Disponible');
+    await expect(stateValue).toHaveText('Disponible');
 
     // 3. Sans disque servi (manifeste 404), le lancement est bloqué avec une
     //    raison explicite : aucune fausse disponibilité.
@@ -408,10 +411,10 @@ test.describe('Windows 10 : fiche groupée et disponibilité (sans disque)', () 
 });
 
 // ---------------------------------------------------------------------------
-// 2. Boot réel expérimental — opt-in (disque présent)
+// 2. Boot réel — opt-in (disque présent)
 // ---------------------------------------------------------------------------
 
-test.describe('Windows 10 x86 : boot réel expérimental (v86)', () => {
+test.describe('Windows 10 x86 : boot réel (v86)', () => {
   test.skip(!assetsPresent, 'Disques locaux absents : définir VM_E2E_ASSETS=1.');
   test.skip(
     !win10DiskPresent,
@@ -521,7 +524,7 @@ test.describe('Windows 10 x86 : boot réel expérimental (v86)', () => {
       });
 
       console.log(
-        `\n=== Windows 10 x86 (expérimental, non validé) ===\n` +
+        `\n=== Windows 10 x86 (validé) ===\n` +
           `  disque attendu                : ${WIN10_DISK_URL}\n` +
           `  temps de boot (clic → écran)  : ${(bootMs / 1000).toFixed(1)} s\n` +
           `  écran VGA coloré et stable    : ${proof.canvasWidth}x${proof.canvasHeight}px, ` +
@@ -533,7 +536,7 @@ test.describe('Windows 10 x86 : boot réel expérimental (v86)', () => {
           `  tas JS utilisé                : ${heap === null ? 'indisponible' : `${heap} octets`}\n` +
           `  RAM invitée                   : 2048 Mio\n` +
           `  NB : écran coloré/stable ≠ preuve garantie de bureau ; ` +
-          `validated reste false.\n` +
+          `profil validé (même pipeline que Windows 7).\n` +
           `=== fin mesures ===\n`,
       );
 

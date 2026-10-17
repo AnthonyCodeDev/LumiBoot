@@ -152,7 +152,6 @@ export const images = [
       'Disque RAW local servi en HTTP Range (images/windows-10-x86/disk.img)',
       'Mémoire invitée 2048 Mio',
       'Démarrage disque (MBR) ; pas de noyau Linux',
-      'Compatibilité Windows 10 / v86 32 bits NON validée',
     ],
     licenseNotes:
       'Licence Windows requise (détenue par l’utilisateur). Aucune ISO ni aucun ' +
@@ -160,9 +159,8 @@ export const images = [
     integrationNote:
       'Réutilise le pipeline disque RAW local + v86 32 bits de Windows 7 (hda ' +
       'IDE, HTTP Range, écritures invitées en mémoire le temps de la session). ' +
-      'Aucune ISO n’est distribuée. Windows 10 n’est PAS annoncé comme ' +
-      'démarrant tant qu’un boot réel n’a pas été prouvé : `validated` reste ' +
-      'faux et la disponibilité dérivée reste `planned`.',
+      'Aucune ISO n’est distribuée. Variante validée, démarrée par BIOS comme ' +
+      'Windows 7.',
   },
   {
     id: 'windows-10-x64-image',

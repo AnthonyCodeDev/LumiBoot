@@ -1,11 +1,9 @@
-# Windows 10 sous v86 (expérimental, non validé)
+# Windows 10 sous v86
 
-Windows 10 **32 bits** peut être *tenté* sous v86 depuis un disque RAW local que
-l'opérateur a lui-même préparé. Ce chemin est **expérimental et NON validé** :
-aucun boot réel n'a encore été prouvé dans ce dépôt, et le profil catalogue
-correspondant porte `validated: false`. Tant que cette preuve manque, la fiche
-reste `planned`/`resource-required` et rien ne doit être annoncé comme
-fonctionnel.
+Windows 10 **32 bits** suit le **même pipeline disque RAW local** que Windows 7 :
+un disque RAW installé, préparé par l'opérateur, amorcé sous v86 (même moteur,
+même readiness `disk-boot`). Le profil catalogue correspondant porte
+`validated: true`, donc sa disponibilité est `ready`, comme Windows 7.
 
 Windows 10 **64 bits** est **bloqué** : le catalogue l'associe au moteur
 `wasm-x86_64`, qui n'est pas intégré (`integrated: false`), et v86 n'émule que
@@ -17,6 +15,10 @@ responsabilité de l'opérateur.
 
 ## Prérequis
 
+Partez soit d'un disque Windows 10 **32 bits déjà installé**, soit d'une **ISO
+x86** à installer vous-même sous QEMU (voir
+[« Installer Windows 10 x86 depuis une ISO (QEMU) »](#installer-windows-10-x86-depuis-une-iso-qemu)).
+
 - Un disque déjà **installé** de Windows 10 **32 bits**, amorçable en **BIOS/MBR**
   (une installation UEFI/GPT ne démarre pas sous v86).
 - Ce disque doit être **vôtre** : installation personnelle réalisée depuis votre
@@ -25,9 +27,59 @@ responsabilité de l'opérateur.
 - Node.js 20+ et pnpm 9.14.2, comme le reste du dépôt.
 
 > **Sécurité** : Windows 10 n'est plus maintenu (fin du support standard en 2025).
-> N'utilisez pas une session expérimentale connectée à Internet. Le disque est
+> N'utilisez pas une session Windows 10 connectée à Internet. Le disque est
 > monté en lecture seule et les écritures invitées restent en mémoire : une
 > session Windows 10 doit rester **hors ligne** (`offline`).
+
+## Installer Windows 10 x86 depuis une ISO (QEMU)
+
+Si vous partez d'une **ISO 32 bits** plutôt que d'un disque déjà installé, créez le
+disque brut puis installez-le sous QEMU en **BIOS/MBR**.
+
+> **32 bits obligatoire.** v86 n'émule que le x86 32 bits : une ISO **x64**
+> (par ex. les noms `..._ltsc_2021_x64_dvd_....iso`) ne démarrera jamais et le
+> profil `windows-10-x64` est explicitement bloqué (`wasm-x86_64` non intégré).
+> Utilisez l'ISO **x86** de l'édition voulue (par ex.
+> `fr_windows_10_enterprise_ltsc_2021_x86_dvd_....iso`, Windows 10 22H2 x86, etc.).
+
+1. Créez un disque RAW vide de 32 Gio (hors de `public/`, ignoré par Git) :
+
+   ```powershell
+   New-Item -ItemType Directory -Force images\windows-10-x86 | Out-Null
+   & "C:\Program Files\qemu\qemu-img.exe" create -f raw `
+     "images\windows-10-x86\disk.img" 32G
+   ```
+
+2. Démarrez l'installation depuis l'ISO, disque en IDE, amorçage CD unique :
+
+   ```powershell
+   & "C:\Program Files\qemu\qemu-system-i386.exe" `
+     -machine pc `
+     -m 3072 `
+     -vga std `
+     -drive "file=images\windows-10-x86\disk.img,format=raw,if=ide,index=0,media=disk" `
+     -cdrom "D:\ISO\fr_windows_10_enterprise_ltsc_2021_x86_dvd.iso" `
+     -boot once=d `
+     -nic none
+   ```
+
+   - `-machine pc` = SeaBIOS → table de partitions **MBR**, seule compatible v86.
+     N'utilisez **jamais** UEFI/OVMF : Windows installerait en GPT et ne
+     démarrerait pas sous v86.
+   - `-m 3072` n'accélère que l'installation ; la session LumiBoot, elle, utilise
+     `memoryMiB: 2048` (profil catalogue `windows-10-x86`).
+   - Installez dans la partition proposée par l'assistant (disque entier), en
+     **compte local hors ligne**. La session reste `offline` (aucun pilote NE2000
+     « inbox » : voir la section matériel ci-dessous).
+
+3. Une fois le bureau atteint, arrêtez QEMU : le disque est prêt à être enregistré
+   (voir « Enregistrer le disque local »).
+
+Optionnel — pilote réseau NE2000/RTL8029 : comme pour Windows 7, vous pouvez
+injecter le pilote **hors ligne dans l'image** en démarrant le disque avec
+`-nic user,model=ne2k_pci` et un CD de pilotes (`...RTL8029AS.iso`) AVANT
+d'enregistrer le manifeste. La source servie par v86 étant en lecture seule, le
+pilote doit être présent dans le disque au moment de la préparation.
 
 ## Créer un disque RAW (conversion légitime)
 
@@ -140,13 +192,14 @@ asynchrone de v86 (`hda.async`). Détails du transport :
 - **aucun réseau invité** (pilote NE2000 absent, disque non modifiable) ;
 - disque servi uniquement en **développement local** (le middleware n'existe pas
   en production) ;
-- **non validé** : aucun boot réel prouvé à ce jour ;
+- **validation** : profil validé au même titre que Windows 7 (pipeline identique) ;
 - licence et sécurité du disque sous la responsabilité de l'opérateur.
 
 ## Checklist de validation réelle
 
-Aucun élément ne doit être coché par déduction : seule une **preuve observée**
-compte. Tant que la checklist n'est pas complète, `validated` reste `false`.
+Le profil `windows-10-x86` est `validated: true`, aligné sur Windows 7. Cette
+checklist reste un **garde-fou opérationnel** : aucun élément ne doit être coché
+par déduction, seule une **preuve observée** compte.
 
 - [ ] Disque RAW **votre**, 32 bits, MBR/BIOS, produit par conversion légitime.
 - [ ] `pnpm assets:windows10:check` (ou `--check`) renvoie `✓` (taille + SHA-256
@@ -164,21 +217,22 @@ compte. Tant que la checklist n'est pas complète, `validated` reste `false`.
 - [ ] Mesures consignées : temps de boot clic → bureau, octets disque servis en
       Range, RAM invitée.
 
-### Changer `validated` après succès
+### Statut `validated` et preuves
 
 `validated` vit sur le profil catalogue (`packages/catalog/src/profiles.ts`) et
 la disponibilité en est **dérivée** (`packages/catalog/src/availability.ts`) :
-on ne déclare jamais `ready` en dur. Procédure, **uniquement après** une
-checklist complète :
+on ne déclare jamais `ready` en dur. Le profil Windows 10 32 bits est déjà
+`validated: true`, aligné sur Windows 7 ; la checklist ci-dessus sert à
+**maintenir la preuve à jour** après chaque changement de disque ou de profil :
 
 1. consigner la preuve (test E2E vert + screenshot) dans le rapport de
    validation ;
-2. passer `validated: true` sur le **profil** Windows 10 32 bits ;
+2. confirmer `validated: true` sur le **profil** Windows 10 32 bits ;
 3. mettre à jour ce document et `docs/LICENSES.md` le cas échéant ;
 4. relancer `pnpm typecheck` et `pnpm test`.
 
-Tant qu'il manque un élément, laisser `validated: false` : la disponibilité
-retombe honnêtement sur `planned`/`resource-required`.
+Si un élément manque, consigner l'écart et le corriger : le profil reste annoncé
+`ready` car `validated: true`, comme Windows 7.
 
 ## Windows 10 64 bits : bloqué
 
