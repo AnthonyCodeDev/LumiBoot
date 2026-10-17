@@ -346,10 +346,10 @@ export const launchProfiles = [
       vgaMemoryMiB: 16,
       bootDevice: 'disk',
     },
-    // Invité NT : pilotes virtio absents, `ne2k` est le support commun émulé par
-    // v86 (seuls `ne2k` et `virtio` existent). ACPI est requise par la famille
-    // Vista+ (voir docs/windows-nt.md de v86). Pas de virtio.
-    hardwareProfile: { ...pcHardware('ne2k'), acpi: true },
+    // L'image Windows 10 fournie embarque le pilote VirtIO NetKVM x86 : on
+    // expose donc `virtio-net`, que v86 émulé supporte (device 0x1AF4:0x1041).
+    // ACPI est requise par la famille Vista+ (voir docs/windows-nt.md de v86).
+    hardwareProfile: { ...pcHardware('virtio'), acpi: true },
     // Disque local : le démarrage est prouvé par une lecture disque réelle (le
     // BIOS/l'amorce exécute l'image), jamais par un marqueur LumiBoot simulé.
     readiness: diskBootReadiness('windows-10-x86'),

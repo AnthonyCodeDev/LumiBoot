@@ -618,7 +618,7 @@ describe('V86Provider : disque RAW local bundled (Windows 10 x86)', () => {
           executionMode: 'browser',
           minMemoryMiB: 2048,
           configuration: { memoryMiB: 2048, vgaMemoryMiB: 16, bootDevice: 'disk' },
-          hardwareProfile: { network: 'ne2k', acpi: true },
+          hardwareProfile: { network: 'virtio', acpi: true },
           readiness: {
             marker: 'LUMIBOOT_DISK_BOOT:windows-10-x86',
             mode: 'disk-boot',
@@ -651,11 +651,11 @@ describe('V86Provider : disque RAW local bundled (Windows 10 x86)', () => {
     expect(options?.boot_order).toBeUndefined();
   });
 
-  it('NIC ne2k pilotée par le profil matériel du catalogue', async () => {
+  it('NIC virtio pilotée par le profil matériel du catalogue', async () => {
     const { provider, captured } = setup(makeManifest(), makeWin10DiskManifest());
     await provider.start(makeWin10DiskBootOS(), document.createElement('div'), {
       network: { mode: 'browser-fetch' },
     });
-    expect(captured[0]?.net_device).toEqual({ relay_url: 'fetch', type: 'ne2k' });
+    expect(captured[0]?.net_device).toEqual({ relay_url: 'fetch', type: 'virtio' });
   });
 });

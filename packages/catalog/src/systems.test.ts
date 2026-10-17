@@ -60,11 +60,11 @@ describe('Windows 10 x86 — pipeline disque local sous v86', () => {
     });
   });
 
-  it('utilise v86, ne2k + ACPI, 2048 Mio et le démarrage disque', () => {
+  it('utilise v86, virtio + ACPI, 2048 Mio et le démarrage disque', () => {
     const profile = getSystemById('windows-10-x86')!.launchProfiles[0]!;
     expect(profile.engineId).toBe('v86');
     expect(profile.executionMode).toBe('browser');
-    expect(profile.hardwareProfile?.network).toBe('ne2k');
+    expect(profile.hardwareProfile?.network).toBe('virtio');
     expect(profile.hardwareProfile?.acpi).toBe(true);
     expect(profile.configuration?.memoryMiB).toBe(2048);
     expect(profile.minMemoryMiB).toBe(2048);

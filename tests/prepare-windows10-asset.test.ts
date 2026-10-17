@@ -143,6 +143,27 @@ describe('prepare-windows10-asset.mjs', () => {
     expect(existsSync(join(outDir, 'manifest.json'))).toBe(false);
   });
 
+  it('tolère un « -- » isolé (injecté par pnpm) et garde les mêmes défauts', () => {
+    const outDir = join(tempDir, 'out-dashdash');
+    const result = run(['--source', source, '--out', outDir, '--', '--skip-hash', '--json']);
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain('Option inconnue');
+    const manifest = parseLocalDiskManifest(JSON.parse(result.stdout));
+    expect(manifest.ref).toBe('windows-10-x86');
+    expect(manifest.displayName).toBe('Windows 10 x86');
+    expect(manifest.architecture).toBe('i386');
+    expect(manifest.memoryMiB).toBe(2048);
+    expect(manifest.vgaMemoryMiB).toBe(16);
+    expect(manifest.disk.sha256).toBeUndefined();
+    expect(manifest.disk.size).toBe(sourceBytes.length);
+  });
+
+  it('tolère un « -- » isolé devant --help', () => {
+    const output = execFileSync('node', [SCRIPT, '--', '--help'], { cwd: repoRoot, encoding: 'utf8' });
+    expect(output).toContain('Windows 10');
+    expect(output).toContain('--source');
+  });
+
   it('expose une aide propre au wrapper sans exécuter la préparation', () => {
     const output = execFileSync('node', [SCRIPT, '--help'], { cwd: repoRoot, encoding: 'utf8' });
     expect(output).toContain('Windows 10');

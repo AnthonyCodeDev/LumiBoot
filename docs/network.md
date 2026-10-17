@@ -14,7 +14,7 @@
 
 `local-network` désigne un réseau virtuel entre invités, pas le LAN physique de l'hôte.
 
-Un invité **Windows** n'a pas de pilote NE2000 en standard : le pilote réseau doit être installé dans son image avant utilisation, sinon aucun réseau n'apparaît. Voir [`windows-7.md`](windows-7.md).
+Sous v86, la carte réseau est choisie par le profil catalogue : **Windows 7** utilise `ne2k` (RTL8029), pour lequel Windows ne fournit aucun pilote « inbox » — le pilote NE2000/RTL8029 doit donc être installé dans l'image ([`windows-7.md`](windows-7.md)). **Windows 10 x86** utilise `virtio-net` (device PCI `0x1AF4:0x1041`), qui correspond au pilote **VirtIO NetKVM x86** présent dans l'image fournie ; sa connectivité invitée n'est pas encore vérifiée par un test ([`windows-10.md`](windows-10.md)).
 
 ## Niveau de preuve
 

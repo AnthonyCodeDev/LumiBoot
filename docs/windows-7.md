@@ -47,7 +47,7 @@ v86 expose à Windows 7 une carte **NE2000 (`ne2k`)**. Les profils `windows-7-pr
 
 Windows 7 (famille Vista+) ne fournit **aucun pilote « inbox »** pour cette carte. Même si le proxy hôte tourne et que la session est en `local-proxy`, l'invité affiche « Aucune connexion n'est disponible » et aucun réseau. La documentation officielle v86 le confirme : [§5.3 Enabling networking (ne2k)](https://github.com/copy/v86/blob/master/docs/windows-nt.md).
 
-Le pilote doit être installé **dans l'image `disk.img`**. Or LumiBoot monte le disque en lecture seule (`hda.async`, HTTP Range) et les écritures v86 restent en mémoire et disparaissent à l'arrêt (voir la section « Développement » ci-dessus). L'installation se fait donc **hors ligne, dans QEMU**, avant de préparer ou de patcher le manifeste.
+Le pilote doit être installé **dans l'image `disk.img`**. Or LumiBoot monte le disque en lecture seule (`hda.async`, HTTP Range) et les écritures v86 restent en mémoire et disparaissent à l'arrêt (voir la section « Développement » ci-dessus). L'installation se fait donc **hors ligne, dans QEMU**, avant de préparer ou de patcher le manifeste. À l'inverse, Windows 10 x86 utilise `virtio-net` car son image embarque le pilote VirtIO NetKVM ; voir [`windows-10.md`](windows-10.md).
 
 ### Installer le pilote hors ligne (QEMU)
 

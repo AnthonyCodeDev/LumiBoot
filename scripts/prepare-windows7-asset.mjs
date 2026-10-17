@@ -77,6 +77,11 @@ function parseArgs(argv) {
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
+    // Tolérance ergonomique : un `--` isolé, injecté par `pnpm <script> -- <opts>`,
+    // est ignoré comme le ferait un parseur d'arguments standard (jamais traité
+    // comme une option inconnue). Il peut toutefois rester la VALEUR explicite
+    // d'une option à argument (ex. `--note --`) via `value()`, cas inchangé.
+    if (arg === '--') continue;
     const [name, inline] = arg.startsWith('--') && arg.includes('=')
       ? [arg.slice(0, arg.indexOf('=')), arg.slice(arg.indexOf('=') + 1)]
       : [arg, undefined];

@@ -159,6 +159,26 @@ describe('prepare-windows7-asset.mjs', () => {
     expect(statSync(destination).size).toBe(sourceBytes.length);
   });
 
+  it('tolère un « -- » isolé (injecté par pnpm) et garde les mêmes défauts', () => {
+    const out = join(tempDir, 'out-dashdash');
+    const result = run(['--source', source, '--out', out, '--', '--skip-hash', '--json']);
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain('Option inconnue');
+    const manifest = parseLocalDiskManifest(JSON.parse(result.stdout));
+    expect(manifest.ref).toBe('windows-7-pro-sp1-x86');
+    expect(manifest.architecture).toBe('i386');
+    expect(manifest.memoryMiB).toBe(1536);
+    expect(manifest.vgaMemoryMiB).toBe(16);
+    expect(manifest.disk.sha256).toBeUndefined();
+    expect(manifest.disk.size).toBe(sourceBytes.length);
+  });
+
+  it('tolère un « -- » isolé devant --help', () => {
+    const output = execFileSync('node', [SCRIPT, '--', '--help'], { cwd: repoRoot, encoding: 'utf8' });
+    expect(output).toContain('--source');
+    expect(output).toContain('--copy-to');
+  });
+
   it('expose une aide sans exécuter la préparation', () => {
     const output = execFileSync('node', [SCRIPT, '--help'], { cwd: repoRoot, encoding: 'utf8' });
     expect(output).toContain('--source');

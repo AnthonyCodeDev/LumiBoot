@@ -143,7 +143,11 @@ function runGenerator(args) {
 }
 
 function main() {
-  const userArgs = process.argv.slice(2);
+  // Neutralise un `--` isolé injecté par `pnpm <script> -- <opts>` : il n'est ni
+  // une option du wrapper ni une valeur, donc on le retire AVANT toute
+  // validation et avant de le transmettre au générateur (qui le tolérerait
+  // aussi, mais on évite ainsi toute ambiguïté avec `lastValue`/`hasFlag`).
+  const userArgs = process.argv.slice(2).filter((arg) => arg !== '--');
 
   if (hasFlag(userArgs, '--help', '-h')) {
     process.stdout.write(usage());
