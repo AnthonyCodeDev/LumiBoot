@@ -130,7 +130,7 @@ Il n'existe pas de route Settings. La configuration globale est chargée depuis 
 - Debian 12 : CLI, X11/Openbox et XFCE validés.
 - Windows 7 : variantes Lite et Professionnel, disques RAW locaux lus par HTTP Range.
 - Windows 10 x86 : boot réel prouvé en développement local (disque RAW opérateur servi en HTTP Range, carte `virtio-net` + pilote VirtIO NetKVM) ; voir [`windows-10.md`](windows-10.md).
-- Windows 10 x64/11, Ubuntu, Fedora, Mint et macOS : catalogue seulement, moteurs ou images absents.
+- Windows 11, Ubuntu, Fedora, Mint et macOS : catalogue seulement, moteurs ou images absents.
 - Réseau : `offline`, `browser-fetch`, `local-proxy`, `user-relay`; `local-network` prévu.
 
 ## Invariants

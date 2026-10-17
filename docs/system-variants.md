@@ -20,7 +20,6 @@ Chaque variante garde sa propre image, son profil, sa readiness et sa disponibil
 |---|---|
 | Debian (`debian-12-i386`) | XFCE, X11, CLI |
 | Windows 7 (`windows-7-x86`) | Professionnel, Lite |
-| Windows 10 (`windows-10-x86`) | 32 bits, 64 bits (non intégré) |
 
 ## Helpers
 

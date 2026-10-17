@@ -259,27 +259,6 @@ describe('catalogue : Windows 10 x86 (mère) sous v86', () => {
   });
 });
 
-describe('catalogue : Windows 10 x64 (stub futur, moteur non intégré)', () => {
-  it('reste `resource-required` : média utilisateur + moteur x86-64 non intégré', () => {
-    const system = getSystemById('windows-10-x64');
-    const profile = system?.launchProfiles[0];
-    expect(system).not.toBeNull();
-    expect(system?.architecture).toBe('x86_64');
-    expect(system?.imageRef).toBeUndefined();
-    expect(system?.mediaStrategy).toBe('user-import');
-    expect(profile?.engineId).toBe('wasm-x86_64');
-    expect(profile && isEngineIntegrated(profile.engineId)).toBe(false);
-    expect(system?.availability).toBe('resource-required');
-  });
-
-  it('reste rattaché au groupe Windows 10 x86 comme variante future', () => {
-    const system = getSystemById('windows-10-x64');
-    expect(system?.variantGroupId).toBe('windows-10-x86');
-    expect(system?.variantName).toBe('64 bits (non intégré)');
-    expect(system?.variantOrder).toBe(2);
-  });
-});
-
 describe('catalogue : profils matériels et preuves de démarrage', () => {
   it('chaque profil porte un matériel et un marqueur explicites', () => {
     for (const system of systems) {

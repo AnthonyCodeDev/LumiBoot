@@ -22,6 +22,12 @@ import { createJsonHandler, createRangeHandler } from './range-server.mjs';
 /** Référence valide (identique au schéma `LocalDiskManifest`). */
 const REF_PATTERN = /^[a-z0-9-]+$/;
 
+/** Taille lisible en Gio (ex. 42949672960 → « 40 Gio »). */
+function formatGiB(bytes) {
+  const gib = bytes / 1024 ** 3;
+  return `${Number.isInteger(gib) ? gib : gib.toFixed(1)} Gio`;
+}
+
 /**
  * Sérialise la forme PUBLIQUE d'un manifeste disque, telle que servie par HTTP.
  *
@@ -194,23 +200,21 @@ export function createDiskAssetMiddleware(options = {}) {
   const imagesDir = options.imagesDir ?? (repoRoot === null ? null : join(repoRoot, 'images'));
 
   if (imagesDir === null || !existsSync(imagesDir)) {
-    logger('[lumiboot] disques locaux : dossier « images/ » introuvable, aucun disque servi.');
+    logger('[lumiboot] aucun disque local servi (dossier « images/ » introuvable).');
     return passThrough;
   }
 
   const { routes, served, skipped } = discoverLocalDisks(imagesDir);
 
-  for (const disk of served) {
-    logger(
-      `[lumiboot] disque local servi en HTTP Range : ${disk.diskRoute} -> ${disk.diskPath} ` +
-        `(${disk.size} octets).`,
-    );
+  if (served.length > 0) {
+    const list = served.map((disk) => `${disk.ref} ${formatGiB(disk.size)}`).join(' · ');
+    logger(`[lumiboot] disques locaux prêts (HTTP Range) : ${list}`);
+  } else {
+    logger('[lumiboot] aucun disque local servi (Windows indisponibles).');
   }
-  for (const reason of skipped) {
-    logger(`[lumiboot] disque local ignoré : ${reason}.`);
-  }
-  if (served.length === 0) {
-    logger('[lumiboot] disques locaux : aucun disque servable trouvé.');
+  // Détail des dossiers ignorés uniquement en mode debug explicite.
+  if (process.env.LUMIBOOT_DISK_DEBUG === '1') {
+    for (const reason of skipped) logger(`[lumiboot] disque ignoré : ${reason}`);
   }
 
   if (routes.size === 0) return passThrough;

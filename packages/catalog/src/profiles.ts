@@ -354,14 +354,10 @@ export const launchProfiles = [
     // BIOS/l'amorce exécute l'image), jamais par un marqueur LumiBoot simulé.
     readiness: diskBootReadiness('windows-10-x86'),
     slug: 'windows-10-x86',
-    // Système MÈRE du groupe de variantes Windows 10 : pas de `variantGroupId`.
-    // Le nom de base est complété par le `variantName` dans le sélecteur.
-    // x86 est la variante mise en avant : `variantOrder` le plus petit, donc
-    // sélectionnée par défaut.
+    // Système AUTONOME : Windows 10 x86 n'appartient à aucun groupe de variantes
+    // (v86 n'émule que le x86 32 bits).
     displayName: 'Windows 10',
     versionLabel: 'x86 (32 bits)',
-    variantName: '32 bits',
-    variantOrder: 1,
     // Même pipeline disque local validé que Windows 7 : le profil est validé,
     // la disponibilité dérivée passe donc à `ready`.
     validated: true,
@@ -369,33 +365,6 @@ export const launchProfiles = [
       'Une session Windows 10 x86 (32 bits) dans le navigateur via v86, démarrée ' +
       'directement par BIOS depuis le disque RAW local, sans installation ni média ' +
       'à importer.',
-  },
-  {
-    id: 'windows-10-x64',
-    imageId: 'windows-10-x64-image',
-    // Moteur x86-64 NON intégré : le stub est conservé tel quel (même id, même
-    // moteur, même média user-import) et rattaché comme variante FUTURE du
-    // groupe Windows 10 x86. Aucun lancement n'est possible tant que le moteur
-    // n'est pas branché.
-    engineId: 'wasm-x86_64',
-    executionMode: 'browser',
-    minMemoryMiB: 4096,
-    configuration: {
-      memoryMiB: 4096,
-      bootDevice: 'disk',
-    },
-    hardwareProfile: pcHardware('virtio'),
-    readiness: guestReadiness('windows-10-x64'),
-    slug: 'windows-10-x64',
-    displayName: 'Windows 10',
-    versionLabel: '64 bits',
-    // Variant enfant rattaché à la mère x86 `windows-10-x86` : variante future
-    // NON intégrée (v86 ne supporte pas le 64 bits), affichée après la mère.
-    variantGroupId: 'windows-10-x86',
-    variantName: '64 bits (non intégré)',
-    variantOrder: 2,
-    validated: false,
-    description: 'Une version moderne de Windows pensée pour un moteur navigateur adapté.',
   },
   {
     id: 'windows-11-x64',

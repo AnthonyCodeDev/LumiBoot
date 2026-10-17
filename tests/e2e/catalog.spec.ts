@@ -47,26 +47,23 @@ test.describe('Bibliothèque', () => {
 });
 
 /**
- * Groupe Windows 10 : la carte affichée est la MÈRE x86, désormais validée et
- * donc `ready` comme Windows 7 ; le stub x64 (moteur x86-64 non intégré) reste
- * replié comme variante. Ces attentes restent honnêtes : la disponibilité de la
- * mère repose sur le même pipeline de boot réel que Windows 7 (voir
- * tests/e2e/windows10-desktop.spec.ts).
+ * Windows 10 x86 : système autonome (plus de groupe de variantes), validé et
+ * donc `ready` comme Windows 7. La disponibilité repose sur le même pipeline de
+ * boot réel que Windows 7 (voir tests/e2e/windows10-desktop.spec.ts).
  */
-test.describe('Windows 10 (groupe de variantes)', () => {
-  test('affiche la mère x86 et replie la variante x64 non intégrée', async ({ page }) => {
+test.describe('Windows 10 x86 (système autonome)', () => {
+  test('expose une carte unique `ready` et ouvre la fiche', async ({ page }) => {
     await page.goto('/');
     await page.getByLabel('Rechercher un système').fill('windows');
 
-    const mother = page.locator('.os-card[data-id="windows-10-x86"]');
-    await expect(mother).toHaveCount(1);
-    // Le stub x64 n'apparaît PAS comme carte autonome : il se choisit depuis la
-    // fiche de la mère.
+    const card = page.locator('.os-card[data-id="windows-10-x86"]');
+    await expect(card).toHaveCount(1);
+    // Plus aucune carte fantôme : la variante x64 n'existe pas.
     await expect(page.locator('.os-card[data-id="windows-10-x64"]')).toHaveCount(0);
-    // Validée (même pipeline que Windows 7) : annoncée « Disponible » (`ready`).
-    await expect(mother.locator('.card-status')).toHaveAttribute('data-state', 'ready');
+    // Validé (même pipeline que Windows 7) : annoncé « Disponible » (`ready`).
+    await expect(card.locator('.card-status')).toHaveAttribute('data-state', 'ready');
 
-    await mother.click();
+    await card.click();
     await expect(page).toHaveURL(/\/systems\/windows-10-x86$/);
   });
 });

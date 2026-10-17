@@ -145,7 +145,7 @@ export const images = [
     // par Git) servi localement en HTTP Range et démarré par BIOS sous v86 —
     // exactement le pipeline de Windows 7. Aucune ISO n'est distribuée : le
     // disque n'est pas importé, il est lu directement par l'émulateur x86 32 bits.
-    // Variante principale (mère) du groupe Windows 10.
+    // Système autonome (aucun groupe de variantes).
     imageRef: 'windows-10-x86',
     requirements: [
       'Navigateur moderne avec WebAssembly (v86, 32 bits)',
@@ -159,17 +159,8 @@ export const images = [
     integrationNote:
       'Réutilise le pipeline disque RAW local + v86 32 bits de Windows 7 (hda ' +
       'IDE, HTTP Range, écritures invitées en mémoire le temps de la session). ' +
-      'Aucune ISO n’est distribuée. Variante validée, démarrée par BIOS comme ' +
+      'Aucune ISO n’est distribuée. Système validé, démarré par BIOS comme ' +
       'Windows 7.',
-  },
-  {
-    id: 'windows-10-x64-image',
-    familyId: 'windows',
-    architecture: 'x86_64',
-    mediaStrategy: 'user-import',
-    requirements: ['WebAssembly', 'Licence Windows valide', 'Mémoire suffisante'],
-    licenseNotes: 'Licence Windows requise. Aucune ISO propriétaire fournie.',
-    integrationNote: 'Image de base à associer à un moteur navigateur x86-64.',
   },
   {
     id: 'windows-11-x64-image',

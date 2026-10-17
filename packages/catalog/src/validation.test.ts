@@ -44,18 +44,18 @@ describe('validateCatalog', () => {
 
   it('rejette un variant pointant vers un groupe inexistant', () => {
     const catalog = cloneCatalog();
-    const child = catalog.find((entry) => entry.id === 'windows-10-x64')!;
-    child.variantGroupId = 'windows-10-inexistant';
+    const child = catalog.find((entry) => entry.id === 'windows-7-pro-sp1-x86')!;
+    child.variantGroupId = 'windows-7-inexistant';
     expect(() => validateCatalog(catalog)).toThrow(CatalogValidationError);
   });
 
-  it('accepte le groupe Windows 10 : mère x86 sans groupe, stub x64 rattaché', () => {
+  it('accepte le groupe Windows 7 : mère sans groupe, variante rattachée', () => {
     const catalog = cloneCatalog();
-    const mother = catalog.find((entry) => entry.id === 'windows-10-x86')!;
-    const child = catalog.find((entry) => entry.id === 'windows-10-x64')!;
+    const mother = catalog.find((entry) => entry.id === 'windows-7-x86')!;
+    const child = catalog.find((entry) => entry.id === 'windows-7-pro-sp1-x86')!;
     expect(mother.variantGroupId).toBeUndefined();
-    expect(child.variantGroupId).toBe('windows-10-x86');
-    // Le catalogue complet (dont la mère x86 + l'enfant x64) passe Zod.
+    expect(child.variantGroupId).toBe('windows-7-x86');
+    // Le catalogue complet (dont la mère + sa variante) passe Zod.
     expect(() => validateCatalog(catalog)).not.toThrow();
   });
 });

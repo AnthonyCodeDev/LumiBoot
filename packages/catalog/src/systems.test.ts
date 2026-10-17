@@ -26,7 +26,7 @@ describe('getDeclaredReadiness — séparation déclaré / runtime', () => {
   });
 
   it('un système user-import sans média reste « resource-required » et média « user-import »', () => {
-    const windows = getSystemById('windows-10-x64')!;
+    const windows = getSystemById('windows-11-x64')!;
     expect(getDeclaredReadiness(windows)).toEqual({
       availability: 'resource-required',
       mediaSource: 'user-import',

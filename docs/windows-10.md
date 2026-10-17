@@ -5,9 +5,9 @@ un disque RAW installé, préparé par l'opérateur, amorcé sous v86 (même mot
 même readiness `disk-boot`). Le profil catalogue correspondant porte
 `validated: true`, donc sa disponibilité est `ready`, comme Windows 7.
 
-Windows 10 **64 bits** est **bloqué** : le catalogue l'associe au moteur
-`wasm-x86_64`, qui n'est pas intégré (`integrated: false`), et v86 n'émule que
-le x86 32 bits. Aucun moteur navigateur x86-64 n'existe dans ce dépôt.
+v86 n'émule que le x86 **32 bits** : seule la build **x86** de Windows 10 est
+prise en charge. Aucun moteur navigateur x86-64 n'existe dans ce dépôt, et le
+catalogue ne déclare donc aucune variante 64 bits.
 
 Aucune ISO, image, clé ou lien de téléchargement Windows n'est fourni, téléchargé
 ni redistribué par LumiBoot. La licence Windows et le média sont sous la
@@ -39,8 +39,7 @@ Si vous partez d'une **ISO 32 bits** plutôt que d'un disque déjà installé, c
 disque brut puis installez-le sous QEMU en **BIOS/MBR**.
 
 > **32 bits obligatoire.** v86 n'émule que le x86 32 bits : une ISO **x64**
-> (par ex. les noms `..._ltsc_2021_x64_dvd_....iso`) ne démarrera jamais et le
-> profil `windows-10-x64` est explicitement bloqué (`wasm-x86_64` non intégré).
+> (par ex. les noms `..._ltsc_2021_x64_dvd_....iso`) ne démarrera jamais.
 > Utilisez l'ISO **x86** de l'édition voulue (par ex.
 > `fr_windows_10_enterprise_ltsc_2021_x86_dvd_....iso`, Windows 10 22H2 x86, etc.).
 
@@ -310,10 +309,3 @@ on ne déclare jamais `ready` en dur. Le profil Windows 10 32 bits est déjà
 Si un élément manque, consigner l'écart et le corriger : le profil reste annoncé
 `ready` car `validated: true`, comme Windows 7.
 
-## Windows 10 64 bits : bloqué
-
-Le profil `windows-10-x64` utilise `engineId: 'wasm-x86_64'`, dont
-`integrated: false` (`packages/catalog/src/engines.ts`). Le lancement est refusé
-explicitement avec « Le moteur « wasm-x86_64 » n'est pas encore intégré. », et
-v86 n'émule pas x86-64. Aucun contournement n'est possible sans un nouveau
-moteur navigateur.

@@ -148,10 +148,10 @@ describe('SystemPage — sélecteur de variante', () => {
 
 describe('SystemPage — import de média utilisateur', () => {
   it('affiche la carte d’import pour un système user-import et refuse le lancement', () => {
-    renderSystemPage('windows-10-x64');
+    renderSystemPage('windows-11-x64');
 
     expect(screen.getByText('Média requis (fourni par vous)')).toBeTruthy();
-    // Le moteur de cette variante n'est pas intégré : refus explicite.
+    // Le moteur de ce système n'est pas intégré : refus explicite.
     const launch = screen.getByRole('button', { name: 'Lancer une session' });
     expect((launch as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/n'est pas encore intégré|non prise en charge/i)).toBeTruthy();

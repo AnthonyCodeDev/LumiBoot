@@ -22,7 +22,7 @@ vi.mock('./user-media.storage', () => ({
 }));
 
 const getStoreMock = vi.mocked(getUserMediaStore);
-const system = getSystemById('windows-10-x64');
+const system = getSystemById('windows-11-x64');
 if (!system) throw new Error('système de test introuvable');
 
 function makeFile(name: string, size: number): File {

@@ -174,7 +174,10 @@ describe('prepare-windows7-asset.mjs', () => {
   });
 
   it('tolère un « -- » isolé devant --help', () => {
-    const output = execFileSync('node', [SCRIPT, '--', '--help'], { cwd: repoRoot, encoding: 'utf8' });
+    const output = execFileSync('node', [SCRIPT, '--', '--help'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
     expect(output).toContain('--source');
     expect(output).toContain('--copy-to');
   });

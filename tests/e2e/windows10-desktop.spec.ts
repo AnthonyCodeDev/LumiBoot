@@ -3,14 +3,14 @@ import { dirname, join, resolve } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
- * Windows 10 sous v86 — fiche groupée et boot réel (disque local).
+ * Windows 10 x86 sous v86 — système autonome et boot réel (disque local).
  *
  * Ce fichier couvre deux niveaux, volontairement séparés :
  *
- * 1. **Sans disque** (toujours exécuté) : la fiche groupée Windows 10 expose la
- *    mère x86 par défaut, la variante x64 (future) n'est PAS annoncée
- *    disponible, et le lancement x86 est bloqué honnêtement quand le disque
- *    n'est pas servi (manifeste 404). Aucun faux `ready`, aucun faux `passed`.
+ * 1. **Sans disque** (toujours exécuté) : Windows 10 x86 est un système
+ *    AUTONOME (aucun sélecteur de variante), validé et donc annoncé
+ *    `Disponible` ; le lancement est bloqué honnêtement quand le disque n'est
+ *    pas servi (manifeste 404). Aucun faux `ready`, aucun faux `passed`.
  *
  * 2. **Avec un vrai disque** (opt-in) : uniquement si `VM_E2E_ASSETS=1` ET
  *    qu'un disque Windows 10 x86 est présent (variable `WIN10_DISK` ou
@@ -20,12 +20,11 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
  *    disque `ide-read-end`) et capture l'écran VGA + les logs. Sans l'un des
  *    deux garde-fous, le test est **ignoré** (jamais « réussi »).
  *
- * Windows 10 x86 est désormais validé, comme Windows 7 : même pipeline disque
- * local sous v86. En revanche, la variante x64 reste non intégrée (moteur
- * `wasm-x86_64` absent) et bloquée, et le cas « sans disque » (manifeste 404)
- * bloque toujours le lancement. Ce fichier ne présente JAMAIS l'écran VGA
- * coloré comme une preuve garantie de bureau. Le parcours Windows 7
- * (`windows7-desktop.spec.ts`) reste inchangé et fait foi pour Windows 7.
+ * Windows 10 x86 est validé, comme Windows 7 : même pipeline disque local sous
+ * v86. Le cas « sans disque » (manifeste 404) bloque toujours le lancement. Ce
+ * fichier ne présente JAMAIS l'écran VGA coloré comme une preuve garantie de
+ * bureau. Le parcours Windows 7 (`windows7-desktop.spec.ts`) reste inchangé et
+ * fait foi pour Windows 7.
  *
  * Commande du boot réel :
  *
@@ -61,7 +60,6 @@ function findRepoRoot(start: string): string | null {
 const REPO_ROOT = findRepoRoot(process.cwd()) ?? process.cwd();
 const WIN10_REF = 'windows-10-x86';
 const WIN10_SYSTEM_SLUG = 'windows-10-x86';
-const WIN10_X64_SLUG = 'windows-10-x64';
 const WIN10_MANIFEST_URL = `/images/${WIN10_REF}/manifest.json`;
 const WIN10_DISK_URL = process.env.WIN10_DISK_URL?.trim() || `/images/${WIN10_REF}/disk.img`;
 
@@ -320,11 +318,11 @@ async function openWindows10Mother(page: Page): Promise<Locator> {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Fiche groupée, sans disque — toujours exécuté
+// 1. Système autonome, sans disque — toujours exécuté
 // ---------------------------------------------------------------------------
 
-test.describe('Windows 10 : fiche groupée et disponibilité (sans disque)', () => {
-  test('expose x86 par défaut, x64 non intégré et bloque honnêtement le lancement sans disque', async ({
+test.describe('Windows 10 x86 : système autonome et disponibilité (sans disque)', () => {
+  test('est autonome, disponible et bloque honnêtement le lancement sans disque', async ({
     page,
   }) => {
     // Force l'absence du disque, même si l'opérateur en possède un localement :
@@ -337,40 +335,18 @@ test.describe('Windows 10 : fiche groupée et disponibilité (sans disque)', () 
     if ((await card.count()) === 0) {
       test.skip(
         true,
-        `Groupe « ${WIN10_SYSTEM_SLUG} » absent du catalogue : aucune preuve possible ` +
+        `Système « ${WIN10_SYSTEM_SLUG} » absent du catalogue : aucune preuve possible ` +
           '(skip honnête, jamais un succès).',
       );
     }
     await card.click();
     await expect(page).toHaveURL(new RegExp(`/systems/${WIN10_SYSTEM_SLUG}$`));
 
-    // 1. Le groupe expose exactement deux variantes : x86 (mère, défaut) + x64
-    //    (future, non intégrée). La sélection par défaut est l'AUTRE que x64.
-    const trigger = page.getByRole('button', { name: 'Choisir la variante' });
-    await expect(trigger).toBeVisible();
-    const defaultLabel = ((await trigger.textContent()) ?? '').trim();
+    // 1. Windows 10 x86 est un système AUTONOME : aucun sélecteur de variante.
+    await expect(page.getByRole('button', { name: 'Choisir la variante' })).toHaveCount(0);
 
-    await trigger.click();
-    const options = page.getByRole('option');
-    await expect(options).toHaveCount(2);
-    const labels = (await options.allInnerTexts()).map((text) => text.trim());
-    const x64Index = labels.findIndex((label) => /64\s*bits/i.test(label));
-    expect(
-      x64Index,
-      `Aucune variante x64 dans le groupe Windows 10 (${labels.join(' | ')}).`,
-    ).toBeGreaterThanOrEqual(0);
-
-    const selected = page.getByRole('option', { selected: true });
-    await expect(selected).toHaveCount(1);
-    const selectedLabel = ((await selected.innerText()) ?? '').trim();
-    // La variante sélectionnée par défaut n'est PAS x64 (c'est x86).
-    expect(selectedLabel).not.toBe(labels[x64Index]);
-    // Le déclencheur reflète bien cette sélection par défaut.
-    expect(defaultLabel).toBe(selectedLabel);
-    await page.keyboard.press('Escape');
-
-    // 2. La mère x86 est validée (même pipeline que Windows 7) : elle est
-    //    annoncée « Disponible » comme Windows 7.
+    // 2. Le système est validé (même pipeline que Windows 7) : il est annoncé
+    //    « Disponible » comme Windows 7.
     const stateValue = page
       .locator('.spec-box > div')
       .filter({ hasText: 'État' })
@@ -385,28 +361,6 @@ test.describe('Windows 10 : fiche groupée et disponibilité (sans disque)', () 
     await expect(
       page.getByRole('status').filter({ hasText: /manifeste.*absent|manifeste.*indisponible/i }),
     ).toBeVisible();
-  });
-
-  test('la variante x64 est refusée explicitement (moteur x86-64 non intégré)', async ({
-    page,
-  }) => {
-    await page.goto(`/systems/${WIN10_X64_SLUG}`);
-    const launch = page.getByRole('button', { name: 'Lancer une session' });
-    if ((await launch.count()) === 0) {
-      test.skip(true, `Fiche « ${WIN10_X64_SLUG} » absente : rien à prouver (skip honnête).`);
-    }
-    await expect(launch).toBeDisabled();
-    // Raison explicite : moteur non intégré (et/ou média utilisateur requis).
-    await expect(
-      page
-        .getByRole('status')
-        .filter({ hasText: /n'est pas encore intégré|Ressource requise|importez un média/i }),
-    ).toBeVisible();
-    const stateValue = page
-      .locator('.spec-box > div')
-      .filter({ hasText: 'État' })
-      .locator('strong');
-    await expect(stateValue).not.toHaveText('Disponible');
   });
 });
 

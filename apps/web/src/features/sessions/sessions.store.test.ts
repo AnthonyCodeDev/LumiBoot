@@ -172,7 +172,7 @@ afterEach(() => {
 
 describe('useSessionsStore — propriété des médias', () => {
   it('deux VM du même OS : libérer A ne révoque jamais le média de B', async () => {
-    const system = getSystemById('windows-10-x64');
+    const system = getSystemById('windows-11-x64');
     if (!system) throw new Error('système de test introuvable');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
@@ -206,7 +206,7 @@ describe('useSessionsStore — propriété des médias', () => {
   });
 
   it('dispose pendant la lecture du blob : aucun démarrage, aucune fuite', async () => {
-    const system = getSystemById('windows-10-x64');
+    const system = getSystemById('windows-11-x64');
     if (!system) throw new Error('système de test introuvable');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
@@ -238,7 +238,7 @@ describe('useSessionsStore — propriété des médias', () => {
   });
 
   it('stop pendant la lecture du blob : pas de démarrage, pas de fuite', async () => {
-    const system = getSystemById('windows-10-x64');
+    const system = getSystemById('windows-11-x64');
     if (!system) throw new Error('système de test introuvable');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
@@ -266,7 +266,7 @@ describe('useSessionsStore — propriété des médias', () => {
   });
 
   it('dispose est idempotent : une seule révocation pour une session', async () => {
-    const system = getSystemById('windows-10-x64');
+    const system = getSystemById('windows-11-x64');
     if (!system) throw new Error('système de test introuvable');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
@@ -285,7 +285,7 @@ describe('useSessionsStore — propriété des médias', () => {
   });
 
   it('redémarrer la même session remplace son URL (aucune accumulation)', async () => {
-    const system = getSystemById('windows-10-x64');
+    const system = getSystemById('windows-11-x64');
     if (!system) throw new Error('système de test introuvable');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
@@ -309,7 +309,7 @@ describe('useSessionsStore — propriété des médias', () => {
 
 describe('useSessionsStore — erreurs normalisées', () => {
   it('une erreur IndexedDB avant lifecycle.start devient un statut de session', async () => {
-    const system = getSystemById('windows-10-x64');
+    const system = getSystemById('windows-11-x64');
     if (!system) throw new Error('système de test introuvable');
     mocks.getUserMediaStore.mockResolvedValue({
       get: vi.fn(async () => {
@@ -330,7 +330,7 @@ describe('useSessionsStore — erreurs normalisées', () => {
   });
 
   it('l’échec tardif d’un boot supplanté n’écrase pas l’état courant', async () => {
-    const system = getSystemById('windows-10-x64');
+    const system = getSystemById('windows-11-x64');
     if (!system) throw new Error('système de test introuvable');
     let rejectGet: ((error: Error) => void) | undefined;
     mocks.getUserMediaStore.mockResolvedValue({
