@@ -1,0 +1,19 @@
+# Configuration gitleaks de LumiBoot.
+#
+# Règle stricte : ce fichier ne doit contenir que des exceptions DOCUMENTÉES
+# à des détections déjà connues et neutralisées — jamais un masquage de secret
+# actif. Voir docs/SECURITY.md.
+
+title = "LumiBoot"
+
+# Conserve TOUTES les règles intégrées de gitleaks et n'ajoute que des
+# allowlists ci-dessous (sans `useDefault`, fournir ce fichier remplacerait le
+# jeu de règles par défaut — le scan ne détecterait alors plus rien).
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Clé d'API historique de provider tiers (UUID) : introduite au commit 623da32, retirée de l'arbre au commit af62cfb, mais encore présente dans l'historique. Cette valeur est présumée RÉVOQUÉE ; ne jamais la réutiliser. Exception limitée à cette valeur exacte."
+regexes = [
+  '''REDACTED''',
+]

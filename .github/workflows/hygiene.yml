@@ -1,9 +1,8 @@
 name: Hygiene
 
-# Garde-fous de propreté du dépôt, complémentaires de `ci.yml`
-# (lint/typecheck/tests/build) : formatage Prettier, intégrité des binaires du
-# moteur v86 (SHA-256 épinglés) et absence de médias/archives volumineux
-# versionnés.
+# Garde-fous de propreté, en UN job pour limiter le nombre de checks :
+# formatage Prettier, intégrité des binaires v86 (SHA-256 épinglés) et absence
+# de médias/fichiers volumineux versionnés. Complète `ci.yml` sans le dupliquer.
 on:
   push:
     branches: [main]
@@ -14,8 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  format:
-    name: Formatage (Prettier)
+  hygiene:
+    name: Propreté
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -26,40 +25,22 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check
-
-  engine-assets:
-    name: Intégrité binaires v86 (SHA-256)
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 9.14.2
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Préparer puis vérifier (v86.wasm, seabios.bin, vgabios.bin)
+      - name: Installation
+        run: pnpm install --frozen-lockfile
+      - name: Formatage (Prettier)
+        run: pnpm format:check
+      - name: Intégrité binaires v86 (SHA-256)
         run: |
           pnpm assets:prepare
           pnpm assets:check
-
-  repository:
-    name: Propreté du dépôt (médias volumineux)
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v5
-      - name: Refuser les médias/archives versionnés
+      - name: Médias/archives versionnés (interdits)
         run: |
           set -euo pipefail
           if git ls-files | grep -Ei '\.(img|iso|qcow2?|vhd|vhdx|vmdk|vdi|ext[234])$'; then
             echo "::error::Des images disque/média sont versionnées ; elles doivent rester hors Git."
             exit 1
           fi
-      - name: Refuser les gros fichiers versionnés (> 25 Mio, hors downloads publiés)
+      - name: Gros fichiers versionnés (> 25 Mio, hors downloads publiés)
         run: |
           set -euo pipefail
           offenders=""
