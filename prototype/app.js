@@ -28,6 +28,10 @@ function saveFavorites() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...state.favorites])); }
     catch { toast('Stockage local indisponible : les favoris ne seront pas conservés.'); }
 }
+// Invariant sécurité : toute valeur dynamique insérée via innerHTML DOIT passer par
+// escaped() (échappe & < > " '). Les booléens et libellés constants sont sûrs ; ne
+// jamais concaténer une valeur non échappée. Ce dossier est un prototype archivé,
+// exclu du build (eslint/vitest/prettier) et non servi.
 function escaped(value) {
     return String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
