@@ -7,7 +7,7 @@ Windows 7 forme un groupe de deux variantes validées, démarrées depuis des di
 | Professionnel SP1 x86 | `windows-7-pro-sp1-x86` | 32 Gio | 1536 Mio | 1, défaut |
 | Lite x86 | `windows-7-x86` | 16 Gio | 1024 Mio | 2, mère |
 
-Les fichiers `images/<ref>/disk.img`, `manifest.json` et `provenance.txt` sont ignorés par Git. Aucune image, ISO ou clé Windows n'est distribuée.
+Les fichiers `images/<ref>/disk.img` et `images/<ref>/provenance.txt` sont ignorés par Git. Le `manifest.json` est versionné sous forme générique (aucun chemin local) ; le disque doit donc être préparé sur la machine. Aucune image, ISO ou clé Windows n'est distribuée.
 
 ## Préparer un disque
 

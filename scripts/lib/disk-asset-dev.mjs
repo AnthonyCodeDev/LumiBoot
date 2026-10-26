@@ -16,7 +16,7 @@
 // 206 / Content-Range / Accept-Ranges / CORS / OPTIONS.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { createJsonHandler, createRangeHandler } from './range-server.mjs';
 
 /** Référence valide (identique au schéma `LocalDiskManifest`). */
@@ -94,12 +94,19 @@ function findRepoRoot(start) {
  * routes Range + manifeste. Les dossiers ignorés (manifeste d'image publiée,
  * disque absent, taille incohérente…) sont documentés mais non bloquants.
  *
+ * `manifest.source.path` est RELATIF à la racine du dépôt (le dossier parent de
+ * `images/`) et non au cwd : Vite démarre depuis `apps/web`, donc `resolve()`
+ * seul chercherait au mauvais endroit et le disque paraîtrait introuvable. Un
+ * chemin absolu hérité d'un ancien manifeste est accepté tel quel.
+ *
  * @returns {{ routes: Map<string, (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void>, served: Array<{ref: string, diskPath: string, size: number, diskRoute: string}>, skipped: string[] }}
  */
 function discoverLocalDisks(imagesDir) {
   const routes = new Map();
   const served = [];
   const skipped = [];
+  // Racine du dépôt = dossier parent de `images/` (aucun chemin codé en dur).
+  const repoRoot = dirname(resolve(imagesDir));
 
   let entries;
   try {
@@ -140,7 +147,7 @@ function discoverLocalDisks(imagesDir) {
 
     let diskPath = null;
     for (const candidate of candidates) {
-      const absolute = resolve(candidate);
+      const absolute = isAbsolute(candidate) ? candidate : resolve(repoRoot, candidate);
       if (existsSync(absolute) && statSync(absolute).isFile()) {
         diskPath = absolute;
         break;

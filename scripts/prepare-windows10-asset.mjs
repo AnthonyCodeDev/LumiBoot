@@ -13,9 +13,12 @@
 //   node scripts/prepare-windows10-asset.mjs --source D:\VM\win10.img --skip-hash
 //   node scripts/prepare-windows10-asset.mjs --source D:\VM\win10.img --json
 //
-// Le disque est servi IN-PLACE : le manifeste enregistre `source.path` sur le
-// fichier réel de l'opérateur (hors dépôt) et ne copie RIEN dans le dépôt.
-// Le middleware de dev (`scripts/lib/disk-asset-dev.mjs`) découvre
+// Le disque est servi IN-PLACE : le manifeste enregistre `source.path` RELATIF à
+// la racine du dépôt (ex. `images/windows-10-x86/disk.img`, séparateurs `/`) et
+// ne copie RIEN dans le dépôt. Un disque HORS dépôt (ex. `--source D:\VM\win10.img`)
+// n'enregistre AUCUN chemin : `source` devient `{ external: true, size, mtimeMs }`,
+// et `--check` réclame alors explicitement `--source` (aucun chemin absolu n'est
+// jamais publié). Le middleware de dev (`scripts/lib/disk-asset-dev.mjs`) découvre
 // automatiquement le dossier `images/windows-10-x86/`, il n'y a rien à câbler.
 //
 // CONTRAINTE DE PIPELINE : Windows 10 démarre en `disk-boot` via `hda`
@@ -68,8 +71,11 @@ Générateur Windows 10 x86 (délègue à prepare-windows7-asset.mjs).
   --source <chemin>       Disque RAW x86 DÉJÀ INSTALLÉ (défaut :
                           images/${REF}/disk.img, ou WINDOWS10_IMG).
                           Une ISO seule ou un QCOW2 sont refusés.
+                          Un disque hors dépôt n'enregistre aucun chemin local.
   --out <dossier>         Dossier de sortie (défaut images/${REF})
   --check                 Vérifie le manifeste existant sans rien écrire
+                          (réclame --source si le manifeste vient d'un disque
+                          externe, faute de chemin enregistré)
   --force                 Autorise l'écrasement du manifeste existant
   --skip-hash             Ne pas calculer le SHA-256 (documente taille + mtime)
   --resume                Réutilise le SHA-256 existant si taille+mtime identiques

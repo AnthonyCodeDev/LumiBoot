@@ -9,8 +9,13 @@
 //   node scripts/prepare-windows7-asset.mjs --check
 //   node scripts/prepare-windows7-asset.mjs --skip-hash   # documente méthode+taille+mtime
 //
-// Le disque est servi IN-PLACE : le manifeste enregistre `source.path` sur le
-// fichier réel de l'opérateur (hors dépôt) et ne copie RIEN dans le dépôt.
+// Le disque est servi IN-PLACE : le manifeste enregistre `source.path` RELATIF à
+// la racine du dépôt (ex. `images/windows-7-x86/disk.img`, séparateurs `/`) et
+// ne copie RIEN dans le dépôt. Un disque HORS dépôt (ex. `--source D:\media\x.img`)
+// n'enregistre AUCUN chemin : `source` devient `{ external: true, size, mtimeMs }`.
+// Un chemin absolu local (lettre de lecteur + dossier personnel) n'a aucune
+// valeur sur une autre machine et ne doit jamais être publié ; `--check` réclame
+// alors explicitement `--source`.
 //
 // Garanties :
 //   - le fichier source est ouvert en LECTURE SEULE et n'est JAMAIS modifié,
@@ -31,7 +36,7 @@ import { access, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/pr
 import { constants as fsConstants } from 'node:fs';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { dirname, extname, join, resolve } from 'node:path';
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -126,7 +131,9 @@ function usage() {
 
   --source <chemin>       Image disque source (défaut :
                           images/windows-7-pro-sp1-x86/disk.img à la racine du
-                          dépôt, ou WINDOWS7_IMG / --source pour la surcharger)
+                          dépôt, ou WINDOWS7_IMG / --source pour la surcharger).
+                          Un chemin relatif est résolu depuis le dossier courant ;
+                          un disque hors dépôt n'enregistre aucun chemin local.
   --ref <ref>             Référence (minuscules/tirets), ex. windows-7-pro-sp1-x86
   --display-name <nom>    Libellé lisible
   --architecture <arch>   i386 (défaut), x86_64, …
@@ -142,13 +149,49 @@ function usage() {
   --skip-hash             Ne pas calculer le SHA-256 (documente taille + mtime)
   --resume                Réutiliser le SHA-256 d'un manifeste existant si taille+mtime identiques
   --check                 Vérifier le manifeste existant sans rien écrire
+                          (suit « source.path », relatif à la racine du dépôt ;
+                          réclame --source pour un disque externe)
   --json                  Imprimer le manifeste sur stdout (logs sur stderr)
   --force                 Autoriser l'écrasement du manifeste existant
+
+Chemins enregistrés : le manifeste ne contient JAMAIS de chemin absolu. Un disque
+situé dans le dépôt est noté relativement (ex. images/<ref>/disk.img) ; un disque
+externe est noté « external: true » sans chemin, et --check réclame --source.
 `;
 }
 
 function log(message) {
   process.stderr.write(`${message}\n`);
+}
+
+/**
+ * Convertit un chemin en chemin RELATIF à la racine du dépôt, séparateurs `/`
+ * (ex. `images/windows-7-x86/disk.img`). Retourne `null` si le fichier est hors
+ * du dépôt : un chemin absolu propre à la machine de l'opérateur ne doit jamais
+ * entrer dans le manifeste ni dans `provenance.txt` (rien ne serait réutilisable
+ * ailleurs, et le dépôt ne doit publier aucun chemin local).
+ *
+ * @param {string} filePath chemin absolu ou relatif au cwd
+ * @returns {string | null} chemin relatif à la racine du dépôt, ou null
+ */
+function toRepoRelativePath(filePath) {
+  const absolute = resolve(filePath);
+  const rel = relative(repoRoot, absolute);
+  if (rel.length === 0 || rel.startsWith('..') || isAbsolute(rel)) return null;
+  return rel.split(sep).join('/');
+}
+
+/**
+ * Résout un chemin ENREGISTRÉ dans un manifeste. Un chemin relatif l'est
+ * toujours par rapport à la RACINE DU DÉPÔT (jamais au cwd : Vite et pnpm
+ * tournent depuis `apps/web` ou un sous-dossier) ; un chemin absolu hérité d'un
+ * ancien manifeste est utilisé tel quel.
+ *
+ * @param {string} recordedPath chemin enregistré dans `source.path`
+ * @returns {string} chemin absolu
+ */
+function resolveRecordedPath(recordedPath) {
+  return isAbsolute(recordedPath) ? recordedPath : resolve(repoRoot, recordedPath);
 }
 
 /** Refuse toute cible située dans un dossier `public/` (bundle Vite). */
@@ -271,12 +314,21 @@ async function main() {
   const manifestPath = join(outputDir, 'manifest.json');
 
   // En vérification sans --source explicite, on suit le chemin enregistré dans
-  // le manifeste (qui peut être une copie locale) plutôt que le défaut CLI.
+  // le manifeste (chemin RELATIF à la racine du dépôt, ou absolu hérité d'un
+  // ancien manifeste). Un manifeste issu d'un disque EXTERNE n'enregistre aucun
+  // chemin : il faut alors fournir --source explicitement.
   let sourcePath = resolve(options.source);
   if (flags.check && !flags.sourceProvided) {
     const recorded = await readExistingManifest(outputDir);
-    if (typeof recorded?.source?.path === 'string' && recorded.source.path.length > 0) {
-      sourcePath = resolve(recorded.source.path);
+    const recordedPath = recorded?.source?.path;
+    if (typeof recordedPath === 'string' && recordedPath.length > 0) {
+      sourcePath = resolveRecordedPath(recordedPath);
+    } else if (recorded?.source?.external === true) {
+      throw new Error(
+        'Ce manifeste a été généré depuis un disque HORS du dépôt : aucun chemin local n’y est ' +
+          'enregistré (il ne doit jamais être publié). Relancez la vérification avec --source :\n' +
+          '  node scripts/prepare-windows7-asset.mjs --check --source "<disque>"',
+      );
     }
   }
 
@@ -396,6 +448,14 @@ async function main() {
   const diskUrl = `/images/${options.ref}/${options.servedName}`;
   const diskMtimeMs = Math.trunc(sourceInfo.mtimeMs);
 
+  // Aucun chemin absolu n'est écrit : chemin relatif à la racine du dépôt si le
+  // disque y vit, sinon simple marqueur « external » (taille + mtime suffisent
+  // à re-détecter le fichier, sans publier l'arborescence de l'opérateur).
+  const sourceRelative = toRepoRelativePath(hashSource);
+  const source = sourceRelative === null
+    ? { external: true, size: sourceInfo.size, mtimeMs: diskMtimeMs }
+    : { path: sourceRelative, size: sourceInfo.size, mtimeMs: diskMtimeMs };
+
   const manifest = {
     version: 1,
     ref: options.ref,
@@ -405,7 +465,7 @@ async function main() {
     vgaMemoryMiB: options.vgaMiB,
     license: options.license,
     provenance: options.provenance,
-    source: { path: hashSource, size: sourceInfo.size, mtimeMs: diskMtimeMs },
+    source,
     disk: {
       fileName: options.servedName,
       format,
@@ -425,7 +485,8 @@ async function main() {
     join(outputDir, 'provenance.txt'),
     [
       `ref            : ${options.ref}`,
-      `source         : ${hashSource}`,
+      // Chemin relatif au dépôt uniquement : jamais de chemin absolu publié.
+      `source         : ${sourceRelative ?? '(disque externe — chemin non enregistré)'}`,
       `taille         : ${sourceInfo.size} octets (${(sourceInfo.size / GIB).toFixed(3)} Gio)`,
       `mtime (ms)     : ${diskMtimeMs}`,
       `format         : ${format}`,

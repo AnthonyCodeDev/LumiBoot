@@ -75,7 +75,7 @@ export const vmConfigurationSchema = z.object({
    * (`bzimage`/`initrd`) adossé à un manifeste d'image publié.
    */
   media: vmMediaSchema.optional(),
-  extra: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+  extra: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
 /** Carte réseau émulée fournie au système invité (`none` = aucune carte). */

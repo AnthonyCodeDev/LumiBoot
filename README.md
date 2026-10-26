@@ -69,7 +69,7 @@ serveur de développement.
 | `packages/vm-assets` | manifestes, intégrité et disques locaux |
 | `packages/vm-storage` | stockage versionné et quotas |
 | `packages/vm-network` | profils, capacités et diagnostics réseau |
-| `images` | scripts de build et assets locaux ignorés |
+| `images` | scripts et manifestes d'images ; binaires ignorés |
 
 Flux : l'UI crée une session, `VMRegistry` charge le moteur à la demande,
 `V86Provider` vérifie le manifeste puis démarre l'émulateur. `running` exige un
