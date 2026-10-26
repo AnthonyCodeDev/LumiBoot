@@ -1,23 +1,23 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Validation en Chromium RÉEL du module d'orchestration Pointer Lock, sans
- * démarrer de VM : le module est chargé tel quel depuis le serveur de dev Vite
- * (`/src/components/session/pointer-lock.ts`) puis piloté par de VRAIS gestes
- * utilisateur (`page.mouse.click`), condition indispensable pour que le
- * navigateur accepte `requestPointerLock`.
+ * Validation of the Pointer Lock orchestration module in REAL Chromium, without
+ * starting a VM: the module is loaded as is from the Vite dev server
+ * (`/src/components/session/pointer-lock.ts`) and then driven by REAL user
+ * gestures (`page.mouse.click`), which is required for the browser to accept
+ * `requestPointerLock`.
  *
- * Preuves : un clic capture (un seul curseur, celui de l'invité), la libération
- * (Échap natif = `pointerlockchange`, ici déclenchée via `exitPointerLock` car
- * Chromium headless n'intercepte pas Échap) restaure le curseur hôte, un clic
- * recapture, et `dispose` libère.
+ * Proofs: a click captures (a single cursor, the guest one), releasing (native
+ * Escape = `pointerlockchange`, triggered here through `exitPointerLock` because
+ * headless Chromium does not intercept Escape) restores the host cursor, a click
+ * recaptures, and `dispose` releases.
  *
- * La séquence « Échap natif » est couverte par les tests unitaires
- * (`pointerlockchange` + classe retirée) ; ce test prouve le comportement dans un
- * vrai moteur de rendu.
+ * The "native Escape" sequence is covered by the unit tests
+ * (`pointerlockchange` + removed class); this test proves the behavior in a real
+ * rendering engine.
  */
-test.describe('Capture souris (Pointer Lock) — module réel dans Chromium', () => {
-  test('capture au clic, libère (Échap natif simulé), recapture, puis libère au dispose', async ({
+test.describe('Mouse capture (Pointer Lock) - real module in Chromium', () => {
+  test('captures on click, releases (simulated native Escape), recaptures, then releases on dispose', async ({
     page,
   }) => {
     await page.goto('/');
@@ -34,7 +34,7 @@ test.describe('Capture souris (Pointer Lock) — module réel dans Chromium', ()
 
       const screen = document.createElement('div');
       screen.id = 'pl-screen';
-      // Contrat d'affichage standard : la cible n'est plus liée à `.v86-screen`.
+      // Standard display contract: the target is no longer tied to `.v86-screen`.
       screen.setAttribute('data-vm-display', 'screen');
       screen.style.cssText = 'width:240px;height:120px;background:#000;';
 
@@ -68,33 +68,33 @@ test.describe('Capture souris (Pointer Lock) — module réel dans Chromium', ()
           document.querySelector('#pl-screen')?.classList.contains('is-pointer-locked') ?? false,
       );
 
-    // Avant tout clic : aucun verrou, aucun curseur masqué.
+    // Before any click: no lock, no hidden cursor.
     expect(await isLockedToScreen()).toBe(false);
     expect(await hasLockedClass()).toBe(false);
 
-    // Clic réel (geste utilisateur) : capture + curseur hôte masqué (classe).
+    // Real click (user gesture): capture + host cursor hidden (class).
     await page.mouse.click(cx, cy);
     await expect.poll(isLockedToScreen).toBe(true);
     await expect.poll(hasLockedClass).toBe(true);
 
-    // Libération (Échap natif du navigateur => `pointerlockchange`).
+    // Release (native browser Escape => `pointerlockchange`).
     await page.evaluate(() => document.exitPointerLock());
     await expect.poll(isLockedToScreen).toBe(false);
     await expect.poll(hasLockedClass).toBe(false);
 
-    // Nouveau clic explicite : recapture.
+    // New explicit click: recapture.
     await page.mouse.click(cx, cy);
     await expect.poll(isLockedToScreen).toBe(true);
-    // On attend la synchronisation via `pointerlockchange` (classe posée).
+    // The synchronization through `pointerlockchange` is awaited (class applied).
     await expect.poll(hasLockedClass).toBe(true);
 
-    // `dispose` (arrêt/démontage de session) : libère le verrou.
+    // `dispose` (session stop/unmount): releases the lock.
     await page.evaluate(() =>
       (window as unknown as { __plHandle?: { dispose: () => void } }).__plHandle?.dispose(),
     );
     await expect.poll(isLockedToScreen).toBe(false);
 
-    // Séquence d'états réelle observée : true → false → true → false.
+    // Real observed state sequence: true -> false -> true -> false.
     const states = await page.evaluate(
       () => (window as unknown as { __plStates?: boolean[] }).__plStates ?? [],
     );

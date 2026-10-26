@@ -3,10 +3,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Garde-fous de configuration web (P2 sécurité) :
- * - sourcemaps de production désactivées par défaut ;
- * - le bearer d'appairage n'est persisté qu'en `sessionStorage` ;
- * - aucune URL WISP (qui porte le token en query) n'est journalisée.
+ * Web configuration guardrails (P2 security):
+ * - production sourcemaps are disabled by default;
+ * - the pairing bearer is only persisted in `sessionStorage`;
+ * - no WISP URL (which carries the token in the query) is ever logged.
  */
 
 const repoRoot = process.cwd();
@@ -28,22 +28,22 @@ function collectSourceFiles(directory: string): string[] {
   return files;
 }
 
-describe('configuration web (sécurité)', () => {
-  it('désactive les sourcemaps publiques par défaut (opt-in explicite)', () => {
+describe('web configuration (security)', () => {
+  it('disables public sourcemaps by default (explicit opt-in)', () => {
     const config = read('apps/web/vite.config.ts');
     expect(config).not.toMatch(/sourcemap:\s*true/);
     expect(config).toContain('LUMIBOOT_SOURCEMAP');
     expect(config).toMatch(/productionSourcemap/);
   });
 
-  it("ne persiste le bearer d'appairage que dans sessionStorage", () => {
+  it('only persists the pairing bearer in sessionStorage', () => {
     const persistence = read('apps/web/src/features/proxy/persistence.ts');
     expect(persistence).toContain('sessionStorage');
     expect(persistence).not.toContain('localStorage.setItem');
     expect(persistence).not.toContain('localStorage.getItem');
   });
 
-  it('ne journalise jamais une URL WISP/token dans le front', () => {
+  it('never logs a WISP/token URL in the front-end', () => {
     const files = [
       ...collectSourceFiles('apps/web/src'),
       ...collectSourceFiles('packages/vm-network/src'),

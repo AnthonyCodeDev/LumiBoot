@@ -9,13 +9,13 @@ import {
 } from '../../lib/platform';
 
 export interface NetworkProxyDownloadProps {
-  /** Plateforme injectée en test (sinon détection automatique). */
+  /** Platform injected in tests (otherwise auto-detected). */
   platform?: HostPlatform | undefined;
-  /** Manifeste injecté en test (sinon chargement réseau). */
+  /** Manifest injected in tests (otherwise loaded over the network). */
   manifest?: DownloadsManifest | undefined;
 }
 
-/** Libellés lisibles des cibles, dans l'ordre du manifeste. */
+/** Human-readable labels for the targets, in manifest order. */
 const TARGET_LABELS: Record<PlatformKey, string> = {
   'windows-x64': 'Windows x64',
   'windows-arm64': 'Windows ARM64',
@@ -25,12 +25,12 @@ const TARGET_LABELS: Record<PlatformKey, string> = {
 };
 
 /**
- * Lien texte discret « Installer » vers le proxy réseau local de la plateforme
- * hôte, accompagné d'un bouton « voir toutes les versions » qui déplie la
- * liste de toutes les plateformes du manifeste.
+ * Discreet "Install" text link to the local network proxy build for the host
+ * platform, plus a "show all versions" button that expands the list of every
+ * platform in the manifest.
  *
- * Tout passe par le manifeste (`/downloads/manifest.json`) : aucune URL en
- * dur, et une cible n'est cliquable que si `published === true && url`.
+ * Everything goes through the manifest (`/downloads/manifest.json`): no
+ * hard-coded URL, and a target is only clickable when `published === true && url`.
  */
 export function NetworkProxyDownload(props: NetworkProxyDownloadProps) {
   const [platform, setPlatform] = useState<HostPlatform | null>(props.platform ?? null);
@@ -40,20 +40,20 @@ export function NetworkProxyDownload(props: NetworkProxyDownloadProps) {
   useEffect(() => {
     if (props.platform !== undefined || props.manifest !== undefined) return;
     let cancelled = false;
-    // Détection synchrone immédiate (UA), puis affinement asynchrone (userAgentData).
+    // Immediate synchronous detection (UA), then asynchronous refinement (userAgentData).
     setPlatform(detectHostPlatform());
     void (async () => {
       try {
         const detected = await detectHostPlatformAsync();
         if (!cancelled) setPlatform(detected);
       } catch {
-        // Le repli synchrone déjà affiché suffit.
+        // The synchronous fallback already displayed is enough.
       }
       try {
         const loaded = await loadDownloadsManifest();
         if (!cancelled) setManifest(loaded);
       } catch {
-        // Manifeste indisponible : aucun lien affiché.
+        // Manifest unavailable: no link is shown.
       }
     })();
     return () => {
@@ -70,7 +70,7 @@ export function NetworkProxyDownload(props: NetworkProxyDownloadProps) {
       <div className="proxy-install-row">
         {primary?.url ? (
           <a href={primary.url} target="_blank" rel="noopener noreferrer">
-            Installer
+            Install
           </a>
         ) : null}
         <button
@@ -79,7 +79,7 @@ export function NetworkProxyDownload(props: NetworkProxyDownloadProps) {
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
         >
-          {expanded ? 'masquer les versions' : 'voir toutes les versions'}
+          {expanded ? 'hide versions' : 'show all versions'}
         </button>
       </div>
       {expanded ? (
@@ -91,7 +91,7 @@ export function NetworkProxyDownload(props: NetworkProxyDownloadProps) {
                   {TARGET_LABELS[target.key]}
                 </a>
               ) : (
-                <span aria-disabled="true">{TARGET_LABELS[target.key]} · Bientôt disponible</span>
+                <span aria-disabled="true">{TARGET_LABELS[target.key]} · Unavailable</span>
               )}
             </li>
           ))}

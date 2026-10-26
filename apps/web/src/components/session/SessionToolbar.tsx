@@ -5,7 +5,7 @@ import { engineShortLabels, getPrimaryLaunchProfile } from '../../lib/labels';
 import { resolveNetworkProfile } from '../../config/runtime';
 import { useSessionsStore } from '../../features/sessions/sessions.store';
 
-/** États pendant lesquels une demande d'arrêt a du sens. */
+/** States during which a stop request makes sense. */
 const STOPPABLE: readonly VMState[] = ['preparing', 'downloading', 'booting', 'running'];
 
 export interface SessionToolbarProps {
@@ -33,11 +33,11 @@ export function SessionToolbar({
 }: SessionToolbarProps) {
   const launchProfile = getPrimaryLaunchProfile(system);
   const canStop = STOPPABLE.includes(session.state);
-  // Mode réseau **effectivement utilisé au démarrage** de la session (mémorisé
-  // par le store au `boot`, ex. `local-proxy` par sélection automatique),
-  // et non le mode configuré. Repli sur le mode configuré si la session n'est
-  // pas encore enregistrée, puis silencieux hors runtime chargé (tests
-  // unitaires) : aucun crash.
+  // Network mode **actually used when the session booted** (recorded by the
+  // store on `boot`, e.g. `local-proxy` through automatic selection), not the
+  // configured mode. Falls back to the configured mode when the session is not
+  // registered yet, then stays silent outside a loaded runtime (unit tests):
+  // no crash.
   const effectiveMode = useSessionsStore((s) => s.networkModes[session.id]);
   let networkMode: string | null = null;
   try {
@@ -60,7 +60,7 @@ export function SessionToolbar({
       <div className="session-actions">
         {networkMode ? (
           <span className="session-network-badge" data-testid="session-network-mode">
-            Réseau : {networkMode}
+            Network: {networkMode}
           </span>
         ) : null}
         {onToggleFullscreen ? (
@@ -69,11 +69,9 @@ export function SessionToolbar({
             type="button"
             onClick={onToggleFullscreen}
             aria-pressed={isFullscreen}
-            title={
-              isFullscreen ? 'Quitter le plein écran (Échap)' : 'Afficher la session en plein écran'
-            }
+            title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Show the session in fullscreen'}
           >
-            {isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}
+            {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
           </Button>
         ) : null}
         {onToggleLogs ? (
@@ -82,7 +80,7 @@ export function SessionToolbar({
             type="button"
             onClick={onToggleLogs}
             aria-pressed={logsOpen}
-            title={logsOpen ? 'Masquer les logs' : 'Afficher les logs'}
+            title={logsOpen ? 'Hide logs' : 'Show logs'}
           >
             Logs
           </Button>
@@ -93,10 +91,10 @@ export function SessionToolbar({
           onClick={onStop}
           disabled={transitioning || !canStop}
         >
-          Arrêter
+          Stop
         </Button>
         <Button variant="primary" type="button" onClick={onRestart} disabled={transitioning}>
-          Redémarrer
+          Restart
         </Button>
       </div>
     </div>

@@ -1,19 +1,19 @@
 import type { FetchLike } from '../../config/load-config';
 
 /**
- * Appairage web ↔ proxy réseau local.
+ * Web ↔ local network proxy pairing.
  *
- * Routes réellement utilisées (cf.
- * `apps/network-proxy/internal/server/server.go` + `README.md`) :
- * - `POST /api/pair/request` (origine autorisée) → `{pairingId, userCode, expiresAt}` ;
- * - `GET /api/pair/status?id=…` → `{status: "pending"|"approved"|"denied", expiresAt}` ;
- * - `POST /api/pair/exchange` `{pairingId}` (même origine) → `{token, expiresAt}` ;
- * - `GET /api/session/verify?token=…` (contrôle authentifié origine + jeton) →
- *   `200 {"ok":true,"expiresAt":"…"}` / `401`/`403` ;
+ * Routes actually used (see
+ * `apps/network-proxy/internal/server/server.go` + `README.md`):
+ * - `POST /api/pair/request` (allowed origin) → `{pairingId, userCode, expiresAt}`;
+ * - `GET /api/pair/status?id=…` → `{status: "pending"|"approved"|"denied", expiresAt}`;
+ * - `POST /api/pair/exchange` `{pairingId}` (same origin) → `{token, expiresAt}`;
+ * - `GET /api/session/verify?token=…` (authenticated origin + token check) →
+ *   `200 {"ok":true,"expiresAt":"…"}` / `401`/`403`;
  * - `POST /api/session/revoke` `{token}` → `{revoked: true}`.
  *
- * L'approbation elle-même (`approve`/`deny`) se fait depuis la console du
- * proxy réseau local (terminal), jamais depuis LumiBoot web.
+ * The approval itself (`approve`/`deny`) happens from the local network proxy
+ * console (terminal), never from LumiBoot web.
  */
 
 export type PairingStatusValue = 'pending' | 'approved' | 'denied';
@@ -35,9 +35,9 @@ export interface PairingExchangeResult {
 }
 
 export interface VerifyTokenResult {
-  /** Le proxy a confirmé que le jeton est valide (HTTP 200 + `{ok:true}`). */
+  /** The proxy confirmed the token is valid (HTTP 200 + `{ok:true}`). */
   ok: boolean;
-  /** Expiration renvoyée par le proxy si connue. */
+  /** Expiry returned by the proxy, when known. */
   expiresAt?: string;
 }
 
@@ -75,7 +75,7 @@ async function readErrorMessage(response: Response): Promise<string | undefined>
       if (typeof message === 'string' && message.length > 0) return message;
     }
   } catch {
-    // Corps non-JSON : on retombe sur le statut HTTP.
+    // Non-JSON body: fall back to the HTTP status.
   }
   return undefined;
 }
@@ -95,7 +95,7 @@ async function postJson<T>(
   } catch (cause) {
     throw new ProxyPairingError(
       'PROXY_UNREACHABLE',
-      'Proxy réseau local injoignable : vérifiez qu’il est lancé sur cette machine.',
+      'Local network proxy unreachable: check that it runs on this machine.',
       { cause },
     );
   }
@@ -111,15 +111,15 @@ async function postJson<T>(
   } catch (cause) {
     throw new ProxyPairingError(
       'PROXY_UNREACHABLE',
-      'Réponse inattendue du proxy réseau local (JSON illisible).',
+      'Unexpected response from the local network proxy (unreadable JSON).',
       { cause },
     );
   }
 }
 
 /**
- * Demande un appairage : le navigateur envoie son origine (en-tête `Origin`
- * automatique + `origin` explicite en repli, car le serveur accepte les deux).
+ * Requests a pairing: the browser sends its origin (automatic `Origin` header +
+ * explicit `origin` as a fallback, since the server accepts both).
  */
 export async function requestPairing(
   baseUrl: string,
@@ -135,25 +135,25 @@ export async function requestPairing(
     if (result.status === 403) {
       throw new ProxyPairingError(
         'ORIGIN_FORBIDDEN',
-        `Origine refusée par le proxy réseau local${result.detail ? ` : ${result.detail}` : ''}. Ajoutez cette origine à la configuration du proxy réseau local puis relancez-le.`,
+        `Origin refused by the local network proxy${result.detail ? `: ${result.detail}` : ''}. Add this origin to the local network proxy config, then restart it.`,
       );
     }
     throw new ProxyPairingError(
       'PROXY_UNREACHABLE',
-      `Demande d’appairage refusée (HTTP ${result.status})${result.detail ? ` : ${result.detail}` : ''}.`,
+      `Pairing request refused (HTTP ${result.status})${result.detail ? `: ${result.detail}` : ''}.`,
     );
   }
   const { pairingId, userCode, expiresAt } = result.data;
   if (typeof pairingId !== 'string' || typeof userCode !== 'string') {
     throw new ProxyPairingError(
       'PROXY_UNREACHABLE',
-      'Réponse d’appairage inattendue du proxy réseau local.',
+      'Unexpected pairing response from the local network proxy.',
     );
   }
   return { pairingId, userCode, expiresAt };
 }
 
-/** Consulte l'état d'une demande d'appairage (polling annulable via `signal`). */
+/** Reads the state of a pairing request (polling cancellable through `signal`). */
 export async function getPairingStatus(
   baseUrl: string,
   pairingId: string,
@@ -171,34 +171,34 @@ export async function getPairingStatus(
   } catch (cause) {
     throw new ProxyPairingError(
       'PROXY_UNREACHABLE',
-      'Proxy réseau local injoignable pendant la vérification de l’appairage.',
+      'Local network proxy unreachable while checking the pairing.',
       { cause },
     );
   }
   if (response.status === 404) {
     throw new ProxyPairingError(
       'PAIRING_NOT_FOUND',
-      'Demande d’appairage introuvable ou expirée : recommencez l’appairage.',
+      'Pairing request not found or expired: start the pairing again.',
     );
   }
   if (response.status === 403) {
     const detail = await readErrorMessage(response);
     throw new ProxyPairingError(
       'ORIGIN_FORBIDDEN',
-      `Origine refusée par le proxy réseau local${detail ? ` : ${detail}` : ''}.`,
+      `Origin refused by the local network proxy${detail ? `: ${detail}` : ''}.`,
     );
   }
   if (!response.ok) {
     throw new ProxyPairingError(
       'PROXY_UNREACHABLE',
-      `Statut d’appairage illisible (HTTP ${response.status}).`,
+      `Unreadable pairing status (HTTP ${response.status}).`,
     );
   }
   let body: unknown;
   try {
     body = await response.json();
   } catch (cause) {
-    throw new ProxyPairingError('PROXY_UNREACHABLE', 'Réponse de statut illisible.', {
+    throw new ProxyPairingError('PROXY_UNREACHABLE', 'Unreadable status response.', {
       cause,
     });
   }
@@ -206,16 +206,16 @@ export async function getPairingStatus(
   if (record.status !== 'pending' && record.status !== 'approved' && record.status !== 'denied') {
     throw new ProxyPairingError(
       'PROXY_UNREACHABLE',
-      'Statut d’appairage inattendu renvoyé par le proxy réseau local.',
+      'Unexpected pairing status returned by the local network proxy.',
     );
   }
   return { status: record.status, expiresAt: String(record.expiresAt ?? '') };
 }
 
 /**
- * Échange un appairage **approuvé** contre un token de session (usage
- * unique). Le token brut n'est renvoyé qu'ici et n'est stocké que haché côté
- * proxy réseau local.
+ * Exchanges an **approved** pairing for a session token (single use). The raw
+ * token is only returned here and is stored hashed on the local network proxy
+ * side.
  */
 export async function exchangeToken(
   baseUrl: string,
@@ -231,42 +231,42 @@ export async function exchangeToken(
     if (result.status === 403) {
       throw new ProxyPairingError(
         'PAIRING_NOT_APPROVED',
-        'Échange impossible : approuvez d’abord la demande depuis la console du proxy (même origine requise).',
+        'Cannot exchange: approve the request from the proxy console first (same origin required).',
       );
     }
     if (result.status === 404) {
       throw new ProxyPairingError(
         'PAIRING_NOT_FOUND',
-        'Demande d’appairage introuvable ou expirée : recommencez l’appairage.',
+        'Pairing request not found or expired: start the pairing again.',
       );
     }
     throw new ProxyPairingError(
       'PROXY_UNREACHABLE',
-      `Échange du token refusé (HTTP ${result.status})${result.detail ? ` : ${result.detail}` : ''}.`,
+      `Token exchange refused (HTTP ${result.status})${result.detail ? `: ${result.detail}` : ''}.`,
     );
   }
   const { token, expiresAt } = result.data;
   if (typeof token !== 'string' || token.length === 0) {
     throw new ProxyPairingError(
       'PROXY_UNREACHABLE',
-      'Token de session manquant dans la réponse du proxy réseau local.',
+      'Session token missing in the local network proxy response.',
     );
   }
   return { token, expiresAt };
 }
 
 /**
- * Vérifie qu'un jeton de session est **réellement validé** par le proxy
- * réseau local via `GET {proxyUrl}/api/session/verify?token=<token>`.
+ * Checks that a session token is **really validated** by the local network proxy
+ * through `GET {proxyUrl}/api/session/verify?token=<token>`.
  *
- * Le jeton passe en **query** (comme `/wisp/`) pour éviter le préflight d'un
- * en-tête `Authorization` personnalisé. Le contrôle est authentifié : le proxy
- * vérifie l'origine et le jeton, et ne fait pas d'upgrade.
+ * The token travels in the **query** (like `/wisp/`) to avoid the preflight of a
+ * custom `Authorization` header. The check is authenticated: the proxy verifies
+ * the origin and the token, and does not upgrade.
  *
- * - `200 {"ok":true,"expiresAt":"…"}` → `{ok:true, expiresAt}` ;
- * - `401`/`403` → `{ok:false}` (jeton absent, invalide, expiré ou origine refusée) ;
- * - erreur réseau ou réponse inattendue → `ProxyPairingError`
- *   (`PROXY_UNREACHABLE`), état **incertain** : on ne conclut pas à l'invalidité.
+ * - `200 {"ok":true,"expiresAt":"…"}` → `{ok:true, expiresAt}`;
+ * - `401`/`403` → `{ok:false}` (missing, invalid or expired token, or refused origin);
+ * - network error or unexpected response → `ProxyPairingError`
+ *   (`PROXY_UNREACHABLE`), an **uncertain** state: we do not conclude invalidity.
  */
 export async function verifyToken(
   baseUrl: string,
@@ -285,7 +285,7 @@ export async function verifyToken(
   } catch (cause) {
     throw new ProxyPairingError(
       'PROXY_UNREACHABLE',
-      'Proxy réseau local injoignable pendant la vérification du jeton de session.',
+      'Local network proxy unreachable while verifying the session token.',
       { cause },
     );
   }
@@ -295,18 +295,16 @@ export async function verifyToken(
   if (!response.ok) {
     throw new ProxyPairingError(
       'PROXY_UNREACHABLE',
-      `Vérification du jeton illisible (HTTP ${response.status}).`,
+      `Unreadable token verification (HTTP ${response.status}).`,
     );
   }
   let body: unknown;
   try {
     body = await response.json();
   } catch (cause) {
-    throw new ProxyPairingError(
-      'PROXY_UNREACHABLE',
-      'Réponse de vérification du jeton illisible.',
-      { cause },
-    );
+    throw new ProxyPairingError('PROXY_UNREACHABLE', 'Unreadable token verification response.', {
+      cause,
+    });
   }
   const record = body as { ok?: unknown; expiresAt?: unknown };
   if (record.ok !== true) return { ok: false };
@@ -315,7 +313,7 @@ export async function verifyToken(
     : { ok: true };
 }
 
-/** Révoque la session par possession du token brut. */
+/** Revokes the session by possession of the raw token. */
 export async function revokeSession(
   baseUrl: string,
   token: string,
@@ -329,10 +327,10 @@ export async function revokeSession(
   if (!result.ok) {
     throw new ProxyPairingError(
       'REVOKE_FAILED',
-      `Révocation impossible (HTTP ${result.status}) : session déjà expirée ou introuvable.`,
+      `Cannot revoke (HTTP ${result.status}): session already expired or not found.`,
     );
   }
   if (result.data.revoked !== true) {
-    throw new ProxyPairingError('REVOKE_FAILED', 'Révocation refusée par le proxy réseau local.');
+    throw new ProxyPairingError('REVOKE_FAILED', 'Revocation refused by the local network proxy.');
   }
 }

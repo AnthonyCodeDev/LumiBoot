@@ -5,7 +5,7 @@ import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ScrollToTop } from './ScrollToTop';
 
 describe('ScrollToTop', () => {
-  it('remonte la fenêtre en haut à chaque changement de route', async () => {
+  it('scrolls the window back to the top on every route change', async () => {
     const user = userEvent.setup();
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
 
@@ -13,16 +13,16 @@ describe('ScrollToTop', () => {
       <MemoryRouter initialEntries={['/']}>
         <ScrollToTop />
         <Routes>
-          <Route path="/" element={<Link to="/systems/debian">Fiche Debian</Link>} />
-          <Route path="/systems/:slug" element={<p>Fiche système</p>} />
+          <Route path="/" element={<Link to="/systems/debian">Debian page</Link>} />
+          <Route path="/systems/:slug" element={<p>System page</p>} />
         </Routes>
       </MemoryRouter>,
     );
 
     scrollTo.mockClear();
-    await user.click(screen.getByRole('link', { name: 'Fiche Debian' }));
+    await user.click(screen.getByRole('link', { name: 'Debian page' }));
 
-    expect(screen.getByText('Fiche système')).toBeTruthy();
+    expect(screen.getByText('System page')).toBeTruthy();
     expect(scrollTo).toHaveBeenCalledWith(0, 0);
 
     scrollTo.mockRestore();

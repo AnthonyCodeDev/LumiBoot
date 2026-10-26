@@ -7,10 +7,9 @@ import { SessionPage } from './SessionPage';
 import { useSessionsStore } from '../features/sessions/sessions.store';
 
 /**
- * Tests de la page de session : capture UI des rejets asynchrones de
- * `boot()`/`restart()` et absence d'écrasement d'une nouvelle session. Le store
- * de sessions et l'écran de session sont remplacés par des doubles : on observe
- * uniquement la logique de la page.
+ * Session page tests: UI capture of asynchronous `boot()`/`restart()` rejections
+ * and no overwriting of a new session. The sessions store and the session screen
+ * are replaced by doubles: only the page logic is observed.
  */
 
 vi.mock('../components/session/SessionScreen', () => ({
@@ -31,10 +30,10 @@ vi.mock('../components/session/SessionScreen', () => ({
       <div ref={consoleRef} data-testid="session-console" />
       <p data-testid="session-state">{session.state}</p>
       <button type="button" onClick={onStop}>
-        Arrêter
+        Stop
       </button>
       <button type="button" onClick={onRestart} disabled={transitioning}>
-        Redémarrer
+        Restart
       </button>
     </div>
   ),
@@ -83,8 +82,8 @@ beforeEach(() => {
   });
 });
 
-describe('SessionPage — capture des rejets asynchrones', () => {
-  it('affiche une alerte quand le boot rejette (aucune promesse non gérée)', async () => {
+describe('SessionPage — capturing asynchronous rejections', () => {
+  it('shows an alert when boot rejects (no unhandled promise)', async () => {
     const session = makeSession('idle');
     useSessionsStore.setState({
       sessions: { [session.id]: session },
@@ -98,23 +97,23 @@ describe('SessionPage — capture des rejets asynchrones', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('IndexedDB inaccessible');
   });
 
-  it('affiche une alerte quand l’arrêt manuel rejette', async () => {
+  it('shows an alert when a manual stop rejects', async () => {
     const user = userEvent.setup();
     const session = makeSession('running');
     useSessionsStore.setState({
       sessions: { [session.id]: session },
       stop: vi.fn(async () => {
-        throw new Error('Arrêt impossible');
+        throw new Error('Stop failed');
       }),
     });
 
     renderPage();
-    await user.click(screen.getByRole('button', { name: 'Arrêter' }));
+    await user.click(screen.getByRole('button', { name: 'Stop' }));
 
-    expect((await screen.findByRole('alert')).textContent).toContain('Arrêt impossible');
+    expect((await screen.findByRole('alert')).textContent).toContain('Stop failed');
   });
 
-  it('libère la session au démontage', async () => {
+  it('releases the session on unmount', async () => {
     const session = makeSession('running');
     const dispose = vi.fn(async () => undefined);
     useSessionsStore.setState({ sessions: { [session.id]: session }, dispose });
@@ -126,15 +125,15 @@ describe('SessionPage — capture des rejets asynchrones', () => {
   });
 });
 
-describe('SessionPage — redémarrage', () => {
-  it('crée une nouvelle session et navigue dessus', async () => {
+describe('SessionPage — restart', () => {
+  it('creates a new session and navigates to it', async () => {
     const user = userEvent.setup();
     const session = makeSession('running');
     const create = vi.fn(() => 'new-session');
     useSessionsStore.setState({ sessions: { [session.id]: session }, create });
 
     renderPage();
-    await user.click(screen.getByRole('button', { name: 'Redémarrer' }));
+    await user.click(screen.getByRole('button', { name: 'Restart' }));
 
     await waitFor(() =>
       expect(screen.getByTestId('location').textContent).toContain('/session/new-session'),
@@ -142,7 +141,7 @@ describe('SessionPage — redémarrage', () => {
     expect(create).toHaveBeenCalledWith('debian-12-i386');
   });
 
-  it('un échec d’arrêt affiche l’erreur et n’écrase pas la session courante', async () => {
+  it('a stop failure shows the error and does not overwrite the current session', async () => {
     const user = userEvent.setup();
     const session = makeSession('running');
     const create = vi.fn(() => 'new-session');
@@ -150,14 +149,14 @@ describe('SessionPage — redémarrage', () => {
       sessions: { [session.id]: session },
       create,
       stop: vi.fn(async () => {
-        throw new Error('Arrêt impossible');
+        throw new Error('Stop failed');
       }),
     });
 
     renderPage();
-    await user.click(screen.getByRole('button', { name: 'Redémarrer' }));
+    await user.click(screen.getByRole('button', { name: 'Restart' }));
 
-    expect((await screen.findByRole('alert')).textContent).toContain('Arrêt impossible');
+    expect((await screen.findByRole('alert')).textContent).toContain('Stop failed');
     expect(create).not.toHaveBeenCalled();
     expect(screen.getByTestId('location').textContent).toContain('/session/session-1');
   });

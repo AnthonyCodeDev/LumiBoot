@@ -1,5 +1,5 @@
 /**
- * Événements émis par une machine en cours d'exécution. Ils proviennent des
- * schémas partagés (`@lumiboot/contracts`) : source unique de vérité.
+ * Events emitted by a running machine. They come from the shared schemas
+ * (`@lumiboot/contracts`): single source of truth.
  */
 export type { SessionEvent, VMState } from '@lumiboot/contracts';

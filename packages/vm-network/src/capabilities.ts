@@ -1,11 +1,12 @@
 import type { NetworkMode } from './modes';
 
-/** Backend de transport d'accès Internet. */
+/** Internet access transport backend. */
 export type NetworkTransportKind = 'none' | 'fetch' | 'wisp';
 
 /**
- * Carte réseau virtuelle (NIC) offerte à la machine invitée. Décrit le
- * **matériel réseau émulé**, indépendamment du transport et de la pile invitée.
+ * Virtual network card (NIC) offered to the guest machine. Describes the
+ * **emulated network hardware**, independently of the transport and of the
+ * guest stack.
  */
 export interface NicCapabilities {
   ethernet: boolean;
@@ -14,8 +15,8 @@ export interface NicCapabilities {
 }
 
 /**
- * Pile TCP/IP **invitée** : ce que le système d'exploitation de la VM peut
- * réellement faire au-dessus de la NIC. Indépendant du backend de transport.
+ * **Guest** TCP/IP stack: what the VM operating system can really do on top of
+ * the NIC. Independent of the transport backend.
  */
 export interface GuestStackCapabilities {
   ip: boolean;
@@ -27,10 +28,10 @@ export interface GuestStackCapabilities {
 }
 
 /**
- * Backend de transport d'accès Internet. `kind` désigne le mécanisme réel ;
- * `cors = true` signifie que les requêtes sont **soumises à CORS** (contrainte
- * navigateur) ; `cors = false` signifie qu'aucune contrainte CORS navigateur ne
- * s'applique au transport utilisé (jamais l'inverse d'un proxy CORS).
+ * Internet access transport backend. `kind` designates the real mechanism;
+ * `cors = true` means requests are **subject to CORS** (browser constraint);
+ * `cors = false` means no browser CORS constraint applies to the transport used
+ * (never the opposite of a CORS proxy).
  */
 export interface TransportCapabilities {
   kind: NetworkTransportKind;
@@ -40,30 +41,30 @@ export interface TransportCapabilities {
 }
 
 /**
- * Capacités réseau d'un mode. Quatre niveaux **distincts** sont séparés pour
- * éviter toute promesse mensongère : NIC, pile TCP/IP invitée, backend de
- * transport, et connectivité Internet réellement vérifiée.
+ * Network capabilities of a mode. Four **distinct** levels are separated to
+ * avoid any misleading promise: NIC, guest TCP/IP stack, transport backend, and
+ * really verified Internet connectivity.
  *
- * Distinction fondamentale (ne jamais la confondre) :
+ * Fundamental distinction (never confuse it):
  *
- * - **Capacité de transport** : statique, décrit ce que le mode *peut* faire
- *   d'après le matériel émulé, la pile invitée et le backend. C'est une
- *   intention, pas une preuve.
- * - **Fonctionnalité vérifiée** : runtime, jamais garantie par le mode. Elle
- *   n'est établie qu'après une **sonde réelle** réussie (`tcp`/`https`) et se
- *   matérialise par `fullInternet`/`verified`, tous deux `false` par défaut.
+ * - **Transport capability**: static, describes what the mode *can* do based on
+ *   the emulated hardware, the guest stack and the backend. It is an intention,
+ *   not a proof.
+ * - **Verified feature**: runtime, never guaranteed by the mode. It is only
+ *   established after a successful **real probe** (`tcp`/`https`) and
+ *   materializes as `fullInternet`/`verified`, both `false` by default.
  *
- * Autrement dit : annoncer `https: true` décrit une capacité de transport ;
- * cela ne prouve **pas** qu'une requête HTTPS aboutira réellement.
+ * In other words: announcing `https: true` describes a transport capability; it
+ * does **not** prove that an HTTPS request will really succeed.
  */
 export interface NetworkCapabilities {
   nic: NicCapabilities;
   guestStack: GuestStackCapabilities;
   transport: TransportCapabilities;
   /**
-   * Accès Internet **complet et vérifié** (`tcp`/`udp`/`icmp` arbitraires).
-   * Reste `false` par défaut et n'est jamais déduit du mode : il ne peut devenir
-   * vrai qu'après vérification réelle à l'exécution (sonde).
+   * **Full and verified** Internet access (arbitrary `tcp`/`udp`/`icmp`). Stays
+   * `false` by default and is never inferred from the mode: it can only become
+   * true after a real runtime check (probe).
    */
   fullInternet: boolean;
 }
@@ -90,7 +91,7 @@ const NO_TRANSPORT: TransportCapabilities = Object.freeze({
   cors: false,
 });
 
-/** Aucun accès réseau : aucun niveau n'est disponible. */
+/** No network access: no level is available. */
 export const OFFLINE_CAPABILITIES: NetworkCapabilities = Object.freeze({
   nic: NO_NIC,
   guestStack: NO_GUEST_STACK,
@@ -99,16 +100,17 @@ export const OFFLINE_CAPABILITIES: NetworkCapabilities = Object.freeze({
 });
 
 /**
- * Réseau émulé au-dessus du `fetch` natif de v86.
+ * Network emulated on top of the native v86 `fetch`.
  *
- * État **factuel** du backend `browser-fetch` de v86 0.5.471 : l'invité obtient
- * DHCP/DNS et atteint Internet en **HTTP (port 80)** ; le backend n'enregistre
- * le TCP que pour le port 80, donc **HTTPS (443) échoue**. Les hôtes sans
- * en-tête CORS sont de plus bloqués (`cors = true`).
+ * **Factual** state of the `browser-fetch` backend of v86 0.5.471: the guest
+ * gets DHCP/DNS and reaches the Internet over **HTTP (port 80)**; the backend
+ * only registers TCP for port 80, so **HTTPS (443) fails**. Hosts without a CORS
+ * header are additionally blocked (`cors = true`).
  *
- * `transport.https` est donc `false` : annoncer `https: true` serait **faux**.
- * `guestStack.tcp` reste `true` mais **limité au transport HTTP** (port 80).
- * UDP/ICMP ne sont **pas** disponibles et `fullInternet` n'est **pas** garanti.
+ * `transport.https` is therefore `false`: announcing `https: true` would be
+ * **false**. `guestStack.tcp` stays `true` but **limited to the HTTP transport**
+ * (port 80). UDP/ICMP are **not** available and `fullInternet` is **not**
+ * guaranteed.
  */
 export const BROWSER_FETCH_CAPABILITIES: NetworkCapabilities = Object.freeze({
   nic: Object.freeze({ ethernet: true, virtio: true, ne2k: true }),
@@ -116,7 +118,7 @@ export const BROWSER_FETCH_CAPABILITIES: NetworkCapabilities = Object.freeze({
     ip: true,
     dhcp: true,
     dns: true,
-    tcp: true, // limité au port 80 : le backend ne transport que HTTP.
+    tcp: true, // limited to port 80: the backend only carries HTTP.
     udp: false,
     icmp: false,
   }),
@@ -125,16 +127,16 @@ export const BROWSER_FETCH_CAPABILITIES: NetworkCapabilities = Object.freeze({
 });
 
 /**
- * Relais WISP **personnel** de l'utilisateur (`wss://`).
+ * **Personal** WISP relay of the user (`wss://`).
  *
- * Un **vrai relais WISP** peut transporter du TCP arbitraire, y compris le
- * **443**, donc `transport.https = true` est une capacité de transport légitime.
- * `cors = false` car le relais relaie des trames et n'est **pas** soumis à CORS.
+ * A **real WISP relay** can carry arbitrary TCP, including **443**, so
+ * `transport.https = true` is a legitimate transport capability. `cors = false`
+ * because the relay forwards frames and is **not** subject to CORS.
  *
- * Mais cette capacité reste **statique** : elle ne prouve rien à l'exécution.
- * `udp` est **optionnel/relais-dépendant** et `icmp` **non garanti** — les deux
- * restent donc `false` par défaut. `fullInternet` est **jamais** accordé par la
- * simple sélection du mode : seul le runtime (sonde) peut le confirmer.
+ * But this capability stays **static**: it proves nothing at runtime. `udp` is
+ * **optional/relay-dependent** and `icmp` **not guaranteed** — both therefore
+ * stay `false` by default. `fullInternet` is **never** granted by simply
+ * selecting the mode: only the runtime (probe) can confirm it.
  */
 export const USER_RELAY_CAPABILITIES: NetworkCapabilities = Object.freeze({
   nic: Object.freeze({ ethernet: true, virtio: true, ne2k: true }),
@@ -143,24 +145,24 @@ export const USER_RELAY_CAPABILITIES: NetworkCapabilities = Object.freeze({
     dhcp: true,
     dns: true,
     tcp: true,
-    udp: false, // optionnel / dépend du relais.
-    icmp: false, // non garanti.
+    udp: false, // optional / depends on the relay.
+    icmp: false, // not guaranteed.
   }),
   transport: Object.freeze({ kind: 'wisp', http: true, https: true, cors: false }),
   fullInternet: false,
 });
 
 /**
- * Relais WISP **local géré par le proxy réseau local** (loopback, `ws://127.0.0.1:37892/wisp/`).
+ * WISP relay **local to and managed by the local network proxy** (loopback,
+ * `ws://127.0.0.1:37892/wisp/`).
  *
- * Comme `user-relay`, le transport WISP peut porter du TCP arbitraire (dont le
- * 443), donc `transport.https = true` est une capacité de transport légitime et
- * `cors = false` (trames relayées, pas de contrainte CORS navigateur).
+ * Like `user-relay`, the WISP transport can carry arbitrary TCP (including 443),
+ * so `transport.https = true` is a legitimate transport capability and
+ * `cors = false` (forwarded frames, no browser CORS constraint).
  *
- * Mais cette capacité reste **statique** et ne garantit rien tant que la
- * connectivité n'est pas prouvée par sonde : `udp`/`icmp` restent `false` et
- * `fullInternet` ne peut devenir vrai qu'après vérification réelle à
- * l'exécution.
+ * But this capability stays **static** and guarantees nothing until connectivity
+ * is proven by a probe: `udp`/`icmp` stay `false` and `fullInternet` can only
+ * become true after a real runtime check.
  */
 export const LOCAL_PROXY_CAPABILITIES: NetworkCapabilities = Object.freeze({
   nic: Object.freeze({ ethernet: true, virtio: true, ne2k: true }),
@@ -169,18 +171,18 @@ export const LOCAL_PROXY_CAPABILITIES: NetworkCapabilities = Object.freeze({
     dhcp: true,
     dns: true,
     tcp: true,
-    udp: false, // optionnel / dépend du relais.
-    icmp: false, // non garanti.
+    udp: false, // optional / depends on the relay.
+    icmp: false, // not guaranteed.
   }),
   transport: Object.freeze({ kind: 'wisp', http: true, https: true, cors: false }),
   fullInternet: false,
 });
 
 /**
- * Mode `local-network` : **indisponible** tant qu'il n'est pas implémenté.
- * Il désignera un **réseau virtuel entre invités** (segment local partagé),
- * **pas** un accès au réseau LAN physique de l'hôte. Aucune capacité n'est
- * annoncée tant que le switch virtuel n'existe pas.
+ * `local-network` mode: **unavailable** as long as it is not implemented.
+ * It designates a **virtual network between guests** (shared local
+ * segment), **not** an access to the host's physical LAN. No capability is
+ * announced as long as the virtual switch does not exist.
  */
 export const LOCAL_NETWORK_CAPABILITIES: NetworkCapabilities = Object.freeze({
   nic: NO_NIC,

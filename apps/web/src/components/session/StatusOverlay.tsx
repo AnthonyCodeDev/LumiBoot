@@ -7,18 +7,18 @@ import { statusMessageForSession, statusTextForSession } from './statusOverlay.h
 export interface StatusOverlayProps {
   session: SessionSnapshot;
   system: OSDefinition;
-  /** Référence vers `.session-console`, qui contient le `textarea.v86-serial`. */
+  /** Reference to `.session-console`, which holds the `textarea.v86-serial`. */
   consoleRef: RefObject<HTMLDivElement>;
 }
 
-/** Période de relecture du terminal série (ms). */
+/** Re-read period of the serial terminal (ms). */
 const SERIAL_POLL_MS = 400;
-/** Nombre de lignes de log conservées à l'écran. */
+/** Number of log lines kept on screen. */
 const LOG_LINE_COUNT = 3;
 
 /**
- * Dernières lignes non vides du terminal série de l'invité.
- * v86 écrit dans `.value` du `<textarea class="v86-serial">`, même masqué.
+ * Last non-empty lines of the guest serial terminal.
+ * v86 writes into `.value` of `<textarea class="v86-serial">`, even when hidden.
  */
 function readSerialTail(container: HTMLElement | null): string[] {
   const serial = container?.querySelector<HTMLTextAreaElement>('textarea.v86-serial');
@@ -36,9 +36,9 @@ interface SessionLogsProps {
 }
 
 /**
- * Panneau de logs : les 3 dernières lignes du terminal, rafraîchies en polling
- * pour donner l'impression d'un défilement continu. Toujours au moins une ligne
- * (repli dérivé de l'état) pour ne jamais afficher un panneau vide.
+ * Log panel: the last 3 terminal lines, refreshed by polling to give the
+ * impression of continuous scrolling. Always at least one line (fallback
+ * derived from the state) so the panel is never empty.
  */
 function SessionLogs({ consoleRef, fallback }: SessionLogsProps) {
   const [tail, setTail] = useState('');
@@ -56,7 +56,7 @@ function SessionLogs({ consoleRef, fallback }: SessionLogsProps) {
   const lines = tail.length > 0 ? tail.split('\n') : [fallback];
 
   return (
-    <div className="session-logs" role="log" aria-label="Journal de démarrage">
+    <div className="session-logs" role="log" aria-label="Boot log">
       {lines.map((line, index) => (
         <p
           className="session-logs-line"
@@ -81,27 +81,24 @@ export function StatusOverlay({ session, system, consoleRef }: StatusOverlayProp
     return (
       <div className="status-overlay" role="alert">
         <span className="status-badge" data-tone="error">
-          {mediaRequired ? 'RESSOURCE REQUISE' : 'INDISPONIBLE'}
+          {mediaRequired ? 'RESOURCE REQUIRED' : 'UNAVAILABLE'}
         </span>
-        <h2>
-          {mediaRequired ? 'Média système manquant.' : 'Session non disponible pour le moment.'}
-        </h2>
-        <p>{session.error?.message ?? 'Le moteur de ce système n’est pas encore prêt.'}</p>
+        <h2>{mediaRequired ? 'System media missing.' : 'Session unavailable right now.'}</h2>
+        <p>{session.error?.message ?? 'The engine for this system is not ready.'}</p>
         {mediaRequired ? (
           <p>
-            Retournez à la fiche de {system.displayName} pour importer un média que vous détenez
-            légalement. Aucune image n’est fournie par LumiBoot.
+            Go back to the {system.displayName} page to import media you own legally. LumiBoot ships
+            no images.
           </p>
         ) : (
           <p>
-            {system.displayName} reste au statut « {system.availability} ». L’écran apparaîtra
-            lorsque le profil de lancement réel (<code>{launchProfile.engineId}</code>) pourra
-            démarrer ce système.
+            {system.displayName} remains at status “{system.availability}”. The screen appears once
+            the actual launch profile (<code>{launchProfile.engineId}</code>) can start this system.
           </p>
         )}
         {session.error ? (
           <p>
-            Code : <code>{session.error.code}</code>
+            Code: <code>{session.error.code}</code>
           </p>
         ) : null}
       </div>
@@ -139,7 +136,7 @@ export function StatusOverlay({ session, system, consoleRef }: StatusOverlayProp
     <div className="status-overlay" role="status" aria-live="polite">
       <div className="session-progress">
         <header className="session-progress-heading">
-          <p className="session-progress-eyebrow">Session en cours</p>
+          <p className="session-progress-eyebrow">Session in progress</p>
           <h2 className="session-progress-title">{statusText}</h2>
         </header>
 

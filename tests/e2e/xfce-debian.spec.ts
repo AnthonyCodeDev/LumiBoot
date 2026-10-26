@@ -1,28 +1,28 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
- * Boot RÉEL de Debian 12 i386 « XFCE » (Xorg + session XFCE) dans v86.
+ * REAL boot of Debian 12 i386 "XFCE" (Xorg + XFCE session) in v86.
  *
- * Ce test n'est activé que lorsque l'image XFCE est réellement publiée
- * (`rootfs.img`, `vmlinuz-686`, `initrd.img`, `manifest.json`) :
+ * This test is only enabled when the XFCE image is really published
+ * (`rootfs.img`, `vmlinuz-686`, `initrd.img`, `manifest.json`):
  *
  *   $env:VM_E2E_ASSETS='1'; pnpm exec playwright test tests/e2e/xfce-debian.spec.ts
  *
- * Sans cette variable, le test est **ignoré** (pas « réussi ») : aucune image,
- * donc aucune preuve possible.
+ * Without that variable, the test is **skipped** (not "passed"): no image, so no
+ * possible proof.
  *
- * Preuve recherchée : le marqueur `LUMIBOOT_DESKTOP_READY:debian-12-i386-xfce`
- * écrit par l'invité sur `ttyS0` **après** que le serveur X réponde (`xdpyinfo`)
- * et que la session XFCE (`xfce4-session`/`xfwm4`) tourne. Aucun marqueur n'est
- * produit côté JavaScript/React.
+ * Proof sought: the `LUMIBOOT_DESKTOP_READY:debian-12-i386-xfce` marker written
+ * by the guest on `ttyS0` **after** the X server answers (`xdpyinfo`) and the
+ * XFCE session (`xfce4-session`/`xfwm4`) runs. No marker is produced on the
+ * JavaScript/React side.
  */
 
 /**
- * XFCE est plus lourd qu'Openbox sous émulation logicielle (sans accélération) :
- * budget mural encore plus large que pour le flavor desktop.
+ * XFCE is heavier than Openbox under software emulation (no acceleration): an
+ * even wider wall-clock budget than for the desktop flavor.
  */
 const BOOT_MARKER_TIMEOUT_MS = 600_000;
-/** Délai court après le marqueur : `running` suit le marqueur de très près. */
+/** Short delay after the marker: `running` follows the marker very closely. */
 const RUNNING_TIMEOUT_MS = 60_000;
 const STOP_TIMEOUT_MS = 60_000;
 const DEFAULT_PROBE_TIMEOUT_MS = 30_000;
@@ -33,14 +33,14 @@ const FAILED_MARKER = 'LUMIBOOT_DESKTOP_START_FAILED:debian-12-i386-xfce';
 const assetsPresent = process.env.VM_E2E_ASSETS === '1';
 
 /**
- * Attend la preuve de session graphique et renvoie un statut lisible.
+ * Waits for the graphical session proof and returns a readable status.
  *
- * On surveille le `<textarea>` `.v86-serial` (la sortie invité vit dans sa
- * *valeur*, pas dans son contenu texte) ET l'état de session. On s'arrête dès
- * qu'un marqueur (READY ou START_FAILED) apparaît, ou que la session passe en
- * `error`. Aucun de ces signaux n'est simulé : ils proviennent tous de v86 ou
- * de l'invité. Si rien n'arrive dans le délai, on renvoie `timeout` et le test
- * échoue en imprimant la sortie série complète pour diagnostic.
+ * The `.v86-serial` `<textarea>` is watched (the guest output lives in its
+ * *value*, not in its text content) along with the session state. The wait stops
+ * as soon as a marker (READY or START_FAILED) shows up, or when the session
+ * moves to `error`. None of these signals is simulated: they all come from v86
+ * or from the guest. If nothing arrives in time, `timeout` is returned and the
+ * test fails while printing the full serial output for diagnosis.
  */
 async function waitForDesktopProof(page: Page): Promise<'ready' | 'failed' | 'error' | 'timeout'> {
   try {
@@ -66,59 +66,59 @@ async function waitForDesktopProof(page: Page): Promise<'ready' | 'failed' | 'er
 
 async function openXfceSession(page: Page): Promise<{ serial: Locator; state: Locator }> {
   await page.goto('/');
-  await page.getByLabel('Rechercher un système').fill('debian');
-  // La carte Debian ouvre la MÈRE ; XFCE est la meilleure variante, déjà
-  // présélectionnée dans le dropdown : on peut lancer directement.
+  await page.getByLabel('Search for a system').fill('debian');
+  // The Debian card opens the MOTHER; XFCE is the best variant, already
+  // preselected in the dropdown: it can be launched directly.
   await page.locator('.os-card[data-id="debian-12-i386"]').click();
   await expect(page).toHaveURL(/\/systems\/debian-12-i386$/);
-  await page.getByRole('button', { name: 'Lancer une session' }).click();
+  await page.getByRole('button', { name: 'Start session' }).click();
   await expect(page).toHaveURL(/\/session\//);
 
-  // Le conteneur de console reste monté pendant tout le démarrage.
+  // The console container stays mounted during the whole boot.
   await expect(page.locator('.session-console')).toBeVisible();
-  // Les logs série sont masqués par défaut : on les affiche pour lire `.v86-serial`.
+  // Serial logs are hidden by default: show them to read `.v86-serial`.
   await page.getByRole('button', { name: 'Logs' }).click();
 
   return { serial: page.locator('.v86-serial'), state: page.locator('.session-toolbar') };
 }
 
-/** Dump la sortie série complète dans la sortie de test (diagnostic). */
+/** Dumps the full serial output into the test output (diagnostic). */
 async function dumpSerial(page: Page, serial: Locator, reason: string): Promise<string> {
   const value = (await serial.inputValue().catch(() => '')) || '';
-  console.log(`\n=== SORTIE SÉRIE COMPLÈTE (${reason}) ===\n${value}\n=== FIN SORTIE SÉRIE ===\n`);
+  console.log(`\n=== FULL SERIAL OUTPUT (${reason}) ===\n${value}\n=== END SERIAL OUTPUT ===\n`);
   await test.info().attach(`serial-${reason}`, { body: value, contentType: 'text/plain' });
   return value;
 }
 
-test.describe('Session Debian 12 i386 XFCE (Xorg + XFCE, boot réel)', () => {
-  test.skip(!assetsPresent, 'Image XFCE absente : définir VM_E2E_ASSETS=1.');
+test.describe('Debian 12 i386 XFCE session (Xorg + XFCE, real boot)', () => {
+  test.skip(!assetsPresent, 'XFCE image missing: set VM_E2E_ASSETS=1.');
 
-  test('démarre une vraie session XFCE, la rend au navigateur et redémarre', async ({ page }) => {
-    // Deux boots graphiques complets sous émulation logicielle lente (XFCE plus
-    // lourd qu'Openbox) : budget mural explicite et large (marqueur jusqu'à
-    // 600 s par boot).
+  test('boots a real XFCE session, hands it back to the browser and restarts', async ({ page }) => {
+    // Two complete graphical boots under slow software emulation (XFCE heavier
+    // than Openbox): explicit and wide wall-clock budget (marker up to 600 s per
+    // boot).
     test.setTimeout(1_800_000);
 
     const { serial, state } = await openXfceSession(page);
 
-    // 1. Preuve de session graphique (marqueur invité sur ttyS0, jamais simulé).
+    // 1. Graphical session proof (guest marker on ttyS0, never simulated).
     const proof = await waitForDesktopProof(page);
     if (proof !== 'ready') {
       const value = await dumpSerial(page, serial, proof);
-      // Un marqueur d'échec explicite est signalé tel quel ; sinon la sortie
-      // série complète est jointe pour diagnostiquer (X, vesa, dbus, startx…).
+      // An explicit failure marker is reported as is; otherwise the full serial
+      // output is attached for diagnosis (X, vesa, dbus, startx...).
       expect(
         proof,
-        `Session graphique non prouvée (statut=${proof}). ` +
-          `Marqueur attendu : ${READY_MARKER}.\nSortie série :\n${value}`,
+        `Graphical session not proven (status=${proof}). ` +
+          `Expected marker: ${READY_MARKER}.\nSerial output:\n${value}`,
       ).toBe('ready');
     }
 
-    // 2. `running` n'est émis qu'APRÈS `DESKTOP_READY` (voir V86Instance).
+    // 2. `running` is only emitted AFTER `DESKTOP_READY` (see V86Instance).
     await expect(state).toHaveAttribute('data-state', 'running', { timeout: RUNNING_TIMEOUT_MS });
 
-    // 3. Rendu graphique réel : le canvas VGA est affiché (mode graphique) et
-    //    dimensionné. En mode texte, v86 masque le canvas (`display:none`).
+    // 3. Real graphical rendering: the VGA canvas is displayed (graphical mode)
+    //    and sized. In text mode, v86 hides the canvas (`display:none`).
     const screen = page.locator('.v86-screen');
     const canvas = page.locator('.v86-screen-canvas');
     await expect(screen).toBeVisible();
@@ -130,22 +130,22 @@ test.describe('Session Debian 12 i386 XFCE (Xorg + XFCE, boot réel)', () => {
     expect(dims.width).toBeGreaterThan(0);
     expect(dims.height).toBeGreaterThan(0);
 
-    // 4. Inspection visuelle : écran complet + écran VGA seul.
+    // 4. Visual inspection: full screen + VGA screen alone.
     await page.screenshot({ path: 'test-results/xfce-boot.png' });
     await page.locator('.session-console').screenshot({ path: 'test-results/xfce-vga.png' });
 
-    // 5. Aucun `login:` bloquant : la console VGA de tty1 a été remplacée par la
-    //    session graphique (canvas en mode graphique). On vérifie qu'aucune
-    //    invite de connexion *en attente* n'est visible. On ne tape AUCUNE
-    //    commande dans la GUI (fiabilité incertaine sous émulation logicielle).
+    // 5. No blocking `login:`: the tty1 VGA console was replaced by the
+    //    graphical session (canvas in graphical mode). No *pending* login prompt
+    //    may be visible. NO command is typed in the GUI (unreliable under
+    //    software emulation).
     const vgaText = (await page.locator('.v86-screen-text').textContent()) ?? '';
     expect(vgaText.trim()).not.toMatch(/login:\s*$/);
 
-    // 6. Arrêt puis redémarrage : cycle de vie complet, aucune ressource orpheline.
-    await page.getByRole('button', { name: 'Arrêter' }).click();
+    // 6. Stop then restart: complete lifecycle, no orphaned resource.
+    await page.getByRole('button', { name: 'Stop' }).click();
     await expect(state).toHaveAttribute('data-state', 'stopped', { timeout: STOP_TIMEOUT_MS });
 
-    await page.getByRole('button', { name: 'Redémarrer' }).click();
+    await page.getByRole('button', { name: 'Restart' }).click();
     await expect(page).toHaveURL(/\/session\//);
 
     const restarted = await openRestartProof(page);
@@ -153,7 +153,7 @@ test.describe('Session Debian 12 i386 XFCE (Xorg + XFCE, boot réel)', () => {
       const value = await dumpSerial(page, page.locator('.v86-serial'), `restart-${restarted}`);
       expect(
         restarted,
-        `Session graphique non prouvée après redémarrage (statut=${restarted}).\nSortie série :\n${value}`,
+        `Graphical session not proven after restart (status=${restarted}).\nSerial output:\n${value}`,
       ).toBe('ready');
     }
     await expect(state).toHaveAttribute('data-state', 'running', { timeout: RUNNING_TIMEOUT_MS });
@@ -161,9 +161,9 @@ test.describe('Session Debian 12 i386 XFCE (Xorg + XFCE, boot réel)', () => {
 });
 
 /**
- * Le Redémarrer recrée une session neuve : les locators restent valides (mêmes
- * classes) mais la sortie série repart de zéro. On réaffiche les logs et on
- * attend de nouveau la preuve graphique.
+ * Restart recreates a fresh session: the locators stay valid (same classes) but
+ * the serial output starts from scratch. The logs are shown again and the
+ * graphical proof is awaited once more.
  */
 async function openRestartProof(page: Page): Promise<'ready' | 'failed' | 'error' | 'timeout'> {
   await expect(page.locator('.session-console')).toBeVisible();

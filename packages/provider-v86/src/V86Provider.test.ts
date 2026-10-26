@@ -6,9 +6,9 @@ import { V86Provider } from './V86Provider';
 import type { V86ConsoleAdapter } from './console-adapter';
 
 /**
- * Capture les contrôleurs réseau réellement créés par le provider et espionne
- * leur `dispose()`, sans altérer le comportement (le vrai contrôleur est
- * appelé). Sert à prouver qu'aucun chemin d'échec ne fuit de contrôleur.
+ * Captures the network controllers actually created by the provider and spies on
+ * their `dispose()`, without altering behavior (the real controller is called).
+ * Used to prove that no failure path leaks a controller.
  */
 const { createdControllers } = vi.hoisted(() => ({
   createdControllers: [] as Array<import('@lumiboot/vm-network').NetworkController>,
@@ -31,10 +31,10 @@ const MiB = 1024 * 1024;
 
 class FakeV86 {
   add_listener(): void {
-    /* aucun abonnement réel en test */
+    /* no real subscription in tests */
   }
   remove_listener(): void {
-    /* aucun abonnement réel en test */
+    /* no real subscription in tests */
   }
   async run(): Promise<void> {
     /* no-op */
@@ -119,11 +119,11 @@ function makeDiskManifest(): LocalDiskManifest {
   return {
     version: 1,
     ref: 'windows-7-pro-sp1-x86',
-    displayName: 'Windows 7 Professionnel SP1 x86',
+    displayName: 'Windows 7 Professional SP1 x86',
     architecture: 'i386',
     memoryMiB: 1536,
     vgaMemoryMiB: 16,
-    license: 'Disque local de la codebase',
+    license: 'Local disk from the codebase',
     provenance: 'images/windows-7-pro-sp1-x86/disk.img',
     source: { path: 'images/windows-7-pro-sp1-x86/disk.img', size: 34_359_738_368, mtimeMs: 0 },
     disk: {
@@ -170,7 +170,7 @@ describe('V86Provider', () => {
     createdControllers.length = 0;
   });
 
-  it('transmet 512 MiB, un disque asynchrone et sa taille réelle à v86', async () => {
+  it('passes 512 MiB, an asynchronous disk and its real size to v86', async () => {
     const { provider, captured } = setup();
     await provider.start(makeOS(), document.createElement('div'));
 
@@ -182,13 +182,13 @@ describe('V86Provider', () => {
     expect(options?.cmdline).toContain('root=/dev/sda');
   });
 
-  it('refuse une cible de montage qui n’est pas un élément DOM', async () => {
+  it('rejects a mount target that is not a DOM element', async () => {
     const { provider, captured } = setup();
     await expect(provider.start(makeOS(), {})).rejects.toMatchObject({ code: 'START_FAILED' });
     expect(captured).toHaveLength(0);
   });
 
-  it('accepte 1536 Mio (non puissance de deux) comme requis par l’invité Windows', async () => {
+  it('accepts 1536 MiB (not a power of two) as required by the Windows guest', async () => {
     const { provider, captured } = setup();
     const os = makeOS({
       launchProfiles: [
@@ -201,11 +201,11 @@ describe('V86Provider', () => {
       ],
     });
     await provider.start(os, document.createElement('div'));
-    // v86 arrondit `create_memory` à 128 Kio : aucune puissance de deux requise.
+    // v86 rounds `create_memory` to 128 KiB: no power of two required.
     expect(captured[0]?.memory_size).toBe(1536 * MiB);
   });
 
-  it('refuse une mémoire hors des bornes réelles de v86 (> 2048 Mio)', async () => {
+  it('rejects memory outside the real v86 bounds (> 2048 MiB)', async () => {
     const { provider, captured } = setup();
     const os = makeOS({
       launchProfiles: [
@@ -223,10 +223,10 @@ describe('V86Provider', () => {
     expect(captured).toHaveLength(0);
   });
 
-  it('échoue proprement si la construction de v86 jette', async () => {
+  it('fails cleanly if the v86 construction throws', async () => {
     const provider = new V86Provider({
       createEngine: () => {
-        throw new Error('wasm manquant');
+        throw new Error('missing wasm');
       },
       resolveManifest: async () => makeManifest(),
       createConsole: () => createConsoleStub(),
@@ -236,7 +236,7 @@ describe('V86Provider', () => {
     });
   });
 
-  it('échoue si le manifeste ne contient pas les fichiers requis', async () => {
+  it('fails if the manifest does not contain the required files', async () => {
     const manifest = makeManifest();
     const broken: ImageManifest = { ...manifest, files: { disk: manifest.files['disk']! } };
     const { provider } = setup(broken);
@@ -245,13 +245,13 @@ describe('V86Provider', () => {
     });
   });
 
-  it('par défaut (profil offline) : aucune carte réseau injectée', async () => {
+  it('by default (offline profile): no network card injected', async () => {
     const { provider, captured } = setup();
     await provider.start(makeOS(), document.createElement('div'));
     expect(captured[0]?.net_device).toBeUndefined();
   });
 
-  it('user-relay valide : injecte un net_device avec relay_url et la NIC adaptée', async () => {
+  it('valid user-relay: injects a net_device with relay_url and the matching NIC', async () => {
     const { provider, captured } = setup();
     await provider.start(makeOS(), document.createElement('div'), {
       network: { mode: 'user-relay', relayUrl: 'wss://relay.example.com:8443/wisp' },
@@ -262,7 +262,7 @@ describe('V86Provider', () => {
     });
   });
 
-  it('browser-fetch : injecte le backend fetch', async () => {
+  it('browser-fetch: injects the fetch backend', async () => {
     const { provider, captured } = setup();
     await provider.start(makeOS(), document.createElement('div'), {
       network: { mode: 'browser-fetch' },
@@ -270,7 +270,7 @@ describe('V86Provider', () => {
     expect(captured[0]?.net_device).toEqual({ relay_url: 'fetch', type: 'virtio' });
   });
 
-  it('profil matériel ne2k : la carte suit le contrat du catalogue', async () => {
+  it('ne2k hardware profile: the card follows the catalog contract', async () => {
     const { provider, captured } = setup();
     const os = makeOS({
       launchProfiles: [
@@ -288,7 +288,7 @@ describe('V86Provider', () => {
     expect(captured[0]?.net_device).toEqual({ relay_url: 'fetch', type: 'ne2k' });
   });
 
-  it('profil matériel none : aucune carte réseau même avec un transport', async () => {
+  it('none hardware profile: no network card even with a transport', async () => {
     const { provider, captured } = setup();
     const os = makeOS({
       launchProfiles: [
@@ -306,25 +306,25 @@ describe('V86Provider', () => {
     expect(captured[0]?.net_device).toBeUndefined();
   });
 
-  it('relais injoignable : le démarrage aboutit sans bloquer le cycle de vie', async () => {
+  it('unreachable relay: the start succeeds without blocking the lifecycle', async () => {
     const { provider, captured } = setup();
     const instance = await provider.start(makeOS(), document.createElement('div'), {
       network: { mode: 'user-relay', relayUrl: 'wss://127.0.0.1:9/' },
     });
 
-    // La traduction vers v86 reste correcte : un vrai relais WISP TLS est visé.
+    // The translation to v86 stays correct: a real TLS WISP relay is targeted.
     expect(captured[0]?.net_device).toEqual({ relay_url: 'wisps://127.0.0.1:9/', type: 'virtio' });
 
-    // L'injoignabilité est constatée à l'exécution par v86, jamais pendant
-    // `start()` : le contrôleur reste « configured » (jamais « error »), donc
-    // un relais mort n'empêche pas l'émulateur de démarrer.
+    // Unreachability is observed at runtime by v86, never during `start()`: the
+    // controller stays "configured" (never "error"), so a dead relay does not
+    // prevent the emulator from starting.
     const controller = createdControllers[0];
     expect(controller?.snapshot().status).toBe('configured');
     expect(controller?.snapshot().status).not.toBe('error');
 
-    // Arrêter puis libérer reste possible et idempotent : aucune ressource
-    // bloquante ne survit au relais injoignable. Le détachement des écouteurs
-    // v86 (eth-transmit-end/eth-receive-end/net0-send) est couvert par
+    // Stopping then releasing stays possible and idempotent: no blocking
+    // resource survives the unreachable relay. The detach of the v86 listeners
+    // (eth-transmit-end/eth-receive-end/net0-send) is covered by
     // `v86-instance.test.ts`.
     await instance.stop();
     await instance.dispose();
@@ -332,7 +332,7 @@ describe('V86Provider', () => {
     expect(controller?.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('user-relay sans URL valide : échoue au démarrage sans construire v86', async () => {
+  it('user-relay without a valid URL: fails at start without building v86', async () => {
     const { provider, captured } = setup();
     await expect(
       provider.start(makeOS(), document.createElement('div'), {
@@ -342,7 +342,7 @@ describe('V86Provider', () => {
     expect(captured).toHaveLength(0);
   });
 
-  it('local-network : échoue au démarrage', async () => {
+  it('local-network: fails at start', async () => {
     const { provider, captured } = setup();
     await expect(
       provider.start(makeOS(), document.createElement('div'), {
@@ -352,10 +352,10 @@ describe('V86Provider', () => {
     expect(captured).toHaveLength(0);
   });
 
-  it('échec de construction de v86 : dispose le contrôleur réseau', async () => {
+  it('v86 construction failure: disposes the network controller', async () => {
     const provider = new V86Provider({
       createEngine: () => {
-        throw new Error('wasm manquant');
+        throw new Error('missing wasm');
       },
       resolveManifest: async () => makeManifest(),
       createConsole: () => createConsoleStub(),
@@ -367,7 +367,7 @@ describe('V86Provider', () => {
     expect(createdControllers[0]?.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('annulation pendant la construction de v86 : dispose le contrôleur réseau', async () => {
+  it('cancellation during v86 construction: disposes the network controller', async () => {
     const abort = new AbortController();
     const provider = new V86Provider({
       createEngine: () => {
@@ -384,7 +384,7 @@ describe('V86Provider', () => {
     expect(createdControllers[0]?.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('succès avec transport : le contrôleur reste « configured », jamais connected/online', async () => {
+  it('success with transport: the controller stays "configured", never connected/online', async () => {
     const { provider, captured } = setup();
     await provider.start(makeOS(), document.createElement('div'), {
       network: { mode: 'browser-fetch' },
@@ -396,23 +396,23 @@ describe('V86Provider', () => {
     expect(controller?.snapshot().verified).toBe(false);
     expect(controller?.snapshot().status).not.toBe('connected');
     expect(controller?.snapshot().status).not.toBe('online');
-    // Le provider n'appelle jamais `setStatus('connected'|'online')` : aucun
-    // faux « connecté » sur `emulator-ready`, DHCP ou simple ouverture de socket.
+    // The provider never calls `setStatus('connected'|'online')`: no fake
+    // "connected" on `emulator-ready`, DHCP or a mere socket open.
     expect(controller?.dispose).not.toHaveBeenCalled();
   });
 
-  it('offline par défaut : contrôleur « offline » et aucun net_device', async () => {
+  it('offline by default: "offline" controller and no net_device', async () => {
     const { provider, captured } = setup();
     await provider.start(makeOS(), document.createElement('div'));
     expect(captured[0]?.net_device).toBeUndefined();
     expect(createdControllers[0]?.snapshot().status).toBe('offline');
   });
 
-  it('n’annonce pas de snapshots (absents de VMInstance)', () => {
+  it('does not advertise snapshots (absent from VMInstance)', () => {
     const { provider } = setup();
     const capabilities = provider.capabilities();
-    // `VMInstance` n'expose aucun point d'entrée de snapshot : ne jamais
-    // promettre RAM/disque à l'UI.
+    // `VMInstance` exposes no snapshot entry point: never promise RAM/disk to
+    // the UI.
     expect(capabilities.ramSnapshots).toBe(false);
     expect(capabilities.diskSnapshots).toBe(false);
     expect(capabilities.partialDownload).toBe(true);
@@ -420,7 +420,7 @@ describe('V86Provider', () => {
   });
 });
 
-describe('V86Provider : média importé (Windows 7)', () => {
+describe('V86Provider: imported media (Windows 7)', () => {
   function makeWindowsOS(): OSDefinition {
     return makeOS({
       id: 'windows-7-pro-sp1-x86',
@@ -447,7 +447,7 @@ describe('V86Provider : média importé (Windows 7)', () => {
     });
   }
 
-  it('démarre le disque importé en BIOS (hda) sans noyau Linux', async () => {
+  it('boots the imported disk through BIOS (hda) without a Linux kernel', async () => {
     const { provider, captured } = setup();
     await provider.start(makeWindowsOS(), document.createElement('div'), {
       media: { kind: 'disk', url: 'blob:local-disk', size: 8_000_000_000, format: 'raw' },
@@ -459,16 +459,16 @@ describe('V86Provider : média importé (Windows 7)', () => {
       async: true,
       size: 8_000_000_000,
     });
-    // Aucun démarrage par noyau : pas de bzimage/initrd/cmdline.
+    // No kernel boot: no bzimage/initrd/cmdline.
     expect(options?.bzimage).toBeUndefined();
     expect(options?.initrd).toBeUndefined();
     expect(options?.cmdline).toBeUndefined();
-    // ACPI activée par le profil matériel (requis par la famille Vista+).
+    // ACPI enabled by the hardware profile (required by the Vista+ family).
     expect(options?.acpi).toBe(true);
     expect(options?.memory_size).toBe(1536 * MiB);
   });
 
-  it('média ISO destine CD-ROM et ordre de boot CD (jamais hda)', async () => {
+  it('ISO media targets CD-ROM and CD-first boot order (never hda)', async () => {
     const { provider, captured } = setup();
     const liveOS = makeOS({
       id: 'live-iso',
@@ -492,24 +492,24 @@ describe('V86Provider : média importé (Windows 7)', () => {
       async: true,
       size: 700_000_000,
     });
-    // Une ISO n'est jamais montée comme disque dur.
+    // An ISO is never mounted as a hard disk.
     expect(options?.hda).toBeUndefined();
-    // Ordre de boot : CD d'abord (CD_HARDDISK_FLOPPY = 0x123).
+    // Boot order: CD first (CD_HARDDISK_FLOPPY = 0x123).
     expect(options?.boot_order).toBe(0x123);
   });
 
-  it('média ISO d’installation (profil disk-boot) : refuse sans simuler la persistance', async () => {
+  it('installation ISO media (disk-boot profile): rejected without simulating persistence', async () => {
     const { provider, captured } = setup();
     await expect(
       provider.start(makeWindowsOS(), document.createElement('div'), {
         media: { kind: 'disk', url: 'blob:win7.iso', size: 3_000_000_000, format: 'iso' },
       }),
     ).rejects.toMatchObject({ code: 'UNSUPPORTED_ENVIRONMENT' });
-    // Aucun émulateur construit : la limitation est affichée avant tout montage.
+    // No emulator built: the limitation is reported before any mount.
     expect(captured).toHaveLength(0);
   });
 
-  it('échoue honnêtement (MEDIA_REQUIRED) sans média importé', async () => {
+  it('fails honestly (MEDIA_REQUIRED) without imported media', async () => {
     const { provider, captured } = setup();
     await expect(
       provider.start(makeWindowsOS(), document.createElement('div')),
@@ -518,13 +518,13 @@ describe('V86Provider : média importé (Windows 7)', () => {
   });
 });
 
-describe('V86Provider : disque RAW local bundled (Windows 7)', () => {
+describe('V86Provider: bundled local RAW disk (Windows 7)', () => {
   function makeDiskBootOS(): OSDefinition {
     return makeOS({
       id: 'windows-7-pro-sp1-x86',
       slug: 'windows-7-pro-sp1-x86',
       family: 'windows',
-      // Plus de `mediaStrategy: 'user-import'` : disque bundled de la codebase.
+      // No more `mediaStrategy: 'user-import'`: disk bundled in the codebase.
       imageRef: 'windows-7-pro-sp1-x86',
       architecture: 'i386',
       availability: 'planned',
@@ -546,7 +546,7 @@ describe('V86Provider : disque RAW local bundled (Windows 7)', () => {
     });
   }
 
-  it('démarre le disque du manifeste local en BIOS (hda), sans média ni noyau', async () => {
+  it('boots the local manifest disk through BIOS (hda), without media or kernel', async () => {
     const { provider, captured } = setup(makeManifest(), makeDiskManifest());
     await provider.start(makeDiskBootOS(), document.createElement('div'));
 
@@ -556,26 +556,26 @@ describe('V86Provider : disque RAW local bundled (Windows 7)', () => {
       async: true,
       size: 34_359_738_368,
     });
-    // Aucun démarrage par noyau : pas de bzimage/initrd/cmdline.
+    // No kernel boot: no bzimage/initrd/cmdline.
     expect(options?.bzimage).toBeUndefined();
     expect(options?.initrd).toBeUndefined();
     expect(options?.cmdline).toBeUndefined();
-    // ACPI activée par le profil matériel (requis par la famille Vista+).
+    // ACPI enabled by the hardware profile (required by the Vista+ family).
     expect(options?.acpi).toBe(true);
     expect(options?.memory_size).toBe(1536 * MiB);
   });
 });
 
-describe('V86Provider : disque RAW local bundled (Windows 10 x86)', () => {
+describe('V86Provider: bundled local RAW disk (Windows 10 x86)', () => {
   function makeWin10DiskManifest(): LocalDiskManifest {
     return {
       version: 1,
       ref: 'windows-10-x86',
-      displayName: 'Windows 10 x86 (disque local)',
+      displayName: 'Windows 10 x86 (local disk)',
       architecture: 'i386',
       memoryMiB: 2048,
       vgaMemoryMiB: 16,
-      license: 'Disque local de la codebase',
+      license: 'Local disk from the codebase',
       provenance: 'images/windows-10-x86/disk.img',
       source: { path: 'images/windows-10-x86/disk.img', size: 20_000_000_000, mtimeMs: 0 },
       disk: {
@@ -629,21 +629,21 @@ describe('V86Provider : disque RAW local bundled (Windows 10 x86)', () => {
     });
   }
 
-  it('démarre le disque local en BIOS (hda/ACPI, 2048 Mio), sans noyau ni ISO', async () => {
+  it('boots the local disk through BIOS (hda/ACPI, 2048 MiB), without kernel or ISO', async () => {
     const { provider, captured } = setup(makeManifest(), makeWin10DiskManifest());
     await provider.start(makeWin10DiskBootOS(), document.createElement('div'));
 
     const options = captured[0];
-    // Disque RAW lu par plages HTTP Range (`async`), mémoire 2048 Mio.
+    // RAW disk read through HTTP Range (`async`), 2048 MiB memory.
     expect(options?.hda).toMatchObject({
       url: '/images/windows-10-x86/disk.img',
       async: true,
       size: 20_000_000_000,
     });
     expect(options?.memory_size).toBe(2048 * MiB);
-    // ACPI activée par le profil matériel (invités NT Vista+).
+    // ACPI enabled by the hardware profile (NT Vista+ guests).
     expect(options?.acpi).toBe(true);
-    // Démarrage BIOS disque : aucun noyau Linux, jamais de CD-ROM/ISO.
+    // BIOS disk boot: no Linux kernel, never a CD-ROM/ISO.
     expect(options?.bzimage).toBeUndefined();
     expect(options?.initrd).toBeUndefined();
     expect(options?.cmdline).toBeUndefined();
@@ -651,7 +651,7 @@ describe('V86Provider : disque RAW local bundled (Windows 10 x86)', () => {
     expect(options?.boot_order).toBeUndefined();
   });
 
-  it('NIC virtio pilotée par le profil matériel du catalogue', async () => {
+  it('virtio NIC driven by the catalog hardware profile', async () => {
     const { provider, captured } = setup(makeManifest(), makeWin10DiskManifest());
     await provider.start(makeWin10DiskBootOS(), document.createElement('div'), {
       network: { mode: 'browser-fetch' },

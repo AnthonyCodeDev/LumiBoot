@@ -10,12 +10,12 @@ function validDiskManifest(ref = 'windows-7-x86') {
   return {
     version: 1,
     ref,
-    displayName: 'Windows 7 x86 (média local)',
+    displayName: 'Windows 7 x86 (local media)',
     architecture: 'i386',
     memoryMiB: 1024,
     vgaMemoryMiB: 16,
-    license: 'Licence utilisateur',
-    provenance: 'Disque local',
+    license: 'User license',
+    provenance: 'Local disk',
     source: { path: 'C:/Windows7.img', size: 100, mtimeMs: 1 },
     disk: {
       fileName: 'disk.img',
@@ -37,7 +37,7 @@ function validDiskManifest(ref = 'windows-7-x86') {
   };
 }
 
-/** Forme PUBLIQUE : sans `source` (chemin réel) ni `provenance` (interne). */
+/** PUBLIC form: without `source` (real path) or `provenance` (internal). */
 function publicDiskManifest(ref = 'windows-7-x86') {
   const full = validDiskManifest(ref) as Record<string, unknown>;
   delete full.source;
@@ -113,7 +113,7 @@ afterEach(() => {
 });
 
 describe('ensureLocalDiskManifest', () => {
-  it('charge, valide et enregistre un manifeste disque privé valide', async () => {
+  it('loads, validates and registers a valid private disk manifest', async () => {
     vi.stubGlobal('fetch', mockFetch(validDiskManifest()));
 
     const manifest = await ensureLocalDiskManifest('windows-7-x86');
@@ -123,7 +123,7 @@ describe('ensureLocalDiskManifest', () => {
     expect(getLocalDiskManifest('windows-7-x86')).not.toBeNull();
   });
 
-  it('accepte la forme PUBLIQUE servie par HTTP (sans source ni provenance)', async () => {
+  it('accepts the PUBLIC form served over HTTP (without source or provenance)', async () => {
     vi.stubGlobal('fetch', mockFetch(publicDiskManifest()));
 
     const manifest = await ensureLocalDiskManifest('windows-7-x86');
@@ -134,7 +134,7 @@ describe('ensureLocalDiskManifest', () => {
     expect(manifest.boot.async).toBe(true);
   });
 
-  it('rejette un manifeste d’image publiée (schéma disque strict)', async () => {
+  it('rejects a published image manifest (strict disk schema)', async () => {
     vi.stubGlobal(
       'fetch',
       mockFetch({
@@ -151,15 +151,15 @@ describe('ensureLocalDiskManifest', () => {
     });
   });
 
-  it('rejette une référence de manifeste différente de la demande', async () => {
-    vi.stubGlobal('fetch', mockFetch(validDiskManifest('autre-image')));
+  it('rejects a manifest reference different from the request', async () => {
+    vi.stubGlobal('fetch', mockFetch(validDiskManifest('other-image')));
 
     await expect(ensureLocalDiskManifest('windows-7-x86')).rejects.toMatchObject({
       code: 'ASSET_INVALID_MANIFEST',
     });
   });
 
-  it('ne déclenche qu’une seule requête pour des appels concurrents', async () => {
+  it('triggers a single request for concurrent calls', async () => {
     const fetchMock = mockFetch(validDiskManifest());
     vi.stubGlobal('fetch', fetchMock);
 
@@ -172,7 +172,7 @@ describe('ensureLocalDiskManifest', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('rejette une référence dynamique invalide sans requête', async () => {
+  it('rejects an invalid dynamic reference without a request', async () => {
     const fetchMock = mockFetch(validDiskManifest());
     vi.stubGlobal('fetch', fetchMock);
 
@@ -182,21 +182,21 @@ describe('ensureLocalDiskManifest', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('signale un manifeste inaccessible (HTTP non ok)', async () => {
+  it('reports an unreachable manifest (non-ok HTTP)', async () => {
     vi.stubGlobal('fetch', mockFetch({}, false, 404));
     await expect(ensureLocalDiskManifest('windows-7-x86')).rejects.toMatchObject({
       code: 'ASSET_NOT_FOUND',
     });
   });
 
-  it('signale un repli HTML SPA au lieu d’un manifeste JSON', async () => {
+  it('reports an SPA HTML fallback instead of a JSON manifest', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => htmlResponse(200)) as unknown as typeof fetch);
     await expect(ensureLocalDiskManifest('windows-7-x86')).rejects.toMatchObject({
       code: 'ASSET_INVALID_MANIFEST',
     });
   });
 
-  it('n’interrompt PAS le chargement partagé quand le premier demandeur annule', async () => {
+  it('does NOT interrupt the shared load when the first requester cancels', async () => {
     const signals: Array<AbortSignal | null | undefined> = [];
     const gate = deferred<void>();
     const fetchMock = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -219,7 +219,7 @@ describe('ensureLocalDiskManifest', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('recharge après un échec (jamais mis en cache)', async () => {
+  it('reloads after a failure (never cached)', async () => {
     let call = 0;
     const fetchMock = vi.fn(async () => {
       call += 1;
@@ -238,7 +238,7 @@ describe('ensureLocalDiskManifest', () => {
 });
 
 describe('checkLocalDiskAvailability', () => {
-  it('déclare le disque disponible quand le manifeste est valide et le disque en 206', async () => {
+  it('declares the disk available when the manifest is valid and the disk answers 206', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/manifest.json')) return fakeResponse(publicDiskManifest());
@@ -252,7 +252,7 @@ describe('checkLocalDiskAvailability', () => {
     expect(result).toMatchObject({ ref: 'windows-7-x86', available: true, size: 100 });
   });
 
-  it('signale un manifeste absent (404)', async () => {
+  it('reports a missing manifest (404)', async () => {
     const fetchMock = vi.fn(async () => fakeResponse({}, { status: 404 }));
 
     const result = await checkLocalDiskAvailability('windows-7-x86', {
@@ -262,7 +262,7 @@ describe('checkLocalDiskAvailability', () => {
     expect(result).toMatchObject({ available: false, reason: 'manifest-missing' });
   });
 
-  it('signale un repli HTML SPA au lieu du manifeste JSON', async () => {
+  it('reports an SPA HTML fallback instead of the JSON manifest', async () => {
     const fetchMock = vi.fn(async () => htmlResponse(200));
 
     const result = await checkLocalDiskAvailability('windows-7-x86', {
@@ -272,7 +272,7 @@ describe('checkLocalDiskAvailability', () => {
     expect(result).toMatchObject({ available: false, reason: 'manifest-html' });
   });
 
-  it('signale l’absence de support Range (200 au lieu de 206)', async () => {
+  it('reports the lack of Range support (200 instead of 206)', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/manifest.json')) return fakeResponse(publicDiskManifest());
@@ -286,7 +286,7 @@ describe('checkLocalDiskAvailability', () => {
     expect(result).toMatchObject({ available: false, reason: 'range-unsupported' });
   });
 
-  it('signale une taille de disque incohérente', async () => {
+  it('reports an inconsistent disk size', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/manifest.json')) return fakeResponse(publicDiskManifest());

@@ -45,7 +45,7 @@ function getRangeHeader(init?: RequestInit): string | null {
 }
 
 describe('downloadAsset', () => {
-  it('retourne une entree mise en cache lorsque le checksum, la taille et la version concordent', async () => {
+  it('returns a cached entry when the checksum, size and version match', async () => {
     const cache = new MemoryAssetCache();
     const bytes = new TextEncoder().encode('ok');
     await cache.set({
@@ -71,7 +71,7 @@ describe('downloadAsset', () => {
     expect(new TextDecoder().decode(result)).toBe('ok');
   });
 
-  it('reprend un téléchargement par blocs avec Content-Range valide', async () => {
+  it('resumes a chunked download with a valid Content-Range', async () => {
     const cache = new MemoryAssetCache();
     const cachedBytes = new TextEncoder().encode('hello ');
     await cache.set({
@@ -113,7 +113,7 @@ describe('downloadAsset', () => {
     expect(new TextDecoder().decode(result)).toBe('hello world');
   });
 
-  it('rejette un Content-Range incoherent lors d une reprise', async () => {
+  it('rejects an inconsistent Content-Range during a resume', async () => {
     const cache = new MemoryAssetCache();
     await cache.set({
       ref: 'asset-3',
@@ -148,7 +148,7 @@ describe('downloadAsset', () => {
     ).rejects.toBeInstanceOf(AssetError);
   });
 
-  it('rejette un checksum invalide', async () => {
+  it('rejects an invalid checksum', async () => {
     await expect(
       downloadAsset(
         {

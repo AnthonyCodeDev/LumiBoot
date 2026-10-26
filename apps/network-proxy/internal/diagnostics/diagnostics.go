@@ -1,10 +1,11 @@
-// Package diagnostics expose des compteurs d'activité thread-safe du proxy réseau local.
+// Package diagnostics exposes thread-safe activity counters for the local
+// network proxy.
 package diagnostics
 
 import "sync"
 
-// Directions : TX = proxy -> invitée (téléchargement vers l'OS virtualisé),
-// RX = invitée -> proxy (envoi depuis l'OS virtualisé).
+// Directions: TX = proxy -> guest (download to the virtualized OS),
+// RX = guest -> proxy (upload from the virtualized OS).
 type Counters struct {
 	mu               sync.Mutex
 	totalConnections uint64
@@ -16,7 +17,7 @@ type Counters struct {
 	rejectedAuth     uint64
 }
 
-// Snapshot est une copie immuable des compteurs, exposée via /health.
+// Snapshot is an immutable copy of the counters, exposed through /health.
 type Snapshot struct {
 	TotalConnections    uint64 `json:"totalConnections"`
 	ActiveConnections   uint64 `json:"activeConnections"`
@@ -27,7 +28,7 @@ type Snapshot struct {
 	RejectedAuth        uint64 `json:"rejectedAuth"`
 }
 
-// IncConnections enregistre une nouvelle connexion (incrémente total + actives).
+// IncConnections records a new connection (increments total + active).
 func (c *Counters) IncConnections() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -35,7 +36,7 @@ func (c *Counters) IncConnections() {
 	c.activeConns++
 }
 
-// DecConnections décrémente les connexions actives (jamais sous zéro).
+// DecConnections decrements the active connections (never below zero).
 func (c *Counters) DecConnections() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -44,42 +45,42 @@ func (c *Counters) DecConnections() {
 	}
 }
 
-// AddTX ajoute des octets proxy -> invitée.
+// AddTX adds proxy -> guest bytes.
 func (c *Counters) AddTX(n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.bytesTX += n
 }
 
-// AddRX ajoute des octets invitée -> proxy.
+// AddRX adds guest -> proxy bytes.
 func (c *Counters) AddRX(n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.bytesRX += n
 }
 
-// IncErrors enregistre une erreur de transfert ou de protocole.
+// IncErrors records a transfer or protocol error.
 func (c *Counters) IncErrors() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.errors++
 }
 
-// IncBlocked enregistre une destination refusée par la politique.
+// IncBlocked records a destination refused by the policy.
 func (c *Counters) IncBlocked() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.blocked++
 }
 
-// IncRejectedAuth enregistre une tentative d'accès rejetée (origine/token).
+// IncRejectedAuth records a rejected access attempt (origin/token).
 func (c *Counters) IncRejectedAuth() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.rejectedAuth++
 }
 
-// Snapshot copie les compteurs.
+// Snapshot copies the counters.
 func (c *Counters) Snapshot() Snapshot {
 	c.mu.Lock()
 	defer c.mu.Unlock()

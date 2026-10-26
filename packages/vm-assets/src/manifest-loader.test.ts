@@ -17,7 +17,7 @@ function validManifest(ref = 'debian-12-i386') {
   };
 }
 
-/** En-têtes factices compatibles avec `Headers.get`. */
+/** Fake headers compatible with `Headers.get`. */
 function fakeHeaders(record: Record<string, string>) {
   const lower: Record<string, string> = {};
   for (const [key, value] of Object.entries(record)) lower[key.toLowerCase()] = value;
@@ -77,7 +77,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-/** Faux signal d'annulation, pour compter précisément les listeners. */
+/** Fake abort signal, to count listeners precisely. */
 class FakeSignal {
   aborted = false;
   readonly #listeners = new Set<() => void>();
@@ -111,7 +111,7 @@ afterEach(() => {
 });
 
 describe('ensureImageManifest', () => {
-  it('charge, valide et enregistre un manifeste valide', async () => {
+  it('loads, validates and registers a valid manifest', async () => {
     vi.stubGlobal('fetch', mockFetch(validManifest()));
 
     const manifest = await ensureImageManifest('debian-12-i386');
@@ -120,7 +120,7 @@ describe('ensureImageManifest', () => {
     expect(getImageManifest('debian-12-i386')).not.toBeNull();
   });
 
-  it('rejette un manifeste placeholder (champs inconnus et fichiers manquants)', async () => {
+  it('rejects a placeholder manifest (unknown fields and missing files)', async () => {
     vi.stubGlobal(
       'fetch',
       mockFetch({
@@ -139,15 +139,15 @@ describe('ensureImageManifest', () => {
     });
   });
 
-  it('rejette une référence de manifeste différente de la demande', async () => {
-    vi.stubGlobal('fetch', mockFetch(validManifest('autre-image')));
+  it('rejects a manifest reference different from the request', async () => {
+    vi.stubGlobal('fetch', mockFetch(validManifest('other-image')));
 
     await expect(ensureImageManifest('debian-12-i386')).rejects.toMatchObject({
       code: 'ASSET_INVALID_MANIFEST',
     });
   });
 
-  it('ne déclenche qu’une seule requête pour des appels concurrents', async () => {
+  it('triggers a single request for concurrent calls', async () => {
     const fetchMock = mockFetch(validManifest());
     vi.stubGlobal('fetch', fetchMock);
 
@@ -160,7 +160,7 @@ describe('ensureImageManifest', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('rejette une référence dynamique invalide sans requête', async () => {
+  it('rejects an invalid dynamic reference without a request', async () => {
     const fetchMock = mockFetch(validManifest());
     vi.stubGlobal('fetch', fetchMock);
 
@@ -170,7 +170,7 @@ describe('ensureImageManifest', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('n’émet aucune requête si le signal est déjà annulé', async () => {
+  it('emits no request if the signal is already aborted', async () => {
     const fetchMock = mockFetch(validManifest());
     vi.stubGlobal('fetch', fetchMock);
 
@@ -183,7 +183,7 @@ describe('ensureImageManifest', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('n’interrompt PAS la requête partagée quand le premier demandeur annule', async () => {
+  it('does NOT interrupt the shared request when the first requester cancels', async () => {
     const signals: Array<AbortSignal | null | undefined> = [];
     const gate = deferred<void>();
     const fetchMock = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -199,7 +199,7 @@ describe('ensureImageManifest', () => {
 
     controller.abort();
     await expect(first).rejects.toMatchObject({ code: 'ASSET_ABORTED' });
-    // Le demandeur restant n'est PAS affecté : la requête interne reste vivante.
+    // The remaining requester is NOT affected: the internal request stays alive.
     expect(signals[0]?.aborted).toBe(false);
 
     gate.resolve();
@@ -207,7 +207,7 @@ describe('ensureImageManifest', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('interrompt la requête seulement quand TOUS les demandeurs annulent, puis recharge au suivant', async () => {
+  it('interrupts the request only when ALL requesters cancel, then reloads for the next one', async () => {
     const signals: Array<AbortSignal | null | undefined> = [];
     let call = 0;
     const fetchMock = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
@@ -235,13 +235,13 @@ describe('ensureImageManifest', () => {
     await expect(second).rejects.toMatchObject({ code: 'ASSET_ABORTED' });
     expect(signals[0]?.aborted).toBe(true);
 
-    // L'abandon collectif n'est jamais mis en cache : un appel ultérieur relance.
+    // Collective abandonment is never cached: a later call starts over.
     const retry = await ensureImageManifest('debian-12-i386');
     expect(retry.ref).toBe('debian-12-i386');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('ne met jamais un échec en cache : un nouvel appel recharge', async () => {
+  it('never caches a failure: a new call reloads', async () => {
     let call = 0;
     const fetchMock = vi.fn(async () => {
       call += 1;
@@ -258,7 +258,7 @@ describe('ensureImageManifest', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('libère les listeners d’annulation après résolution', async () => {
+  it('releases the abort listeners after resolution', async () => {
     const gate = deferred<void>();
     const fetchMock = vi.fn(async () => {
       await gate.promise;
@@ -275,7 +275,7 @@ describe('ensureImageManifest', () => {
     expect(signal.listenerCount).toBe(0);
   });
 
-  it('libère les listeners d’annulation après annulation', async () => {
+  it('releases the abort listeners after cancellation', async () => {
     const fetchMock = vi.fn(
       (_url: RequestInfo | URL, init?: RequestInit) =>
         new Promise<Response>((_resolve, reject) => {
@@ -297,7 +297,7 @@ describe('ensureImageManifest', () => {
 });
 
 describe('checkImageAvailability', () => {
-  it('déclare l’image disponible quand le manifeste est valide et le disque en 206', async () => {
+  it('declares the image available when the manifest is valid and the disk answers 206', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/manifest.json')) return fakeResponse(validManifest());
@@ -311,7 +311,7 @@ describe('checkImageAvailability', () => {
     expect(result).toMatchObject({ ref: 'debian-12-i386', available: true, size: 100 });
   });
 
-  it('signale un manifeste absent (404)', async () => {
+  it('reports a missing manifest (404)', async () => {
     const fetchMock = vi.fn(async () => fakeResponse({}, { status: 404 }));
 
     const result = await checkImageAvailability('debian-12-i386', {
@@ -321,7 +321,7 @@ describe('checkImageAvailability', () => {
     expect(result).toMatchObject({ available: false, reason: 'manifest-missing' });
   });
 
-  it('signale un repli HTML SPA au lieu du manifeste JSON', async () => {
+  it('reports an SPA HTML fallback instead of the JSON manifest', async () => {
     const fetchMock = vi.fn(async () => htmlResponse(200));
 
     const result = await checkImageAvailability('debian-12-i386', {
@@ -331,7 +331,7 @@ describe('checkImageAvailability', () => {
     expect(result).toMatchObject({ available: false, reason: 'manifest-html' });
   });
 
-  it('signale un manifeste JSON illisible', async () => {
+  it('reports an unreadable JSON manifest', async () => {
     const fetchMock = vi.fn(
       async () =>
         ({
@@ -352,7 +352,7 @@ describe('checkImageAvailability', () => {
     expect(result).toMatchObject({ available: false, reason: 'manifest-invalid' });
   });
 
-  it('signale un manifeste hors schéma', async () => {
+  it('reports a manifest outside the schema', async () => {
     const fetchMock = vi.fn(async () => fakeResponse({ ref: 'debian-12-i386' }));
 
     const result = await checkImageAvailability('debian-12-i386', {
@@ -362,7 +362,7 @@ describe('checkImageAvailability', () => {
     expect(result).toMatchObject({ available: false, reason: 'manifest-schema' });
   });
 
-  it('signale l’absence de support Range (200 au lieu de 206)', async () => {
+  it('reports the lack of Range support (200 instead of 206)', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/manifest.json')) return fakeResponse(validManifest());
@@ -376,7 +376,7 @@ describe('checkImageAvailability', () => {
     expect(result).toMatchObject({ available: false, reason: 'range-unsupported' });
   });
 
-  it('signale un disque absent (404)', async () => {
+  it('reports a missing disk (404)', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/manifest.json')) return fakeResponse(validManifest());

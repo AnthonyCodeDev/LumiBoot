@@ -7,12 +7,12 @@ import { join } from 'node:path';
 import { parseLocalDiskManifest } from '../packages/vm-assets/src/local-disk';
 
 /**
- * Test d'intégration du wrapper `scripts/prepare-windows10-asset.mjs` : on
- * vérifie qu'il DÉLÈGUE au générateur éprouvé en fixant les valeurs Windows 10
- * x86 (ref, display-name, architecture, mémoire, VGA), qu'il propage les
- * options CLI (--check/--force/--skip-hash/--json) et qu'il REFUSE les médias
- * non amorçables en `hda` (ISO seule, QCOW2) sans jamais écrire de faux
- * manifeste. On utilise une petite image temporaire, jamais le vrai disque.
+ * Integration test of the `scripts/prepare-windows10-asset.mjs` wrapper: it
+ * must DELEGATE to the proven generator while pinning the Windows 10 x86 values
+ * (ref, display-name, architecture, memory, VGA), forward the CLI options
+ * (--check/--force/--skip-hash/--json) and REFUSE non-bootable `hda` media (ISO
+ * only, QCOW2) without ever writing a bogus manifest. A small temporary image is
+ * used, never the real disk.
  */
 
 const repoRoot = process.cwd();
@@ -41,7 +41,7 @@ afterAll(() => {
 });
 
 describe('prepare-windows10-asset.mjs', () => {
-  it('délègue au générateur avec les valeurs Windows 10 x86', () => {
+  it('delegates to the generator with the Windows 10 x86 values', () => {
     const outDir = join(tempDir, 'out');
     const result = run(['--source', source, '--out', outDir, '--json']);
     expect(result.status).toBe(0);
@@ -62,12 +62,12 @@ describe('prepare-windows10-asset.mjs', () => {
       size: sourceBytes.length,
     });
     expect(manifest.engine.wasm.sha256).toHaveLength(64);
-    // Les notes par défaut (Windows 7) sont remplacées par celles de Windows 10.
+    // The default notes (Windows 7) are replaced by the Windows 10 ones.
     expect(manifest.notes?.join(' ')).toContain('Windows 10');
     expect(manifest.notes?.join(' ')).not.toContain('Windows 7');
   });
 
-  it('n’écrase ni ne modifie le fichier source', () => {
+  it('neither overwrites nor modifies the source file', () => {
     const outDir = join(tempDir, 'out-preserve');
     const before = statSync(source);
     expect(run(['--source', source, '--out', outDir, '--json']).status).toBe(0);
@@ -78,7 +78,7 @@ describe('prepare-windows10-asset.mjs', () => {
     expect(createHash('sha256').update(readFileSync(source)).digest('hex')).toBe(sourceHash);
   });
 
-  it('propage --skip-hash (taille + mtime documentés, pas de SHA)', () => {
+  it('forwards --skip-hash (size + mtime documented, no SHA)', () => {
     const outDir = join(tempDir, 'out-skip');
     const result = run(['--source', source, '--out', outDir, '--skip-hash', '--json']);
     expect(result.status).toBe(0);
@@ -87,7 +87,7 @@ describe('prepare-windows10-asset.mjs', () => {
     expect(manifest.disk.size).toBe(sourceBytes.length);
   });
 
-  it('propage --force (refus sans --force, succès avec)', () => {
+  it('forwards --force (refused without --force, succeeds with it)', () => {
     const outDir = join(tempDir, 'out-force');
     expect(run(['--source', source, '--out', outDir, '--skip-hash']).status).toBe(0);
     const refused = run(['--source', source, '--out', outDir, '--skip-hash']);
@@ -97,26 +97,26 @@ describe('prepare-windows10-asset.mjs', () => {
     expect(forced.status).toBe(0);
   });
 
-  it('propage --check (vérifie le manifeste existant avec --source)', () => {
+  it('forwards --check (verifies the existing manifest with --source)', () => {
     const outDir = join(tempDir, 'out-check');
     expect(run(['--source', source, '--out', outDir, '--json']).status).toBe(0);
     const result = run(['--out', outDir, '--check', '--source', source]);
     expect(result.status).toBe(0);
-    expect(result.stderr).toContain('conforme');
+    expect(result.stderr).toContain('Manifest matches');
   });
 
-  it('explique --check sans --source quand le disque est externe', () => {
-    // Un disque hors dépôt n'enregistre aucun chemin : la vérification ne peut
-    // pas le retrouver seule et doit réclamer --source explicitement.
+  it('explains --check without --source when the disk is external', () => {
+    // A disk outside the repository records no path: the check cannot find it
+    // on its own and must explicitly ask for --source.
     const outDir = join(tempDir, 'out-check-external');
     expect(run(['--source', source, '--out', outDir, '--json']).status).toBe(0);
     const result = run(['--out', outDir, '--check']);
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('HORS du dépôt');
+    expect(result.stderr).toContain('OUTSIDE the repository');
     expect(result.stderr).toContain('--source');
   });
 
-  it('refuse une ISO seule et n’écrit aucun manifeste', () => {
+  it('refuses a standalone ISO and writes no manifest', () => {
     const iso = join(tempDir, 'win10.iso');
     writeFileSync(iso, sourceBytes);
     const outDir = join(tempDir, 'out-iso');
@@ -126,7 +126,7 @@ describe('prepare-windows10-asset.mjs', () => {
     expect(existsSync(join(outDir, 'manifest.json'))).toBe(false);
   });
 
-  it('refuse un QCOW2 et n’écrit aucun manifeste', () => {
+  it('refuses a QCOW2 and writes no manifest', () => {
     const qcow = join(tempDir, 'win10.qcow2');
     writeFileSync(qcow, sourceBytes);
     const outDir = join(tempDir, 'out-qcow');
@@ -136,7 +136,7 @@ describe('prepare-windows10-asset.mjs', () => {
     expect(existsSync(join(outDir, 'manifest.json'))).toBe(false);
   });
 
-  it('refuse --format iso même sur un fichier .img', () => {
+  it('refuses --format iso even on a .img file', () => {
     const outDir = join(tempDir, 'out-format');
     const result = run(['--source', source, '--out', outDir, '--format', 'iso', '--json']);
     expect(result.status).not.toBe(0);
@@ -144,21 +144,21 @@ describe('prepare-windows10-asset.mjs', () => {
     expect(existsSync(join(outDir, 'manifest.json'))).toBe(false);
   });
 
-  it('échoue lisiblement quand aucune image locale n’est disponible', () => {
+  it('fails readably when no local image is available', () => {
     const missing = join(tempDir, 'absent.img');
     const outDir = join(tempDir, 'out-missing');
     const result = run(['--source', missing, '--out', outDir, '--json']);
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('Aucune image locale');
+    expect(result.stderr).toContain('No local');
     expect(result.stderr).toContain(missing);
     expect(existsSync(join(outDir, 'manifest.json'))).toBe(false);
   });
 
-  it('tolère un « -- » isolé (injecté par pnpm) et garde les mêmes défauts', () => {
+  it('tolerates a lone "--" (injected by pnpm) and keeps the same defaults', () => {
     const outDir = join(tempDir, 'out-dashdash');
     const result = run(['--source', source, '--out', outDir, '--', '--skip-hash', '--json']);
     expect(result.status).toBe(0);
-    expect(result.stderr).not.toContain('Option inconnue');
+    expect(result.stderr).not.toContain('Unknown option');
     const manifest = parseLocalDiskManifest(JSON.parse(result.stdout));
     expect(manifest.ref).toBe('windows-10-x86');
     expect(manifest.displayName).toBe('Windows 10 x86');
@@ -169,7 +169,7 @@ describe('prepare-windows10-asset.mjs', () => {
     expect(manifest.disk.size).toBe(sourceBytes.length);
   });
 
-  it('tolère un « -- » isolé devant --help', () => {
+  it('tolerates a lone "--" before --help', () => {
     const output = execFileSync('node', [SCRIPT, '--', '--help'], {
       cwd: repoRoot,
       encoding: 'utf8',
@@ -178,7 +178,7 @@ describe('prepare-windows10-asset.mjs', () => {
     expect(output).toContain('--source');
   });
 
-  it('expose une aide propre au wrapper sans exécuter la préparation', () => {
+  it('exposes wrapper-specific help without running the preparation', () => {
     const output = execFileSync('node', [SCRIPT, '--help'], { cwd: repoRoot, encoding: 'utf8' });
     expect(output).toContain('Windows 10');
     expect(output).toContain('--source');

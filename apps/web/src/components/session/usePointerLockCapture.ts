@@ -2,24 +2,24 @@ import { useEffect, useState, type RefObject } from 'react';
 import { attachPointerLockCapture } from './pointer-lock';
 
 export interface PointerLockCaptureState {
-  /** Vrai quand l'écran détient réellement le verrou du pointeur. */
+  /** True when the screen really holds the pointer lock. */
   readonly captured: boolean;
-  /** Vrai si le Pointer Lock est utilisable dans ce navigateur. */
+  /** True when Pointer Lock is usable in this browser. */
   readonly supported: boolean;
-  /** Message d'erreur lisible en cas de refus/indisponibilité, sinon `null`. */
+  /** Readable error message on refusal/unavailability, otherwise `null`. */
   readonly error: string | null;
 }
 
 function describePointerLockError(error: unknown): string {
   if (error instanceof Error && error.message.length > 0) return error.message;
-  return 'Impossible de capturer la souris dans l’écran.';
+  return 'Unable to capture the mouse on the screen.';
 }
 
 /**
- * Branche l'orchestration Pointer Lock sur le conteneur d'écran tant que la
- * session est active (`enabled`). À l'arrêt, au démontage, ou quand la page
- * perd le focus, le verrou est libéré et les écouteurs détachés : aucune
- * ressource ni curseur masqué ne survit à la session.
+ * Wires the Pointer Lock orchestration to the screen container while the
+ * session is active (`enabled`). On stop, on unmount, or when the page loses
+ * focus, the lock is released and listeners are detached: no resource and no
+ * hidden cursor outlives the session.
  */
 export function usePointerLockCapture(
   containerRef: RefObject<HTMLElement>,
@@ -40,7 +40,7 @@ export function usePointerLockCapture(
       container,
       onCaptureChange: (next) => {
         setCaptured(next);
-        // Une capture réussie efface un éventuel message d'erreur précédent.
+        // A successful capture clears any previous error message.
         if (next) setError(null);
       },
       onError: (cause) => setError(describePointerLockError(cause)),

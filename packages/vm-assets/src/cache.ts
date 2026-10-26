@@ -38,7 +38,7 @@ export class MemoryAssetCache implements AssetCache {
       (this.#entries.get(asset.ref)?.bytes.byteLength ?? 0) +
       asset.bytes.byteLength;
     if (this.#quotaBytes !== null && nextSize > this.#quotaBytes) {
-      throw new AssetError('ASSET_CACHE_QUOTA_EXCEEDED', 'Quota de cache dépassée.', {
+      throw new AssetError('ASSET_CACHE_QUOTA_EXCEEDED', 'Cache quota exceeded.', {
         ref: asset.ref,
       });
     }

@@ -49,7 +49,7 @@ export async function downloadAsset(
 
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   if (!fetchImpl) {
-    throw new AssetError('ASSET_DOWNLOAD_FAILED', 'Aucun client HTTP n’est disponible.', {
+    throw new AssetError('ASSET_DOWNLOAD_FAILED', 'No HTTP client is available.', {
       ref: descriptor.ref,
     });
   }
@@ -77,7 +77,7 @@ export async function downloadAsset(
     if (!response.ok && response.status !== 206) {
       throw new AssetError(
         'ASSET_DOWNLOAD_FAILED',
-        `Réponse HTTP ${response.status} pour « ${descriptor.ref} ».`,
+        `HTTP response ${response.status} for "${descriptor.ref}".`,
         {
           ref: descriptor.ref,
         },
@@ -95,7 +95,7 @@ export async function downloadAsset(
   if (descriptor.size > 0 && validatedBytes.byteLength !== descriptor.size) {
     throw new AssetError(
       'ASSET_SIZE_MISMATCH',
-      `Taille inattendue pour « ${descriptor.ref} » : ${validatedBytes.byteLength} au lieu de ${descriptor.size}.`,
+      `Unexpected size for "${descriptor.ref}": ${validatedBytes.byteLength} instead of ${descriptor.size}.`,
       { ref: descriptor.ref },
     );
   }
@@ -111,7 +111,7 @@ export async function downloadAsset(
   if (checksum !== descriptor.sha256) {
     throw new AssetError(
       'ASSET_CHECKSUM_MISMATCH',
-      `Checksum SHA-256 invalide pour « ${descriptor.ref} ».`,
+      `Invalid SHA-256 checksum for "${descriptor.ref}".`,
       { ref: descriptor.ref },
     );
   }
@@ -151,7 +151,7 @@ async function readResponseBytes(
   while (true) {
     if (signal?.aborted) {
       reader.cancel().catch(() => undefined);
-      throw new AssetError('ASSET_ABORTED', `Téléchargement annulé pour « ${ref} ».`, { ref });
+      throw new AssetError('ASSET_ABORTED', `Download canceled for "${ref}".`, { ref });
     }
 
     const { done, value } = await reader.read();
@@ -231,9 +231,9 @@ async function fetchAsset(
     });
   } catch (error) {
     if (signal?.aborted) {
-      throw new AssetError('ASSET_ABORTED', `Téléchargement annulé.`, { cause: error });
+      throw new AssetError('ASSET_ABORTED', `Download canceled.`, { cause: error });
     }
-    throw new AssetError('ASSET_DOWNLOAD_FAILED', `Échec du téléchargement de « ${url} ».`, {
+    throw new AssetError('ASSET_DOWNLOAD_FAILED', `Failed to download "${url}".`, {
       cause: error,
     });
   }
@@ -261,7 +261,7 @@ async function readRangeChunk(
   if (response.status !== 206) {
     throw new AssetError(
       'ASSET_DOWNLOAD_FAILED',
-      `Réponse HTTP ${response.status} pour « ${descriptor.ref} ».`,
+      `HTTP response ${response.status} for "${descriptor.ref}".`,
       {
         ref: descriptor.ref,
       },
@@ -272,7 +272,7 @@ async function readRangeChunk(
   if (!contentRange) {
     throw new AssetError(
       'ASSET_DOWNLOAD_FAILED',
-      `Content-Range manquant pour « ${descriptor.ref} ».`,
+      `Missing Content-Range for "${descriptor.ref}".`,
       {
         ref: descriptor.ref,
       },
@@ -283,7 +283,7 @@ async function readRangeChunk(
   if (!rangeMatch) {
     throw new AssetError(
       'ASSET_DOWNLOAD_FAILED',
-      `Content-Range invalide pour « ${descriptor.ref} ».`,
+      `Invalid Content-Range for "${descriptor.ref}".`,
       {
         ref: descriptor.ref,
       },
@@ -297,7 +297,7 @@ async function readRangeChunk(
   if (rangeStart !== start || rangeEnd !== end || rangeTotal !== descriptor.size) {
     throw new AssetError(
       'ASSET_DOWNLOAD_FAILED',
-      `Content-Range incompatible pour « ${descriptor.ref} ».`,
+      `Incompatible Content-Range for "${descriptor.ref}".`,
       {
         ref: descriptor.ref,
       },

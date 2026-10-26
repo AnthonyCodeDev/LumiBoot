@@ -9,9 +9,8 @@ export interface ImageFileRef {
 }
 
 /**
- * Paramètres de démarrage propres à une image, optionnels. Ils permettent de
- * faire varier les chemins des binaires du moteur et la ligne de commande du
- * noyau sans modifier le code du provider.
+ * Optional boot parameters specific to an image. They allow varying the engine
+ * binary paths and the kernel command line without modifying the provider code.
  */
 export interface ImageBootOptions {
   cmdline?: string;
@@ -34,7 +33,7 @@ const manifests = new Map<string, ImageManifest>();
 
 export function registerImageManifest(manifest: ImageManifest): void {
   if (!manifest.ref) {
-    throw new AssetError('ASSET_INVALID_MANIFEST', 'Le manifeste doit avoir une référence.', {
+    throw new AssetError('ASSET_INVALID_MANIFEST', 'The manifest must have a reference.', {
       ref: manifest.ref,
     });
   }
@@ -51,13 +50,13 @@ export function clearImageManifests(): void {
 
 export function resolveImage(os: OSDefinition): ImageManifest {
   if (!os.imageRef) {
-    throw new AssetError('ASSET_NOT_FOUND', `Aucune image n'est associée à « ${os.id} ».`, {
+    throw new AssetError('ASSET_NOT_FOUND', `No image is associated with "${os.id}".`, {
       ref: os.id,
     });
   }
   const manifest = getImageManifest(os.imageRef);
   if (!manifest) {
-    throw new AssetError('ASSET_NOT_FOUND', `Image « ${os.imageRef} » introuvable.`, {
+    throw new AssetError('ASSET_NOT_FOUND', `Image "${os.imageRef}" not found.`, {
       ref: os.imageRef,
     });
   }

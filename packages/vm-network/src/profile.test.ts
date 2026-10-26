@@ -8,24 +8,24 @@ import {
 } from './profile';
 
 describe('defaultNetworkProfile', () => {
-  it('est hors ligne et sans relais public', () => {
+  it('is offline and without a public relay', () => {
     expect(defaultNetworkProfile.mode).toBe('offline');
     expect(defaultNetworkProfile.relayUrl).toBeUndefined();
   });
 });
 
 describe('networkProfileSchema', () => {
-  it('rejette les clés inconnues', () => {
+  it('rejects unknown keys', () => {
     expect(networkProfileSchema.safeParse({ mode: 'offline', extra: 1 }).success).toBe(false);
   });
 
-  it('rejette un mode inconnu', () => {
+  it('rejects an unknown mode', () => {
     expect(networkProfileSchema.safeParse({ mode: 'wifi' }).success).toBe(false);
   });
 });
 
 describe('normalizeNetworkProfile', () => {
-  it('conserve relayUrl uniquement en mode user-relay', () => {
+  it('keeps relayUrl only in user-relay mode', () => {
     expect(
       normalizeNetworkProfile({ mode: 'user-relay', relayUrl: 'wss://relay.example' }),
     ).toEqual({ mode: 'user-relay', relayUrl: 'wss://relay.example' });
@@ -39,7 +39,7 @@ describe('normalizeNetworkProfile', () => {
     ).toEqual({ mode: 'browser-fetch' });
   });
 
-  it('conserve proxyUrl/proxyToken uniquement en mode local-proxy', () => {
+  it('keeps proxyUrl/proxyToken only in local-proxy mode', () => {
     expect(
       normalizeNetworkProfile({
         mode: 'local-proxy',
@@ -73,21 +73,21 @@ describe('normalizeNetworkProfile', () => {
     ).toEqual({ mode: 'user-relay', relayUrl: 'wss://relay.example' });
   });
 
-  it('lève une NetworkError sur une entrée invalide', () => {
+  it('throws a NetworkError on invalid input', () => {
     expect(() => normalizeNetworkProfile({ mode: 'nope' })).toThrow(NetworkError);
     expect(() => normalizeNetworkProfile(null)).toThrow(NetworkError);
   });
 });
 
 describe('validateNetworkProfile', () => {
-  it('accepte et nettoie un profil valide', () => {
+  it('accepts and cleans a valid profile', () => {
     const result = validateNetworkProfile({ mode: 'user-relay', relayUrl: 'wss://relay.example' });
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
     expect(result.profile).toEqual({ mode: 'user-relay', relayUrl: 'wss://relay.example' });
   });
 
-  it('retourne les erreurs sans lever', () => {
+  it('returns the errors without throwing', () => {
     const result = validateNetworkProfile({ mode: 'bad' });
     expect(result.ok).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);

@@ -5,8 +5,8 @@
   "architecture": "i386",
   "memoryMiB": 1536,
   "vgaMemoryMiB": 16,
-  "license": "Disque RAW local de la codebase (non distribué)",
-  "provenance": "images/windows-7-pro-sp1-x86/disk.img (disque local servi in-place)",
+  "license": "Local RAW disk from the codebase (not distributed)",
+  "provenance": "images/windows-7-pro-sp1-x86/disk.img (local disk served in place)",
   "source": {
     "path": "images/windows-7-pro-sp1-x86/disk.img",
     "size": 34359738368,
@@ -47,7 +47,7 @@
     "size": 34359738368
   },
   "notes": [
-    "Disque RAW 32 Gio de l’opérateur, servi in-place (images/windows-7-pro-sp1-x86/disk.img) : jamais copié, ignoré par Git, committé ni distribué.",
-    "Démarré par BIOS sous v86 via HTTP Range (hda.async = true), jamais en cdrom."
+    "Operator-provided 32 GiB RAW disk, served in place (images/windows-7-pro-sp1-x86/disk.img): never copied, git-ignored, never committed nor distributed.",
+    "Booted by the BIOS under v86 over HTTP Range (hda.async = true), never as a cdrom."
   ]
 }

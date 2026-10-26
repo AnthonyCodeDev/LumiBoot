@@ -1,16 +1,16 @@
 {
-  "$comment": "PLACEHOLDER (source, versionné) décrivant le format attendu par @lumiboot/vm-assets (ensureImageManifest) pour le flavor desktop. Il n'est VOLONTAIREMENT pas un manifeste valide : `files` est vide et les clés `$comment`/`status`/`notes` sont rejetées par le schéma strict, il ne peut donc jamais simuler la présence de l'image. Le vrai manifeste est généré par build.sh (FLAVOR=desktop) puis publié dans apps/web/public/images/debian-12-i386-desktop/ (dossier ignoré par Git), où il a été validé par un boot réel.",
+  "$comment": "Deliberately invalid versioned sentinel describing the format expected by @lumiboot/vm-assets (ensureImageManifest) for the desktop flavor. `files` is empty and the `$comment`/`status`/`notes` keys are rejected by the strict schema: this file can never simulate the presence of the image. The usable manifest is produced by build.sh (FLAVOR=desktop) then published into apps/web/public/images/debian-12-i386-desktop/ (a Git-ignored directory), where a real boot validates it.",
   "ref": "debian-12-i386-desktop",
   "architecture": "i386",
   "memoryMiB": 1024,
   "vgaMemoryMiB": 16,
-  "license": "Debian GNU/Linux — voir les notices de paquets (Debian Free Software Guidelines)",
+  "license": "Debian GNU/Linux — see the package notices (Debian Free Software Guidelines)",
   "files": {},
-  "status": "placeholder-source",
+  "status": "not-built",
   "notes": [
-    "Ce fichier est un gabarit versionné : le manifeste réellement publié vit dans le dossier `public` (ignoré par Git) et est validé par un boot réel.",
-    "Ne jamais committer les binaires de l'image dans le dépôt.",
-    "Renseigner sha256 et size pour disk/bzimage/initrd après construction réelle.",
-    "Le catalogue référence désormais l'image (imageRef renseigné) et la disponibilité reste dérivée d'un boot validé (`validated` du profil)."
+    "This file is a versioned template; the usable manifest lives in the `public` directory (Git-ignored) and a real boot validates it.",
+    "The image binaries are never committed to the repository.",
+    "The sha256 and size of disk/bzimage/initrd are filled in during the real build.",
+    "The catalog references the image (imageRef set) and availability stays derived from a validated boot (the profile's `validated`)."
   ]
 }

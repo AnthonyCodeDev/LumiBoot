@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Architecture réseau universelle, agnostique du OS et du moteur d'exécution",
+  "description": "Universal network architecture, independent of the guest OS and execution engine",
   "exports": {
     ".": {
       "types": "./src/index.ts",

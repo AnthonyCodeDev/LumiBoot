@@ -1,5 +1,5 @@
-// Package platform isole les détails par OS : emplacement du fichier de
-// configuration. Aucune élévation de privilèges n'est jamais demandée.
+// Package platform isolates OS-specific details: the location of the
+// configuration file. No privilege escalation is ever requested.
 package platform
 
 import (
@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 )
 
-// ConfigDirName est le dossier applicatif sous le répertoire de config de l'OS.
+// ConfigDirName is the application folder under the OS config directory.
 const ConfigDirName = "Network Proxy"
 
-// ConfigFilePath renvoie le chemin du fichier de configuration :
+// ConfigFilePath returns the configuration file path:
 // <os.UserConfigDir>/LumiBoot/Network Proxy/config.json.
 func ConfigFilePath() (string, error) {
 	base, err := os.UserConfigDir()
@@ -20,7 +20,7 @@ func ConfigFilePath() (string, error) {
 	return filepath.Join(base, "LumiBoot", ConfigDirName, "config.json"), nil
 }
 
-// EnsureConfigDir crée le dossier de configuration si besoin et le renvoie.
+// EnsureConfigDir creates the configuration folder if needed and returns it.
 func EnsureConfigDir() (string, error) {
 	path, err := ConfigFilePath()
 	if err != nil {

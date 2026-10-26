@@ -1,81 +1,53 @@
-# Sécurité
+# Security
 
 ## Invariants
 
-- Les VM s'exécutent dans le navigateur ; aucune commande serveur ne démarre une VM.
-- Les variables `VITE_*` et `apps/web/public/lumiboot.config.json` sont publiques : aucun secret ne doit y être placé.
-- Les médias propriétaires et gros disques restent hors Git et hors bundle Vite.
-- Les états `ready`, `running` et `connected` exigent une preuve technique, pas une simple configuration.
-- La télémétrie ne doit jamais capturer le terminal ou le contenu de l'invité.
+- VMs run in the browser; no server-side boot.
+- `VITE_*` and `apps/web/public/lumiboot.config.json` are public: no secrets.
+- Proprietary media and large disks outside Git and outside the Vite bundle.
+- `ready`, `running`, `connected` require technical proof.
+- No log, error report or telemetry captures the terminal or guest content.
 
-## Menace XSS
+## XSS threat
 
-L'application traite des données d'origine non fiable (contenu invité, réponses réseau). Une
-XSS réussie peut lire tout secret accessible au contexte JS de l'origine LumiBoot.
+Untrusted data (guest, network); an XSS reads every secret in the JS context of the LumiBoot origin.
 
-- **Bearer d'appairage** : le jeton de session du proxy réseau local n'est persisté que dans
-  `sessionStorage` (`lumiboot.proxy.session`). Il ne survit pas à la fermeture de l'onglet et
-  n'est pas partagé entre onglets. L'ancienne clé `localStorage` d'une version antérieure est
-  purgée sans migration. Le jeton n'est jamais lu depuis le stockage pour l'exécution : seule la
-  copie mémoire (`getProxyRuntimeCredentials`) est utilisée, et uniquement à l'état authentifié.
-- **URL WISP** : le token figure en query (`…/wisp/?token=…`) à cause des limites de v86
-  0.5.471. Aucune URL WISP ni aucun token ne doit être journalisé (`console.*`, télémétrie,
-  rapports d'erreur). Un garde-fou de test échoue si un log du front référence `token`, `wisp`,
-  `relay_url` ou `proxyToken`.
-- **Sourcemaps** : désactivées en production par défaut. Une sourcemap publique expose le code
-  source original et facilite l'exploitation d'une XSS. Activation explicite uniquement
-  (`LUMIBOOT_SOURCEMAP=1`, ou `hidden` pour un `.map` non publié sur le webroot statique).
-- **CSP** : `connect-src` reste une allow-list d'origines exactes (jamais `*` ni un schéma
-  global) ; voir `infra/nginx/security-headers.conf`.
+- **Pairing bearer**: `sessionStorage` only (`lumiboot.proxy.session`), scoped to the tab, lost on close. Legacy `localStorage` key purged without migration. Execution never reads storage: in-memory copy only (`getProxyRuntimeCredentials`), in the authenticated state (`apps/web/src/features/proxy/persistence.ts`).
+- **WISP URL**: token in the query string (`…/wisp/?token=…`), v86 0.5.471 limitation. No logging of WISP URLs or tokens (`console.*`, error reports); `tests/security-config.test.ts` fails on `token`, `wisp`, `relay_url`, `proxyToken` in a frontend log.
+- **Sourcemaps**: disabled in production; a public `.map` exposes the source. Opt-in `LUMIBOOT_SOURCEMAP=1`, or `hidden` (`.map` not published).
+- **CSP**: `connect-src` as an allow-list of exact origins, never `*` or a scheme-wide rule (`infra/nginx/security-headers.conf`).
 
-## Réseau
+## Network
 
-- `browser-fetch` respecte CORS et n'offre pas de TCP brut.
-- `user-relay` doit viser un relais WISP administré ou approuvé par l'utilisateur.
-- Le proxy local écoute sur loopback, vérifie origine et token, bloque les réseaux privés et les métadonnées cloud après DNS, puis applique quotas et délais.
-- `allowPrivateNetworks` et `allowNonLoopback` réduisent l'isolation ; ne les activer qu'après analyse explicite.
-- Un token WISP apparaît dans l'URL à cause des limites de v86 0.5.471 : limiter sa durée et permettre sa révocation.
+- `browser-fetch`: CORS, no raw TCP.
+- `user-relay`: WISP relay administered or approved by the user.
+- Local proxy: loopback, origin + token verified, private networks and cloud metadata blocked after DNS resolution, quotas and timeouts (`apps/network-proxy/internal/security/policy.go`).
+- `allowPrivateNetworks`, `allowNonLoopback`: weaken isolation, enable after review.
+- WISP token visible in the URL: limited lifetime, revocation available.
 
-### Allowlist d'origines DEV / PROD (proxy réseau)
+### DEV / PROD origin allowlist (network proxy)
 
-L'allowlist d'origines du proxy réseau local est **séparée par environnement** :
+Split per environment (`apps/network-proxy/internal/config/config.go`):
 
-- **Production (défaut)** : seules les origines LumiBoot (`https://lumiboot.app`,
-  `https://www.lumiboot.app`). Aucune origine `localhost` générique n'est acceptée.
-- **Développement** : `LUMIBOOT_PROXY_ENV=development` élargit l'allowlist aux boucles locales
-  du monorepo (5173, 5200, 3000, 4173, 8080). À n'utiliser que sur un poste de dev.
-- **Appairage local explicite** : si l'UI est réellement servie depuis un poste (déploiement
-  local), activer `allowLocalOrigins` (`LUMIBOOT_PROXY_ALLOW_LOCAL_ORIGINS=true`) ou lister les
-  origines exactes. Toute origine loopback en production sans cet opt-in est refusée à la
-  validation.
+- **Production (default)**: `https://lumiboot.app`, `https://www.lumiboot.app`; no generic `localhost` origin.
+- **Development**: `LUMIBOOT_PROXY_ENV=development` adds 5173, 5200, 3000, 4173, 8080 on `127.0.0.1` and `localhost`. Dev machine only.
+- **Explicit local pairing**: `allowLocalOrigins` (`LUMIBOOT_PROXY_ALLOW_LOCAL_ORIGINS=true`) or exact origins. A loopback origin in production without opt-in is refused at validation.
 
-La révocation (`POST /api/session/revoke`) est la déconnexion : elle supprime la session côté
-proxy et purge immédiatement le stockage local.
+Revocation `POST /api/session/revoke` = disconnect: session removed on the proxy side, local storage purged.
 
-## Déploiement
+## Deployment
 
-Les en-têtes Nginx sont dans `infra/nginx/security-headers.conf`. COOP/COEP reste optionnel via `LUMIBOOT_COOP_COEP=1` car v86 0.5.471 n'utilise pas `SharedArrayBuffer`.
+`infra/nginx/security-headers.conf`. Optional COOP/COEP via `LUMIBOOT_COOP_COEP=1`; v86 0.5.471 does not use `SharedArrayBuffer`.
 
-`infra/nginx/site.conf` applique les règles suivantes :
+`infra/nginx/site.conf`:
 
-- `/downloads/` est **strictement statique** : aucun fallback SPA (un fichier absent renvoie un
-  vrai 404, jamais `index.html`), `Accept-Ranges` autorisé pour reprendre un téléchargement,
-  compression désactivée pour ne pas casser les réponses 206. `/downloads/manifest.json` est
-  servi en `application/json` (`no-store`).
-- Le WASM de v86 est servi avec `application/wasm` ; aucun fallback SPA sous `/v86/`.
-- `/images/` sert les disques des distributions **libres** (Debian) en HTTP Range, sans index ni
-  fallback SPA. Les médias système **propriétaires** (Windows…) et les médias utilisateur sont
-  interdits dans le webroot public : un bloc Nginx les refuse explicitement en 404, et le
-  garde-fou CI `tests/webroot-assets.test.ts` échoue si un tel média est copié dans
-  `apps/web/public/` ou `apps/web/dist/`.
+- `/downloads/`: strict static files, no SPA fallback (real 404); `Accept-Ranges`, compression off to preserve `206`; `/downloads/manifest.json` as `application/json` (`no-store`).
+- v86 WASM as `application/wasm`, no fallback under `/v86/`.
+- `/images/`: free disks (Debian) over HTTP Range, no index and no fallback; proprietary and user media forbidden in the webroot: Nginx 404 block (`^/images/.*(windows|winxp|winvista|win[0-9])`) + `tests/webroot-assets.test.ts` on `apps/web/public/` and `apps/web/dist/`.
 
-## Export source / bundle release
+## Source export / release bundle
 
-- L'export **source** (`python export_project_zip.py`) n'écrit jamais de faux binaire : un
-  artefact trop volumineux est **omis** (jamais remplacé par un texte `.img`/`.exe`) et décrit
-  dans `EXPORT-MANIFEST.json` (chemin, taille, SHA-256). Le vrai dossier `images/` et les assets
-  ne sont jamais modifiés ni supprimés.
-- Le **bundle release** (`--profile release`) est distinct : il n'embarque que le build web et
-  les téléchargements, et refuse les médias non libres via un garde-fou.
+- **Source** (`python export_project_zip.py`): oversized artifact **omitted** (never a fake `.img`/`.exe`), described in `EXPORT-MANIFEST.json` (path, size, SHA-256); `images/` untouched.
+- **Release** (`--profile release`): `apps/web/dist` + `apps/web/public/downloads` only, non-free media refused.
 
-Signaler les vulnérabilités en privé aux mainteneurs avant toute publication.
+Report vulnerabilities privately to the maintainers.

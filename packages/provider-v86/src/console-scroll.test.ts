@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { V86 } from 'v86';
 import { attachConsoleWheelScroll } from './console-scroll';
 
-/** Scancodes make+break attendus (voir `console-scroll.ts`). */
+/** Expected make+break scancodes (see `console-scroll.ts`). */
 const SHIFT_PAGE_UP = [0x2a, 0xe0, 0x49, 0xe0, 0xc9, 0xaa];
 const SHIFT_PAGE_DOWN = [0x2a, 0xe0, 0x51, 0xe0, 0xd1, 0xaa];
 
@@ -20,9 +20,8 @@ function createEmulator(): FakeEmulator {
 }
 
 /**
- * Construit un écran factice contenant `.v86-screen-text`. `display` vaut
- * `null` pour laisser le div visible (mode texte), ou `'none'` pour simuler le
- * mode graphique.
+ * Builds a fake screen containing `.v86-screen-text`. `display` is `null` to
+ * leave the div visible (text mode), or `'none'` to simulate graphics mode.
  */
 function createScreen(display: string | null): { screen: HTMLElement; text: HTMLElement } {
   const screen = document.createElement('div');
@@ -49,7 +48,7 @@ describe('attachConsoleWheelScroll', () => {
     document.body.innerHTML = '';
   });
 
-  it('molette vers le haut : envoie Shift+PageUp et bloque le défilement', () => {
+  it('wheel up: sends Shift+PageUp and blocks scrolling', () => {
     const { emulator, keyboard_send_scancodes } = createEmulator();
     const { screen } = createScreen(null);
     const detach = attachConsoleWheelScroll(screen, emulator);
@@ -63,7 +62,7 @@ describe('attachConsoleWheelScroll', () => {
     detach();
   });
 
-  it('molette vers le bas : envoie Shift+PageDown après le throttle', () => {
+  it('wheel down: sends Shift+PageDown after the throttle', () => {
     vi.useFakeTimers();
     vi.setSystemTime(10_000);
     const { emulator, keyboard_send_scancodes } = createEmulator();
@@ -73,7 +72,7 @@ describe('attachConsoleWheelScroll', () => {
     dispatchWheel(screen, 120);
     expect(keyboard_send_scancodes).toHaveBeenCalledWith(SHIFT_PAGE_DOWN);
 
-    // Hors fenêtre de throttle : un nouvel événement repart.
+    // Outside the throttle window: a new event goes through.
     keyboard_send_scancodes.mockClear();
     vi.setSystemTime(10_100);
     dispatchWheel(screen, 120);
@@ -82,7 +81,7 @@ describe('attachConsoleWheelScroll', () => {
     detach();
   });
 
-  it('throttle : ignore les événements trop rapprochés (mais bloque toujours)', () => {
+  it('throttle: ignores events that are too close (but still blocks)', () => {
     vi.useFakeTimers();
     vi.setSystemTime(5_000);
     const { emulator, keyboard_send_scancodes } = createEmulator();
@@ -98,7 +97,7 @@ describe('attachConsoleWheelScroll', () => {
     detach();
   });
 
-  it('mode graphique (texte masqué) : n’envoie rien et ne bloque pas', () => {
+  it('graphics mode (hidden text): sends nothing and does not block', () => {
     const { emulator, keyboard_send_scancodes } = createEmulator();
     const { screen } = createScreen('none');
     const detach = attachConsoleWheelScroll(screen, emulator);
@@ -111,7 +110,7 @@ describe('attachConsoleWheelScroll', () => {
     detach();
   });
 
-  it('deltaY nul : aucun scancode', () => {
+  it('zero deltaY: no scancode', () => {
     const { emulator, keyboard_send_scancodes } = createEmulator();
     const { screen } = createScreen(null);
     const detach = attachConsoleWheelScroll(screen, emulator);
@@ -122,7 +121,7 @@ describe('attachConsoleWheelScroll', () => {
     detach();
   });
 
-  it('la fonction retournée détache l’écouteur', () => {
+  it('the returned function detaches the listener', () => {
     const { emulator, keyboard_send_scancodes } = createEmulator();
     const { screen } = createScreen(null);
     const detach = attachConsoleWheelScroll(screen, emulator);

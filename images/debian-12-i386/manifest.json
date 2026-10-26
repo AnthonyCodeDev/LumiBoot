@@ -1,20 +1,20 @@
 {
-  "$comment": "Manifeste PLACEHOLDER — à compléter au Lot 1. Aucun checksum réel tant que l'image n'est pas construite et validée.",
+  "$comment": "Deliberately invalid versioned sentinel: the image is not built, no file is published and no checksum is computed.",
   "ref": "debian-12-i386",
   "os": "Debian GNU/Linux",
   "release": "12 Bookworm",
   "architecture": "i386",
   "engine": "v86",
-  "engineVersion": "à figer au Lot 1",
+  "engineVersion": "not pinned",
   "memoryMiB": 128,
   "vgaMemoryMiB": 8,
-  "license": "Debian Free Software Guidelines (logiciels libres)",
-  "provenance": "à documenter (http://cdimage.debian.org/ ou archive i386 officielle)",
+  "license": "Debian Free Software Guidelines (free software)",
+  "provenance": "not documented (cdimage.debian.org or the official i386 archive)",
   "files": {},
   "status": "not-built",
   "notes": [
-    "Ne jamais committer le binaire de l'image dans le dépôt.",
-    "Renseigner sha256 et size pour chaque fichier après construction.",
-    "Passer status à 'ready' uniquement après le smoke test complet."
+    "The image binary is never committed to the repository.",
+    "Every published file carries its sha256 and its size, filled in during the build.",
+    "status only becomes 'ready' after the full smoke test."
   ]
 }

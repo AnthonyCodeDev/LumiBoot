@@ -13,19 +13,19 @@ function renderTopbar(initialEntries: string[] = ['/']) {
 }
 
 describe('Topbar', () => {
-  it('affiche le wordmark et le CTA Discord', () => {
+  it('renders the wordmark and the Discord CTA', () => {
     renderTopbar();
-    expect(screen.getByRole('link', { name: 'LumiBoot, accueil' })).toBeTruthy();
-    const discord = screen.getByRole('link', { name: 'Rejoindre le Discord' });
+    expect(screen.getByRole('link', { name: 'LumiBoot, home' })).toBeTruthy();
+    const discord = screen.getByRole('link', { name: 'Join the Discord' });
     expect(discord.getAttribute('href')).toBe('https://discord.gg/HcqduKt');
     expect(discord.getAttribute('target')).toBe('_blank');
     expect(discord.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
-  it('ouvre et ferme le menu burger au clavier (Escape)', async () => {
+  it('opens and closes the burger menu with the keyboard (Escape)', async () => {
     const user = userEvent.setup();
     renderTopbar(['/']);
-    const toggle = screen.getByRole('button', { name: /menu de navigation/ });
+    const toggle = screen.getByRole('button', { name: /navigation menu/ });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     await user.click(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');

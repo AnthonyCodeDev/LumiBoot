@@ -10,35 +10,35 @@ function isLocalHostname(hostname: string): boolean {
 }
 
 /**
- * Valide une adresse de relais WISP personnelle.
+ * Validates a personal WISP relay address.
  *
- * Seul le schéma `wss:` est accepté. `ws:` (non chiffré) n'est toléré que pour
- * un hôte localhost et uniquement si `allowInsecure` est activé (développement).
- * L'URL ne doit comporter ni identifiants (userinfo), ni fragment ; l'hôte est
- * obligatoire et le port reste optionnel.
+ * Only the `wss:` scheme is accepted. `ws:` (unencrypted) is tolerated only for
+ * a localhost host and only if `allowInsecure` is enabled (development). The URL
+ * must contain neither credentials (userinfo) nor fragment; the host is required
+ * and the port stays optional.
  */
 export function validateRelayUrl(
   raw: unknown,
   options: { allowInsecure?: boolean } = {},
 ): RelayValidation {
   if (typeof raw !== 'string') {
-    return { ok: false, error: 'Adresse de relais invalide : une chaîne est attendue.' };
+    return { ok: false, error: 'Invalid relay address: a string is expected.' };
   }
 
   const trimmed = raw.trim();
   if (trimmed.length === 0) {
-    return { ok: false, error: 'Adresse de relais vide.' };
+    return { ok: false, error: 'Empty relay address.' };
   }
 
   let url: URL;
   try {
     url = new URL(trimmed);
   } catch {
-    return { ok: false, error: 'Adresse de relais mal formée.' };
+    return { ok: false, error: 'Malformed relay address.' };
   }
 
   if (url.protocol !== 'wss:' && url.protocol !== 'ws:') {
-    return { ok: false, error: 'Seul le protocole « wss: » est autorisé.' };
+    return { ok: false, error: 'Only the "wss:" protocol is allowed.' };
   }
 
   if (url.protocol === 'ws:') {
@@ -46,21 +46,21 @@ export function validateRelayUrl(
     if (!allowInsecure || !isLocalHostname(url.hostname)) {
       return {
         ok: false,
-        error: 'Le protocole « ws: » (non chiffré) est réservé au développement localhost.',
+        error: 'The "ws:" protocol (unencrypted) is reserved for localhost development.',
       };
     }
   }
 
   if (url.username !== '' || url.password !== '') {
-    return { ok: false, error: "Les identifiants (userinfo) ne sont pas autorisés dans l'URL." };
+    return { ok: false, error: 'Credentials (userinfo) are not allowed in the URL.' };
   }
 
   if (url.hash !== '') {
-    return { ok: false, error: 'Le fragment (« #… ») n’est pas autorisé.' };
+    return { ok: false, error: 'The fragment ("#…") is not allowed.' };
   }
 
   if (url.hostname === '') {
-    return { ok: false, error: 'Le nom d’hôte est obligatoire.' };
+    return { ok: false, error: 'The hostname is required.' };
   }
 
   return { ok: true, url: url.href };

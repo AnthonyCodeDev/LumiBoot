@@ -1,21 +1,21 @@
 import { PROXY_WISP_VERSION, type ProxyState } from '@lumiboot/vm-network';
 import type { FetchLike } from '../../config/load-config';
 
-/** Résultat de la sonde `/health` du proxy réseau local. */
+/** Result of the local network proxy `/health` probe. */
 export interface ProxyHealth {
   state: ProxyState;
   version?: string;
   wispVersion?: number;
-  /** Message de diagnostic guidé (état `error` incertain). */
+  /** Guided diagnostic message (uncertain `error` state). */
   error?: string;
   /**
-   * `true` quand la sonde ne permet pas de trancher (ex. `TypeError` Chromium
-   * ambigu entre proxy arrêté et refus d'accès réseau local).
+   * `true` when the probe cannot decide (e.g. Chromium `TypeError` that is
+   * ambiguous between a stopped proxy and a local network access refusal).
    */
   uncertain?: boolean;
 }
 
-/** Délai de sonde : le proxy réseau local est local, 1500 ms suffisent. */
+/** Probe timeout: the local network proxy is local, 1500 ms is enough. */
 export const PROXY_HEALTH_TIMEOUT_MS = 1500;
 
 function trimBaseUrl(baseUrl: string): string {
@@ -34,10 +34,10 @@ function isAbortError(error: unknown): boolean {
 }
 
 /**
- * Le navigateur supporte-t-il Local Network Access (heuristique) ?
+ * Does the browser support Local Network Access (heuristic)?
  *
- * Chrome/Chromium récent expose `navigator.userAgentData` ; à défaut on
- * détecte un UA Chromium. Hors Chromium, la notion n'existe pas → `false`.
+ * Recent Chrome/Chromium exposes `navigator.userAgentData`; failing that, a
+ * Chromium UA is detected. Outside Chromium the concept does not exist → `false`.
  */
 export function supportsLocalNetworkAccess(nav?: {
   userAgent?: string;
@@ -61,29 +61,29 @@ function isSecureContextActive(): boolean {
 }
 
 /**
- * Sonde le proxy réseau local via `GET {baseUrl}/health`.
+ * Probes the local network proxy through `GET {baseUrl}/health`.
  *
- * Routes réellement utilisées (cf. `apps/network-proxy/internal/server/server.go`) :
+ * Routes actually used (see `apps/network-proxy/internal/server/server.go`):
  * - `GET /health` → `{status: "ok", version, wispVersion: 1, …}`.
  *
- * Interprétation :
- * - erreur réseau / timeout (y compris `AbortError`) → `not-running` ;
- * - réponse non-JSON ou forme inattendue → `incompatible` ;
- * - `wispVersion !== PROXY_WISP_VERSION` → `incompatible` ;
- * - succès → `connected` (proxy réseau local **joint**, pas encore appairé : le store
- *   exige en plus un token avant d'afficher « Connecté »).
+ * Interpretation:
+ * - network error / timeout (including `AbortError`) → `not-running`;
+ * - non-JSON response or unexpected shape → `incompatible`;
+ * - `wispVersion !== PROXY_WISP_VERSION` → `incompatible`;
+ * - success → `connected` (local network proxy **reached**, not paired yet: the
+ *   store also requires a token before showing "Connected").
  *
- * État **incertain** (LIMITATION DOCUMENTÉE) : quand le fetch échoue par
- * `TypeError` alors que `window.isSecureContext` est vrai ET que
- * l'environnement supporte Local Network Access (Chromium), le navigateur ne
- * permet PAS de distinguer un refus LNA d'un proxy réseau local arrêté : les
- * deux produisent le même `TypeError` générique (« Failed to fetch »). On
- * renvoie donc un état `error` **incertain** (`uncertain: true`) portant un
- * message de diagnostic guidé, au lieu d'affirmer `permission-required`. Hors
- * contexte sécurisé ou hors Chromium, le même échec donne `not-running`.
+ * **Uncertain** state (DOCUMENTED LIMITATION): when the fetch fails with a
+ * `TypeError` while `window.isSecureContext` is true AND the environment supports
+ * Local Network Access (Chromium), the browser does NOT let us tell an LNA
+ * refusal apart from a stopped local network proxy: both produce the same
+ * generic `TypeError` ("Failed to fetch"). We therefore return an **uncertain**
+ * `error` state (`uncertain: true`) carrying a guided diagnostic message,
+ * instead of asserting `permission-required`. Outside a secure context or
+ * outside Chromium, the same failure yields `not-running`.
  *
- * `not-installed` n'est JAMAIS renvoyé ici : l'absence de réponse ne prouve
- * pas l'absence d'installation.
+ * `not-installed` is NEVER returned here: the absence of a response does not
+ * prove the absence of an installation.
  */
 export async function checkProxy(
   baseUrl: string,
@@ -104,14 +104,14 @@ export async function checkProxy(
       if (isAbortError(error)) return { state: 'not-running' };
       if (error instanceof TypeError) {
         if (isSecureContextActive() && supportsLocalNetworkAccess()) {
-          // Chromium : impossible de trancher entre refus LNA et proxy arrêté.
+          // Chromium: cannot decide between an LNA refusal and a stopped proxy.
           return {
             state: 'error',
             uncertain: true,
             error:
-              'Impossible de joindre le proxy réseau local : le navigateur a pu bloquer ' +
-              'l’accès au réseau local, ou le proxy n’est pas lancé. Vérifiez qu’il tourne ' +
-              'sur cette machine, puis autorisez l’accès au réseau local pour ce site.',
+              'Unable to reach the local network proxy: the browser may have blocked ' +
+              'local network access, or the proxy is not running. Check that it runs on ' +
+              'this machine, then allow local network access for this site.',
           };
         }
         return { state: 'not-running' };

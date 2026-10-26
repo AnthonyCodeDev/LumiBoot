@@ -9,15 +9,15 @@ import {
 } from './pointer-lock';
 
 /**
- * Mock Pointer Lock pour jsdom (qui ne l'implémente pas). Il reproduit le
- * contrat réel observé : `requestPointerLock()` verrouille l'élément demandé,
- * `document.pointerLockElement` reflète le verrou, `exitPointerLock()` le
- * libère, et chaque transition émet `pointerlockchange` sur `document`.
+ * Pointer Lock mock for jsdom (which does not implement it). It reproduces the
+ * observed real contract: `requestPointerLock()` locks the requested element,
+ * `document.pointerLockElement` reflects the lock, `exitPointerLock()` releases
+ * it, and every transition emits `pointerlockchange` on `document`.
  */
 interface PointerLockMock {
   requestCalls: number;
   exitCalls: number;
-  /** Force une libération externe (Échap natif) + événement `pointerlockchange`. */
+  /** Forces an external release (native Escape) + `pointerlockchange` event. */
   releaseExternally(): void;
   restore(): void;
 }
@@ -52,7 +52,7 @@ function installPointerLock(options: { rejectRequest?: boolean } = {}): PointerL
     return Promise.resolve();
   };
   const requestPointerLock = vi.fn(function (this: Element): Promise<void> {
-    if (options.rejectRequest) return Promise.reject(new Error('refusé par le navigateur'));
+    if (options.rejectRequest) return Promise.reject(new Error('refused by the browser'));
     return applyLock(this);
   });
   Object.defineProperty(Element.prototype, 'requestPointerLock', {
@@ -101,9 +101,9 @@ interface Fixture {
 }
 
 /**
- * Écran FACTICE conforme au seul contrat d'affichage provider-agnostique :
- * marqueur `data-vm-display="screen"`, AUCUNE classe `.v86-screen`. Une capture
- * réussie sur cet élément prouve que l'UI ne dépend pas du moteur v86.
+ * FAKE screen matching the provider-agnostic display contract only:
+ * `data-vm-display="screen"` marker, NO `.v86-screen` class. A successful capture
+ * on this element proves that the UI does not depend on the v86 engine.
  */
 function makeFixture(): Fixture {
   const container = document.createElement('div');
@@ -133,11 +133,11 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     document.body.innerHTML = '';
   });
 
-  it('n’est pas supporté quand le Pointer Lock est absent', () => {
+  it('is not supported when Pointer Lock is absent', () => {
     expect(isPointerLockSupported(document)).toBe(false);
   });
 
-  it('capture dès l’appui dans l’écran, avant le relâchement', () => {
+  it('captures on press inside the screen, before release', () => {
     mock = installPointerLock();
     expect(isPointerLockSupported(document)).toBe(true);
 
@@ -148,7 +148,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
       onCaptureChange: (captured) => states.push(captured),
     });
 
-    // Avant tout clic : pas de verrou, pas de curseur masqué.
+    // Before any click: no lock, no hidden cursor.
     expect(document.pointerLockElement).toBeNull();
     expect(screen.classList.contains(POINTER_LOCKED_CLASS)).toBe(false);
 
@@ -162,7 +162,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     handle.dispose();
   });
 
-  it('ignore les clics hors écran (logs, conteneur) : jamais de capture parasite', () => {
+  it('ignores clicks outside the screen (logs, container): never a stray capture', () => {
     mock = installPointerLock();
     const { container, serial } = makeFixture();
     const onError = vi.fn();
@@ -178,7 +178,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     handle.dispose();
   });
 
-  it('libère au pointerlockchange (Échap) et restaure le curseur, puis recapture', () => {
+  it('releases on pointerlockchange (Escape) and restores the cursor, then recaptures', () => {
     mock = installPointerLock();
     const { container, screen, canvas } = makeFixture();
     const states: boolean[] = [];
@@ -190,7 +190,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     pointerDownOn(canvas);
     expect(handle.isCaptured()).toBe(true);
 
-    // Échap est géré nativement par le navigateur : il libère et émet l'événement.
+    // Escape is handled natively by the browser: it releases and fires the event.
     mock.releaseExternally();
 
     expect(document.pointerLockElement).toBeNull();
@@ -198,7 +198,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     expect(screen.classList.contains(POINTER_LOCKED_CLASS)).toBe(false);
     expect(states).toEqual([true, false]);
 
-    // Nouveau clic explicite => recapture.
+    // New explicit click => recapture.
     pointerDownOn(screen);
     expect(handle.isCaptured()).toBe(true);
     expect(document.pointerLockElement).toBe(screen);
@@ -206,7 +206,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     handle.dispose();
   });
 
-  it('ne redemande pas la capture si l’écran est déjà verrouillé (pas de doublon)', () => {
+  it('does not request the capture again when the screen is already locked (no duplicate)', () => {
     mock = installPointerLock();
     const { container, canvas } = makeFixture();
     const handle = attachPointerLockCapture({ container });
@@ -219,7 +219,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     handle.dispose();
   });
 
-  it('remonte une erreur si la demande est refusée et ne masque pas le curseur', async () => {
+  it('reports an error when the request is refused and does not hide the cursor', async () => {
     mock = installPointerLock({ rejectRequest: true });
     const { container, screen, canvas } = makeFixture();
     const onError = vi.fn();
@@ -227,7 +227,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
 
     pointerDownOn(canvas);
 
-    // Rejet asynchrone + repli sans option : on laisse les micro-tâches finir.
+    // Asynchronous rejection + fallback without options: let the microtasks finish.
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(onError).toHaveBeenCalled();
@@ -236,7 +236,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     handle.dispose();
   });
 
-  it('remonte l’événement pointerlockerror du navigateur', () => {
+  it('reports the browser pointerlockerror event', () => {
     mock = installPointerLock();
     const { container } = makeFixture();
     const onError = vi.fn();
@@ -248,7 +248,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     handle.dispose();
   });
 
-  it('libère le verrou et détache les écouteurs au dispose', () => {
+  it('releases the lock and detaches listeners on dispose', () => {
     mock = installPointerLock();
     const { container, canvas } = makeFixture();
     const handle = attachPointerLockCapture({ container });
@@ -262,13 +262,13 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     expect(document.pointerLockElement).toBeNull();
     expect(handle.isCaptured()).toBe(false);
 
-    // Après dispose : plus aucun écouteur actif.
+    // After dispose: no listener is active anymore.
     const callsAfterDispose = mock.requestCalls;
     pointerDownOn(canvas);
     expect(mock.requestCalls).toBe(callsAfterDispose);
   });
 
-  it('libère quand l’onglet devient invisible', () => {
+  it('releases when the tab becomes invisible', () => {
     mock = installPointerLock();
     const { container, canvas } = makeFixture();
     const handle = attachPointerLockCapture({ container });
@@ -290,7 +290,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     handle.dispose();
   });
 
-  it('libère quand la fenêtre perd le focus', () => {
+  it('releases when the window loses focus', () => {
     mock = installPointerLock();
     const { container, canvas } = makeFixture();
     const handle: PointerLockCaptureHandle = attachPointerLockCapture({ container });
@@ -304,18 +304,18 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     handle.dispose();
   });
 
-  it('expose un sélecteur d’écran provider-agnostique (contrat standard)', () => {
+  it('exposes a provider-agnostic screen selector (standard contract)', () => {
     expect(DEFAULT_SCREEN_SELECTOR).toBe(STANDARD_VM_DISPLAY.screenSelector);
     expect(DEFAULT_SCREEN_SELECTOR).toBe('[data-vm-display="screen"]');
-    // Plus aucune trace de sélecteur spécifique à v86 dans l'UI générique.
+    // No trace of a v86-specific selector remains in the generic UI.
     expect(DEFAULT_SCREEN_SELECTOR).not.toContain('v86');
   });
 
-  it('ignore un écran purement v86 dépourvu du marqueur d’affichage standard', () => {
+  it('ignores a purely v86 screen without the standard display marker', () => {
     mock = installPointerLock();
     const container = document.createElement('div');
     container.className = 'session-console';
-    // Écran legacy : classe v86 uniquement, aucun marqueur de contrat.
+    // Legacy screen: v86 class only, no contract marker.
     const legacy = document.createElement('div');
     legacy.className = 'v86-screen';
     const canvas = document.createElement('canvas');
@@ -331,7 +331,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     handle.dispose();
   });
 
-  it('accepte un contrat d’affichage explicite fourni par un futur moteur', () => {
+  it('accepts an explicit display contract provided by a future engine', () => {
     mock = installPointerLock();
     const container = document.createElement('div');
     const screen = document.createElement('div');
@@ -355,16 +355,16 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
   });
 });
 
-describe('pointer-lock — support absent', () => {
-  it('ne capture pas et signale l’indisponibilité (sans écouteur posé)', () => {
-    // jsdom sans mock : aucune API Pointer Lock.
+describe('pointer-lock — unsupported', () => {
+  it('does not capture and reports unavailability (no listener attached)', () => {
+    // jsdom without a mock: no Pointer Lock API.
     const { container, canvas } = makeFixture();
     const onError = vi.fn();
     const handle = attachPointerLockCapture({ container, onError });
 
     expect(handle.isSupported()).toBe(false);
     pointerDownOn(canvas);
-    expect(onError).not.toHaveBeenCalled(); // le clic est simplement ignoré
+    expect(onError).not.toHaveBeenCalled(); // the click is simply ignored
 
     handle.requestCapture();
     expect(onError).toHaveBeenCalledTimes(1);

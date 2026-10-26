@@ -37,7 +37,7 @@ describe('pairing', () => {
     const error = await requestPairing(
       'http://127.0.0.1:37892',
       fetchJson(403, {
-        error: 'origine non autorisée',
+        error: 'origin not allowed',
       }),
     ).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ProxyPairingError);
@@ -57,7 +57,7 @@ describe('pairing', () => {
     const error = await getPairingStatus(
       'http://127.0.0.1:37892',
       'gone',
-      fetchJson(404, { error: 'introuvable' }),
+      fetchJson(404, { error: 'not found' }),
     ).catch((e: unknown) => e);
     expect((error as ProxyPairingError).code).toBe('PAIRING_NOT_FOUND');
   });
@@ -71,16 +71,16 @@ describe('pairing', () => {
     expect(result.token).toBe('tok');
   });
 
-  it('exchangeToken 403 → PAIRING_NOT_APPROVED (token invalide/expiré)', async () => {
+  it('exchangeToken 403 → PAIRING_NOT_APPROVED (invalid/expired token)', async () => {
     const error = await exchangeToken(
       'http://127.0.0.1:37892',
       'p1',
-      fetchJson(403, { error: 'échange impossible' }),
+      fetchJson(403, { error: 'exchange impossible' }),
     ).catch((e: unknown) => e);
     expect((error as ProxyPairingError).code).toBe('PAIRING_NOT_APPROVED');
   });
 
-  it('revokeSession → résout sans erreur', async () => {
+  it('revokeSession → resolves without error', async () => {
     await expect(
       revokeSession('http://127.0.0.1:37892', 'tok', fetchJson(200, { revoked: true })),
     ).resolves.toBeUndefined();
@@ -90,12 +90,12 @@ describe('pairing', () => {
     const error = await revokeSession(
       'http://127.0.0.1:37892',
       'tok',
-      fetchJson(404, { error: 'introuvable' }),
+      fetchJson(404, { error: 'not found' }),
     ).catch((e: unknown) => e);
     expect((error as ProxyPairingError).code).toBe('REVOKE_FAILED');
   });
 
-  it('verifyToken 200 {ok:true} → ok + expiresAt, token en query', async () => {
+  it('verifyToken 200 {ok:true} → ok + expiresAt, token in query', async () => {
     let seenUrl = '';
     const fetchImpl: FetchLike = (async (input: string) => {
       seenUrl = input;
@@ -110,7 +110,7 @@ describe('pairing', () => {
     expect(seenUrl).toBe('http://127.0.0.1:37892/api/session/verify?token=tok');
   });
 
-  it('verifyToken 200 sans expiresAt → ok sans expiresAt', async () => {
+  it('verifyToken 200 without expiresAt → ok without expiresAt', async () => {
     const result = await verifyToken('http://127.0.0.1:37892', 'tok', fetchJson(200, { ok: true }));
     expect(result).toEqual({ ok: true });
   });
@@ -119,7 +119,7 @@ describe('pairing', () => {
     const result = await verifyToken(
       'http://127.0.0.1:37892',
       'tok',
-      fetchJson(401, { error: 'jeton invalide' }),
+      fetchJson(401, { error: 'invalid token' }),
     );
     expect(result).toEqual({ ok: false });
   });
@@ -128,12 +128,12 @@ describe('pairing', () => {
     const result = await verifyToken(
       'http://127.0.0.1:37892',
       'tok',
-      fetchJson(403, { error: 'origine refusée' }),
+      fetchJson(403, { error: 'origin refused' }),
     );
     expect(result).toEqual({ ok: false });
   });
 
-  it('verifyToken erreur réseau → ProxyPairingError PROXY_UNREACHABLE', async () => {
+  it('verifyToken network error → ProxyPairingError PROXY_UNREACHABLE', async () => {
     const error = await verifyToken('http://127.0.0.1:37892', 'tok', fetchNetworkError()).catch(
       (e: unknown) => e,
     );
@@ -141,7 +141,7 @@ describe('pairing', () => {
     expect((error as ProxyPairingError).code).toBe('PROXY_UNREACHABLE');
   });
 
-  it('verifyToken statut inattendu (500) → ProxyPairingError, pas ok:false', async () => {
+  it('verifyToken unexpected status (500) → ProxyPairingError, not ok:false', async () => {
     const error = await verifyToken(
       'http://127.0.0.1:37892',
       'tok',

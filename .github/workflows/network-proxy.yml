@@ -1,20 +1,20 @@
 name: Network Proxy
 
-# Pipeline du « LumiBoot Network Proxy » (application Go autonome dans
+# Pipeline for the "LumiBoot Network Proxy" (standalone Go application in
 # `apps/network-proxy/`, module `github.com/lumiboot/network-proxy`,
-# entrée `./cmd/lumiboot-network`). Binaire natif, sans CGO.
+# entry point `./cmd/lumiboot-network`). Native binary, no CGO.
 #
-# Principe : les tests sont OBLIGATOIRES avant toute compilation (`build` et
-# `smoke` dépendent de `test`). La compilation croisée n'est jamais considérée
-# comme une preuve de fonctionnement : le job `smoke` exécute réellement le
-# binaire natif sur chaque OS. Sans signature, la publication reste une
-# PRÉVERSION non signée, jamais « stable ».
+# Principle: tests are MANDATORY before any build (`build` and `smoke`
+# depend on `test`). Cross-compilation is never considered
+# proof that it works: the `smoke` job actually runs the
+# native binary on each OS. Without signing, the release remains an
+# UNSIGNED PRE-RELEASE, never "stable".
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version forcée (optionnel). Laisser vide = auto-incrément."
+        description: 'Forced version (optional). Leave empty = auto-increment.'
         required: false
         type: string
   push:
@@ -45,18 +45,18 @@ jobs:
       - name: go vet
         working-directory: apps/network-proxy
         run: go vet ./...
-      - name: gofmt (échoue si un fichier est mal formaté)
+      - name: gofmt (fails if a file is misformatted)
         working-directory: apps/network-proxy
         run: |
           out="$(gofmt -l .)"
           if [ -n "$out" ]; then
-            echo "Fichiers mal formatés :"
+            echo "Misformatted files:"
             echo "$out"
             exit 1
           fi
 
   prepare:
-    name: version (auto-incrément)
+    name: version (auto-increment)
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.compute.outputs.version }}
@@ -95,7 +95,7 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=network-v$VERSION" >> "$GITHUB_OUTPUT"
           echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
-          echo "Version calculée : $VERSION (release=$RELEASE)"
+          echo "Computed version: $VERSION (release=$RELEASE)"
 
   build:
     name: build (${{ matrix.goos }}/${{ matrix.goarch }})
@@ -118,7 +118,7 @@ jobs:
         with:
           go-version-file: apps/network-proxy/go.mod
           cache-dependency-path: apps/network-proxy/go.sum
-      - name: Compilation croisée (CGO désactivé, reproductible)
+      - name: Cross-compile (CGO disabled, reproducible)
         working-directory: apps/network-proxy
         env:
           GOOS: ${{ matrix.goos }}
@@ -138,7 +138,7 @@ jobs:
             rm "dist/$BIN"
           fi
           ls -la dist
-      - name: Upload artefact
+      - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: LumiBoot-Network-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -146,19 +146,19 @@ jobs:
           if-no-files-found: error
 
   smoke:
-    # Réponse à « ne pas considérer la compilation croisée comme une preuve de
-    # fonctionnement » : chaque binaire est compilé NATIVEMENT sur son OS puis
-    # réellement EXÉCUTÉ (--version / --help). Échoue si le binaire ne démarre pas.
+    # Answer to "do not treat cross-compilation as proof that it works":
+    # each binary is built NATIVELY on its OS and then
+    # actually EXECUTED (--version / --help). Fails if the binary does not start.
     name: smoke (${{ matrix.os }})
     needs: test
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-24.04, ext: "" }
-          - { os: windows-latest, ext: ".exe" }
-          - { os: macos-15-intel, ext: "" }
-          - { os: macos-15, ext: "" }
+          - { os: ubuntu-24.04, ext: '' }
+          - { os: windows-latest, ext: '.exe' }
+          - { os: macos-15-intel, ext: '' }
+          - { os: macos-15, ext: '' }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -167,12 +167,12 @@ jobs:
         with:
           go-version-file: apps/network-proxy/go.mod
           cache-dependency-path: apps/network-proxy/go.sum
-      - name: Compilation native
+      - name: Native build
         working-directory: apps/network-proxy
         env:
           CGO_ENABLED: 0
         run: go build -trimpath -o "smoke-bin${{ matrix.ext }}" ./cmd/lumiboot-network
-      - name: Démarrage réel du binaire (--version et --help)
+      - name: Actually start the binary (--version and --help)
         working-directory: apps/network-proxy
         shell: bash
         run: |
@@ -180,25 +180,25 @@ jobs:
           ./smoke-bin${{ matrix.ext }} --help
 
   package-macos:
-    # V1 : binaire macOS UNIVERSEL (Intel + Apple Silicon) empaqueté en
-    # `.tar.gz` (pas de DMG). Construit avec `lipo -create` à partir des deux
-    # binaires darwin produits par `build`. Le web ne doit JAMAIS annoncer un
-    # fichier non produit : `macos` pointe vers cet universel.
-    name: package macOS universel (lipo)
+    # V1: UNIVERSAL macOS binary (Intel + Apple Silicon) packaged as
+    # `.tar.gz` (no DMG). Built with `lipo -create` from the two
+    # darwin binaries produced by `build`. The web app must NEVER advertise a
+    # file that is not produced: `macos` points to this universal build.
+    name: package universal macOS (lipo)
     needs: build
     runs-on: macos-15
     steps:
-      - name: Télécharger darwin/amd64
+      - name: Download darwin/amd64
         uses: actions/download-artifact@v7
         with:
           name: LumiBoot-Network-darwin-amd64
           path: darwin-amd64
-      - name: Télécharger darwin/arm64
+      - name: Download darwin/arm64
         uses: actions/download-artifact@v7
         with:
           name: LumiBoot-Network-darwin-arm64
           path: darwin-arm64
-      - name: Construire le binaire universel (lipo) + tar.gz
+      - name: Build the universal binary (lipo) + tar.gz
         run: |
           set -euo pipefail
           mkdir -p work/amd64 work/arm64 dist
@@ -209,7 +209,7 @@ jobs:
           tar -czf dist/LumiBoot-Network-macos-universal.tar.gz -C dist lumiboot-network
           rm dist/lumiboot-network
           ls -la dist
-      - name: Upload artefact universel
+      - name: Upload universal artifact
         uses: actions/upload-artifact@v7
         with:
           name: LumiBoot-Network-macos-universal
@@ -217,37 +217,37 @@ jobs:
           if-no-files-found: error
 
   release:
-    # Publication automatique : à chaque tag `network-v*` ou à chaque
-    # `workflow_dispatch` (version forcée optionnelle ; vide = auto-incrément du
-    # dernier tag `network-v*`, ou 1.0.0 s'il n'y en a aucun), la CI crée une
-    # Release GitHub DANS CE REPO
-    # (private) contenant UN SEUL ZIP : tous les binaires + `manifest.json` +
-    # `SHA256SUMS`. Le ZIP est prêt à être décompressé dans
-    # `apps/web/public/downloads/` (le manifeste pointe vers `/downloads/...`).
-    # `actions/checkout` est INDISPENSABLE : sans lui, `gh release create` échoue
-    # avec « fatal: not a git repository ».
-    name: release (zip complet)
+    # Automatic publication: on every `network-v*` tag or every
+    # `workflow_dispatch` (optional forced version; empty = auto-increment from
+    # the last `network-v*` tag, or 1.0.0 if there is none), CI creates a
+    # GitHub Release IN THIS REPO
+    # (private) containing a SINGLE ZIP: all binaries + `manifest.json` +
+    # `SHA256SUMS`. The ZIP is ready to be extracted into
+    # `apps/web/public/downloads/` (the manifest points to `/downloads/...`).
+    # `actions/checkout` is REQUIRED: without it, `gh release create` fails
+    # with "fatal: not a git repository".
+    name: release (full zip)
     needs: [prepare, build, package-macos, smoke]
     if: needs.prepare.outputs.release == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - name: Checkout (requis par gh release)
+      - name: Checkout (required by gh release)
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Télécharger tous les artefacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v7
         with:
           merge-multiple: true
           path: dist
-      - name: Générer SHA256SUMS
+      - name: Generate SHA256SUMS
         run: |
           cd dist
           sha256sum LumiBoot-Network-* > SHA256SUMS
           cat SHA256SUMS
-      - name: Générer manifest.json
+      - name: Generate manifest.json
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
@@ -294,7 +294,7 @@ jobs:
               json.dump(manifest, handle, indent=2)
               handle.write("\n")
           PY
-      - name: Créer le ZIP complet
+      - name: Create the full ZIP
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
@@ -302,7 +302,7 @@ jobs:
           zip -r "../LumiBoot-Network-proxy-${VERSION}.zip" .
           cd ..
           ls -la "LumiBoot-Network-proxy-${VERSION}.zip"
-      - name: Créer la Release GitHub
+      - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.prepare.outputs.version }}
@@ -311,26 +311,26 @@ jobs:
           gh release create "$TAG" "LumiBoot-Network-proxy-${VERSION}.zip" \
             --title "LumiBoot Network Proxy ${VERSION}" \
             --generate-notes \
-            --notes $'### Utilisation\nTéléchargez ce ZIP, décompressez-le dans `apps/web/public/downloads/` (le `manifest.json` qu\'il contient pointe déjà vers `/downloads/...`).\n\n⚠️ Binaires **non signés / non notarisés** : Windows (SmartScreen) et macOS (Gatekeeper) afficheront un avertissement.'
+            --notes $'### Usage\nDownload this ZIP and extract it into `apps/web/public/downloads/` (its `manifest.json` already points to `/downloads/...`).\n\n⚠️ **Unsigned / not notarized** binaries: Windows (SmartScreen) and macOS (Gatekeeper) will show a warning.'
 
   sign-windows:
-    # Signature Authenticode OPTIONNELLE : ignorée si les secrets sont absents.
-    # Ne bloque jamais la publication initiale (aucun `needs` vers ce job).
-    name: signature Windows (optionnel)
+    # OPTIONAL Authenticode signing: skipped when the secrets are absent.
+    # Never blocks the initial publication (no `needs` pointing to this job).
+    name: Windows signing (optional)
     needs: [build]
     if: startsWith(github.ref, 'refs/tags/network-v') && vars.ENABLE_SIGNING == 'true'
     runs-on: windows-latest
     env:
       HAS_WIN_CERT: ${{ secrets.WINDOWS_CERT_PFX_BASE64 != '' && secrets.WINDOWS_CERT_PASSWORD != '' }}
     steps:
-      - name: Télécharger les .exe
+      - name: Download the .exe files
         if: env.HAS_WIN_CERT == 'true'
         uses: actions/download-artifact@v7
         with:
           pattern: LumiBoot-Network-windows-*
           merge-multiple: true
           path: dist
-      - name: Signer avec signtool (Authenticode + horodatage)
+      - name: Sign with signtool (Authenticode + timestamp)
         if: env.HAS_WIN_CERT == 'true'
         shell: powershell
         env:
@@ -344,18 +344,18 @@ jobs:
             $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
               Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
           }
-          if (-not $signtool) { throw "signtool introuvable (Windows SDK manquant)" }
+          if (-not $signtool) { throw "signtool not found (Windows SDK missing)" }
           try {
             Get-ChildItem -LiteralPath "dist" -Filter "*.exe" | ForEach-Object {
               & $signtool sign /fd SHA256 /f $pfx /p $env:CERT_PASSWORD /tr http://timestamp.digicert.com /td SHA256 $_.FullName
-              if ($LASTEXITCODE -ne 0) { throw "signtool a échoué pour $($_.Name)" }
+              if ($LASTEXITCODE -ne 0) { throw "signtool failed for $($_.Name)" }
               & $signtool verify /pa $_.FullName
-              if ($LASTEXITCODE -ne 0) { throw "vérification échouée pour $($_.Name)" }
+              if ($LASTEXITCODE -ne 0) { throw "verification failed for $($_.Name)" }
             }
           } finally {
             Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
           }
-      - name: Upload .exe signés
+      - name: Upload signed .exe files
         if: env.HAS_WIN_CERT == 'true'
         uses: actions/upload-artifact@v7
         with:
@@ -364,23 +364,23 @@ jobs:
           if-no-files-found: error
 
   sign-macos:
-    # Signature + notarisation Apple OPTIONNELLES : ignorées si les secrets sont
-    # absents. Ne bloque jamais la publication initiale.
-    name: signature macOS (optionnel)
+    # OPTIONAL Apple signing + notarization: skipped when the secrets are
+    # absent. Never blocks the initial publication.
+    name: macOS signing (optional)
     needs: [build]
     if: startsWith(github.ref, 'refs/tags/network-v') && vars.ENABLE_SIGNING == 'true'
     runs-on: macos-15
     env:
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERT_P12_BASE64 != '' && secrets.APPLE_CERT_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_PASSWORD != '' }}
     steps:
-      - name: Télécharger les archives darwin
+      - name: Download the darwin archives
         if: env.HAS_APPLE_CERT == 'true'
         uses: actions/download-artifact@v7
         with:
           pattern: LumiBoot-Network-darwin-*
           merge-multiple: true
           path: dist
-      - name: Signer (codesign) et notariser (notarytool)
+      - name: Sign (codesign) and notarize (notarytool)
         if: env.HAS_APPLE_CERT == 'true'
         env:
           APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
@@ -400,7 +400,7 @@ jobs:
           security import "$RUNNER_TEMP/lumiboot-cert.p12" -k "$KEYCHAIN" -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PW" "$KEYCHAIN"
           IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | head -1 | sed -E 's/.*"(.*)".*/\1/')
-          if [ -z "$IDENTITY" ]; then echo "Aucune identité de signature trouvée."; exit 1; fi
+          if [ -z "$IDENTITY" ]; then echo "No signing identity found."; exit 1; fi
           mkdir -p signed
           for archive in dist/LumiBoot-Network-darwin-*.tar.gz; do
             workdir="$(mktemp -d)"
@@ -416,7 +416,7 @@ jobs:
             rm -rf "$workdir"
           done
           ls -la signed
-      - name: Upload archives signées/notarisées
+      - name: Upload signed/notarized archives
         if: env.HAS_APPLE_CERT == 'true'
         uses: actions/upload-artifact@v7
         with:

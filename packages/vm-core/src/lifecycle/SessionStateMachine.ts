@@ -4,7 +4,7 @@ import { allowedTransitions } from './SessionState';
 
 export type StateListener = (state: VMState) => void;
 
-/** Machine à états déterministe : toute transition non autorisée lève une erreur. */
+/** Deterministic state machine: any unauthorized transition throws an error. */
 export class SessionStateMachine {
   #state: VMState = 'idle';
   readonly #listeners = new Set<StateListener>();
@@ -19,7 +19,7 @@ export class SessionStateMachine {
 
   transition(next: VMState): VMState {
     if (!this.canTransition(next)) {
-      throw new VMError('INVALID_TRANSITION', `Transition invalide : ${this.#state} -> ${next}.`);
+      throw new VMError('INVALID_TRANSITION', `Invalid transition: ${this.#state} -> ${next}.`);
     }
     this.#state = next;
     for (const listener of this.#listeners) listener(next);

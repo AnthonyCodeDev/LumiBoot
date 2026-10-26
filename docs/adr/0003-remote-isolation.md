@@ -1,22 +1,24 @@
-# ADR 0003 — Aucune infrastructure de VM distante
+# ADR 0003 — No remote VM infrastructure
 
-- Statut : accepté
-- Date : 2026-10-14
+- Status: accepted
+- Date: 2026-10-14
 
-## Décision
+## Context
 
-LumiBoot ne fournit ni calcul distant, ni API d'orchestration, ni console distante. Les moteurs s'exécutent dans le navigateur et les sessions appellent `stop()` puis `dispose()`.
+A VM backend would impose compute, secrets and server state, against ADR 0001.
 
-Cette décision n'interdit pas :
+## Decision
 
-- l'hébergement statique des moteurs et images ;
-- le proxy réseau natif exécuté en loopback sur la machine de l'utilisateur ;
-- un relais WISP que l'utilisateur administre explicitement.
+No remote compute, no orchestration API, no remote console: engines in the browser, `stop()` then `dispose()`.
 
-Ces composants transportent des données mais n'exécutent aucune VM.
+Allowed, without running a VM:
 
-## Conséquences
+- static hosting of engines and images;
+- native network proxy on loopback on the user's machine;
+- WISP relay explicitly administered by the user.
 
-- Aucun secret d'infrastructure ne doit être exposé au frontend.
-- Aucun état « disponible » ou « connecté » ne peut être déduit d'une configuration seule.
-- Toute extension doit conserver l'exécution locale de la VM.
+## Consequences
+
+- No infrastructure secret in the frontend.
+- "Available" or "connected" is never deduced from a configuration.
+- Any extension keeps execution local.

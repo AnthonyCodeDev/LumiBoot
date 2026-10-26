@@ -1,14 +1,14 @@
-// Package auth gère l'appairage et les sessions du proxy réseau local.
+// Package auth handles pairing and sessions for the local network proxy.
 //
-// v86 n'envoie ni en-tête ni sous-protocole WebSocket : l'authentification de
-// la session WISP repose donc sur un token transmis en query string de l'URL
-// (ex. ws://127.0.0.1:37892/wisp/?token=...), vérifié avec une comparaison à
-// temps constant, combiné à un contrôle strict de l'en-tête Origin.
+// v86 sends neither a header nor a WebSocket subprotocol: WISP session
+// authentication therefore relies on a token passed in the URL query string
+// (e.g. ws://127.0.0.1:37892/wisp/?token=...), checked with a constant-time
+// comparison, combined with a strict Origin header check.
 //
-// Flux : la page web demande un appairage (RequestPairing), l'utilisateur
-// approuve depuis la console du proxy réseau local (Approve), puis la page échange
-// l'appairage contre un token de session (Exchange). Le token brut n'est
-// stocké que sous forme hachée (SHA-256), avec TTL et origine liée.
+// Flow: the web page requests a pairing (RequestPairing), the user approves it
+// from the local network proxy console (Approve), then the page exchanges the
+// pairing for a session token (Exchange). The raw token is only stored hashed
+// (SHA-256), with a TTL and a bound origin.
 package auth
 
 import (
@@ -27,69 +27,69 @@ import (
 )
 
 var (
-	// ErrOriginNotAllowed signale une origine non autorisée.
-	ErrOriginNotAllowed = errors.New("auth: origine non autorisée")
-	// ErrPairingNotFound signale un appairage inconnu ou déjà consommé.
-	ErrPairingNotFound = errors.New("auth: appairage introuvable")
-	// ErrPairingExpired signale un appairage expiré.
-	ErrPairingExpired = errors.New("auth: appairage expiré")
-	// ErrPairingNotApproved signale un appairage pas encore approuvé.
-	ErrPairingNotApproved = errors.New("auth: appairage non approuvé")
-	// ErrOriginMismatch signale une origine différente de celle d'appairage.
-	ErrOriginMismatch = errors.New("auth: origine différente de celle d'appairage")
-	// ErrPairingLimit signale un flood de demandes d'appairage en attente.
-	ErrPairingLimit = errors.New("auth: trop de demandes d'appairage en attente")
+	// ErrOriginNotAllowed reports a disallowed origin.
+	ErrOriginNotAllowed = errors.New("auth: origin not allowed")
+	// ErrPairingNotFound reports an unknown or already consumed pairing.
+	ErrPairingNotFound = errors.New("auth: pairing not found")
+	// ErrPairingExpired reports an expired pairing.
+	ErrPairingExpired = errors.New("auth: pairing expired")
+	// ErrPairingNotApproved reports a pairing that is not approved yet.
+	ErrPairingNotApproved = errors.New("auth: pairing not approved")
+	// ErrOriginMismatch reports an origin different from the pairing origin.
+	ErrOriginMismatch = errors.New("auth: origin differs from the pairing origin")
+	// ErrPairingLimit reports a flood of pending pairing requests.
+	ErrPairingLimit = errors.New("auth: too many pending pairing requests")
 )
 
-// Plafonds anti-flood des appairages en attente (total et par origine).
+// Anti-flood caps on pending pairings (total and per origin).
 const (
 	maxPendingPairings  = 64
 	maxPendingPerOrigin = 8
 )
 
-// Statuts d'appairage exposés par Status.
+// Pairing statuses exposed by Status.
 const (
 	StatusPending  = "pending"
 	StatusApproved = "approved"
 	StatusDenied   = "denied"
 )
 
-// Pairing est une demande d'appairage en attente.
+// Pairing is a pending pairing request.
 type Pairing struct {
 	ID        string
-	UserCode  string // code lisible affiché à l'utilisateur pour approbation
+	UserCode  string // human-readable code shown to the user for approval
 	Origin    string
 	ExpiresAt time.Time
 	Status    string
 }
 
-// SessionInfo décrit une session active (sans secret).
-// ID est l'empreinte SHA-256 hex du token : non réversible, affichable à
-// la console locale et utilisable pour révoquer (AdminRevoke).
+// SessionInfo describes an active session (no secret).
+// ID is the hex SHA-256 fingerprint of the token: irreversible, displayable in
+// the local console and usable for revocation (AdminRevoke).
 type SessionInfo struct {
 	ID        string
 	Origin    string
 	ExpiresAt time.Time
 }
 
-// CloseFunc ferme un transport (WebSocket + connexions TCP associées). Il est
-// invoqué par le registre de sessions lors d'une révocation, d'une expiration
-// ou de l'arrêt du serveur, jamais sous verrou.
+// CloseFunc closes a transport (WebSocket + associated TCP connections). It is
+// invoked by the session registry on revocation, expiration or server
+// shutdown, never while holding the lock.
 type CloseFunc func()
 
 type session struct {
 	hash      string
 	origin    string
 	expiresAt time.Time
-	// closes associe CHAQUE transport actif (WebSocket + net.Conn) de la session
-	// à son callback de fermeture, indexé par identifiant de transport. Plusieurs
-	// transports peuvent partager le même token sans s'écraser mutuellement.
-	// Protégé par le mutex de l'Authenticator.
+	// closes maps EVERY active transport (WebSocket + net.Conn) of the session
+	// to its close callback, keyed by transport ID. Several transports can share
+	// the same token without overwriting each other.
+	// Protected by the Authenticator mutex.
 	closes map[string]*transport
 }
 
-// takeCloses retire et renvoie tous les transports de la session. L'appelant
-// DOIT détenir le mutex de l'Authenticator et invoquer les callbacks HORS verrou.
+// takeCloses removes and returns every transport of the session. The caller
+// MUST hold the Authenticator mutex and invoke the callbacks OUTSIDE the lock.
 func (s *session) takeCloses() []*transport {
 	if len(s.closes) == 0 {
 		return nil
@@ -102,9 +102,9 @@ func (s *session) takeCloses() []*transport {
 	return out
 }
 
-// transport encapsule un callback de fermeture afin qu'il ne soit invoqué
-// qu'une seule fois, quel que soit le nombre de chemins de fermeture concurrents
-// (révocation, expiration, arrêt, fermeture normale). Évite tout double close.
+// transport wraps a close callback so that it is invoked only once, whatever
+// the number of concurrent close paths (revocation, expiration, shutdown,
+// normal close). Prevents any double close.
 type transport struct {
 	once sync.Once
 	fn   CloseFunc
@@ -117,15 +117,15 @@ func (t *transport) close() {
 	t.once.Do(t.fn)
 }
 
-// closeAll invoque des callbacks de fermeture hors verrou.
+// closeAll invokes close callbacks outside the lock.
 func closeAll(ts []*transport) {
 	for _, t := range ts {
 		t.close()
 	}
 }
 
-// Authenticator gère origines, appairages et sessions. Thread-safe.
-// Le zéro valeur est inutilisable : passer par NewAuthenticator.
+// Authenticator manages origins, pairings and sessions. Thread-safe.
+// The zero value is unusable: use NewAuthenticator.
 type Authenticator struct {
 	mu         sync.Mutex
 	allowed    map[string]struct{}
@@ -137,13 +137,13 @@ type Authenticator struct {
 	now        func() time.Time
 }
 
-// NewAuthenticator construit un authentificateur.
+// NewAuthenticator builds an authenticator.
 func NewAuthenticator(allowedOrigins []string, pairingTTL, sessionTTL time.Duration) *Authenticator {
 	return NewAuthenticatorWithClock(allowedOrigins, pairingTTL, sessionTTL, rand.Reader, time.Now)
 }
 
-// NewAuthenticatorWithClock est identique mais injecte source d'aléa et horloge
-// (tests déterministes).
+// NewAuthenticatorWithClock is the same but injects the randomness source and
+// the clock (deterministic tests).
 func NewAuthenticatorWithClock(allowedOrigins []string, pairingTTL, sessionTTL time.Duration, randSource io.Reader, now func() time.Time) *Authenticator {
 	allowed := make(map[string]struct{}, len(allowedOrigins))
 	for _, o := range allowedOrigins {
@@ -162,8 +162,8 @@ func NewAuthenticatorWithClock(allowedOrigins []string, pairingTTL, sessionTTL t
 	}
 }
 
-// NormalizeOrigin canonise une origine (schéma + hôte minuscules, port conservé,
-// sans chemin ni slash final). Renvoie "" si invalide.
+// NormalizeOrigin canonicalizes an origin (lowercase scheme + host, port kept,
+// no path or trailing slash). Returns "" if invalid.
 func NormalizeOrigin(origin string) string {
 	u, err := url.Parse(strings.TrimSpace(origin))
 	if err != nil {
@@ -183,8 +183,8 @@ func NormalizeOrigin(origin string) string {
 	return out
 }
 
-// IsOriginAllowed indique si une origine est autorisée (match exact après
-// normalisation). Les ports dev loopback doivent figurer dans la configuration.
+// IsOriginAllowed reports whether an origin is allowed (exact match after
+// normalization). Loopback dev ports must appear in the configuration.
 func (a *Authenticator) IsOriginAllowed(origin string) bool {
 	n := NormalizeOrigin(origin)
 	if n == "" {
@@ -196,7 +196,7 @@ func (a *Authenticator) IsOriginAllowed(origin string) bool {
 	return ok
 }
 
-// RequestPairing crée une demande d'appairage depuis une origine autorisée.
+// RequestPairing creates a pairing request from an allowed origin.
 func (a *Authenticator) RequestPairing(origin string) (Pairing, error) {
 	n := NormalizeOrigin(origin)
 	if n == "" {
@@ -207,7 +207,7 @@ func (a *Authenticator) RequestPairing(origin string) (Pairing, error) {
 	if _, ok := a.allowed[n]; !ok {
 		return Pairing{}, fmt.Errorf("%w: %q", ErrOriginNotAllowed, origin)
 	}
-	// Nettoyage des expirés puis plafonds anti-flood (total et par origine).
+	// Purge expired entries, then apply anti-flood caps (total and per origin).
 	now := a.now()
 	for id, p := range a.pairings {
 		if now.After(p.ExpiresAt) {
@@ -245,7 +245,7 @@ func (a *Authenticator) RequestPairing(origin string) (Pairing, error) {
 	return *p, nil
 }
 
-// Status renvoie l'état d'un appairage.
+// Status returns the state of a pairing.
 func (a *Authenticator) Status(pairingID string) (Pairing, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -260,8 +260,8 @@ func (a *Authenticator) Status(pairingID string) (Pairing, bool) {
 	return *p, true
 }
 
-// Approve approuve (ok=true) ou refuse (ok=false) un appairage en attente.
-// Un refus supprime la demande ; une approbation la marque échangeable.
+// Approve approves (ok=true) or denies (ok=false) a pending pairing.
+// A denial removes the request; an approval marks it as exchangeable.
 func (a *Authenticator) Approve(pairingID string, ok bool) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -283,9 +283,9 @@ func (a *Authenticator) Approve(pairingID string, ok bool) error {
 	return nil
 }
 
-// Exchange convertit un appairage approuvé en token de session.
-// Le token brut (32 octets aléatoires, base64url) n'est renvoyé qu'ici et
-// n'est stocké que sous forme hachée (SHA-256). Usage unique.
+// Exchange converts an approved pairing into a session token.
+// The raw token (32 random bytes, base64url) is only returned here and is
+// stored hashed (SHA-256) only. Single use.
 func (a *Authenticator) Exchange(pairingID, origin string) (token string, expiresAt time.Time, err error) {
 	n := NormalizeOrigin(origin)
 	a.mu.Lock()
@@ -310,19 +310,19 @@ func (a *Authenticator) Exchange(pairingID, origin string) (token string, expire
 	}
 	expiresAt = a.now().Add(a.sessionTTL)
 	a.sessions[hashToken(raw)] = &session{hash: hashToken(raw), origin: p.Origin, expiresAt: expiresAt}
-	delete(a.pairings, pairingID) // usage unique
+	delete(a.pairings, pairingID) // single use
 	return raw, expiresAt, nil
 }
 
-// Verify contrôle un token de session pour une origine donnée.
-// Comparaison à temps constant ; vérifie TTL et liaison d'origine.
+// Verify checks a session token for a given origin.
+// Constant-time comparison; checks the TTL and the origin binding.
 func (a *Authenticator) Verify(token, origin string) bool {
 	_, _, ok := a.lookup(token, origin)
 	return ok
 }
 
-// VerifySession est identique à Verify mais renvoie aussi les métadonnées de la
-// session (sans secret) : ID (empreinte du token) et date d'expiration.
+// VerifySession is the same as Verify but also returns the session metadata
+// (no secret): ID (token fingerprint) and expiration.
 func (a *Authenticator) VerifySession(token, origin string) (SessionInfo, bool) {
 	id, s, ok := a.lookup(token, origin)
 	if !ok {
@@ -331,12 +331,12 @@ func (a *Authenticator) VerifySession(token, origin string) (SessionInfo, bool) 
 	return SessionInfo{ID: id, Origin: s.origin, ExpiresAt: s.expiresAt}, true
 }
 
-// AttachSession vérifie atomiquement le token et enregistre un NOUVEAU transport
-// de fermeture pour la session, identifié par un ID de transport distinct.
-// Plusieurs transports peuvent être attachés au même token sans s'écraser : la
-// révocation ou l'expiration les ferme TOUS. Atomique : aucune fenêtre où une
-// révocation concurrente pourrait passer inaperçue. Renvoie les métadonnées de
-// la session et l'ID de transport à repasser à DetachSession.
+// AttachSession atomically verifies the token and registers a NEW close
+// transport for the session, identified by a distinct transport ID. Several
+// transports can be attached to the same token without overwriting each other:
+// revocation or expiration closes them ALL. Atomic: there is no window where a
+// concurrent revocation could go unnoticed. Returns the session metadata and
+// the transport ID to pass back to DetachSession.
 func (a *Authenticator) AttachSession(token, origin string, onClose CloseFunc) (SessionInfo, string, bool) {
 	a.mu.Lock()
 	id, s, expired, ok := a.lookupLocked(token, origin)
@@ -359,10 +359,10 @@ func (a *Authenticator) AttachSession(token, origin string, onClose CloseFunc) (
 	return info, tid, true
 }
 
-// DetachSession retire UNIQUEMENT le transport identifié (fermeture normale du
-// WebSocket) sans révoquer la session : les autres transports attachés au même
-// token restent actifs. Le token brut identifie la session ; l'ID de transport
-// provient d'AttachSession.
+// DetachSession removes ONLY the identified transport (normal WebSocket close)
+// without revoking the session: the other transports attached to the same token
+// stay active. The raw token identifies the session; the transport ID comes
+// from AttachSession.
 func (a *Authenticator) DetachSession(token, transportID string) {
 	if token == "" || transportID == "" {
 		return
@@ -378,9 +378,9 @@ func (a *Authenticator) DetachSession(token, transportID string) {
 	a.mu.Unlock()
 }
 
-// CloseAllSessions invoque tous les callbacks de fermeture (arrêt du serveur).
-// Les sessions ne sont pas supprimées (le serveur s'arrête). L'invocation est
-// idempotente par transport (sync.Once).
+// CloseAllSessions invokes every close callback (server shutdown).
+// Sessions are not deleted (the server is stopping). Invocation is idempotent
+// per transport (sync.Once).
 func (a *Authenticator) CloseAllSessions() {
 	a.mu.Lock()
 	var closes []*transport
@@ -393,8 +393,9 @@ func (a *Authenticator) CloseAllSessions() {
 	closeAll(closes)
 }
 
-// lookup vérifie un token hors verrou ; voir lookupLocked. Les transports d'une
-// session expirée sont fermés HORS verrou (jamais de callback sous mutex).
+// lookup verifies a token outside the lock; see lookupLocked. The transports of
+// an expired session are closed OUTSIDE the lock (never a callback under the
+// mutex).
 func (a *Authenticator) lookup(token, origin string) (string, *session, bool) {
 	a.mu.Lock()
 	id, s, expired, ok := a.lookupLocked(token, origin)
@@ -403,11 +404,11 @@ func (a *Authenticator) lookup(token, origin string) (string, *session, bool) {
 	return id, s, ok
 }
 
-// lookupLocked résout une session valide à partir d'un token et d'une origine.
-// Une session expirée est purgée ; ses transports sont renvoyés à l'appelant
-// pour fermeture HORS verrou : une session expirée ne peut jamais laisser un
-// WebSocket ouvert (purge et fermeture atomiques du point de vue du verrou).
-// L'appelant DOIT détenir a.mu.
+// lookupLocked resolves a valid session from a token and an origin.
+// An expired session is purged; its transports are returned to the caller for
+// closing OUTSIDE the lock: an expired session can never leave a WebSocket
+// open (purge and close are atomic from the lock's point of view).
+// The caller MUST hold a.mu.
 func (a *Authenticator) lookupLocked(token, origin string) (string, *session, []*transport, bool) {
 	if token == "" {
 		return "", nil, nil, false
@@ -433,8 +434,8 @@ func (a *Authenticator) lookupLocked(token, origin string) (string, *session, []
 	return "", nil, nil, false
 }
 
-// Revoke révoque la session correspondant au token brut. Renvoie false si
-// inconnu. Ferme le transport associé (callback hors verrou).
+// Revoke revokes the session matching the raw token. Returns false if unknown.
+// Closes the associated transport (callback outside the lock).
 func (a *Authenticator) Revoke(token string) bool {
 	if token == "" {
 		return false
@@ -456,9 +457,9 @@ func (a *Authenticator) Revoke(token string) bool {
 	return found
 }
 
-// ListSessions liste les sessions actives (sans secret). Une session expirée est
-// purgée ET ses transports fermés (hors verrou) : lister ne laisse jamais une
-// connexion expirée ouverte.
+// ListSessions lists the active sessions (no secret). An expired session is
+// purged AND its transports closed (outside the lock): listing never leaves an
+// expired connection open.
 func (a *Authenticator) ListSessions() []SessionInfo {
 	a.mu.Lock()
 	now := a.now()
@@ -477,8 +478,9 @@ func (a *Authenticator) ListSessions() []SessionInfo {
 	return out
 }
 
-// AdminRevoke révoque une session par son empreinte (ID de ListSessions).
-// Réservé à la console locale du proxy réseau local. Ferme le transport associé.
+// AdminRevoke revokes a session by its fingerprint (ID from ListSessions).
+// Reserved for the local network proxy console. Closes the associated
+// transport.
 func (a *Authenticator) AdminRevoke(id string) bool {
 	if id == "" {
 		return false
@@ -499,9 +501,9 @@ func (a *Authenticator) AdminRevoke(id string) bool {
 	return found
 }
 
-// CleanupExpired purge appairages et sessions expirés. Une session expirée voit
-// TOUS ses transports fermés (callbacks invoqués hors verrou) : une expiration
-// ferme réellement chaque WebSocket et ses net.Conn associés.
+// CleanupExpired purges expired pairings and sessions. An expired session has
+// ALL its transports closed (callbacks invoked outside the lock): an expiration
+// actually closes every WebSocket and its associated net.Conn.
 func (a *Authenticator) CleanupExpired() {
 	var closes []*transport
 	a.mu.Lock()
@@ -521,7 +523,7 @@ func (a *Authenticator) CleanupExpired() {
 	closeAll(closes)
 }
 
-// PendingPairings liste les appairages en attente non expirés (console).
+// PendingPairings lists non-expired pending pairings (console).
 func (a *Authenticator) PendingPairings() []Pairing {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -543,7 +545,7 @@ func (a *Authenticator) uniqueUserCodeLocked() (string, error) {
 	for tries := 0; tries < 20; tries++ {
 		n, err := rand.Int(a.randSource, big.NewInt(1000000))
 		if err != nil {
-			return "", fmt.Errorf("auth: aléa indisponible: %w", err)
+			return "", fmt.Errorf("auth: randomness unavailable: %w", err)
 		}
 		code := fmt.Sprintf("%06d", n.Int64())
 		dup := false
@@ -557,10 +559,10 @@ func (a *Authenticator) uniqueUserCodeLocked() (string, error) {
 			return code, nil
 		}
 	}
-	return "", errors.New("auth: impossible de générer un code unique")
+	return "", errors.New("auth: unable to generate a unique code")
 }
 
-// hashToken hache un token brut (SHA-256 hex) pour stockage.
+// hashToken hashes a raw token (SHA-256 hex) for storage.
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return fmt.Sprintf("%x", sum)
@@ -569,7 +571,7 @@ func hashToken(token string) string {
 func randomString(src io.Reader, nBytes int) (string, error) {
 	buf := make([]byte, nBytes)
 	if _, err := io.ReadFull(src, buf); err != nil {
-		return "", fmt.Errorf("auth: aléa indisponible: %w", err)
+		return "", fmt.Errorf("auth: randomness unavailable: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }

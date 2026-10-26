@@ -21,8 +21,8 @@ import (
 	"github.com/lumiboot/network-proxy/internal/security"
 )
 
-// pipeDialer simule un réseau : chaque composition renvoie un net.Pipe dont
-// l'autre extrémité fait écho.
+// pipeDialer simulates a network: every dial returns a net.Pipe whose other end
+// echoes.
 func pipeDialer() DialFunc {
 	return func(_ context.Context, _, _ string) (net.Conn, error) {
 		client, server := net.Pipe()
@@ -54,7 +54,7 @@ type sessionFixture struct {
 	cancel context.CancelFunc
 }
 
-// newSession monte un handler WISP réel derrière un vrai WebSocket.
+// newSession mounts a real WISP handler behind a real WebSocket.
 func newSession(t *testing.T, mutate func(*HandlerConfig)) *sessionFixture {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -89,7 +89,7 @@ func newSession(t *testing.T, mutate func(*HandlerConfig)) *sessionFixture {
 	wsURL := "ws://" + strings.TrimPrefix(srv.URL, "http://") + "/wisp/"
 	conn, _, err := dialer.Dial(wsURL, nil)
 	if err != nil {
-		t.Fatalf("dial WS: %v", err)
+		t.Fatalf("WS dial: %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	return &sessionFixture{conn: conn, stats: stats, mgr: mgr, cancel: cancel}
@@ -100,11 +100,11 @@ func readFrame(t *testing.T, conn *websocket.Conn) Frame {
 	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
-		t.Fatalf("lecture WS: %v", err)
+		t.Fatalf("WS read: %v", err)
 	}
 	f, err := DecodeFrame(msg, 4*1024*1024)
 	if err != nil {
-		t.Fatalf("décodage: %v", err)
+		t.Fatalf("decoding: %v", err)
 	}
 	return f
 }
@@ -113,21 +113,21 @@ func sendFrame(t *testing.T, conn *websocket.Conn, f Frame) {
 	t.Helper()
 	_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	if err := conn.WriteMessage(websocket.BinaryMessage, f.Encode()); err != nil {
-		t.Fatalf("écriture WS: %v", err)
+		t.Fatalf("WS write: %v", err)
 	}
 }
 
 func expectClose(t *testing.T, f Frame, stream uint32, reason byte) {
 	t.Helper()
 	if f.Type != TypeClose || f.StreamID != stream {
-		t.Fatalf("CLOSE attendu sur flux %d, obtenu type=%#x flux=%d", stream, f.Type, f.StreamID)
+		t.Fatalf("CLOSE expected on stream %d, got type=%#x stream=%d", stream, f.Type, f.StreamID)
 	}
 	got, err := ParseClose(f.Payload)
 	if err != nil {
-		t.Fatalf("payload CLOSE: %v", err)
+		t.Fatalf("CLOSE payload: %v", err)
 	}
 	if got != reason {
-		t.Fatalf("raison attendue %#x, obtenue %#x", reason, got)
+		t.Fatalf("expected reason %#x, got %#x", reason, got)
 	}
 }
 
@@ -135,30 +135,30 @@ func TestInitialContinue(t *testing.T) {
 	fx := newSession(t, nil)
 	f := readFrame(t, fx.conn)
 	if f.Type != TypeContinue || f.StreamID != 0 {
-		t.Fatalf("CONTINUE initial attendu, obtenu type=%#x flux=%d", f.Type, f.StreamID)
+		t.Fatalf("initial CONTINUE expected, got type=%#x stream=%d", f.Type, f.StreamID)
 	}
 	if n, _ := ParseContinue(f.Payload); n != 32 {
-		t.Fatalf("fenêtre initiale inattendue: %d", n)
+		t.Fatalf("unexpected initial window: %d", n)
 	}
 }
 
 func TestConnectDataCloseEcho(t *testing.T) {
 	fx := newSession(t, nil)
-	_ = readFrame(t, fx.conn) // CONTINUE initial
+	_ = readFrame(t, fx.conn) // initial CONTINUE
 
 	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
 	sendFrame(t, fx.conn, Frame{Type: TypeData, StreamID: 1, Payload: []byte("ping-echo")})
 	echo := readFrame(t, fx.conn)
 	if echo.Type != TypeData || echo.StreamID != 1 || string(echo.Payload) != "ping-echo" {
-		t.Fatalf("écho inattendu: %+v", echo)
+		t.Fatalf("unexpected echo: %+v", echo)
 	}
 	if got := fx.stats.Snapshot(); got.TotalConnections != 1 {
-		t.Fatalf("compteur de connexions: %+v", got)
+		t.Fatalf("connection counter: %+v", got)
 	}
 
-	// CLOSE client puis DATA sur flux fermé -> CLOSE 0x41.
+	// Client CLOSE then DATA on a closed stream -> CLOSE 0x41.
 	sendFrame(t, fx.conn, Frame{Type: TypeClose, StreamID: 1, Payload: []byte{CloseClientDone}})
-	sendFrame(t, fx.conn, Frame{Type: TypeData, StreamID: 1, Payload: []byte("trop-tard")})
+	sendFrame(t, fx.conn, Frame{Type: TypeData, StreamID: 1, Payload: []byte("too-late")})
 	expectClose(t, readFrame(t, fx.conn), 1, CloseInvalidInfo)
 }
 
@@ -178,24 +178,24 @@ func TestZeroAndDuplicateStreamRefused(t *testing.T) {
 	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
 	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
 	expectClose(t, readFrame(t, fx.conn), 1, CloseInvalidInfo)
-	// Le premier flux reste utilisable.
+	// The first stream remains usable.
 	sendFrame(t, fx.conn, Frame{Type: TypeData, StreamID: 1, Payload: []byte("ok")})
 	echo := readFrame(t, fx.conn)
 	if echo.Type != TypeData || string(echo.Payload) != "ok" {
-		t.Fatalf("flux d'origine cassé: %+v", echo)
+		t.Fatalf("original stream broken: %+v", echo)
 	}
 }
 
 func TestInfoIgnored(t *testing.T) {
 	fx := newSession(t, nil)
 	_ = readFrame(t, fx.conn)
-	// INFO (V2) : aucun paquet en retour, session toujours vivante.
+	// INFO (V2): no packet back, session still alive.
 	sendFrame(t, fx.conn, Frame{Type: TypeInfo, StreamID: 0, Payload: []byte{0x00, 0x01}})
 	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 5, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
-	sendFrame(t, fx.conn, Frame{Type: TypeData, StreamID: 5, Payload: []byte("vivant")})
+	sendFrame(t, fx.conn, Frame{Type: TypeData, StreamID: 5, Payload: []byte("alive")})
 	echo := readFrame(t, fx.conn)
-	if echo.Type != TypeData || string(echo.Payload) != "vivant" {
-		t.Fatalf("session cassée après INFO: %+v", echo)
+	if echo.Type != TypeData || string(echo.Payload) != "alive" {
+		t.Fatalf("session broken after INFO: %+v", echo)
 	}
 }
 
@@ -206,10 +206,10 @@ func TestBlockedDestination(t *testing.T) {
 		}
 	})
 	_ = readFrame(t, fx.conn)
-	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "interne.local")})
+	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "internal.local")})
 	expectClose(t, readFrame(t, fx.conn), 1, security.ReasonDestinationBlocked)
 	if got := fx.stats.Snapshot().BlockedDestinations; got != 1 {
-		t.Fatalf("destinations bloquées: %d", got)
+		t.Fatalf("blocked destinations: %d", got)
 	}
 }
 
@@ -224,12 +224,12 @@ func TestConnectRefused(t *testing.T) {
 	expectClose(t, readFrame(t, fx.conn), 1, CloseConnectRefused)
 }
 
-// TestFlowControlContinueEmission vérifie l'émission du CONTINUE par flux :
-// après InitialBufferPackets trames traitées, un CONTINUE annonçant la fenêtre
-// est émis, sans bloquer les échos.
+// TestFlowControlContinueEmission verifies the per-stream CONTINUE emission:
+// after InitialBufferPackets processed frames, a CONTINUE advertising the window
+// is emitted, without blocking the echoes.
 func TestFlowControlContinueEmission(t *testing.T) {
 	fx := newSession(t, func(c *HandlerConfig) { c.InitialBufferPackets = 3 })
-	_ = readFrame(t, fx.conn) // CONTINUE initial stream 0
+	_ = readFrame(t, fx.conn) // initial stream 0 CONTINUE
 
 	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
 	for i := 0; i < 3; i++ {
@@ -245,17 +245,17 @@ func TestFlowControlContinueEmission(t *testing.T) {
 			dataCount++
 		case f.Type == TypeContinue && f.StreamID == 1:
 			if n, _ := ParseContinue(f.Payload); n != 3 {
-				t.Fatalf("fenêtre CONTINUE inattendue: %d", n)
+				t.Fatalf("unexpected CONTINUE window: %d", n)
 			}
 			seenContinue = true
 		default:
-			t.Fatalf("paquet inattendu: %+v", f)
+			t.Fatalf("unexpected packet: %+v", f)
 		}
 	}
 }
 
-// TestConcurrentCloseNoPanic ferme la session pendant un transfert actif sur
-// plusieurs flux : non-régression « send on closed channel » / double close.
+// TestConcurrentCloseNoPanic closes the session during an active transfer on
+// several streams: non-regression for "send on closed channel" / double close.
 func TestConcurrentCloseNoPanic(t *testing.T) {
 	fx := newSession(t, nil)
 	_ = readFrame(t, fx.conn)
@@ -264,7 +264,7 @@ func TestConcurrentCloseNoPanic(t *testing.T) {
 		sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: id, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
 	}
 
-	// Lecteur de fond : absorbe les échos pour ne pas saturer la socket.
+	// Background reader: absorbs echoes so the socket does not saturate.
 	stopRead := make(chan struct{})
 	go func() {
 		for {
@@ -290,20 +290,20 @@ func TestConcurrentCloseNoPanic(t *testing.T) {
 		for i := 0; i < 300; i++ {
 			id := uint32(1 + i%5)
 			_ = fx.conn.SetWriteDeadline(time.Now().Add(time.Second))
-			if err := fx.conn.WriteMessage(websocket.BinaryMessage, Frame{Type: TypeData, StreamID: id, Payload: []byte("charge")}.Encode()); err != nil {
+			if err := fx.conn.WriteMessage(websocket.BinaryMessage, Frame{Type: TypeData, StreamID: id, Payload: []byte("load")}.Encode()); err != nil {
 				return
 			}
 		}
 	}()
 
 	time.Sleep(10 * time.Millisecond)
-	fx.cancel() // fermeture concurrente pendant le transfert
+	fx.cancel() // concurrent close during the transfer
 	wg.Wait()
 	close(stopRead)
 }
 
-// scriptedConn est un net.Conn de test qui écrit partiellement puis, si errAt
-// est atteint, renvoie une erreur.
+// scriptedConn is a test net.Conn that writes partially then, once errAt is
+// reached, returns an error.
 type scriptedConn struct {
 	mu          sync.Mutex
 	maxPerWrite int
@@ -312,7 +312,7 @@ type scriptedConn struct {
 	buf         bytes.Buffer
 }
 
-var errScripted = errors.New("scripted: erreur d'écriture")
+var errScripted = errors.New("scripted: write error")
 
 func (c *scriptedConn) Write(p []byte) (int, error) {
 	c.mu.Lock()
@@ -351,10 +351,10 @@ func TestWriteFullPartial(t *testing.T) {
 		t.Fatalf("writeFull: %v", err)
 	}
 	if n != len(data) {
-		t.Fatalf("octets écrits: %d, attendu %d", n, len(data))
+		t.Fatalf("bytes written: %d, expected %d", n, len(data))
 	}
 	if conn.buf.String() != string(data) {
-		t.Fatalf("données: %q", conn.buf.String())
+		t.Fatalf("data: %q", conn.buf.String())
 	}
 }
 
@@ -364,9 +364,9 @@ func TestWriteFullErrorPartial(t *testing.T) {
 	data := []byte("abcdef")
 	n, err := writeFull(conn, data, time.Second)
 	if !errors.Is(err, errScripted) {
-		t.Fatalf("erreur attendue, obtenue %v", err)
+		t.Fatalf("error expected, got %v", err)
 	}
 	if n != 2 {
-		t.Fatalf("octets partiels comptés: %d, attendu 2", n)
+		t.Fatalf("partial bytes counted: %d, expected 2", n)
 	}
 }

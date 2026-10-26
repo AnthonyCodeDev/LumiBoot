@@ -2,25 +2,25 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 /**
- * Outil d'analyse du graphe de dépendances de l'espace de travail.
+ * Workspace dependency graph analysis tool.
  *
- * Il est volontairement sans dépendance externe : il lit les `package.json` et
- * les sources TypeScript, puis expose des primitives pures (graphe, cycles,
- * imports interdits) que les tests d'architecture assemblent en règles.
+ * It is deliberately free of external dependencies: it reads the `package.json`
+ * files and the TypeScript sources, then exposes pure primitives (graph, cycles,
+ * forbidden imports) that the architecture tests assemble into rules.
  *
- * Deux niveaux sont distingués :
- * - le graphe DÉCLARÉ (`package.json` → dépendances `@lumiboot/*`) ;
- * - le graphe RÉEL (imports présents dans les sources), qui doit être un
- *   sous-ensemble du premier (pas de dépendance fantôme).
+ * Two levels are distinguished:
+ * - the DECLARED graph (`package.json` -> `@lumiboot/*` dependencies);
+ * - the ACTUAL graph (imports present in the sources), which must be a subset of
+ *   the former (no phantom dependency).
  */
 
-/** Dossiers de l'espace de travail analysés (pnpm-workspace.yaml). */
+/** Workspace folders that are analyzed (pnpm-workspace.yaml). */
 export const WORKSPACE_DIRS = ['apps', 'packages'] as const;
 
-/** Portée des paquets internes. */
+/** Scope of the internal packages. */
 export const INTERNAL_SCOPE = '@lumiboot/';
 
-/** Dossiers techniques jamais parcourus. */
+/** Technical folders that are never walked. */
 export const IGNORED_DIRS: ReadonlySet<string> = new Set([
   'node_modules',
   'dist',
@@ -31,32 +31,32 @@ export const IGNORED_DIRS: ReadonlySet<string> = new Set([
 ]);
 
 export interface WorkspacePackage {
-  /** Nom npm, ex. `@lumiboot/vm-core`. */
+  /** npm name, e.g. `@lumiboot/vm-core`. */
   readonly name: string;
-  /** Chemin absolu du dossier du paquet. */
+  /** Absolute path of the package folder. */
   readonly dir: string;
-  /** Chemin relatif POSIX depuis la racine, ex. `packages/vm-core`. */
+  /** POSIX path relative to the root, e.g. `packages/vm-core`. */
   readonly relDir: string;
-  /** Dépendances internes déclarées, triées et dédupliquées. */
+  /** Declared internal dependencies, sorted and deduplicated. */
   readonly internalDeps: readonly string[];
-  /** Toutes les dépendances déclarées (internes + externes), pour diagnostic. */
+  /** All declared dependencies (internal + external), for diagnostics. */
   readonly declaredDeps: readonly string[];
 }
 
-/** Convertit un chemin Windows en POSIX (comparaisons lisibles). */
+/** Converts a Windows path to POSIX (readable comparisons). */
 export function toPosix(path: string): string {
   return path.split(sep).join('/');
 }
 
-/** Vrai si le nom est un paquet interne `@lumiboot/*`. */
+/** True when the name is an internal `@lumiboot/*` package. */
 export function isInternalPackage(name: string): boolean {
   return name.startsWith(INTERNAL_SCOPE);
 }
 
 /**
- * Extrait le nom de paquet d'un spécificateur d'import, ou `null` s'il n'est
- * pas interne. `@lumiboot/contracts` → `@lumiboot/contracts` ;
- * `@lumiboot/contracts/src/x` → `@lumiboot/contracts`.
+ * Extracts the package name of an import specifier, or `null` when it is not
+ * internal. `@lumiboot/contracts` -> `@lumiboot/contracts`;
+ * `@lumiboot/contracts/src/x` -> `@lumiboot/contracts`.
  */
 export function internalPackageFromSpecifier(specifier: string): string | null {
   if (!isInternalPackage(specifier)) return null;
@@ -66,8 +66,8 @@ export function internalPackageFromSpecifier(specifier: string): string | null {
 }
 
 /**
- * Vrai si le spécificateur est un import profond interdit
- * (`@lumiboot/contracts/src/...`), qui contournerait la surface publique.
+ * True when the specifier is a forbidden deep import
+ * (`@lumiboot/contracts/src/...`), which would bypass the public surface.
  */
 export function isDeepInternalSpecifier(specifier: string): boolean {
   const pkg = internalPackageFromSpecifier(specifier);
@@ -76,9 +76,9 @@ export function isDeepInternalSpecifier(specifier: string): boolean {
 }
 
 /**
- * Lit tous les spécificateurs d'import/export/require d'un source.
- * Gère `import ... from 'x'`, `import 'x'`, `export ... from 'x'`,
- * `import('x')` et `require('x')`.
+ * Reads every import/export/require specifier of a source.
+ * Handles `import ... from 'x'`, `import 'x'`, `export ... from 'x'`,
+ * `import('x')` and `require('x')`.
  */
 export function extractModuleSpecifiers(source: string): string[] {
   const specifiers = new Set<string>();
@@ -96,7 +96,7 @@ export function extractModuleSpecifiers(source: string): string[] {
   return [...specifiers];
 }
 
-/** Liste récursivement les sources `.ts`/`.tsx` d'un dossier. */
+/** Recursively lists the `.ts`/`.tsx` sources of a folder. */
 export function collectSourceFiles(dir: string): string[] {
   let entries;
   try {
@@ -114,7 +114,7 @@ export function collectSourceFiles(dir: string): string[] {
   return files;
 }
 
-/** Toutes les sources de l'espace de travail, hors dossiers ignorés. */
+/** All workspace sources, excluding ignored folders. */
 export function collectWorkspaceSourceFiles(root: string): string[] {
   const files: string[] = [];
   for (const group of WORKSPACE_DIRS) {
@@ -161,9 +161,9 @@ function readDeclaredDeps(manifest: Record<string, unknown>): string[] {
 }
 
 /**
- * Lit les paquets de l'espace de travail (`apps/*`, `packages/*`).
- * Les `node_modules` imbriqués sont ignorés : un `package.json` de dépendance
- * ne doit jamais être confondu avec un paquet du dépôt.
+ * Reads the workspace packages (`apps/*`, `packages/*`).
+ * Nested `node_modules` are ignored: a dependency `package.json` must never be
+ * mistaken for a repository package.
  */
 export function collectWorkspacePackages(root: string): WorkspacePackage[] {
   const packages: WorkspacePackage[] = [];
@@ -191,9 +191,9 @@ export function collectWorkspacePackages(root: string): WorkspacePackage[] {
 }
 
 /**
- * Graphe orienté d'imports réels entre paquets internes : arête
- * `source → cible` dès qu'une source du paquet `source` importe un paquet
- * interne `cible`.
+ * Directed graph of the actual imports between internal packages: an edge
+ * `source -> target` as soon as a source of the `source` package imports the
+ * internal `target` package.
  */
 export function buildPackageImportGraph(
   packages: readonly WorkspacePackage[],
@@ -213,7 +213,7 @@ export function buildPackageImportGraph(
   return graph;
 }
 
-/** Graphe orienté des dépendances internes DÉCLARÉES. */
+/** Directed graph of the DECLARED internal dependencies. */
 export function buildDeclaredPackageGraph(
   packages: readonly WorkspacePackage[],
 ): Map<string, Set<string>> {
@@ -223,9 +223,8 @@ export function buildDeclaredPackageGraph(
 }
 
 /**
- * Détecte les cycles d'un graphe orienté (composantes fortement connexes de
- * taille > 1, plus les auto-boucles). Renvoie chaque cycle trié pour un rapport
- * stable.
+ * Detects the cycles of a directed graph (strongly connected components larger
+ * than 1, plus self-loops). Each cycle is returned sorted for a stable report.
  */
 export function findCycles(graph: ReadonlyMap<string, Iterable<string>>): string[][] {
   const nodes = [...graph.keys()].sort();
@@ -241,7 +240,7 @@ export function findCycles(graph: ReadonlyMap<string, Iterable<string>>): string
     return value === undefined ? [] : [...value];
   };
 
-  // Tarjan itératif : évite tout débordement de pile sur de gros graphes.
+  // Iterative Tarjan: avoids any stack overflow on large graphs.
   for (const start of nodes) {
     if (index.has(start)) continue;
     const work: Array<{ node: string; next: number }> = [{ node: start, next: 0 }];
@@ -300,9 +299,9 @@ export interface RelativeEscape {
 }
 
 /**
- * Détecte les imports relatifs qui « s'échappent » d'un paquet vers un AUTRE
- * paquet du dépôt (ex. `../../provider-v86/src/...`). Ces chemins contournent
- * la surface publique et figent la structure interne.
+ * Detects relative imports that "escape" from a package towards ANOTHER package
+ * of the repository (e.g. `../../provider-v86/src/...`). Such paths bypass the
+ * public surface and freeze the internal structure.
  */
 export function findCrossPackageRelativeImports(
   packages: readonly WorkspacePackage[],

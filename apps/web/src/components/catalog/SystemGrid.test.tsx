@@ -8,8 +8,8 @@ import { availabilityLabels } from '../../lib/labels';
 import { useCatalogStore } from '../../features/catalog/catalog.store';
 
 /**
- * Nombre de cartes attendues : une par système AFFICHÉ (mères de groupe +
- * autonomes). Les variantes enfants n'ont pas leur propre carte.
+ * Expected card count: one per DISPLAYED system (group parents + standalone
+ * systems). Child variants have no card of their own.
  */
 const displayedCount = getDisplaySystems().length;
 
@@ -35,40 +35,40 @@ beforeEach(() => {
 });
 
 describe('SystemGrid', () => {
-  it('affiche une seule carte par système affiché (mères + autonomes)', () => {
+  it('renders a single card per displayed system (parents + standalone)', () => {
     renderGrid();
     expect(screen.getAllByRole('article')).toHaveLength(displayedCount);
   });
 
-  it('replie les variantes sur une seule carte Debian lors de la recherche', () => {
+  it('folds the variants into a single Debian card during search', () => {
     renderGrid();
     act(() => {
       useCatalogStore.getState().setQuery('debian');
     });
-    // Debian console, Bureau et XFCE matchent « debian », mais la grille ne
-    // montre que la carte de la mère : une seule carte.
+    // Debian console, Desktop and XFCE match "debian", but the grid only shows
+    // the parent card: a single card.
     const cards = screen.getAllByRole('article');
     expect(cards).toHaveLength(1);
     expect(cards[0]!.getAttribute('data-id')).toBe('debian-12-i386');
   });
 
-  it('affiche un état vide et le réinitialise', async () => {
+  it('renders an empty state and resets it', async () => {
     const user = userEvent.setup();
     renderGrid();
     act(() => {
-      useCatalogStore.getState().setQuery('aucun-systeme-correspondant');
+      useCatalogStore.getState().setQuery('no-matching-system');
     });
     expect(screen.queryAllByRole('article')).toHaveLength(0);
-    await user.click(screen.getByRole('button', { name: 'Réinitialiser les filtres' }));
+    await user.click(screen.getByRole('button', { name: 'Reset filters' }));
     expect(screen.getAllByRole('article')).toHaveLength(displayedCount);
   });
 
-  it('affiche le badge de statut de disponibilité sur chaque carte', () => {
+  it('renders the availability badge on every card', () => {
     renderGrid();
     const cards = screen.getAllByRole('article');
     expect(cards).toHaveLength(displayedCount);
     for (const card of cards) {
-      // On ne recode pas la disponibilité en dur : on la lit dans le catalogue.
+      // Availability is not hard-coded here: it is read from the catalogue.
       const id = card.getAttribute('data-id');
       const system = id ? getSystemById(id) : null;
       expect(system).not.toBeNull();
@@ -80,7 +80,7 @@ describe('SystemGrid', () => {
     }
   });
 
-  it('ordonne les cartes disponibles avant les non-disponibles', () => {
+  it('orders available cards before unavailable ones', () => {
     renderGrid();
     const availabilities = screen.getAllByRole('article').map((card) => {
       const id = card.getAttribute('data-id');
@@ -96,12 +96,12 @@ describe('SystemGrid', () => {
     }
   });
 
-  it('affiche un séparateur entre les systèmes disponibles et les autres', () => {
+  it('renders a separator between available systems and the others', () => {
     renderGrid();
     expect(screen.getByRole('separator').tagName).toBe('HR');
   });
 
-  it('applique la classe is-muted uniquement aux cartes non-disponibles', () => {
+  it('applies the is-muted class only to unavailable cards', () => {
     renderGrid();
     const cards = screen.getAllByRole('article');
     for (const card of cards) {
@@ -112,7 +112,7 @@ describe('SystemGrid', () => {
     }
   });
 
-  it('navigue directement vers la fiche système au clic (sans popup)', async () => {
+  it('navigates straight to the system page on click (no popup)', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -125,7 +125,7 @@ describe('SystemGrid', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('ouvre la mère/base (Debian) au clic sur la carte Debian', async () => {
+  it('opens the base/parent (Debian) when the Debian card is clicked', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -138,7 +138,7 @@ describe('SystemGrid', () => {
       .find((article) => article.getAttribute('data-id') === 'debian-12-i386');
     expect(card).toBeDefined();
     await user.click(card as HTMLElement);
-    // La carte ouvre la mère : la variante se choisit ensuite sur la fiche.
+    // The card opens the parent: the variant is then picked on its page.
     expect(screen.getByTestId('location').textContent).toBe('/systems/debian-12-i386');
   });
 });

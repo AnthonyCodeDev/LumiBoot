@@ -1,7 +1,7 @@
 /**
- * Modes réseau proposés par LumiBoot. Chaque mode décrit *comment* une machine
- * virtuelle accède (ou non) au réseau, indépendamment du moteur d'exécution et
- * du système invité.
+ * Network modes offered by LumiBoot. Each mode describes *how* a virtual
+ * machine accesses (or not) the network, independently of the execution engine
+ * and of the guest system.
  */
 
 export const NETWORK_MODES = [
@@ -20,10 +20,10 @@ export interface NetworkModeInfo {
   description: string;
   availability: 'ready' | 'planned';
   /**
-   * Toujours `true` : le profil réseau v86 est fixé **avant** la construction de
-   * l'émulateur (traduction vers `net_device`). Tout changement de profil
-   * réseau — y compris vers/depuis `offline` — exige donc une **nouvelle
-   * session** ; aucun basculement à chaud n'est supporté.
+   * Always `true`: the v86 network profile is fixed **before** the emulator is
+   * built (translation to `net_device`). Any network profile change — including
+   * to/from `offline` — therefore requires a **new session**; no hot switching
+   * is supported.
    */
   requiresRestart: boolean;
   requiresConfiguration: boolean;
@@ -32,47 +32,48 @@ export interface NetworkModeInfo {
 export const networkModes: Record<NetworkMode, NetworkModeInfo> = {
   offline: {
     id: 'offline',
-    label: 'Hors ligne',
-    description: 'Aucun accès réseau : la machine invitée est totalement isolée.',
+    label: 'Offline',
+    description: 'No network access: the guest machine is fully isolated.',
     availability: 'ready',
     requiresRestart: true,
     requiresConfiguration: false,
   },
   'browser-fetch': {
     id: 'browser-fetch',
-    label: 'Réseau du navigateur',
+    label: 'Browser network',
     description:
-      'Réseau émulé au-dessus de fetch du navigateur. Soumis aux contraintes CORS et ' +
-      'sans accès Internet complet.',
+      'Network emulated on top of the browser fetch API. Subject to CORS constraints and ' +
+      'without full Internet access.',
     availability: 'ready',
     requiresRestart: true,
     requiresConfiguration: false,
   },
   'local-proxy': {
     id: 'local-proxy',
-    label: 'Proxy réseau local',
+    label: 'Local network proxy',
     description:
-      "Internet via le LumiBoot Network Proxy installé localement : les connexions TCP sortent par la vraie connexion de l'utilisateur (WISP local sur 127.0.0.1).",
+      'Internet through the locally installed LumiBoot Network Proxy: TCP connections go out ' +
+      "over the user's real connection (local WISP on 127.0.0.1).",
     availability: 'ready',
     requiresRestart: true,
     requiresConfiguration: true,
   },
   'user-relay': {
     id: 'user-relay',
-    label: 'Relais personnel (WISP)',
+    label: 'Personal relay (WISP)',
     description:
-      "Internet via un serveur WISP personnel fourni et administré par l'utilisateur ; " +
-      "l'accès complet n'est jamais garanti par défaut.",
+      'Internet through a personal WISP server supplied and administered by the user; ' +
+      'full access is never guaranteed by default.',
     availability: 'ready',
     requiresRestart: true,
     requiresConfiguration: true,
   },
   'local-network': {
     id: 'local-network',
-    label: 'Réseau local',
+    label: 'Local network',
     description:
-      'Réseau virtuel entre invités du navigateur (segment local partagé), et non un accès ' +
-      "au réseau LAN physique de l'hôte. Fonctionnalité non implémentée.",
+      'Virtual network between browser guests (shared local segment), not access to the ' +
+      "host's physical LAN. This feature is not implemented.",
     availability: 'planned',
     requiresRestart: true,
     requiresConfiguration: true,

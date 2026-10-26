@@ -13,12 +13,12 @@ export interface NetworkProxyCardProps {
 }
 
 /**
- * Carte « Internet via votre connexion » (rendu minimaliste) : un titre, une
- * description courte, un bouton « Appairer » (ou « Déconnecter » une fois
- * connecté) et une note discrète expliquant l'usage du proxy réseau local.
+ * "Internet via your connection" card (minimal rendering): a title, a short
+ * description, a "Pair" button (or "Disconnect" once connected) and a discreet
+ * note explaining how the local network proxy is used.
  *
- * Reprend les effets de l'ancien `NetworkProxyStatus` : `refresh()` au montage
- * et `cancelPairing()` au démontage (aucun poll d'appairage orphelin).
+ * Reproduces the effects of the former `NetworkProxyStatus`: `refresh()` on mount
+ * and `cancelPairing()` on unmount (no orphaned pairing poll).
  */
 export function NetworkProxyCard(props: NetworkProxyCardProps) {
   const state = useProxyStore((s) => s.state);
@@ -31,8 +31,8 @@ export function NetworkProxyCard(props: NetworkProxyCardProps) {
 
   const { url: proxyUrl } = resolveProxyConfig();
 
-  // Détection de « déjà appairé » : session persistée et non expirée pour
-  // l'URL courante. L'initialisation paresseuse évite un flash au montage.
+  // "Already paired" detection: a persisted, non-expired session for the
+  // current URL. Lazy initialization avoids a flash on mount.
   const [hasSession, setHasSession] = useState(() => loadProxySession(proxyUrl) !== null);
   useEffect(() => {
     setHasSession(loadProxySession(proxyUrl) !== null);
@@ -41,34 +41,33 @@ export function NetworkProxyCard(props: NetworkProxyCardProps) {
   const connected = state === 'connected' && token !== null;
   const connecting = state === 'connecting';
 
-  // Message neutre tant qu'une session persiste mais qu'on n'est pas connecté
-  // (proxy relancé, etc.). Il disparaît dès le début d'un appairage. Aucun
-  // message n'est affiché pour un échec sans session ni pour les états passifs.
+  // Neutral message while a session persists but we are not connected
+  // (proxy restarted, etc.). It disappears once a pairing starts. No
+  // message is shown for a failure without a session nor for passive states.
   const alreadyPairedMessage =
     !connected && !connecting && hasSession
-      ? 'Vous êtes déjà appairé. Relancez le proxy, ou cliquez sur le bouton ci-dessus pour lancer un nouvel appairage.'
+      ? 'You are already paired. Restart the proxy, or click the button above to start a new pairing.'
       : null;
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  // Démontage : annuler toute surveillance d'appairage en cours.
+  // Unmount: cancel any in-flight pairing watch.
   useEffect(() => () => cancelPairing(), [cancelPairing]);
 
   return (
-    <section className="proxy-card" aria-label="Internet via votre connexion">
-      <h2>Internet via votre connexion</h2>
+    <section className="proxy-card" aria-label="Internet via your connection">
+      <h2>Internet via your connection</h2>
       <p className="proxy-description">
-        Faites profiter vos systèmes lancés de votre connexion Internet, directement dans le
-        navigateur.
+        Give your running systems access to your Internet connection, straight from the browser.
       </p>
       <div className="proxy-actions">
         {connected ? (
           <>
-            <span className="proxy-connected">Connecté</span>
+            <span className="proxy-connected">Connected</span>
             <Button variant="ghost" type="button" onClick={() => void revoke()}>
-              Déconnecter
+              Disconnect
             </Button>
           </>
         ) : (
@@ -78,21 +77,21 @@ export function NetworkProxyCard(props: NetworkProxyCardProps) {
             disabled={connecting}
             onClick={() => void startPairing()}
           >
-            {connecting ? 'Appairage…' : 'Appairer'}
+            {connecting ? 'Pairing…' : 'Pair'}
           </Button>
         )}
       </div>
       {connected ? (
-        <p className="proxy-note">Votre connexion est partagée avec vos systèmes.</p>
+        <p className="proxy-note">Your connection is shared with your systems.</p>
       ) : (
         <div className="proxy-note">
-          LumiBoot Network Proxy fait le lien entre vos systèmes et votre connexion.{' '}
+          LumiBoot Network Proxy bridges your systems and your connection.{' '}
           <NetworkProxyDownload platform={props.platform} manifest={props.manifest} />
         </div>
       )}
       {state === 'pairing-required' && userCode ? (
         <p className="proxy-note" role="status">
-          En attente d’autorisation…
+          Waiting for authorization…
         </p>
       ) : null}
       {alreadyPairedMessage ? (

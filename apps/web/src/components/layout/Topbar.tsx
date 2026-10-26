@@ -8,12 +8,12 @@ export function Topbar() {
   const menuRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
 
-  // Fermer le menu mobile au changement de route.
+  // Close the mobile menu on route change.
   useEffect(() => {
     setOpen(false);
   }, [location.pathname]);
 
-  // Fermer au clic hors menu + à Escape (focus rendu au bouton).
+  // Close on outside click + Escape (focus returned to the button).
   useEffect(() => {
     if (!open) return;
     function onPointerDown(event: PointerEvent) {
@@ -44,7 +44,7 @@ export function Topbar() {
 
   return (
     <header className="topbar">
-      <Link to="/" className="wordmark" aria-label="LumiBoot, accueil">
+      <Link to="/" className="wordmark" aria-label="LumiBoot, home">
         <svg
           width="35"
           height="35"
@@ -88,7 +88,7 @@ export function Topbar() {
           rel="noopener noreferrer"
           onClick={() => setOpen(false)}
         >
-          Rejoindre le Discord
+          Join the Discord
         </a>
       </div>
 
@@ -98,7 +98,7 @@ export function Topbar() {
         ref={toggleRef}
         aria-expanded={open}
         aria-controls={menuId}
-        aria-label={open ? 'Fermer le menu de navigation' : 'Ouvrir le menu de navigation'}
+        aria-label={open ? 'Close navigation menu' : 'Open navigation menu'}
         onClick={() => setOpen((value) => !value)}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">

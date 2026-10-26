@@ -24,7 +24,7 @@ export const engineLabels: Record<EngineId, string> = {
   'wasm-68k': 'WASM 68k',
 };
 
-/** Libellés courts de moteur, utilisés dans les sous-titres de session. */
+/** Short engine labels, used in session subtitles. */
 export const engineShortLabels: Record<EngineId, string> = {
   v86: 'v86',
   'wasm-x86': 'WASM x86',
@@ -35,28 +35,28 @@ export const engineShortLabels: Record<EngineId, string> = {
 };
 
 export const executionLabels: Record<ExecutionMode, string> = {
-  browser: 'Dans le navigateur',
+  browser: 'In the browser',
 };
 
-/** Libellés du média de démarrage émulé (`bootDevice` d'un profil). */
+/** Labels for the emulated boot media (a profile's `bootDevice`). */
 export const bootDeviceLabels: Record<string, string> = {
-  disk: 'Disque (hda)',
+  disk: 'Disk (hda)',
   cdrom: 'CD-ROM',
 };
 
-/** Libellés de la carte réseau émulée vue par l'invité. */
+/** Labels for the emulated network card as seen by the guest. */
 export const hardwareNetworkLabels: Record<HardwareNetwork, string> = {
   virtio: 'VirtIO',
   ne2k: 'NE2000',
-  none: 'Aucune',
+  none: 'None',
 };
 
 export const availabilityLabels: Record<Availability, string> = {
-  planned: 'En préparation',
-  experimental: 'Expérimental',
-  ready: 'Disponible',
-  unavailable: 'Indisponible',
-  'resource-required': 'Ressource requise',
+  planned: 'Not ready',
+  experimental: 'Experimental',
+  ready: 'Available',
+  unavailable: 'Unavailable',
+  'resource-required': 'Resource required',
 };
 
 export const executionShortLabel = (mode: ExecutionMode): string =>

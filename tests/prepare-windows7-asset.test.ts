@@ -15,10 +15,10 @@ import { join } from 'node:path';
 import { parseLocalDiskManifest } from '../packages/vm-assets/src/local-disk';
 
 /**
- * Test d'intégration du pipeline réel `scripts/prepare-windows7-asset.mjs` :
- * on lance le script avec une petite image temporaire (jamais le vrai disque
- * de 32 Gio) et on valide sa sortie avec le schéma `@lumiboot/vm-assets`.
- * Preuve que l'outil est réutilisable et que sa sortie est conforme.
+ * Integration test of the real `scripts/prepare-windows7-asset.mjs` pipeline:
+ * the script runs against a small temporary image (never the real 32 GiB disk)
+ * and its output is validated with the `@lumiboot/vm-assets` schema. Proof that
+ * the tool is reusable and that its output is valid.
  */
 
 const repoRoot = process.cwd();
@@ -49,7 +49,7 @@ afterAll(() => {
 });
 
 describe('prepare-windows7-asset.mjs', () => {
-  it('génère un manifeste conforme (avec SHA-256 réel)', () => {
+  it('generates a valid manifest (with the real SHA-256)', () => {
     const result = run([
       '--source',
       source,
@@ -73,7 +73,7 @@ describe('prepare-windows7-asset.mjs', () => {
     expect(manifest.engine.wasm.sha256).toHaveLength(64);
   });
 
-  it('n’écrase ni ne modifie le fichier source', () => {
+  it('neither overwrites nor modifies the source file', () => {
     const before = statSync(source);
     const result = run(['--source', source, '--out', outDir, '--force', '--json']);
     expect(result.status).toBe(0);
@@ -83,13 +83,13 @@ describe('prepare-windows7-asset.mjs', () => {
     expect(createHash('sha256').update(readFileSync(source)).digest('hex')).toBe(sourceHash);
   });
 
-  it('refuse d’écraser un manifeste existant sans --force', () => {
+  it('refuses to overwrite an existing manifest without --force', () => {
     const result = run(['--source', source, '--out', outDir, '--skip-hash']);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('--check');
   });
 
-  it('supporte --skip-hash (taille + mtime documentés, pas de SHA)', () => {
+  it('supports --skip-hash (size + mtime documented, no SHA)', () => {
     const out = join(tempDir, 'out-skip');
     const result = run(['--source', source, '--out', out, '--skip-hash', '--json']);
     expect(result.status).toBe(0);
@@ -98,25 +98,25 @@ describe('prepare-windows7-asset.mjs', () => {
     expect(manifest.disk.size).toBe(sourceBytes.length);
   });
 
-  it('vérifie un manifeste existant avec --check', () => {
+  it('verifies an existing manifest with --check', () => {
     const result = run(['--source', source, '--out', outDir, '--check']);
     expect(result.status).toBe(0);
-    expect(result.stderr).toContain('conforme');
+    expect(result.stderr).toContain('Manifest matches');
   });
 
-  it('détecte une source modifiée avec --check', () => {
+  it('detects a modified source with --check', () => {
     const out = join(tempDir, 'out-check');
     run(['--source', source, '--out', out, '--skip-hash']);
-    // Modifie la source APRÈS génération : la taille diffère -> échec attendu.
+    // Modifies the source AFTER generation: the size differs -> expected failure.
     const modified = join(tempDir, 'modified.img');
     copyFileSync(source, modified);
     writeFileSync(modified, Buffer.concat([sourceBytes, Buffer.from('x')]));
     const result = run(['--source', modified, '--out', out, '--check']);
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('taille');
+    expect(result.stderr).toContain('source size');
   });
 
-  it('refuse une copie vers un dossier public/', () => {
+  it('refuses a copy into a public/ directory', () => {
     const publicDir = join(tempDir, 'public');
     const result = run([
       '--source',
@@ -130,7 +130,7 @@ describe('prepare-windows7-asset.mjs', () => {
     expect(result.stderr).toContain('public');
   });
 
-  it('refuse une copie qui écraserait la source', () => {
+  it('refuses a copy that would overwrite the source', () => {
     const result = run([
       '--source',
       source,
@@ -143,7 +143,7 @@ describe('prepare-windows7-asset.mjs', () => {
     expect(result.stderr.toLowerCase()).toContain('source');
   });
 
-  it('copie vérifiée vers un chemin autorisé (hash identique)', () => {
+  it('verified copy to an allowed path (identical hash)', () => {
     const destination = join(tempDir, 'copies', 'win7.img');
     const result = run([
       '--source',
@@ -159,11 +159,11 @@ describe('prepare-windows7-asset.mjs', () => {
     expect(statSync(destination).size).toBe(sourceBytes.length);
   });
 
-  it('tolère un « -- » isolé (injecté par pnpm) et garde les mêmes défauts', () => {
+  it('tolerates a lone "--" (injected by pnpm) and keeps the same defaults', () => {
     const out = join(tempDir, 'out-dashdash');
     const result = run(['--source', source, '--out', out, '--', '--skip-hash', '--json']);
     expect(result.status).toBe(0);
-    expect(result.stderr).not.toContain('Option inconnue');
+    expect(result.stderr).not.toContain('Unknown option');
     const manifest = parseLocalDiskManifest(JSON.parse(result.stdout));
     expect(manifest.ref).toBe('windows-7-pro-sp1-x86');
     expect(manifest.architecture).toBe('i386');
@@ -173,7 +173,7 @@ describe('prepare-windows7-asset.mjs', () => {
     expect(manifest.disk.size).toBe(sourceBytes.length);
   });
 
-  it('tolère un « -- » isolé devant --help', () => {
+  it('tolerates a lone "--" before --help', () => {
     const output = execFileSync('node', [SCRIPT, '--', '--help'], {
       cwd: repoRoot,
       encoding: 'utf8',
@@ -182,7 +182,7 @@ describe('prepare-windows7-asset.mjs', () => {
     expect(output).toContain('--copy-to');
   });
 
-  it('expose une aide sans exécuter la préparation', () => {
+  it('exposes help without running the preparation', () => {
     const output = execFileSync('node', [SCRIPT, '--help'], { cwd: repoRoot, encoding: 'utf8' });
     expect(output).toContain('--source');
     expect(output).toContain('--copy-to');

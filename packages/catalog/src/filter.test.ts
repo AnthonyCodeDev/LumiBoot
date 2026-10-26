@@ -6,13 +6,13 @@ import { getFeaturedSystem, getSystemById, getSystemBySlug, systems } from './sy
 const debian = getSystemById('debian-12-i386') as OSDefinition;
 
 describe('normalizeText', () => {
-  it('supprime les accents et la casse', () => {
-    expect(normalizeText('Systèmes ÉTRANGERS')).toBe('systemes etrangers');
+  it('strips accents and case', () => {
+    expect(normalizeText('ÅNGSTRÖM Café')).toBe('angstrom cafe');
   });
 });
 
 describe('matchesFamily', () => {
-  it('gère all et famille', () => {
+  it('handles all and family', () => {
     expect(matchesFamily(debian, 'all')).toBe(true);
     expect(matchesFamily(debian, 'linux')).toBe(true);
     expect(matchesFamily(debian, 'windows')).toBe(false);
@@ -22,27 +22,27 @@ describe('matchesFamily', () => {
 describe('filterSystems', () => {
   const base = { systems, family: 'all', query: '' } as const;
 
-  it('retourne tout le catalogue sans critère', () => {
+  it('returns the whole catalog without criteria', () => {
     expect(filterSystems({ ...base })).toHaveLength(systems.length);
   });
 
-  it('filtre par famille et recherche', () => {
-    // 4 entrées plates : Lite (mère), Professionnel (enfant), Windows 10 x86
-    // (autonome), Windows 11.
+  it('filters by family and search', () => {
+    // 4 flat entries: Lite (parent), Professional (child), Windows 10 x86
+    // (standalone), Windows 11.
     expect(filterSystems({ ...base, family: 'windows' })).toHaveLength(4);
     expect(filterSystems({ ...base, query: 'fedora' })).toHaveLength(1);
     expect(filterSystems({ ...base, query: 'ubuntu x64' })).toHaveLength(0);
   });
 });
 
-describe('sélecteurs de catalogue', () => {
-  it('renvoie Debian comme système à la une', () => {
+describe('catalog selectors', () => {
+  it('returns Debian as the featured system', () => {
     expect(getFeaturedSystem()?.id).toBe('debian-12-i386');
   });
 
-  it('résout par identifiant et par slug', () => {
+  it('resolves by identifier and by slug', () => {
     expect(getSystemById('debian-12-i386')?.displayName).toBe('Debian');
     expect(getSystemBySlug('macos-sequoia')?.family).toBe('macos');
-    expect(getSystemById('inconnu')).toBeNull();
+    expect(getSystemById('unknown')).toBeNull();
   });
 });

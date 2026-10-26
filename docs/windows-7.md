@@ -1,77 +1,72 @@
-# Windows 7 sous v86
+﻿# Windows 7 under v86
 
-Windows 7 forme un groupe de deux variantes validées, démarrées depuis des disques RAW locaux fournis par l'opérateur.
+Two validated variants, BIOS-booted from local RAW disks.
 
-| Variante | Référence | Disque | RAM | Ordre |
+| Variant | Reference | Disk | RAM | Order |
 |---|---|---:|---:|---:|
-| Professionnel SP1 x86 | `windows-7-pro-sp1-x86` | 32 Gio | 1536 Mio | 1, défaut |
-| Lite x86 | `windows-7-x86` | 16 Gio | 1024 Mio | 2, mère |
+| Professional SP1 x86 | `windows-7-pro-sp1-x86` | 32 GiB | 1536 MiB | 1, default |
+| Lite x86 | `windows-7-x86` | 16 GiB | 1024 MiB | 2, parent |
 
-Les fichiers `images/<ref>/disk.img` et `images/<ref>/provenance.txt` sont ignorés par Git. Le `manifest.json` est versionné sous forme générique (aucun chemin local) ; le disque doit donc être préparé sur la machine. Aucune image, ISO ou clé Windows n'est distribuée.
+`images/<ref>/disk.img` and `provenance.txt` are ignored by Git; the versioned `manifest.json` contains no absolute machine path. No Windows image, ISO or key is distributed.
 
-## Préparer un disque
+## Preparing a disk
 
 ```bash
 node scripts/prepare-windows7-asset.mjs \
-  --source "images/windows-7-pro-sp1-x86/disk.img" \
+  --source images/windows-7-pro-sp1-x86/disk.img \
   --ref windows-7-pro-sp1-x86 \
   --display-name "Windows 7 Professionnel SP1 x86" \
   --architecture i386 --memory-mib 1536 --vga-mib 16 \
   --out images/windows-7-pro-sp1-x86
-
-pnpm assets:windows7:check
 ```
 
-Le script ouvre la source en lecture seule, calcule le SHA-256 en streaming et écrit le manifeste sans copier le disque. `--resume` réutilise le hash si taille et `mtime` concordent ; `--force` autorise le remplacement du manifeste.
+Source opened read-only, streaming SHA-256 (8 MiB blocks), writes limited to `manifest.json` and `provenance.txt`. Options: `--skip-hash` (no SHA-256, size and `mtime` recorded), `--resume` (existing SHA-256 reused when size and `mtime` match), `--force` (overwrites an existing manifest, mandatory otherwise), `--check` (verifies without writing; `--source` required for an external disk), `--copy-to` (verified copy, refused onto the source or into `public/`).
 
-## Développement
+`pnpm assets:windows7:check` is equivalent to `--check`. A disk outside the repository records no path (`source.external`): `--source` becomes mandatory for any verification.
 
-`pnpm dev` active le middleware Vite de `scripts/lib/disk-asset-dev.mjs`. Il découvre chaque manifeste `disk-boot` et sert le disque in-place sur `/images/<ref>/disk.img` avec HTTP Range `206`.
+## Development
 
-Le disque est monté comme `hda.async`, jamais comme CD-ROM. Les écritures v86 restent en mémoire et disparaissent à l'arrêt ; la source n'est pas modifiée.
+`pnpm dev` loads the `scripts/lib/disk-asset-dev.mjs` middleware (`apps/web/vite.config.ts`), which discovers every `images/<ref>/manifest.json` with `boot.mode === 'disk-boot'` and serves the disk in place on `/images/<ref>/disk.img` over HTTP Range `206`, plus the public form of the manifest (without `source` or `provenance`).
+
+Attached as `hda.async`, never as a CD-ROM. v86 writes stay in memory and disappear on stop; the source file is not modified.
 
 ## Readiness
 
-Windows n'émet pas de marqueur LumiBoot. Le mode `disk-boot` passe à `running` après une première lecture IDE réelle du disque. Cette preuve confirme l'amorçage, pas à elle seule un bureau fonctionnel ; le test visuel E2E couvre ensuite le canvas VGA.
+No guest marker: `disk-boot` switches to `running` on the first real IDE read of the disk (`ide-read-end`, channel 0, bytes > 0, `packages/provider-v86/src/v86-instance.ts:328-335`), 300 s timeout (`packages/catalog/src/profiles.ts:102-109`). That proof attests booting, not a working desktop; the E2E test then covers the VGA canvas.
 
-```bash
+```powershell
 $env:VM_E2E_ASSETS='1'
-pnpm test:e2e --grep "Windows 7"
+pnpm exec playwright test tests/e2e/windows7-desktop.spec.ts
 ```
 
-Playwright utilise le port `5200`. Les tests réels restent désactivés sans `VM_E2E_ASSETS=1` car les disques font 16 et 32 Gio.
+Playwright serves the app on port `5200`. Without `VM_E2E_ASSETS=1`, the real tests are skipped (16 and 32 GiB disks).
 
-## Réseau (Internet dans l'invité)
+## Network (Internet inside the guest)
 
-v86 expose à Windows 7 une carte **NE2000 (`ne2k`)**. Les profils `windows-7-pro-sp1-x86` et `windows-7-x86` déclarent `hardwareProfile: { ...pcHardware('ne2k'), acpi: true }` (`packages/catalog/src/profiles.ts`), traduit en `net_device.type = 'ne2k'` par `toV86NetworkDeviceType` (`packages/provider-v86/src/network/V86NetworkAdapter.ts`). Côté invité, la carte n'est utilisable qu'avec un **pilote NE2000/RTL8029**.
+**NE2000 (`ne2k`)** adapter: profiles declare `hardwareProfile: { ...pcHardware('ne2k'), acpi: true }` (`packages/catalog/src/profiles.ts:274,313`), translated into `net_device.type = 'ne2k'` by `toV86NetworkDeviceType` (`packages/provider-v86/src/network/V86NetworkAdapter.ts`). Windows 7 ships no inbox driver for this card: without an installed NE2000/RTL8029 driver, the guest reports "No connections are available", whatever the network mode (see v86, [§5.3 Enabling networking](https://github.com/copy/v86/blob/master/docs/windows-nt.md)).
 
-Windows 7 (famille Vista+) ne fournit **aucun pilote « inbox »** pour cette carte. Même si le proxy hôte tourne et que la session est en `local-proxy`, l'invité affiche « Aucune connexion n'est disponible » et aucun réseau. La documentation officielle v86 le confirme : [§5.3 Enabling networking (ne2k)](https://github.com/copy/v86/blob/master/docs/windows-nt.md).
+The driver must be present **inside `disk.img`**: the disk is served read-only, so the installation happens offline in QEMU, before preparing or regenerating the manifest. Windows 10 x86 uses `virtio-net` (see [`windows-10.md`](windows-10.md)).
 
-Le pilote doit être installé **dans l'image `disk.img`**. Or LumiBoot monte le disque en lecture seule (`hda.async`, HTTP Range) et les écritures v86 restent en mémoire et disparaissent à l'arrêt (voir la section « Développement » ci-dessus). L'installation se fait donc **hors ligne, dans QEMU**, avant de préparer ou de patcher le manifeste. À l'inverse, Windows 10 x86 utilise `virtio-net` car son image embarque le pilote VirtIO NetKVM ; voir [`windows-10.md`](windows-10.md).
-
-### Installer le pilote hors ligne (QEMU)
-
-Démarrer le disque avec un contrôleur NE2000 émulé et un CD-ROM contenant les pilotes :
+### Installing the driver offline (QEMU)
 
 ```bash
 qemu-system-i386 \
   -drive file=images/windows-7-pro-sp1-x86/disk.img,format=raw,if=ide \
   -m 1536 \
-  -net nic,model=ne2k_pci -net user \
+  -nic user,model=ne2k_pci \
   -cdrom drivers-ne2000.iso
 ```
 
-1. monter l'ISO de pilotes NE2000/RTL8029 (ou son dossier extrait) ;
-2. ouvrir le Gestionnaire de périphériques et sélectionner le « Ethernet Controller » inconnu ;
-3. **Mettre à jour le pilote** → « Parcourir mon ordinateur à la recherche d'un pilote » → pointer le dossier ou le CD ;
-4. accepter « Installer ce pilote logiciel quand même » si Windows signale un pilote non signé ;
-5. redémarrer l'invité, puis vérifier avec `ipconfig /all` que la carte obtient une adresse.
+1. mount the NE2000/RTL8029 ISO (or its extracted folder);
+2. select the unknown "Ethernet Controller" in Device Manager;
+3. **Update driver** → "Browse my computer" → point to the folder or the CD;
+4. accept the unsigned driver if Windows asks, reboot, verify with `ipconfig /all`.
 
-Après l'installation, re-préparer le manifeste pour que LumiBoot serve le disque modifié :
+Then regenerate the manifest:
 
 ```bash
-pnpm assets:windows7:prepare -- \
-  --source "images/windows-7-pro-sp1-x86/disk.img" \
+pnpm assets:windows7:prepare --force \
+  --source images/windows-7-pro-sp1-x86/disk.img \
   --ref windows-7-pro-sp1-x86 \
   --display-name "Windows 7 Professionnel SP1 x86" \
   --architecture i386 --memory-mib 1536 --vga-mib 16 \
@@ -80,29 +75,29 @@ pnpm assets:windows7:prepare -- \
 pnpm assets:windows7:check
 ```
 
-### Condition côté LumiBoot
+### LumiBoot side
 
-Le `net_device` n'est émis que si le mode effectif est `local-proxy` (proxy **appairé**, pas seulement démarré) ou `user-relay`. Sinon :
+The `net_device` combines the profile adapter (`ne2k`) and the mode transport; absent only in `offline` (`packages/provider-v86/src/V86Provider.ts:219-223,291`).
 
-| Mode effectif | Réseau invité |
+| Effective mode | Guest network |
 |---|---|
-| `local-proxy` | WISP vers le proxy appairé, TCP sortant uniquement |
-| `user-relay` | WISP vers un relais `wss://` |
-| `browser-fetch` | HTTP 80 seulement, CORS, pas de HTTPS |
-| `offline` | aucune NIC |
+| `offline` | no NIC |
+| `browser-fetch` | ne2k + fetch backend: HTTP 80 only, CORS |
+| `local-proxy` | ne2k + WISP to the paired proxy, outbound TCP |
+| `user-relay` | ne2k + WISP to a `wss://` relay |
 
-Le mode est résolu au démarrage de la session (`selectEffectiveNetworkProfile`, `apps/web/src/features/sessions/sessions.store.ts`) et **figé** pour la session : appairer le proxy ne suffit pas, il faut **redémarrer la session** ensuite. Références : [`network.md`](network.md), [`network-proxy.md`](network-proxy.md).
+Mode resolved at startup (`selectEffectiveNetworkProfile`, `apps/web/src/features/sessions/sessions.store.ts:217-230`) then fixed: pairing the proxy afterwards requires restarting the session. See [`network.md`](network.md), [`network-proxy.md`](network-proxy.md).
 
-### Vérifier
+### Verifying
 
-- dans l'invité : `ipconfig /all` ;
-- dans LumiBoot : le badge réseau de la barre d'outils (`data-testid="session-network-mode"`) affiche le mode effectif.
+- in the guest: `ipconfig /all`;
+- in LumiBoot: network badge (`data-testid="session-network-mode"`, `apps/web/src/components/session/SessionToolbar.tsx:62`), which shows the effective mode.
 
-## Limites
+## Limitations
 
-- émulation x86 logicielle, donc démarrage lent ;
-- aucune persistance des écritures ;
-- disques disponibles uniquement en développement local sauf serveur Range explicitement déployé ;
-- licence et sécurité des disques sous la responsabilité de l'opérateur.
+- software x86 emulation: slow boot;
+- no write persistence;
+- disks served in local development, unless a Range server is deployed;
+- disk licence and security are the operator's responsibility.
 
-Détails du transport Range : [`windows-7-streaming.md`](windows-7-streaming.md).
+Range transport: [`windows-7-streaming.md`](windows-7-streaming.md).

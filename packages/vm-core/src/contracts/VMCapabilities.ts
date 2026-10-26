@@ -3,22 +3,22 @@ import type { Architecture } from '@lumiboot/contracts';
 export type RuntimeTarget = 'browser';
 
 /**
- * Fonctionnalités réellement offertes par un moteur. Une UI ou un orchestrateur
- * doit consulter `capabilities()` avant de proposer snapshots, reprise ou
- * téléchargement partiel — toutes les options ne sont pas universelles.
+ * Features actually offered by an engine. A UI or an orchestrator must consult
+ * `capabilities()` before offering snapshots, resume or partial download — not
+ * all options are universal.
  */
 export interface VMCapabilities {
   readonly runtime: RuntimeTarget;
   readonly architectures: readonly Architecture[];
-  /** Snapshot complet RAM + CPU. */
+  /** Full RAM + CPU snapshot. */
   readonly ramSnapshots: boolean;
-  /** Snapshot du disque seul, sans l'état mémoire. */
+  /** Disk-only snapshot, without the memory state. */
   readonly diskSnapshots: boolean;
-  /** Téléchargement partiel via requêtes HTTP Range. */
+  /** Partial download via HTTP Range requests. */
   readonly partialDownload: boolean;
-  /** Reprise d'une session précédemment interrompue. */
+  /** Resume of a previously interrupted session. */
   readonly resumable: boolean;
-  /** Mémoire invitée configurable. */
+  /** Configurable guest memory. */
   readonly configurableMemory: boolean;
 }
 

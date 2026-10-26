@@ -36,18 +36,18 @@ export function SessionScreen({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(true);
   const [logsOpen, setLogsOpen] = useState(false);
-  // Capture souris unique (Pointer Lock) : un seul curseur visible, celui de
-  // l'invité. Un clic dans l'écran capture, Échap libère. v86 relaie déjà les
-  // mouvements relatifs : on ne réinjecte jamais de mouvement ici.
+  // Single mouse capture (Pointer Lock): only one visible cursor, the guest's.
+  // A click inside the screen captures, Escape releases. v86 already forwards
+  // relative movements: no movement is ever re-injected here.
   const {
     captured,
     supported: pointerLockSupported,
     error: pointerLockError,
   } = usePointerLockCapture(consoleRef, running);
 
-  // Cible du plein écran : uniquement l'écran résultat, repéré par le contrat
-  // d'affichage standard (`data-vm-display="screen"`) que le provider pose dans
-  // `.session-console`. Aucun moteur n'est ciblé en dur : pas de `.v86-screen`.
+  // Fullscreen target: only the rendered screen, located through the standard
+  // display contract (`data-vm-display="screen"`) that the provider sets inside
+  // `.session-console`. No engine is targeted by name: no `.v86-screen`.
   const getScreenElement = useCallback(
     (): HTMLElement | null =>
       consoleRef.current?.querySelector<HTMLElement>(STANDARD_VM_DISPLAY.screenSelector) ?? null,
@@ -81,11 +81,11 @@ export function SessionScreen({
     if (document.fullscreenElement ?? doc.webkitFullscreenElement) {
       if (typeof document.exitFullscreen === 'function') {
         void document.exitFullscreen().catch(() => {
-          /* sortie plein écran refusée : on reste en place */
+          /* fullscreen exit refused: stay as is */
         });
       } else if (typeof doc.webkitExitFullscreen === 'function') {
         void Promise.resolve(doc.webkitExitFullscreen()).catch(() => {
-          /* repli webkit indisponible */
+          /* webkit fallback unavailable */
         });
       }
       return;
@@ -94,11 +94,11 @@ export function SessionScreen({
     if (!el) return;
     if (typeof el.requestFullscreen === 'function') {
       void el.requestFullscreen().catch(() => {
-        /* demande refusée ou non supportée : on reste en place */
+        /* request refused or unsupported: stay as is */
       });
     } else if (typeof el.webkitRequestFullscreen === 'function') {
       void Promise.resolve(el.webkitRequestFullscreen()).catch(() => {
-        /* repli webkit indisponible */
+        /* webkit fallback unavailable */
       });
     }
   }, [getScreenElement]);
@@ -117,9 +117,9 @@ export function SessionScreen({
         onToggleLogs={() => setLogsOpen((open) => !open)}
       />
       {/*
-        Le conteneur de console reste monté pendant toutes les phases :
-        démonter/remonter la VM sur un simple changement d'état casserait la
-        session. L'overlay informe sans bloquer le terminal une fois `running`.
+        The console container stays mounted through every phase: unmounting and
+        remounting the VM on a simple state change would break the session. The
+        overlay informs without blocking the terminal once `running`.
       */}
       <div className="session-viewport">
         <div className={`session-console${logsOpen ? '' : ' logs-hidden'}`} ref={consoleRef} />
@@ -127,9 +127,9 @@ export function SessionScreen({
           <StatusOverlay session={session} system={system} consoleRef={consoleRef} />
         ) : null}
         {/*
-          Indicateur discret de capture : jamais cliquable (`pointer-events:
-          none`), il ne superpose AUCUN curseur — le navigateur masque le
-          curseur hôte nativement pendant le verrouillage.
+          Discreet capture indicator: never clickable (`pointer-events: none`),
+          it never overlays a cursor — the browser hides the host cursor
+          natively while the pointer is locked.
         */}
         {running && pointerLockSupported ? (
           <p
@@ -138,9 +138,7 @@ export function SessionScreen({
             data-state={captured ? 'captured' : 'released'}
             aria-live="polite"
           >
-            {captured
-              ? 'Souris capturée · Échap pour libérer'
-              : 'Cliquez dans l’écran pour capturer la souris'}
+            {captured ? 'Mouse captured · Esc to release' : 'Click the screen to capture the mouse'}
           </p>
         ) : null}
         {running && pointerLockError ? (

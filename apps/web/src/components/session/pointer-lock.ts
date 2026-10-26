@@ -1,66 +1,65 @@
 /**
- * Orchestration générique de la capture souris (Pointer Lock API) pour l'écran
- * d'une VM.
+ * Generic mouse capture orchestration (Pointer Lock API) for a VM screen.
  *
- * Objectif UX : un SEUL curseur visible — celui de l'invité. Un appui explicite
- * dans l'écran verrouille le pointeur sur l'élément écran ; le navigateur masque
- * alors le curseur hôte et livre les mouvements RELATIFS (`movementX/Y`) à v86,
- * qui les relaie déjà à l'invité. `Échap` (géré nativement par le navigateur)
- * libère le pointeur et restaure le curseur hôte ; un nouveau clic recapture.
+ * UX goal: ONE visible cursor — the guest's. An explicit press inside the screen
+ * locks the pointer to the screen element; the browser then hides the host
+ * cursor and delivers RELATIVE movements (`movementX/Y`) to v86, which already
+ * forwards them to the guest. `Escape` (handled natively by the browser)
+ * releases the pointer and restores the host cursor; a new click recaptures.
  *
- * Ce module est volontairement indépendant de v86 et de tout OS : il consomme le
- * contrat d'affichage provider-agnostique `VMDisplay` (marqueur
- * `data-vm-display="screen"`) au lieu d'un sélecteur propre à un moteur ;
- * - il ne réinjecte JAMAIS de mouvement souris (v86 le fait déjà) ;
- * - il ne pose `cursor: none` QUE lorsque `document.pointerLockElement` est
- *   réellement l'élément écran (synchronisation via `pointerlockchange`) ;
- * - il reste testable sans navigateur réel (jsdom + mock Pointer Lock).
+ * This module is deliberately independent of v86 and of any OS: it consumes the
+ * provider-agnostic display contract `VMDisplay` (marker
+ * `data-vm-display="screen"`) instead of an engine-specific selector;
+ * - it NEVER re-injects mouse movement (v86 already does);
+ * - it only sets `cursor: none` when `document.pointerLockElement` really is
+ *   the screen element (synchronization through `pointerlockchange`);
+ * - it stays testable without a real browser (jsdom + Pointer Lock mock).
  */
 import { STANDARD_VM_DISPLAY, type VMDisplay } from '@lumiboot/vm-core';
 
 /**
- * Sélecteur de l'écran par défaut, issu du contrat d'affichage standard
- * (`data-vm-display="screen"`). Aucun moteur n'est ciblé en dur : un futur
- * moteur non v86 qui pose le même marqueur est pris en charge sans changement.
+ * Default screen selector, taken from the standard display contract
+ * (`data-vm-display="screen"`). No engine is targeted by name: a future
+ * non-v86 engine using the same marker is supported without changes.
  */
 export const DEFAULT_SCREEN_SELECTOR = STANDARD_VM_DISPLAY.screenSelector;
 
-/** Classe posée sur l'écran UNIQUEMENT pendant le verrouillage effectif. */
+/** Class set on the screen ONLY while the lock is effectively held. */
 export const POINTER_LOCKED_CLASS = 'is-pointer-locked';
 
-/** Forme minimale d'`Element` pour les navigateurs anciens (retour `void`). */
+/** Minimal `Element` shape for older browsers (`void` return). */
 type PointerLockElementLike = HTMLElement & {
   requestPointerLock(options?: PointerLockOptions): Promise<void> | void;
 };
 
 export interface PointerLockCaptureOptions {
-  /** Conteneur (ex. `.session-console`) dans lequel se trouve l'écran. */
+  /** Container (e.g. `.session-console`) that holds the screen. */
   readonly container: HTMLElement;
   /**
-   * Contrat d'affichage du moteur (repli : contrat standard). Sa cible `screen`
-   * est verrouillée.
+   * Engine display contract (fallback: the standard contract). Its `screen`
+   * target is the one that gets locked.
    */
   readonly display?: VMDisplay;
-  /** Réglage explicite du sélecteur d'écran (prime sur `display`). */
+  /** Explicit screen selector (takes precedence over `display`). */
   readonly screenSelector?: string;
-  /** Notifié à chaque changement réel d'état de capture. */
+  /** Notified on every real capture state change. */
   readonly onCaptureChange?: (captured: boolean) => void;
-  /** Notifié en cas de refus/erreur/indisponibilité du Pointer Lock. */
+  /** Notified on refusal/error/unavailability of Pointer Lock. */
   readonly onError?: (error: unknown) => void;
 }
 
 export interface PointerLockCaptureHandle {
-  /** Tente une capture immédiate (clic explicite ou appel programmatique). */
+  /** Attempts an immediate capture (explicit click or programmatic call). */
   requestCapture(): void;
-  /** État réel de capture de CET écran (jamais un état simulé). */
+  /** Real capture state of THIS screen (never a simulated state). */
   isCaptured(): boolean;
-  /** Vrai si le Pointer Lock est réellement utilisable dans ce document. */
+  /** True when Pointer Lock is really usable in this document. */
   isSupported(): boolean;
-  /** Détache tous les écouteurs et libère le verrou s'il est le nôtre. */
+  /** Detaches every listener and releases the lock if it is ours. */
   dispose(): void;
 }
 
-/** Le Pointer Lock est-il réellement disponible dans ce document ? */
+/** Is Pointer Lock really available in this document? */
 export function isPointerLockSupported(doc: Document): boolean {
   const root = doc.documentElement as PointerLockElementLike | null;
   return (
@@ -72,11 +71,11 @@ export function isPointerLockSupported(doc: Document): boolean {
 }
 
 /**
- * Attache l'orchestration Pointer Lock au conteneur d'écran.
+ * Attaches the Pointer Lock orchestration to the screen container.
  *
- * L'appui de capture est écouté sur le conteneur puis filtré : seuls les appuis
- * dont la cible est DANS l'écran capturent. Les clics sur les contrôles hors
- * écran (barre d'outils, logs…) ne déclenchent donc jamais de capture.
+ * Capture presses are listened for on the container, then filtered: only presses
+ * whose target is INSIDE the screen capture. Clicks on controls outside the
+ * screen (toolbar, logs…) therefore never trigger a capture.
  */
 export function attachPointerLockCapture(
   options: PointerLockCaptureOptions,
@@ -102,30 +101,30 @@ export function attachPointerLockCapture(
   const sync = (): void => {
     const screen = getScreen();
     const locked = screen !== null && doc.pointerLockElement === screen;
-    // `cursor: none` seulement quand l'écran détient RÉELLEMENT le verrou.
+    // `cursor: none` only when the screen REALLY holds the lock.
     screen?.classList.toggle(POINTER_LOCKED_CLASS, locked);
     setCaptured(locked);
   };
 
-  /** Libère le verrou uniquement s'il appartient à notre écran. */
+  /** Releases the lock only when it belongs to our screen. */
   const releaseOurLock = (): void => {
     if (doc.pointerLockElement === null) return;
     if (doc.pointerLockElement === getScreen()) {
       try {
         doc.exitPointerLock();
       } catch {
-        /* sortie refusée : on reste cohérent via pointerlockchange */
+        /* exit refused: stay consistent through pointerlockchange */
       }
     }
   };
 
   const requestLock = (screen: HTMLElement): void => {
     const el = screen as PointerLockElementLike;
-    // L'appel synchrone préserve l'« activation utilisateur » du clic.
+    // The synchronous call preserves the click's "user activation".
     void (async () => {
       try {
-        // `unadjustedMovement` = mouvements bruts, sans accélération OS
-        // (comme v86). Repli sans option si le navigateur refuse l'option.
+        // `unadjustedMovement` = raw movements, without OS acceleration
+        // (like v86). Falls back to no option if the browser refuses it.
         await el.requestPointerLock({ unadjustedMovement: true });
       } catch (error) {
         if (disposed) return;
@@ -141,22 +140,20 @@ export function attachPointerLockCapture(
   const requestCapture = (): void => {
     if (disposed) return;
     if (!supported) {
-      options.onError?.(
-        new Error('La capture du pointeur n’est pas disponible dans ce navigateur.'),
-      );
+      options.onError?.(new Error('Pointer capture is not available in this browser.'));
       return;
     }
     const screen = getScreen();
     if (screen === null) return;
     if (doc.pointerLockElement === screen) return;
-    // Un autre élément détient le verrou : on ne le vole pas.
+    // Another element holds the lock: we do not steal it.
     if (doc.pointerLockElement !== null) return;
     requestLock(screen);
   };
 
   const onPointerDown = (event: PointerEvent): void => {
     if (disposed || !supported) return;
-    // Comme l'ancien événement `click`, seul le bouton principal capture.
+    // Like the former `click` event, only the primary button captures.
     if (event.button !== 0) return;
     if (doc.pointerLockElement !== null) return;
     const screen = getScreen();
@@ -191,13 +188,13 @@ export function attachPointerLockCapture(
     doc.addEventListener('pointerlockchange', onPointerLockChange);
     doc.addEventListener('pointerlockerror', onPointerLockError);
     doc.addEventListener('visibilitychange', onVisibilityChange);
-    // `pointerdown` capture dès l'appui, sans attendre le relâchement qui
-    // déclenche `click`.
+    // `pointerdown` captures on press, without waiting for the release that
+    // fires `click`.
     container.addEventListener('pointerdown', onPointerDown);
     win?.addEventListener('blur', onWindowBlur);
   }
-  // Synchronise au montage : un verrou déjà actif (StrictMode, remount) est
-  // reflété sans attendre un événement.
+  // Synchronize on mount: an already active lock (StrictMode, remount) is
+  // reflected without waiting for an event.
   sync();
 
   return {

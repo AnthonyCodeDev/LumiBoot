@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Types et schémas Zod partagés entre le web, l'API et les providers",
+  "description": "Zod types and schemas shared by the web app, the API and the providers",
   "exports": {
     ".": {
       "types": "./src/index.ts",

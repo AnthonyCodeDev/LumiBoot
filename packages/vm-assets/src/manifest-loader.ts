@@ -6,19 +6,19 @@ const HEX64 = /^[0-9a-f]{64}$/i;
 const IMAGE_REF = /^[a-z0-9-]+$/;
 
 /**
- * Validation stricte du manifeste d'image servi en statique.
+ * Strict validation of the image manifest served statically.
  *
- * Refuse toute URL absolue (accès réseau inattendu), tout SHA non hexadécimal
- * de 64 caractères, toute taille non positive et tout manifeste incomplet : un
- * manifeste invalide fait échouer le démarrage au lieu de produire une session
- * incohérente.
+ * Rejects any absolute URL (unexpected network access), any non-hexadecimal
+ * 64-character SHA, any non-positive size and any incomplete manifest: an
+ * invalid manifest makes the start fail instead of producing an inconsistent
+ * session.
  */
 export const imageFileRefSchema = z.object({
   url: z
     .string()
     .min(1)
-    .regex(/^\/images\//, 'URL relative attendue sous « /images/ »'),
-  sha256: z.string().regex(HEX64, 'SHA-256 hexadécimal de 64 caractères attendu'),
+    .regex(/^\/images\//, 'relative URL expected under "/images/"'),
+  sha256: z.string().regex(HEX64, '64-character hexadecimal SHA-256 expected'),
   size: z.number().int().positive(),
   version: z.string().min(1).optional(),
 });
@@ -34,7 +34,7 @@ export const imageBootOptionsSchema = z
 
 export const imageManifestSchema = z
   .object({
-    ref: z.string().regex(IMAGE_REF, 'référence : minuscules, chiffres et tirets'),
+    ref: z.string().regex(IMAGE_REF, 'reference: lowercase letters, digits and dashes'),
     architecture: z.enum(['i386', 'x86', 'x86_64', 'arm', 'arm64', 'powerpc', 'm68k']),
     memoryMiB: z.number().int().positive(),
     vgaMemoryMiB: z.number().int().positive().optional(),
@@ -51,60 +51,59 @@ export const imageManifestSchema = z
   .strict();
 
 // ---------------------------------------------------------------------------
-// Requêtes partagées (déduplication)
+// Shared requests (deduplication)
 // ---------------------------------------------------------------------------
 
 /**
- * Entrée de registre : une seule requête en vol par clé, partagée par tous les
- * consommateurs. Chaque consommateur possède son propre signal d'annulation ;
- * la requête sous-jacente utilise un signal interne qui N'EST JAMAIS celui d'un
- * consommateur.
+ * Registry entry: a single request in flight per key, shared by all consumers.
+ * Each consumer owns its own abort signal; the underlying request uses an
+ * internal signal that is NEVER a consumer's.
  */
 interface SharedRequestEntry<V> {
   readonly promise: Promise<V>;
   readonly controller: AbortController;
-  /** Nombre de consommateurs encore intéressés (ref-count). */
+  /** Number of consumers still interested (ref-count). */
   consumers: number;
 }
 
 export interface SharedRequestRegistry<V> {
   /**
-   * Rejoint ou démarre la requête partagée associée à `key`.
+   * Joins or starts the shared request associated with `key`.
    *
-   * L'annulation d'un consommateur ne rejette QUE sa promesse : la requête
-   * sous-jacente continue tant qu'un autre consommateur l'attend. Elle n'est
-   * interrompue que lorsque TOUS les consommateurs ont annulé. Un rejet (échec)
-   * n'est jamais mis en cache : la prochaine demande relance une requête.
+   * Canceling a consumer only rejects ITS promise: the underlying request
+   * continues as long as another consumer awaits it. It is only interrupted when
+   * ALL consumers have canceled. A rejection (failure) is never cached: the next
+   * request starts a new one.
    */
   run(
     key: string,
     signal: AbortSignal | undefined,
     load: (signal: AbortSignal) => Promise<V>,
   ): Promise<V>;
-  /** Nombre de requêtes actuellement en vol (diagnostic / tests). */
+  /** Number of requests currently in flight (diagnostics / tests). */
   pending(): number;
-  /** Interrompt et oublie toutes les requêtes en vol (tests). */
+  /** Interrupts and forgets all in-flight requests (tests). */
   clear(): void;
 }
 
 /**
- * Construit un registre de requêtes dédupliquées, isolant l'annulation par
- * consommateur (`ref-count`) du signal interne de la requête.
+ * Builds a registry of deduplicated requests, isolating per-consumer
+ * cancellation (`ref-count`) from the request internal signal.
  *
- * @param createAbortError fabrique l'erreur renvoyée à un consommateur annulé.
+ * @param createAbortError builds the error returned to a canceled consumer.
  */
 export function createSharedRequestRegistry<V>(
   createAbortError: (cause?: unknown) => Error,
 ): SharedRequestRegistry<V> {
   const entries = new Map<string, SharedRequestEntry<V>>();
 
-  /** Libère un consommateur ; interrompt la requête si plus personne n'attend. */
+  /** Releases a consumer; interrupts the request if nobody is waiting anymore. */
   function release(key: string, entry: SharedRequestEntry<V>): void {
     entry.consumers -= 1;
     if (entry.consumers <= 0 && !entry.controller.signal.aborted) {
-      // Requête abandonnée par TOUS : on l'interrompt ET on la retire
-      // immédiatement pour qu'un appel ultérieur reparte sur une requête
-      // neuve (une annulation collective n'est jamais un échec caché).
+      // Request abandoned by ALL: it is interrupted AND removed immediately so a
+      // later call starts on a fresh request (a collective cancellation is never
+      // a hidden failure).
       entry.controller.abort();
       if (entries.get(key) === entry) entries.delete(key);
     }
@@ -112,8 +111,8 @@ export function createSharedRequestRegistry<V>(
 
   return {
     run(key, signal, load) {
-      // Un signal déjà annulé ne déclenche AUCUNE requête (et ne rejoint pas
-      // une requête existante) : le consommateur est immédiatement annulé.
+      // An already aborted signal triggers NO request (and does not join an
+      // existing request): the consumer is immediately canceled.
       if (signal?.aborted) {
         return Promise.reject(createAbortError());
       }
@@ -124,12 +123,12 @@ export function createSharedRequestRegistry<V>(
         const created: SharedRequestEntry<V> = {
           controller,
           consumers: 0,
-          // La requête interne NE reçoit jamais le signal d'un consommateur :
-          // l'annulation du premier demandeur ne peut donc pas casser les autres.
+          // The internal request NEVER receives a consumer signal: canceling the
+          // first requester therefore cannot break the others.
           promise: Promise.resolve().then(() => load(controller.signal)),
         };
-        // Un échec n'est jamais conservé : l'entrée disparaît dès qu'elle est
-        // réglée, quelle qu'en soit l'issue (succès ou rejet).
+        // A failure is never kept: the entry disappears as soon as it settles,
+        // whatever the outcome (success or rejection).
         void created.promise
           .finally(() => {
             if (entries.get(key) === created) entries.delete(key);
@@ -148,7 +147,7 @@ export function createSharedRequestRegistry<V>(
 
       return new Promise<V>((resolve, reject) => {
         let settled = false;
-        // Toute sortie retire le listener : aucun `AbortSignal` ne fuit.
+        // Every exit removes the listener: no `AbortSignal` leaks.
         const onAbort = (): void => {
           if (settled) return;
           settled = true;
@@ -183,18 +182,17 @@ export function createSharedRequestRegistry<V>(
   };
 }
 
-/** Registre partagé des manifestes d'images. */
+/** Shared registry of image manifests. */
 const imageManifestRequests = createSharedRequestRegistry<ImageManifest>(
-  () => new AssetError('ASSET_ABORTED', 'Chargement du manifeste annulé.'),
+  () => new AssetError('ASSET_ABORTED', 'Manifest load canceled.'),
 );
 
 /**
- * Garantit qu'un manifeste est enregistré, puis le retourne.
+ * Ensures a manifest is registered, then returns it.
  *
- * Ne récupère jamais les octets du disque : le manifeste est petit, le disque
- * est lu par v86 via HTTP Range. Un manifeste déjà enregistré n'est pas
- * rechargé (le rechargement d'une nouvelle version se fait en vidant le
- * registre via `clearImageManifests()`).
+ * Never fetches the disk bytes: the manifest is small, the disk is read by v86
+ * through HTTP Range. An already registered manifest is not reloaded (reloading
+ * a new version is done by clearing the registry via `clearImageManifests()`).
  */
 export async function ensureImageManifest(
   ref: string,
@@ -210,7 +208,7 @@ export async function ensureImageManifest(
 
 export async function loadImageManifest(ref: string, signal?: AbortSignal): Promise<ImageManifest> {
   if (!IMAGE_REF.test(ref)) {
-    throw new AssetError('ASSET_INVALID_MANIFEST', 'Référence d’image invalide.', { ref });
+    throw new AssetError('ASSET_INVALID_MANIFEST', 'Invalid image reference.', { ref });
   }
 
   let response: Response;
@@ -222,22 +220,22 @@ export async function loadImageManifest(ref: string, signal?: AbortSignal): Prom
     });
   } catch (error) {
     if (signal?.aborted) {
-      throw new AssetError('ASSET_ABORTED', 'Chargement du manifeste annulé.', {
+      throw new AssetError('ASSET_ABORTED', 'Manifest load canceled.', {
         ref,
         cause: error,
       });
     }
-    throw new AssetError('ASSET_NOT_FOUND', 'Manifeste inaccessible.', { ref, cause: error });
+    throw new AssetError('ASSET_NOT_FOUND', 'Unreachable manifest.', { ref, cause: error });
   }
 
   if (!response.ok) {
-    throw new AssetError('ASSET_NOT_FOUND', `Manifeste HTTP ${response.status}.`, { ref });
+    throw new AssetError('ASSET_NOT_FOUND', `Manifest HTTP ${response.status}.`, { ref });
   }
 
   if (readHeader(response, 'content-type').includes('text/html')) {
     throw new AssetError(
       'ASSET_INVALID_MANIFEST',
-      'Le serveur a renvoyé du HTML (repli SPA) au lieu d’un manifeste JSON.',
+      'The server returned HTML (SPA fallback) instead of a JSON manifest.',
       { ref },
     );
   }
@@ -246,7 +244,7 @@ export async function loadImageManifest(ref: string, signal?: AbortSignal): Prom
   try {
     json = await response.json();
   } catch (error) {
-    throw new AssetError('ASSET_INVALID_MANIFEST', 'Manifeste JSON illisible.', {
+    throw new AssetError('ASSET_INVALID_MANIFEST', 'Unreadable JSON manifest.', {
       ref,
       cause: error,
     });
@@ -256,7 +254,7 @@ export async function loadImageManifest(ref: string, signal?: AbortSignal): Prom
   if (!parsed.success) {
     throw new AssetError(
       'ASSET_INVALID_MANIFEST',
-      `Manifeste invalide — ${formatIssues(parsed.error)}`,
+      `Invalid manifest — ${formatIssues(parsed.error)}`,
       { ref },
     );
   }
@@ -265,7 +263,7 @@ export async function loadImageManifest(ref: string, signal?: AbortSignal): Prom
   if (manifest.ref !== ref) {
     throw new AssetError(
       'ASSET_INVALID_MANIFEST',
-      'La référence du manifeste diffère de la demande.',
+      'The manifest reference differs from the request.',
       {
         ref,
       },
@@ -277,10 +275,10 @@ export async function loadImageManifest(ref: string, signal?: AbortSignal): Prom
 }
 
 // ---------------------------------------------------------------------------
-// Disponibilité des assets (manifeste + disque réellement servable)
+// Asset availability (manifest + actually servable disk)
 // ---------------------------------------------------------------------------
 
-/** Motif stable d'indisponibilité, destiné à l'UI et aux diagnostics. */
+/** Stable unavailability reason, intended for the UI and diagnostics. */
 export type AssetUnavailableReason =
   | 'ref-invalid'
   | 'manifest-missing'
@@ -296,19 +294,19 @@ export type AssetUnavailableReason =
   | 'network'
   | 'aborted';
 
-/** Résultat d'une vérification de disponibilité d'asset. */
+/** Result of an asset availability check. */
 export interface AssetAvailability {
   readonly ref: string;
   readonly available: boolean;
   readonly reason?: AssetUnavailableReason;
   readonly message?: string;
-  /** Taille totale annoncée par le serveur (`Content-Range`), si connue. */
+  /** Total size announced by the server (`Content-Range`), if known. */
   readonly size?: number;
 }
 
 export interface AssetAvailabilityOptions {
   readonly signal?: AbortSignal;
-  /** Implémentation `fetch` injectable (tests) ; `globalThis.fetch` par défaut. */
+  /** Injectable `fetch` implementation (tests); `globalThis.fetch` by default. */
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -316,7 +314,7 @@ interface RangeProbeOptions extends AssetAvailabilityOptions {
   readonly expectedSize?: number;
 }
 
-/** Lit un en-tête quelle que soit l'implémentation (`Headers` ou objet nu). */
+/** Reads a header whatever the implementation (`Headers` or plain object). */
 function readHeader(response: Response, name: string): string {
   const headers = response.headers as unknown;
   if (headers === null || typeof headers !== 'object') return '';
@@ -328,7 +326,7 @@ function readHeader(response: Response, name: string): string {
   return value === undefined ? '' : String(value);
 }
 
-/** Annule le corps d'une réponse non lue (évite de télécharger un disque entier). */
+/** Cancels the body of an unread response (avoids downloading a whole disk). */
 function discardBody(response: Response): void {
   const body = response.body as ReadableStream<Uint8Array> | null | undefined;
   if (body !== null && body !== undefined && typeof body.cancel === 'function') {
@@ -342,14 +340,14 @@ function describeError(error: unknown): string {
 
 function formatIssues(error: z.ZodError): string {
   return error.issues
-    .map((issue) => `${issue.path.join('.') || 'manifeste'} : ${issue.message}`)
-    .join(' ; ');
+    .map((issue) => `${issue.path.join('.') || 'manifest'}: ${issue.message}`)
+    .join('; ');
 }
 
 function resolveFetch(options: AssetAvailabilityOptions): typeof fetch {
   const resolved = options.fetchImpl ?? globalThis.fetch;
   if (typeof resolved !== 'function') {
-    throw new AssetError('ASSET_NOT_FOUND', 'fetch est indisponible dans cet environnement.');
+    throw new AssetError('ASSET_NOT_FOUND', 'fetch is unavailable in this environment.');
   }
   return resolved;
 }
@@ -370,8 +368,8 @@ type JsonDocumentResult =
     };
 
 /**
- * Récupère un document JSON en distinguant explicitement les causes d'échec :
- * 404, repli HTML d'une SPA (au lieu de JSON), JSON illisible ou erreur réseau.
+ * Fetches a JSON document while explicitly distinguishing the failure causes:
+ * 404, SPA HTML fallback (instead of JSON), unreadable JSON or network error.
  */
 export async function fetchJsonDocument(
   url: string,
@@ -387,12 +385,12 @@ export async function fetchJsonDocument(
     });
   } catch (error) {
     if (options.signal?.aborted) {
-      return { kind: 'unavailable', reason: 'aborted', message: 'Requête annulée.' };
+      return { kind: 'unavailable', reason: 'aborted', message: 'Request canceled.' };
     }
     return {
       kind: 'unavailable',
       reason: 'network',
-      message: `Manifeste inaccessible : ${describeError(error)}.`,
+      message: `Unreachable manifest: ${describeError(error)}.`,
     };
   }
 
@@ -401,7 +399,7 @@ export async function fetchJsonDocument(
     return {
       kind: 'unavailable',
       reason: 'manifest-missing',
-      message: 'Manifeste absent (HTTP 404).',
+      message: 'Missing manifest (HTTP 404).',
     };
   }
   if (readHeader(response, 'content-type').includes('text/html')) {
@@ -409,7 +407,7 @@ export async function fetchJsonDocument(
     return {
       kind: 'unavailable',
       reason: 'manifest-html',
-      message: 'Le serveur a renvoyé du HTML (repli SPA) au lieu d’un manifeste JSON.',
+      message: 'The server returned HTML (SPA fallback) instead of a JSON manifest.',
     };
   }
   if (!response.ok) {
@@ -417,7 +415,7 @@ export async function fetchJsonDocument(
     return {
       kind: 'unavailable',
       reason: 'manifest-missing',
-      message: `Manifeste HTTP ${response.status}.`,
+      message: `Manifest HTTP ${response.status}.`,
     };
   }
 
@@ -427,16 +425,16 @@ export async function fetchJsonDocument(
     return {
       kind: 'unavailable',
       reason: 'manifest-invalid',
-      message: `Manifeste JSON illisible : ${describeError(error)}.`,
+      message: `Unreadable JSON manifest: ${describeError(error)}.`,
     };
   }
 }
 
 /**
- * Vérifie qu'une URL est bien servie en HTTP Range (206 + `Content-Range`),
- * condition REQUISE par v86 (`hda.async`). Un serveur qui répond 200 à une
- * requête Range renvoie le fichier entier : on annule immédiatement le corps et
- * on signale clairement l'absence de support Range.
+ * Checks that a URL is really served over HTTP Range (206 + `Content-Range`), a
+ * condition REQUIRED by v86 (`hda.async`). A server that answers 200 to a Range
+ * request returns the whole file: the body is immediately canceled and the lack
+ * of Range support is reported clearly.
  */
 export async function probeRangeAvailability(
   url: string,
@@ -453,16 +451,16 @@ export async function probeRangeAvailability(
     });
   } catch (error) {
     if (options.signal?.aborted) {
-      return unavailable('aborted', 'Requête disque annulée.');
+      return unavailable('aborted', 'Disk request canceled.');
     }
-    return unavailable('network', `Disque inaccessible : ${describeError(error)}.`);
+    return unavailable('network', `Unreachable disk: ${describeError(error)}.`);
   }
 
   const contentType = readHeader(response, 'content-type');
 
   if (response.status === 404) {
     discardBody(response);
-    return unavailable('disk-missing', 'Disque absent (HTTP 404).');
+    return unavailable('disk-missing', 'Missing disk (HTTP 404).');
   }
 
   if (response.status === 200) {
@@ -470,12 +468,12 @@ export async function probeRangeAvailability(
     if (contentType.includes('text/html')) {
       return unavailable(
         'disk-html',
-        'Le serveur a renvoyé du HTML (repli SPA) au lieu du disque.',
+        'The server returned HTML (SPA fallback) instead of the disk.',
       );
     }
     return unavailable(
       'range-unsupported',
-      'Le serveur ignore Range (HTTP 200 au lieu de 206) : v86 ne peut pas lire le disque par plages.',
+      'The server ignores Range (HTTP 200 instead of 206): v86 cannot read the disk by ranges.',
     );
   }
 
@@ -486,7 +484,7 @@ export async function probeRangeAvailability(
     if (match === null) {
       return unavailable(
         'range-unsupported',
-        'Réponse 206 sans « Content-Range » exploitable : la lecture par plages est indéterminée.',
+        '206 response without a usable "Content-Range": range reads are undetermined.',
       );
     }
     const size = Number(match[1]);
@@ -494,7 +492,7 @@ export async function probeRangeAvailability(
       return {
         available: false,
         reason: 'disk-mismatch',
-        message: `Taille du disque incohérente : ${size} octets servis, ${options.expectedSize} attendus.`,
+        message: `Inconsistent disk size: ${size} bytes served, ${options.expectedSize} expected.`,
         size,
       };
     }
@@ -503,23 +501,23 @@ export async function probeRangeAvailability(
 
   if (response.status === 401 || response.status === 403) {
     discardBody(response);
-    return unavailable('unauthorized', `Accès au disque refusé (HTTP ${response.status}).`);
+    return unavailable('unauthorized', `Disk access denied (HTTP ${response.status}).`);
   }
 
   discardBody(response);
-  return unavailable('network', `Réponse disque inattendue (HTTP ${response.status}).`);
+  return unavailable('network', `Unexpected disk response (HTTP ${response.status}).`);
 }
 
 /**
- * Vérifie qu'une image publiée est réellement utilisable : manifeste JSON valide
- * au schéma, référence cohérente, puis disque servi en HTTP Range (206).
+ * Checks that a published image is really usable: JSON manifest valid against
+ * the schema, consistent reference, then disk served over HTTP Range (206).
  */
 export async function checkImageAvailability(
   ref: string,
   options: AssetAvailabilityOptions = {},
 ): Promise<AssetAvailability> {
   if (!IMAGE_REF.test(ref)) {
-    return { ref, ...unavailable('ref-invalid', 'Référence d’image invalide.') };
+    return { ref, ...unavailable('ref-invalid', 'Invalid image reference.') };
   }
 
   const document = await fetchJsonDocument(`/images/${ref}/manifest.json`, options);
@@ -531,13 +529,13 @@ export async function checkImageAvailability(
   if (!parsed.success) {
     return {
       ref,
-      ...unavailable('manifest-schema', `Manifeste invalide — ${formatIssues(parsed.error)}`),
+      ...unavailable('manifest-schema', `Invalid manifest — ${formatIssues(parsed.error)}`),
     };
   }
   if (parsed.data.ref !== ref) {
     return {
       ref,
-      ...unavailable('ref-mismatch', 'La référence du manifeste diffère de la demande.'),
+      ...unavailable('ref-mismatch', 'The manifest reference differs from the request.'),
     };
   }
 

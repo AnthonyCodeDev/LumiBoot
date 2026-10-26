@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSystemById } from '@lumiboot/catalog';
 
 /**
- * Tests du store de sessions : propriété des médias par SESSION, générations de
- * boot, annulation, et normalisation des erreurs asynchrones en statut de
- * session. Le registre de moteurs, la config runtime, les credentials proxy et
- * le stockage média sont remplacés par des doubles contrôlables : on observe la
- * logique de propriété/annulation du store, pas v86.
+ * Sessions store tests: media ownership by SESSION, boot generations,
+ * cancellation, and normalization of asynchronous errors into a session status.
+ * The engine registry, the runtime config, the proxy credentials and the media
+ * storage are replaced by controllable doubles: the store ownership/cancellation
+ * logic is observed, not v86.
  */
 
 const mocks = vi.hoisted(() => {
@@ -170,10 +170,10 @@ afterEach(() => {
   else delete (URL as unknown as Record<string, unknown>).revokeObjectURL;
 });
 
-describe('useSessionsStore — propriété des médias', () => {
-  it('deux VM du même OS : libérer A ne révoque jamais le média de B', async () => {
+describe('useSessionsStore — media ownership', () => {
+  it('two VMs of the same OS: releasing A never revokes B media', async () => {
     const system = getSystemById('windows-11-x64');
-    if (!system) throw new Error('système de test introuvable');
+    if (!system) throw new Error('test system not found');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
     mocks.getUserMediaStore.mockResolvedValue(mediaStore);
@@ -186,7 +186,7 @@ describe('useSessionsStore — propriété des médias', () => {
     await useSessionsStore.getState().boot(a, mount);
     await useSessionsStore.getState().boot(b, mount);
 
-    // Deux VM du même OS : deux URLs distinctes, une par session.
+    // Two VMs of the same OS: two distinct URLs, one per session.
     expect(created).toHaveLength(2);
     const [urlA, urlB] = created;
     expect(urlA).not.toBe(urlB);
@@ -196,7 +196,7 @@ describe('useSessionsStore — propriété des médias', () => {
 
     await useSessionsStore.getState().dispose(a);
 
-    // Seule l'URL de A est révoquée ; celle de B reste valide.
+    // Only A URL is revoked; B URL stays valid.
     expect(revoked).toEqual([urlA]);
     expect(revoked).not.toContain(urlB);
     expect(useSessionsStore.getState().sessions[a]).toBeUndefined();
@@ -205,9 +205,9 @@ describe('useSessionsStore — propriété des médias', () => {
     expect(mocks.instances[1]!.dispose).not.toHaveBeenCalled();
   });
 
-  it('dispose pendant la lecture du blob : aucun démarrage, aucune fuite', async () => {
+  it('dispose during the blob read: no start, no leak', async () => {
     const system = getSystemById('windows-11-x64');
-    if (!system) throw new Error('système de test introuvable');
+    if (!system) throw new Error('test system not found');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
     let resolveBytes: ((value: Blob | null) => void) | undefined;
@@ -231,15 +231,15 @@ describe('useSessionsStore — propriété des médias', () => {
     resolveBytes?.(mediaStore.bytes.get(system.id) ?? null);
     await bootPromise;
 
-    // Toute URL éventuellement créée a été révoquée ; aucun VM n'a démarré.
+    // Any URL that may have been created was revoked; no VM started.
     expect(revoked).toEqual(created);
     expect(mocks.instances).toHaveLength(0);
     expect(useSessionsStore.getState().sessions[sessionId]).toBeUndefined();
   });
 
-  it('stop pendant la lecture du blob : pas de démarrage, pas de fuite', async () => {
+  it('stop during the blob read: no start, no leak', async () => {
     const system = getSystemById('windows-11-x64');
-    if (!system) throw new Error('système de test introuvable');
+    if (!system) throw new Error('test system not found');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
     let resolveBytes: ((value: Blob | null) => void) | undefined;
@@ -265,9 +265,9 @@ describe('useSessionsStore — propriété des médias', () => {
     expect(mocks.instances).toHaveLength(0);
   });
 
-  it('dispose est idempotent : une seule révocation pour une session', async () => {
+  it('dispose is idempotent: a single revocation per session', async () => {
     const system = getSystemById('windows-11-x64');
-    if (!system) throw new Error('système de test introuvable');
+    if (!system) throw new Error('test system not found');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
     mocks.getUserMediaStore.mockResolvedValue(mediaStore);
@@ -284,9 +284,9 @@ describe('useSessionsStore — propriété des médias', () => {
     expect(revoked).toEqual([created[0]]);
   });
 
-  it('redémarrer la même session remplace son URL (aucune accumulation)', async () => {
+  it('restarting the same session replaces its URL (no accumulation)', async () => {
     const system = getSystemById('windows-11-x64');
-    if (!system) throw new Error('système de test introuvable');
+    if (!system) throw new Error('test system not found');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
     mocks.getUserMediaStore.mockResolvedValue(mediaStore);
@@ -301,19 +301,19 @@ describe('useSessionsStore — propriété des médias', () => {
     const secondUrl = created[1];
 
     expect(secondUrl).not.toBe(firstUrl);
-    // L'ancienne URL de CETTE session est révoquée quand la nouvelle est publiée.
+    // The previous URL of THIS session is revoked when the new one is published.
     expect(revoked).toContain(firstUrl);
     expect(revoked).not.toContain(secondUrl);
   });
 });
 
-describe('useSessionsStore — erreurs normalisées', () => {
-  it('une erreur IndexedDB avant lifecycle.start devient un statut de session', async () => {
+describe('useSessionsStore — normalized errors', () => {
+  it('an IndexedDB error before lifecycle.start becomes a session status', async () => {
     const system = getSystemById('windows-11-x64');
-    if (!system) throw new Error('système de test introuvable');
+    if (!system) throw new Error('test system not found');
     mocks.getUserMediaStore.mockResolvedValue({
       get: vi.fn(async () => {
-        throw new Error('IndexedDB indisponible');
+        throw new Error('IndexedDB unavailable');
       }),
     });
 
@@ -321,17 +321,17 @@ describe('useSessionsStore — erreurs normalisées', () => {
     const mount = document.createElement('div');
     const sessionId = useSessionsStore.getState().create(system.id);
 
-    // Le boot ne rejette jamais : l'échec devient un snapshot `error`.
+    // The boot never rejects: the failure becomes an `error` snapshot.
     await expect(useSessionsStore.getState().boot(sessionId, mount)).resolves.toBeUndefined();
     const snapshot = useSessionsStore.getState().sessions[sessionId];
     expect(snapshot?.state).toBe('error');
-    expect(snapshot?.error?.message).toContain('IndexedDB indisponible');
+    expect(snapshot?.error?.message).toContain('IndexedDB unavailable');
     expect(mocks.instances).toHaveLength(0);
   });
 
-  it('l’échec tardif d’un boot supplanté n’écrase pas l’état courant', async () => {
+  it('a late failure of a superseded boot does not overwrite the current state', async () => {
     const system = getSystemById('windows-11-x64');
-    if (!system) throw new Error('système de test introuvable');
+    if (!system) throw new Error('test system not found');
     let rejectGet: ((error: Error) => void) | undefined;
     mocks.getUserMediaStore.mockResolvedValue({
       get: vi.fn(
@@ -348,17 +348,17 @@ describe('useSessionsStore — erreurs normalisées', () => {
     const bootPromise = useSessionsStore.getState().boot(sessionId, mount);
     await flushMicrotasks();
 
-    // La session est détruite avant l'échec : l'erreur tardive est ignorée.
+    // The session is destroyed before the failure: the late error is ignored.
     await useSessionsStore.getState().dispose(sessionId);
-    rejectGet?.(new Error('IndexedDB tardif'));
+    rejectGet?.(new Error('late IndexedDB'));
     await bootPromise;
 
     expect(useSessionsStore.getState().sessions[sessionId]).toBeUndefined();
   });
 
-  it('un système bundled démarre sans jamais consulter le stockage média', async () => {
+  it('a bundled system starts without ever querying the media storage', async () => {
     const system = getSystemById('debian-12-i386');
-    if (!system) throw new Error('système de test introuvable');
+    if (!system) throw new Error('test system not found');
     const useSessionsStore = await loadSessionsStore();
     const mount = document.createElement('div');
     const sessionId = useSessionsStore.getState().create(system.id);

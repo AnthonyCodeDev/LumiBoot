@@ -1,5 +1,5 @@
-// Package connections suit les flux TCP actifs, applique les quotas et les
-// timeouts d'inactivité, et optionnellement limite la bande passante globale.
+// Package connections tracks active TCP streams, enforces quotas and idle
+// timeouts, and optionally limits global bandwidth.
 package connections
 
 import (
@@ -10,23 +10,23 @@ import (
 	"time"
 )
 
-// CloseThrottled est la raison WISP renvoyée quand un quota est atteint.
+// CloseThrottled is the WISP reason returned when a quota is reached.
 const CloseThrottled = byte(0x49)
 
-// ErrGlobalLimit signale le dépassement du quota global.
-var ErrGlobalLimit = errors.New("connections: quota global atteint")
+// ErrGlobalLimit reports that the global quota was exceeded.
+var ErrGlobalLimit = errors.New("connections: global quota reached")
 
-// ErrSessionLimit signale le dépassement du quota par session WISP.
-var ErrSessionLimit = errors.New("connections: quota de session atteint")
+// ErrSessionLimit reports that the per-WISP-session quota was exceeded.
+var ErrSessionLimit = errors.New("connections: session quota reached")
 
-// StreamInfo décrit un flux actif (exposé aux diagnostics et aux tests).
+// StreamInfo describes an active stream (exposed to diagnostics and tests).
 type StreamInfo struct {
 	ID           uint32
 	Host         string
 	Port         uint16
 	IP           string
-	BytesIn      uint64 // invitée -> réseau
-	BytesOut     uint64 // réseau -> invitée
+	BytesIn      uint64 // guest -> network
+	BytesOut     uint64 // network -> guest
 	StartedAt    time.Time
 	LastActivity time.Time
 }
@@ -37,7 +37,7 @@ type entry struct {
 	conn net.Conn
 }
 
-// Manager suit les flux actifs. Zéro valeur inutilisable : passer par NewManager.
+// Manager tracks active streams. The zero value is unusable: use NewManager.
 // Thread-safe.
 type Manager struct {
 	mu            sync.Mutex
@@ -48,10 +48,10 @@ type Manager struct {
 	limiter       *tokenBucket
 }
 
-// NewManager construit un gestionnaire.
-// maxTotal borne le nombre total de flux, maxPerSession le nombre par session
-// WISP (identifiée par sessionID). bandwidthBytesPerSecond <= 0 désactive la
-// limitation de bande passante.
+// NewManager builds a manager.
+// maxTotal bounds the total number of streams, maxPerSession bounds the number
+// per WISP session (identified by sessionID). bandwidthBytesPerSecond <= 0
+// disables bandwidth limiting.
 func NewManager(maxTotal, maxPerSession int, bandwidthBytesPerSecond int64) *Manager {
 	if maxTotal <= 0 {
 		maxTotal = 64
@@ -67,7 +67,7 @@ func NewManager(maxTotal, maxPerSession int, bandwidthBytesPerSecond int64) *Man
 	}
 }
 
-// Add enregistre un nouveau flux après contrôle des quotas.
+// Add registers a new stream after checking the quotas.
 func (m *Manager) Add(sessionID string, id uint32, host string, port uint16, ip string, conn net.Conn) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -83,7 +83,7 @@ func (m *Manager) Add(sessionID string, id uint32, host string, port uint16, ip 
 		return ErrSessionLimit
 	}
 	if _, dup := sess[id]; dup {
-		return errors.New("connections: stream_id dupliqué")
+		return errors.New("connections: duplicate stream_id")
 	}
 	now := time.Now()
 	sess[id] = &entry{
@@ -97,7 +97,7 @@ func (m *Manager) Add(sessionID string, id uint32, host string, port uint16, ip 
 	return nil
 }
 
-// Remove oublie un flux et ferme sa connexion TCP. Idempotent.
+// Remove forgets a stream and closes its TCP connection. Idempotent.
 func (m *Manager) Remove(sessionID string, id uint32) {
 	m.mu.Lock()
 	sess := m.streams[sessionID]
@@ -115,8 +115,8 @@ func (m *Manager) Remove(sessionID string, id uint32) {
 	}
 }
 
-// SetConn attache la connexion TCP à un flux réservé. Renvoie false si le
-// flux n'existe plus (réservation annulée entre-temps).
+// SetConn attaches the TCP connection to a reserved stream. Returns false if the
+// stream no longer exists (reservation cancelled in the meantime).
 func (m *Manager) SetConn(sessionID string, id uint32, conn net.Conn) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -131,7 +131,7 @@ func (m *Manager) SetConn(sessionID string, id uint32, conn net.Conn) bool {
 	return true
 }
 
-// Conn renvoie la connexion TCP d'un flux.
+// Conn returns the TCP connection of a stream.
 func (m *Manager) Conn(sessionID string, id uint32) (net.Conn, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -141,7 +141,7 @@ func (m *Manager) Conn(sessionID string, id uint32) (net.Conn, bool) {
 	return nil, false
 }
 
-// Exists indique si un flux est suivi.
+// Exists reports whether a stream is tracked.
 func (m *Manager) Exists(sessionID string, id uint32) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -149,7 +149,7 @@ func (m *Manager) Exists(sessionID string, id uint32) bool {
 	return ok
 }
 
-// Touch rafraîchit l'activité d'un flux.
+// Touch refreshes a stream's activity.
 func (m *Manager) Touch(sessionID string, id uint32) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -160,7 +160,7 @@ func (m *Manager) Touch(sessionID string, id uint32) {
 	}
 }
 
-// AddBytesIn comptabilise des octets invitée -> réseau.
+// AddBytesIn accounts for guest -> network bytes.
 func (m *Manager) AddBytesIn(sessionID string, id uint32, n uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -172,7 +172,7 @@ func (m *Manager) AddBytesIn(sessionID string, id uint32, n uint64) {
 	}
 }
 
-// AddBytesOut comptabilise des octets réseau -> invitée.
+// AddBytesOut accounts for network -> guest bytes.
 func (m *Manager) AddBytesOut(sessionID string, id uint32, n uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -184,21 +184,21 @@ func (m *Manager) AddBytesOut(sessionID string, id uint32, n uint64) {
 	}
 }
 
-// Count renvoie le nombre total de flux actifs.
+// Count returns the total number of active streams.
 func (m *Manager) Count() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.total
 }
 
-// SessionCount renvoie le nombre de flux actifs d'une session.
+// SessionCount returns the number of active streams of a session.
 func (m *Manager) SessionCount(sessionID string) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.streams[sessionID])
 }
 
-// Snapshot copie l'état des flux actifs.
+// Snapshot copies the state of the active streams.
 func (m *Manager) Snapshot() []StreamInfo {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -213,7 +213,7 @@ func (m *Manager) Snapshot() []StreamInfo {
 	return out
 }
 
-// SweepIdle ferme les flux inactifs depuis idleTimeout et renvoie leur nombre.
+// SweepIdle closes streams idle for idleTimeout and returns how many it closed.
 func (m *Manager) SweepIdle(idleTimeout time.Duration) int {
 	cutoff := time.Now().Add(-idleTimeout)
 	type victim struct {
@@ -247,17 +247,17 @@ func (m *Manager) SweepIdle(idleTimeout time.Duration) int {
 	return len(victims)
 }
 
-// Throttle applique la limitation de bande passante globale (token bucket).
-// Sans effet si la limite est désactivée. n est le nombre d'octets transférés.
-// L'attente est annulable : dès que ctx est annulé, Throttle rend la main.
+// Throttle applies the global bandwidth limit (token bucket).
+// No effect when the limit is disabled. n is the number of bytes transferred.
+// The wait is cancellable: as soon as ctx is cancelled, Throttle returns.
 func (m *Manager) Throttle(ctx context.Context, n int) {
 	m.limiter.consume(ctx, n)
 }
 
-// tokenBucket est un seau à jetons minimaliste pour la bande passante.
+// tokenBucket is a minimal token bucket for bandwidth limiting.
 type tokenBucket struct {
 	mu     sync.Mutex
-	rate   float64 // octets par seconde, <= 0 = désactivé
+	rate   float64 // bytes per second, <= 0 = disabled
 	tokens float64
 	last   time.Time
 }
@@ -280,7 +280,7 @@ func (b *tokenBucket) consume(ctx context.Context, n int) {
 	b.last = now
 	b.tokens += elapsed * b.rate
 	if b.tokens > b.rate {
-		b.tokens = b.rate // capacité = 1 seconde de débit
+		b.tokens = b.rate // capacity = one second of throughput
 	}
 	b.tokens -= float64(n)
 	wait := time.Duration(0)

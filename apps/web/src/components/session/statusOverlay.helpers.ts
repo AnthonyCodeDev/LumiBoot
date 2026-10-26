@@ -6,36 +6,36 @@ export interface StatusMessage {
 }
 
 /**
- * Message sobre pour les états hors démarrage (arrêt, inactivité).
- * Ces états n'affichent ni journal ni progression.
+ * Plain message for non-boot states (stopping, idle).
+ * These states show neither a log nor progress.
  */
 export function statusMessageForSession(session: SessionSnapshot): StatusMessage {
   switch (session.state) {
     case 'stopping':
-      return { title: 'Arrêt en cours…', detail: 'La session est en cours de fermeture.' };
+      return { title: 'Stopping…', detail: 'The session is closing.' };
     case 'stopped':
-      return { title: 'Système arrêté', detail: 'La session a été arrêtée.' };
+      return { title: 'System stopped', detail: 'The session has been stopped.' };
     case 'idle':
     default:
-      return { title: 'Session inactive', detail: 'Aucune session en cours.' };
+      return { title: 'Session idle', detail: 'No session is running.' };
   }
 }
 
 export function statusTextForSession(session: SessionSnapshot): string {
   switch (session.state) {
     case 'downloading':
-      return 'Chargement des ressources…';
+      return 'Loading resources…';
     case 'booting':
-      return 'Démarrage du système…';
+      return 'Starting the system…';
     case 'running':
-      return 'Session active.';
+      return 'Session running.';
     case 'stopped':
-      return 'Session arrêtée.';
+      return 'Session stopped.';
     case 'stopping':
-      return 'Arrêt de la session…';
+      return 'Stopping the session…';
     case 'preparing':
     case 'idle':
     default:
-      return 'Préparation de la session…';
+      return 'Preparing the session…';
   }
 }

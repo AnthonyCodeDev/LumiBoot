@@ -1,26 +1,20 @@
 # LumiBoot
 
-LumiBoot est un catalogue React qui exécute des systèmes x86 directement dans le
-navigateur avec **v86 / WebAssembly**. Aucun serveur de virtualisation : tout
-tourne en local, et aucun démarrage ni état de disponibilité n'est simulé.
+React catalogue of x86 systems in the browser (**v86 / WebAssembly, 32-bit**). No virtualization backend; no simulated state.
 
-## Systèmes disponibles
+## Available systems
 
-Tous tournent sur le moteur **v86 / WebAssembly (x86 32 bits)**.
-
-| Système | Variantes | Média | RAM |
+| System | Variants | Media | RAM |
 |---|---|---|---|
-| Debian 12 | CLI, X11/Openbox, XFCE | image ext4 locale (kernel + initrd) | 512 Mio / 1 Gio / 1 Gio |
-| Windows 7 | Professionnel SP1, Lite | disques RAW locaux (32 / 16 Gio) | 1536 / 1024 Mio |
-| Windows 10 x86 | 32 bits | disque RAW local (40 Gio) | 2048 Mio |
+| Debian 12 | XFCE, X11/Openbox, CLI | local ext4 image (kernel + initrd), 4 / 3 / 3 GiB | 1 GiB / 1 GiB / 512 MiB |
+| Windows 7 | Professional SP1, Lite | local RAW disks (32 / 16 GiB) | 1536 / 1024 MiB |
+| Windows 10 x86 | 32-bit | local RAW disk (40 GiB) | 2048 MiB |
 
-Les images volumineuses et les médias propriétaires ne sont pas versionnés. La
-disponibilité est dérivée de quatre faits : image présente, profil compatible,
-moteur intégré et boot validé.
+Images and proprietary media live outside Git. `ready`: `imageRef` + `browser` profile + `integrated` engine + `validated: true`, same candidate (`packages/catalog/src/systems.ts`).
 
-## Démarrer
+## Getting started
 
-Prérequis : Node.js 20+ et pnpm 9.14.2.
+Node.js ≥ 20 (`engines`), pnpm 9.14.2 (`packageManager`).
 
 ```bash
 pnpm install
@@ -28,107 +22,72 @@ pnpm assets:prepare
 pnpm dev
 ```
 
-Application : `http://127.0.0.1:5173`.
+`http://127.0.0.1:5173`.
 
-`assets:prepare` installe les binaires v86 verrouillés par
-`scripts/v86-assets.lock.json`. Les images Debian se construisent et se publient
-séparément : voir [`images/debian-12-i386/README.md`](images/debian-12-i386/README.md).
+`assets:prepare`: `v86.wasm` from the npm package + pinned BIOS, sizes and SHA-256 (`scripts/v86-assets.lock.json`). Debian: [`images/debian-12-i386/README.md`](images/debian-12-i386/README.md).
 
-## Commandes
+## Commands
 
 ```bash
-pnpm build          # typecheck puis bundle Vite
-pnpm typecheck      # tous les packages TypeScript
+pnpm build          # recursive tsc --noEmit + Vite bundle
+pnpm typecheck      # tsc --noEmit
 pnpm lint           # ESLint
-pnpm format:check   # vérification Prettier
+pnpm format:check   # Prettier (pnpm format rewrites)
 pnpm test           # Vitest
 pnpm test:e2e       # Playwright, port 5200
-pnpm assets:check   # intégrité des binaires v86
+pnpm assets:check   # v86 binary integrity
 ```
 
-Les boots réels sont opt-in car ils nécessitent plusieurs gigaoctets d'assets :
+`pnpm preview`: build on 5173. `pnpm test:watch`: Vitest in watch mode.
+
+Real boots, opt-in (several GiB of assets):
 
 ```powershell
 $env:VM_E2E_ASSETS='1'
 pnpm test:e2e
 ```
 
-Playwright utilise toujours le port `5200` ; le port `5173` reste réservé au
-serveur de développement.
+E2E: `5200`; dev: `5173` (`apps/web/vite.config.ts`, `playwright.config.ts`).
 
 ## Architecture
 
-| Chemin | Rôle |
+| Path | Role |
 |---|---|
-| `apps/web` | interface React/Vite, catalogue et sessions |
-| `apps/network-proxy` | proxy WISP V1 local en Go |
-| `packages/contracts` | types et schémas Zod |
-| `packages/catalog` | images, profils, moteurs, variantes et disponibilité |
-| `packages/vm-core` | contrats moteur, registre et cycle de vie |
-| `packages/provider-v86` | intégration v86, readiness, console et réseau |
-| `packages/vm-assets` | manifestes, intégrité et disques locaux |
-| `packages/vm-storage` | stockage versionné et quotas |
-| `packages/vm-network` | profils, capacités et diagnostics réseau |
-| `images` | scripts et manifestes d'images ; binaires ignorés |
+| `apps/web` | React/Vite, catalogue, sessions, dynamic provider import |
+| `apps/network-proxy` | local WISP V1 proxy in Go (loopback `127.0.0.1:37892`) |
+| `packages/contracts` | types and Zod schemas |
+| `packages/catalog` | images, profiles, engines, variants, availability |
+| `packages/vm-core` | engine contracts, registry, lifecycle |
+| `packages/provider-v86` | v86 integration, readiness, console, network |
+| `packages/vm-assets` | manifests, integrity, local disks |
+| `packages/vm-storage` | versioned storage, quotas; isolated package, no consumer |
+| `packages/vm-network` | modes, profiles, capabilities, diagnostics |
+| `images` | scripts and manifests; binaries ignored |
+| `infra` | Nginx, Docker dev, WISP relay |
 
-Flux : l'UI crée une session, `VMRegistry` charge le moteur à la demande,
-`V86Provider` vérifie le manifeste puis démarre l'émulateur. `running` exige un
-marqueur invité Debian ou une lecture disque réelle en mode `disk-boot`. L'arrêt
-appelle `stop()` puis `dispose()`.
+UI → `VMRegistry` → dynamic import of `provider-v86` → manifest → emulator. `running`: Debian guest marker or disk read (`disk-boot`). Stop: `stop()`, `dispose()`. Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-Voir [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) pour les responsabilités et
-invariants.
+## Network
 
-## Réseau
+- `offline`: no NIC;
+- `browser-fetch`: HTTP 80, CORS;
+- `local-proxy`: outbound TCP through the local binary on `127.0.0.1:37892`, paired from its console;
+- `user-relay`: user-provided WISP.
 
-- `offline` : aucune NIC ;
-- `browser-fetch` : HTTP 80 uniquement, soumis à CORS ;
-- `local-proxy` : TCP sortant via le binaire local sur `127.0.0.1:37892` ;
-- `user-relay` : relais WISP fourni par l'utilisateur.
+Profile fixed before v86; changing it means a new session. Public config: `apps/web/public/lumiboot.config.json`. See [`docs/network.md`](docs/network.md), [`docs/network-proxy.md`](docs/network-proxy.md).
 
-La configuration publique se trouve dans `apps/web/public/lumiboot.config.json`.
-Le proxy local nécessite un appairage approuvé dans sa console. Voir
-[`docs/network.md`](docs/network.md) et [`docs/network-proxy.md`](docs/network-proxy.md).
+## Local media
 
-## Médias locaux
+- Debian: `images/debian-12-i386/build.sh` → `apps/web/public/images/<ref>/` (`rootfs.img`, `vmlinuz-686`, `initrd.img`, `manifest.json`).
+- Windows 7: `images/<ref>/disk.img` + `pnpm assets:windows7:prepare`; Vite middleware, in-place HTTP Range.
+- Windows 10: `images/windows-10-x86/disk.img` + `pnpm assets:windows10:prepare`.
+- `pnpm assets:windows7:serve`: disk + v86 binaries on loopback, token, no copy into `public/`.
 
-- Debian : construire avec `images/debian-12-i386/build.sh`, puis publier dans
-  `apps/web/public/images/<ref>/`.
-- Windows 7 : placer le RAW dans `images/<ref>/disk.img`, générer son manifeste
-  avec `scripts/prepare-windows7-asset.mjs`, puis lancer `pnpm dev`. Le middleware
-  Vite le sert in-place par HTTP Range.
-- Windows 10 : placer le RAW dans `images/windows-10-x86/disk.img`, générer son
-  manifeste avec `scripts/prepare-windows10-asset.mjs`, puis lancer `pnpm dev`.
-
-Voir [`docs/windows-7.md`](docs/windows-7.md),
-[`docs/windows-10.md`](docs/windows-10.md) et [`docs/LICENSES.md`](docs/LICENSES.md).
-
-## Windows 10
-
-Windows 10 32 bits suit le **même pipeline disque RAW local** que Windows 7,
-depuis un disque RAW **que vous fournissez** (installation personnelle convertie
-depuis QEMU/VirtualBox) : boot lent, stockage invité éphémère (source en lecture
-seule). Le **boot réel est prouvé** (test E2E
-`tests/e2e/windows10-desktop.spec.ts`, `VM_E2E_ASSETS=1`). Le matériel réseau
-`virtio-net` est configuré (pilote VirtIO NetKVM x86 présent dans l'image), mais
-la **connectivité invitée n'est pas encore vérifiée** par un test. Aucune ISO ni
-image Windows n'est téléchargée ou redistribuée : une licence Windows vous est
-requise.
-
-```powershell
-pnpm assets:windows10:prepare --source "D:\VM\Windows10-32bit.img" --skip-hash
-pnpm assets:windows10:check
-pnpm dev
-```
-
-Les options se passent **sans** le séparateur `--`.
-
-Conversion légitime du disque, RAM 2048 Mio, matériel ACPI/virtio-net, preuve de
-boot et checklist : [`docs/windows-10.md`](docs/windows-10.md).
+See [`docs/windows-7.md`](docs/windows-7.md), [`docs/windows-10.md`](docs/windows-10.md), [`docs/LICENSES.md`](docs/LICENSES.md).
 
 ## Documentation
 
-- [`docs/AGENT_BRIEF.md`](docs/AGENT_BRIEF.md) — règles de contribution techniques
-- [`docs/system-variants.md`](docs/system-variants.md) — groupes et ordre des variantes
-- [`docs/SECURITY.md`](docs/SECURITY.md) — invariants de sécurité
-- [`docs/adr/`](docs/adr/) — décisions d'architecture
+- [`docs/AGENT_BRIEF.md`](docs/AGENT_BRIEF.md) — technical contribution
+- [`docs/system-variants.md`](docs/system-variants.md) — variants and order
+- [`docs/SECURITY.md`](docs/SECURITY.md) — security invariants
+- [`docs/adr/`](docs/adr/) — architecture decisions

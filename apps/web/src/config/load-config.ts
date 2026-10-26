@@ -14,7 +14,7 @@ import {
   type ParsedNetworkConfig,
 } from './schema';
 
-/** Emplacement public du fichier de configuration globale. */
+/** Public location of the global config file. */
 export const CONFIG_URL = '/lumiboot.config.json';
 
 export type ConfigLoadErrorCode =
@@ -27,7 +27,7 @@ export type ConfigLoadErrorCode =
   | 'CONFIG_INVALID_PROXY_URL'
   | 'CONFIG_FORBIDDEN_TOKEN';
 
-/** Erreur typée : tout échec de chargement porte un code exploitable. */
+/** Typed error: every load failure carries a usable code. */
 export class ConfigLoadError extends Error {
   readonly code: ConfigLoadErrorCode;
 
@@ -41,8 +41,8 @@ export class ConfigLoadError extends Error {
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 /**
- * Refuse un profil `user-relay` sans adresse ou dont l'adresse WISP est
- * invalide (schéma non `wss:`, identifiants, fragment…).
+ * Rejects a `user-relay` profile without an address, or whose WISP address is
+ * invalid (non-`wss:` scheme, credentials, fragment…).
  */
 function assertRelay(profile: NetworkProfile, label: string): void {
   if (profile.mode !== 'user-relay') return;
@@ -50,25 +50,25 @@ function assertRelay(profile: NetworkProfile, label: string): void {
   if (relayUrl === undefined || relayUrl.length === 0) {
     throw new ConfigLoadError(
       'CONFIG_INVALID_RELAY',
-      `Configuration invalide : ${label} active le mode « user-relay » sans adresse de relais.`,
+      `Invalid config: ${label} enables "user-relay" mode without a relay address.`,
     );
   }
   const validation = validateRelayUrl(relayUrl);
   if (!validation.ok) {
     throw new ConfigLoadError(
       'CONFIG_INVALID_RELAY',
-      `Configuration invalide : adresse de relais WISP rejetée pour ${label} — ${
-        validation.error ?? 'adresse invalide'
+      `Invalid config: WISP relay address rejected for ${label} — ${
+        validation.error ?? 'invalid address'
       }.`,
     );
   }
 }
 
 /**
- * Refuse tout jeton persisté dans le fichier public : `proxyToken` est
- * runtime uniquement (mémoire, jamais `lumiboot.config.json`). Balaye
- * récursivement le JSON brut car le schéma strict le rejetterait sinon en
- * `CONFIG_INVALID` générique, sans message de sécurité explicite.
+ * Rejects any token persisted in the public file: `proxyToken` is runtime-only
+ * (memory, never `lumiboot.config.json`). Scans the raw JSON recursively because
+ * the strict schema would otherwise reject it as a generic `CONFIG_INVALID`,
+ * without an explicit security message.
  */
 function assertNoProxyToken(raw: unknown): void {
   const seen = new Set<unknown>();
@@ -86,34 +86,34 @@ function assertNoProxyToken(raw: unknown): void {
   if (visit(raw)) {
     throw new ConfigLoadError(
       'CONFIG_FORBIDDEN_TOKEN',
-      'Configuration invalide : « proxyToken » ne doit jamais figurer dans le fichier public « /lumiboot.config.json » (jeton runtime uniquement, obtenu par appairage).',
+      'Invalid config: "proxyToken" must never appear in the public file "/lumiboot.config.json" (runtime token only, obtained through pairing).',
     );
   }
 }
 
-/** Valide l'URL d'un profil `local-proxy` (loopback uniquement). */
+/** Validates the URL of a `local-proxy` profile (loopback only). */
 function assertProxyUrl(proxyUrl: string | undefined, label: string): void {
   if (proxyUrl === undefined) return;
   const validation = validateProxyUrl(proxyUrl);
   if (!validation.ok) {
     throw new ConfigLoadError(
       'CONFIG_INVALID_PROXY_URL',
-      `Configuration invalide : adresse du proxy réseau local rejetée pour ${label} — ${
-        validation.error ?? 'adresse invalide'
+      `Invalid config: local network proxy address rejected for ${label} — ${
+        validation.error ?? 'invalid address'
       }.`,
     );
   }
 }
 
-/** Normalise la section `proxy` (défauts appliqués, URL validée). */
+/** Normalizes the `proxy` section (defaults applied, URL validated). */
 function toProxyConfig(parsed: ParsedProxyFileConfig | undefined): ProxyConfig {
   const url = parsed?.url ?? DEFAULT_PROXY_URL;
   const validation = validateProxyUrl(url);
   if (!validation.ok || validation.url === undefined) {
     throw new ConfigLoadError(
       'CONFIG_INVALID_PROXY_URL',
-      `Configuration invalide : adresse du proxy réseau local rejetée — ${
-        validation.error ?? 'adresse invalide'
+      `Invalid config: local network proxy address rejected — ${
+        validation.error ?? 'invalid address'
       }.`,
     );
   }
@@ -127,13 +127,13 @@ function toProxyConfig(parsed: ParsedProxyFileConfig | undefined): ProxyConfig {
   return config;
 }
 
-/** Nettoie les profils validés et vérifie les relais avant exposition. */
+/** Cleans validated profiles and checks relays before exposure. */
 function toNetworkConfig(parsed: ParsedNetworkConfig): NetworkConfig {
   const defaultProfile = normalizeNetworkProfile(parsed.defaultProfile);
-  assertRelay(defaultProfile, 'le profil réseau par défaut');
+  assertRelay(defaultProfile, 'the default network profile');
   assertProxyUrl(
     defaultProfile.mode === 'local-proxy' ? defaultProfile.proxyUrl : undefined,
-    'le profil réseau par défaut',
+    'the default network profile',
   );
 
   const parsedSystems = parsed.systems;
@@ -144,10 +144,10 @@ function toNetworkConfig(parsed: ParsedNetworkConfig): NetworkConfig {
   const systems: Record<string, NetworkProfile> = {};
   for (const [id, rawProfile] of Object.entries(parsedSystems)) {
     const profile = normalizeNetworkProfile(rawProfile);
-    assertRelay(profile, `le système « ${id} »`);
+    assertRelay(profile, `the "${id}" system`);
     assertProxyUrl(
       profile.mode === 'local-proxy' ? profile.proxyUrl : undefined,
-      `le système « ${id} »`,
+      `the "${id}" system`,
     );
     systems[id] = profile;
   }
@@ -155,11 +155,11 @@ function toNetworkConfig(parsed: ParsedNetworkConfig): NetworkConfig {
 }
 
 /**
- * Charge la configuration globale publique avant le rendu React.
+ * Loads the global public config before the React render.
  *
- * Détecte le repli SPA (page HTML servie à la place du JSON), valide la
- * version, le schéma puis les adresses de relais. Ne lève jamais d'exception
- * non typée : tout échec est un `ConfigLoadError`.
+ * Detects the SPA fallback (HTML page served instead of JSON), validates the
+ * version, then the schema, then the relay addresses. Never throws an untyped
+ * exception: every failure is a `ConfigLoadError`.
  */
 export async function loadConfig(fetchImpl: FetchLike = fetch): Promise<LumibootConfig> {
   let response: Response;
@@ -168,7 +168,7 @@ export async function loadConfig(fetchImpl: FetchLike = fetch): Promise<Lumiboot
   } catch (cause) {
     throw new ConfigLoadError(
       'CONFIG_NOT_FOUND',
-      `Configuration introuvable : impossible de charger « ${CONFIG_URL} ».`,
+      `Config not found: cannot load "${CONFIG_URL}".`,
       { cause },
     );
   }
@@ -177,7 +177,7 @@ export async function loadConfig(fetchImpl: FetchLike = fetch): Promise<Lumiboot
     const statusText = response.statusText.length > 0 ? ` ${response.statusText}` : '';
     throw new ConfigLoadError(
       'CONFIG_NOT_FOUND',
-      `Configuration introuvable : « ${CONFIG_URL} » a répondu ${response.status}${statusText}.`,
+      `Config not found: "${CONFIG_URL}" responded ${response.status}${statusText}.`,
     );
   }
 
@@ -188,17 +188,17 @@ export async function loadConfig(fetchImpl: FetchLike = fetch): Promise<Lumiboot
   } catch (cause) {
     throw new ConfigLoadError(
       'CONFIG_INVALID',
-      `Configuration illisible : « ${CONFIG_URL} » n'a pas pu être lu.`,
+      `Config unreadable: "${CONFIG_URL}" could not be read.`,
       { cause },
     );
   }
 
-  // Repli SPA : le serveur renvoie index.html au lieu du fichier de config.
+  // SPA fallback: the server returns index.html instead of the config file.
   if (contentType.includes('text/html') || text.trimStart().startsWith('<')) {
     throw new ConfigLoadError(
       'CONFIG_INVALID',
-      `Configuration introuvable : « ${CONFIG_URL} » a renvoyé une page HTML (repli SPA). ` +
-        'Vérifiez que le fichier est bien déployé.',
+      `Config not found: "${CONFIG_URL}" returned an HTML page (SPA fallback). ` +
+        'Check that the file is actually deployed.',
     );
   }
 
@@ -208,7 +208,7 @@ export async function loadConfig(fetchImpl: FetchLike = fetch): Promise<Lumiboot
   } catch (cause) {
     throw new ConfigLoadError(
       'CONFIG_INVALID_JSON',
-      `Configuration illisible : « ${CONFIG_URL} » n'est pas un JSON valide.`,
+      `Config unreadable: "${CONFIG_URL}" is not valid JSON.`,
       { cause },
     );
   }
@@ -218,9 +218,9 @@ export async function loadConfig(fetchImpl: FetchLike = fetch): Promise<Lumiboot
   if (version !== 1) {
     throw new ConfigLoadError(
       'CONFIG_VERSION_UNSUPPORTED',
-      `Version de configuration non prise en charge : ${
-        version === undefined ? 'absente' : JSON.stringify(version)
-      } (attendu : 1).`,
+      `Unsupported config version: ${
+        version === undefined ? 'missing' : JSON.stringify(version)
+      } (expected: 1).`,
     );
   }
 
@@ -232,14 +232,12 @@ export async function loadConfig(fetchImpl: FetchLike = fetch): Promise<Lumiboot
     if (first !== undefined && first.path.includes('mode')) {
       throw new ConfigLoadError(
         'CONFIG_INVALID_MODE',
-        `Mode réseau inconnu dans la configuration « ${CONFIG_URL} » : ${first.message}.`,
+        `Unknown network mode in config "${CONFIG_URL}": ${first.message}.`,
       );
     }
     throw new ConfigLoadError(
       'CONFIG_INVALID',
-      `Configuration invalide dans « ${CONFIG_URL} » : ${
-        first?.message ?? 'structure inattendue'
-      }.`,
+      `Invalid config in "${CONFIG_URL}": ${first?.message ?? 'unexpected structure'}.`,
     );
   }
 

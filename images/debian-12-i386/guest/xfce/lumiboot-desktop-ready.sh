@@ -1,34 +1,34 @@
 #!/bin/sh
 #
-# Émission du marqueur de session graphique LumiBoot (flavor xfce).
+# Emission of the LumiBoot graphical session marker (xfce flavor).
 #
-# Ce script est exécuté PAR LE SYSTÈME INVITÉ (unité systemd
-# lumiboot-desktop-ready.service). Il ne produit JAMAIS le marqueur à la place
-# d'une GUI : il vérifie réellement que
-#   1. la socket X du serveur :0 existe,
-#   2. le serveur X RÉPOND (xdpyinfo),
-#   3. la session XFCE tourne (xfce4-session ou le gestionnaire de fenêtres xfwm4),
-# puis écrit LUMIBOOT_DESKTOP_READY:<ref> sur la console série (ttyS0).
+# This script is executed BY THE GUEST SYSTEM (systemd unit
+# lumiboot-desktop-ready.service). It NEVER produces the marker in place of a
+# GUI: it really checks that
+#   1. the X socket of server :0 exists,
+#   2. the X server ANSWERS (xdpyinfo),
+#   3. the XFCE session runs (xfce4-session or the xfwm4 window manager),
+# then writes LUMIBOOT_DESKTOP_READY:<ref> to the serial console (ttyS0).
 #
-# Le service tourne en root ; le serveur X a été lancé par l'utilisateur
-# « lumiboot » avec un cookie MIT-MAGIC-COOKIE dans ~/.Xauthority. Pour pouvoir
-# interroger :0, on pointe donc XAUTHORITY sur le fichier de « lumiboot » (et on
-# fixe DISPLAY) : sans cela, xdpyinfo échouerait sur « No protocol specified »
-# alors même que X fonctionne.
+# The service runs as root; the X server was started by the "lumiboot" user with
+# a MIT-MAGIC-COOKIE in ~/.Xauthority. To be able to query :0, XAUTHORITY is
+# therefore pointed at the "lumiboot" file (and DISPLAY is set): without that,
+# xdpyinfo would fail with "No protocol specified" even though X works.
 #
-# Si la session graphique ne démarre pas dans le délai, un marqueur d'échec
-# distinct est émis et l'unité échoue : aucune GUI n'est déclarée prête à tort.
+# If the graphical session does not start within the deadline, a distinct
+# failure marker is emitted and the unit fails: no GUI is wrongly declared
+# ready.
 set -u
 
 REF='debian-12-i386-xfce'
-# Délai large : l'émulation logicielle de v86 est lente (démarrage X + XFCE).
+# Generous deadline: the software emulation of v86 is slow (X + XFCE start).
 DEADLINE=300
 
 export DISPLAY=:0
 export XAUTHORITY=/home/lumiboot/.Xauthority
 
-# XFCE peut exposer la session via le gestionnaire de session ou le WM ; les
-# deux sont acceptés comme preuve que la session XFCE est réellement vivante.
+# XFCE can expose the session through the session manager or the WM; both are
+# accepted as proof that the XFCE session is really alive.
 xfce_session_running() {
   pgrep -x xfce4-session >/dev/null 2>&1 || pgrep -x xfwm4 >/dev/null 2>&1
 }

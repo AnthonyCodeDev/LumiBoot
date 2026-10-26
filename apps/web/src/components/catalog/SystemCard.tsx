@@ -22,7 +22,7 @@ export function SystemCard({ system, onOpen, muted = false }: SystemCardProps) {
       style={accentStyle(system)}
       data-id={system.id}
       tabIndex={0}
-      aria-label={`Ouvrir la fiche de ${system.displayName}`}
+      aria-label={`Open the ${system.displayName} page`}
       onClick={() => onOpen(system)}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;

@@ -8,54 +8,54 @@ function cloneCatalog(): Array<Record<string, unknown>> {
 }
 
 describe('validateCatalog', () => {
-  it('accepte le catalogue fourni', () => {
+  it('accepts the provided catalog', () => {
     expect(() => validateCatalog(cloneCatalog())).not.toThrow();
   });
 
-  it('rejette une entrée sans identifiant', () => {
+  it('rejects an entry without an identifier', () => {
     const catalog = cloneCatalog();
     delete catalog[0]!.id;
     expect(() => validateCatalog(catalog)).toThrow(CatalogValidationError);
   });
 
-  it('rejette un accentRgb mal formé', () => {
+  it('rejects a malformed accentRgb', () => {
     const catalog = cloneCatalog();
     catalog[0]!.accentRgb = 'not-a-color';
     expect(() => validateCatalog(catalog)).toThrow(CatalogValidationError);
   });
 
-  it('rejette un slug invalide', () => {
+  it('rejects an invalid slug', () => {
     const catalog = cloneCatalog();
     catalog[0]!.slug = 'Debian 12';
     expect(() => validateCatalog(catalog)).toThrow(CatalogValidationError);
   });
 
-  it('rejette les identifiants dupliqués', () => {
+  it('rejects duplicate identifiers', () => {
     const catalog = cloneCatalog();
     catalog[1]!.id = catalog[0]!.id;
     try {
       validateCatalog(catalog);
-      throw new Error('devrait lever');
+      throw new Error('should throw');
     } catch (error) {
       expect(error).toBeInstanceOf(CatalogValidationError);
-      expect((error as CatalogValidationError).issues[0]?.message).toContain('dupliqué');
+      expect((error as CatalogValidationError).issues[0]?.message).toContain('duplicate');
     }
   });
 
-  it('rejette un variant pointant vers un groupe inexistant', () => {
+  it('rejects a variant pointing to a nonexistent group', () => {
     const catalog = cloneCatalog();
     const child = catalog.find((entry) => entry.id === 'windows-7-pro-sp1-x86')!;
     child.variantGroupId = 'windows-7-inexistant';
     expect(() => validateCatalog(catalog)).toThrow(CatalogValidationError);
   });
 
-  it('accepte le groupe Windows 7 : mère sans groupe, variante rattachée', () => {
+  it('accepts the Windows 7 group: parent without group, attached variant', () => {
     const catalog = cloneCatalog();
     const mother = catalog.find((entry) => entry.id === 'windows-7-x86')!;
     const child = catalog.find((entry) => entry.id === 'windows-7-pro-sp1-x86')!;
     expect(mother.variantGroupId).toBeUndefined();
     expect(child.variantGroupId).toBe('windows-7-x86');
-    // Le catalogue complet (dont la mère + sa variante) passe Zod.
+    // The full catalog (parent + its variant) passes Zod.
     expect(() => validateCatalog(catalog)).not.toThrow();
   });
 });

@@ -2,15 +2,15 @@ import { z } from 'zod';
 import { NETWORK_MODES, type NetworkMode } from './modes';
 import { NetworkError } from './errors';
 
-/** Configuration réseau d'une machine virtuelle. Aucun relais public par défaut. */
+/** Network configuration of a virtual machine. No public relay by default. */
 export interface NetworkProfile {
   mode: NetworkMode;
   relayUrl?: string;
   proxyUrl?: string;
   /**
-   * Jeton de session du proxy réseau local (RUNTIME uniquement). Ne doit JAMAIS provenir
-   * du fichier de config public (la validation web le refusera) : il est fourni
-   * à l'exécution (appairage) et n'est jamais persisté dans la config publique.
+   * Session token of the local network proxy (RUNTIME only). Must NEVER come
+   * from the public config file (web validation rejects it): it is supplied at
+   * runtime (pairing) and is never persisted in the public config.
    */
   proxyToken?: string;
 }
@@ -57,24 +57,24 @@ function cleanProfile(parsed: ParsedProfile): NetworkProfile {
 function formatIssues(error: z.ZodError): string[] {
   return error.issues.map((issue) => {
     const path = issue.path.join('.');
-    return path.length > 0 ? `${path} : ${issue.message}` : issue.message;
+    return path.length > 0 ? `${path}: ${issue.message}` : issue.message;
   });
 }
 
-/** Valide puis nettoie un profil : `relayUrl` n'est conservé qu'en mode `user-relay`, `proxyUrl`/`proxyToken` qu'en mode `local-proxy`. */
+/** Validates then cleans a profile: `relayUrl` is only kept in `user-relay` mode, `proxyUrl`/`proxyToken` only in `local-proxy` mode. */
 export function normalizeNetworkProfile(input: unknown): NetworkProfile {
   const result = networkProfileSchema.safeParse(input);
   if (!result.success) {
     throw new NetworkError(
       'NETWORK_INVALID_PROFILE',
-      `Profil réseau invalide : ${formatIssues(result.error).join(' ; ')}`,
+      `Invalid network profile: ${formatIssues(result.error).join('; ')}`,
       { cause: result.error },
     );
   }
   return cleanProfile(result.data);
 }
 
-/** Valide un profil sans lever : renvoie les erreurs et le profil nettoyé. */
+/** Validates a profile without throwing: returns the errors and the cleaned profile. */
 export function validateNetworkProfile(input: unknown): NetworkProfileValidation {
   const result = networkProfileSchema.safeParse(input);
   if (!result.success) {

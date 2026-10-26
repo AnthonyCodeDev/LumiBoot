@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 describe('proxy persistence', () => {
-  it('sauvegarde puis relit une session valide', () => {
+  it('saves then re-reads a valid session', () => {
     saveProxySession({ token: 'tok', expiresAt: futureIso(), proxyUrl: URL });
     expect(loadProxySession(URL)).toEqual({
       token: 'tok',
@@ -29,13 +29,13 @@ describe('proxy persistence', () => {
     });
   });
 
-  it('utilise sessionStorage et ne persiste jamais dans localStorage', () => {
+  it('uses sessionStorage and never persists in localStorage', () => {
     saveProxySession({ token: 'tok', expiresAt: futureIso(), proxyUrl: URL });
     expect(sessionStorage.getItem(STORAGE_KEY)).not.toBeNull();
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('purge un bearer hérité de localStorage (aucune migration)', () => {
+  it('purges a bearer inherited from localStorage (no migration)', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({ token: 'legacy', expiresAt: futureIso(), proxyUrl: URL }),
@@ -44,7 +44,7 @@ describe('proxy persistence', () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('expiresAt dépassé → null et nettoyage du stockage', () => {
+  it('expiresAt in the past → null and storage cleanup', () => {
     saveProxySession({
       token: 'tok',
       expiresAt: new Date(Date.now() - 1000).toISOString(),
@@ -54,32 +54,32 @@ describe('proxy persistence', () => {
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('expiresAt illisible → null et nettoyage', () => {
-    saveProxySession({ token: 'tok', expiresAt: 'pas-une-date', proxyUrl: URL });
+  it('unreadable expiresAt → null and cleanup', () => {
+    saveProxySession({ token: 'tok', expiresAt: 'not-a-date', proxyUrl: URL });
     expect(loadProxySession(URL)).toBeNull();
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('proxyUrl différent → null et nettoyage', () => {
+  it('different proxyUrl → null and cleanup', () => {
     saveProxySession({ token: 'tok', expiresAt: futureIso(), proxyUrl: URL });
     expect(loadProxySession('http://127.0.0.1:9999')).toBeNull();
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('JSON corrompu → null sans lever', () => {
+  it('corrupted JSON → null without throwing', () => {
     sessionStorage.setItem(STORAGE_KEY, '{not valid json');
     expect(() => loadProxySession(URL)).not.toThrow();
     expect(loadProxySession(URL)).toBeNull();
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('format invalide (champs manquants) → null et nettoyage', () => {
+  it('invalid format (missing fields) → null and cleanup', () => {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ token: 'tok' }));
     expect(loadProxySession(URL)).toBeNull();
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('absence de sessionStorage → null sans lever', () => {
+  it('missing sessionStorage → null without throwing', () => {
     vi.stubGlobal('sessionStorage', undefined);
     expect(() =>
       saveProxySession({ token: 'tok', expiresAt: futureIso(), proxyUrl: URL }),
@@ -88,7 +88,7 @@ describe('proxy persistence', () => {
     expect(() => clearProxySession()).not.toThrow();
   });
 
-  it('clearProxySession supprime la session persistée', () => {
+  it('clearProxySession removes the persisted session', () => {
     saveProxySession({ token: 'tok', expiresAt: futureIso(), proxyUrl: URL });
     clearProxySession();
     expect(loadProxySession(URL)).toBeNull();

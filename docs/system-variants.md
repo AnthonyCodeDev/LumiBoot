@@ -1,32 +1,34 @@
-# Variantes système
+# System variants
 
-Une famille de variantes apparaît sous une seule carte. La fiche conserve le contenu de la variante mère et le sélecteur choisit uniquement le profil à lancer.
+One card per family; the selector picks the launched profile.
 
-## Modèle
+## Model
 
-Les champs sont déclarés dans `packages/catalog/src/profiles.ts`, puis copiés dans `OSDefinition` :
+Fields in `packages/catalog/src/profiles.ts`, copied into `OSDefinition` by `systems.ts`:
 
-| Champ | Rôle |
+| Field | Role |
 |---|---|
-| `variantGroupId` | identifiant de la mère ; absent sur la mère |
-| `variantName` | libellé court affiché dans le sélecteur |
-| `variantOrder` | priorité croissante ; la plus petite valeur est sélectionnée par défaut |
+| `variantGroupId` | parent id; absent on the parent |
+| `variantName` | short selector label |
+| `variantOrder` | ascending priority; lowest = default; absent = after the ordered variants |
 
-Chaque variante garde sa propre image, son profil, sa readiness et sa disponibilité.
+Each variant has its own image, profile, readiness and availability.
 
-## Groupes actuels
+## Current groups
 
-| Groupe | Ordre |
-|---|---|
-| Debian (`debian-12-i386`) | XFCE, X11, CLI |
-| Windows 7 (`windows-7-x86`) | Professionnel, Lite |
+| Group | Order | Default |
+|---|---|---|
+| Debian (`debian-12-i386`) | XFCE, X11, CLI | XFCE |
+| Windows 7 (`windows-7-x86`) | Professional, Lite | Professional |
 
 ## Helpers
 
-- `getDisplaySystems()` : mères et systèmes autonomes ;
-- `getVariantGroup()` : membres triés par `variantOrder` ;
-- `getDefaultVariant()` : premier membre du groupe ;
-- `getVariantParent()` / `getVariantParentId()` : résolution de la mère ;
-- `hasVariants()` : groupe de plusieurs entrées.
+`packages/catalog/src/systems.ts`:
 
-Pour ajouter une variante : créer son image dans `images.ts`, son profil complet dans `profiles.ts`, renseigner `variantGroupId`, `variantName` et `variantOrder`, puis ajouter les tests catalogue/UI/E2E. Aucun changement de composant React n'est requis.
+- `getDisplaySystems()`: parents and standalone systems;
+- `getVariantGroup()`: members sorted by `variantOrder`;
+- `getDefaultVariant()`: first member;
+- `getVariantParent()` / `getVariantParentId()`: parent resolution;
+- `hasVariants()`: group with several entries.
+
+Adding one: image (`images.ts`), profile (`profiles.ts`), `variantGroupId`, `variantName`, `variantOrder`, catalogue/UI/E2E tests. No React component to change.

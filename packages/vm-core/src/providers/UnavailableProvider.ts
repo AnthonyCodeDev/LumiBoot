@@ -8,9 +8,9 @@ import type { VMInstance } from '../contracts/VMInstance';
 export const UNAVAILABLE_PROVIDER_ID = 'unavailable';
 
 /**
- * Construit une instance qui signale honnêtement qu'aucun moteur ne peut
- * démarrer le système : le premier abonné reçoit une erreur typée. Aucune
- * progression simulée n'est jamais émise.
+ * Builds an instance that honestly reports that no engine can start the
+ * system: the first subscriber receives a typed error. No simulated progress is
+ * ever emitted.
  */
 export function createErrorHandle(
   providerId: string,
@@ -44,9 +44,9 @@ export function createErrorHandle(
 }
 
 /**
- * Moteur de repli : il ne calcule rien et n'affiche jamais de fausse VM. Il
- * existe pour que l'interface reste honnête quand aucun moteur réel n'est
- * disponible pour un système donné.
+ * Fallback engine: it computes nothing and never renders a fake VM. It exists
+ * so the interface stays honest when no real engine is available for a given
+ * system.
  */
 export class UnavailableProvider implements VMEngine {
   readonly id = UNAVAILABLE_PROVIDER_ID;
@@ -61,10 +61,10 @@ export class UnavailableProvider implements VMEngine {
 
   async start(os: OSDefinition): Promise<VMInstance> {
     const launchProfile = os.launchProfiles[0];
-    const engineLabel = launchProfile ? launchProfile.engineId : 'inconnu';
+    const engineLabel = launchProfile ? launchProfile.engineId : 'unknown';
     const error = new VMError(
       'ENGINE_NOT_INTEGRATED',
-      `Le moteur « ${engineLabel} » n'est pas encore intégré. Aucun système n'a été démarré.`,
+      `Engine "${engineLabel}" is not yet integrated. No system was started.`,
       { systemId: os.id },
     );
     return createErrorHandle(this.id, os.id, error);

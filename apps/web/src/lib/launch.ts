@@ -17,115 +17,114 @@ export interface LaunchReadiness {
 
 export interface LaunchReadinessOptions {
   /**
-   * Le média local requis par un système `user-import` a-t-il réellement été
-   * importé (octets disponibles) ? Fourni par le store de médias utilisateur.
+   * Has the local media required by a `user-import` system actually been imported
+   * (bytes available)? Provided by the user media store.
    */
   userMediaReady?: boolean;
 }
 
 /**
- * Message utilisateur stable par cause d'indisponibilité runtime. On ne
- * présente jamais un motif technique brut : chaque cause (404, repli HTML d'une
- * SPA, absence de HTTP Range…) a une explication actionnable.
+ * Stable user message per runtime unavailability cause. A raw technical reason is
+ * never shown: every cause (404, SPA HTML fallback, missing HTTP Range…) has an
+ * actionable explanation.
  */
 const RUNTIME_REASON_MESSAGES: Record<AssetUnavailableReason, string> = {
-  'ref-invalid': 'La référence du média système est invalide.',
-  'manifest-missing': 'Le manifeste du média est absent du serveur (HTTP 404).',
+  'ref-invalid': 'The system media reference is invalid.',
+  'manifest-missing': 'The media manifest is missing from the server (HTTP 404).',
   'manifest-html':
-    'Le serveur a renvoyé une page HTML (repli SPA) au lieu du manifeste JSON du média.',
-  'manifest-invalid': 'Le manifeste du média n’est pas un JSON lisible.',
-  'manifest-schema': 'Le manifeste du média ne respecte pas le schéma attendu.',
-  'ref-mismatch': 'La référence du manifeste ne correspond pas au système demandé.',
-  'disk-missing': 'Le disque du média est absent du serveur (HTTP 404).',
-  'disk-html': 'Le serveur a renvoyé une page HTML (repli SPA) au lieu du fichier disque.',
-  'disk-mismatch': 'La taille du disque servi ne correspond pas à celle annoncée par le manifeste.',
+    'The server returned an HTML page (SPA fallback) instead of the media JSON manifest.',
+  'manifest-invalid': 'The media manifest is not readable JSON.',
+  'manifest-schema': 'The media manifest does not match the expected schema.',
+  'ref-mismatch': 'The manifest reference does not match the requested system.',
+  'disk-missing': 'The media disk is missing from the server (HTTP 404).',
+  'disk-html': 'The server returned an HTML page (SPA fallback) instead of the disk file.',
+  'disk-mismatch': 'The served disk size does not match the one announced by the manifest.',
   'range-unsupported':
-    'Le serveur ne sert pas le disque en HTTP Range (206) : v86 ne peut pas le lire par plages.',
-  unauthorized: 'L’accès au média a été refusé par le serveur.',
-  network: 'Le média est inaccessible (erreur réseau).',
-  aborted: 'La vérification de disponibilité du média a été annulée.',
+    'The server does not serve the disk over HTTP Range (206): v86 cannot read it in ranges.',
+  unauthorized: 'Access to the media was refused by the server.',
+  network: 'The media is unreachable (network error).',
+  aborted: 'The media availability check was aborted.',
 };
 
 /**
- * Source de vérité pour l'activation du bouton « Lancer une session », côté
- * DÉCLARÉ (catalogue) et contraintes statiques.
+ * Source of truth for enabling the "Start session" button, on the DECLARED side
+ * (catalogue) plus static constraints.
  *
- * - Système à **disque local** (`readiness.mode === 'disk-boot'`, ex. Windows 7) :
- *   lançable dès que le moteur est intégré, qu'un disque est référencé
- *   (`imageRef`), que la mémoire allouée est cohérente et que l'architecture est
- *   servie par le moteur. Aucun média n'est importé ni demandé : le disque est
- *   celui de la codebase, servi localement. Sa présence réelle est vérifiée au
- *   runtime par `checkSystemRuntimeAvailability`.
- * - Système `bundled` : lançable si l'entrée catalogue est `ready`, que le
- *   moteur principal est intégré et que l'architecture est servie.
- * - Système `user-import` : lançable dès que l'utilisateur a importé SON média
- *   légal — jamais auparavant.
+ * - **Local disk** system (`readiness.mode === 'disk-boot'`, e.g. Windows 7):
+ *   launchable once the engine is integrated, a disk is referenced
+ *   (`imageRef`), the allocated memory is consistent and the architecture is
+ *   served by the engine. No media is imported or requested: the disk belongs to
+ *   the codebase and is served locally. Its real presence is checked at runtime
+ *   by `checkSystemRuntimeAvailability`.
+ * - `bundled` system: launchable when the catalogue entry is `ready`, the main
+ *   engine is integrated and the architecture is served.
+ * - `user-import` system: launchable once the user imported THEIR legal
+ *   media — never before.
  *
- * L'architecture non servie (ex. `x86_64`/`arm64` sous v86) et l'absence de
- * moteur intégré sont refusées EXPLICITEMENT ici, avant tout démarrage.
+ * An unserved architecture (e.g. `x86_64`/`arm64` under v86) and a missing
+ * integrated engine are refused EXPLICITLY here, before any boot.
  */
 export function getLaunchReadiness(
   system: OSDefinition,
   options: LaunchReadinessOptions = {},
 ): LaunchReadiness {
   if (system.availability === 'unavailable') {
-    return { canLaunch: false, reason: 'Ce système est marqué comme indisponible.' };
+    return { canLaunch: false, reason: 'This system is marked as unavailable.' };
   }
 
   const profile = getPrimaryLaunchProfile(system);
   const declared = getDeclaredReadiness(system);
 
-  // 1. Contrôles liés à la source du média.
+  // 1. Checks tied to the media source.
   if (declared.mediaSource === 'user-import') {
     if (!isEngineIntegrated(profile.engineId)) {
       return {
         canLaunch: false,
-        reason: `Le moteur « ${profile.engineId} » n'est pas encore intégré.`,
+        reason: `The "${profile.engineId}" engine is not integrated.`,
       };
     }
     if (!options.userMediaReady) {
       return {
         canLaunch: false,
         reason:
-          'Ressource requise : importez un média disque que vous détenez légalement pour ' +
-          'démarrer cette session. Aucune image n’est distribuée par LumiBoot.',
+          'Resource required: import a disk media you own legally to start this ' +
+          'session. LumiBoot distributes no images.',
       };
     }
   } else if (declared.mediaSource === 'local-disk') {
     if (!isEngineIntegrated(profile.engineId)) {
       return {
         canLaunch: false,
-        reason: `Le moteur « ${profile.engineId} » n'est pas encore intégré.`,
+        reason: `The "${profile.engineId}" engine is not integrated.`,
       };
     }
     if (!system.imageRef) {
       return {
         canLaunch: false,
-        reason: 'Aucun disque local n’est associé à ce système.',
+        reason: 'No local disk is associated with this system.',
       };
     }
   } else {
     if (system.availability !== 'ready') {
       return {
         canLaunch: false,
-        reason:
-          'Ce système est en préparation : son moteur et son image ne sont pas encore disponibles.',
+        reason: 'This system is not ready: its engine and image are not available.',
       };
     }
     if (!isEngineIntegrated(profile.engineId)) {
       return {
         canLaunch: false,
-        reason: `Le moteur « ${profile.engineId} » n'est pas encore intégré.`,
+        reason: `The "${profile.engineId}" engine is not integrated.`,
       };
     }
   }
 
-  // 2. Contrainte mémoire déclarée (cohérence profil / mémoire allouée).
+  // 2. Declared memory constraint (profile consistency / allocated memory).
   const memoryReason = getMemoryConstraintReason(system, profile);
   if (memoryReason !== null) return { canLaunch: false, reason: memoryReason };
 
-  // 3. Compatibilité runtime architecture/CPU + prérequis navigateur. Un moteur
-  //    qui ne sert pas l'architecture du système est refusé ici, pas au démarrage.
+  // 3. Runtime architecture/CPU compatibility + browser prerequisites. An engine
+  //    that does not serve the system architecture is refused here, not at boot.
   const compatibility = explainSystemCompatibility(system);
   if (!compatibility.compatible) {
     return { canLaunch: false, reason: compatibility.reasons.join(' ') };
@@ -135,47 +134,46 @@ export function getLaunchReadiness(
 }
 
 /**
- * Contrainte mémoire statique : la mémoire configurée doit être définie et au
- * moins égale au minimum déclaré par le profil. Les deux valeurs viennent du
- * catalogue ; ce contrôle empêche un profil incohérent de promettre un boot
- * qu'il ne peut pas tenir.
+ * Static memory constraint: the configured memory must be set and at least equal
+ * to the profile's declared minimum. Both values come from the catalogue; this
+ * check stops an inconsistent profile from promising a boot it cannot deliver.
  */
 function getMemoryConstraintReason(system: OSDefinition, profile: LaunchProfile): string | null {
   const configured = profile.configuration?.memoryMiB ?? system.minMemoryMiB;
   if (configured === undefined || configured <= 0) {
-    return 'Mémoire invitée non définie : le lancement ne peut pas être garanti.';
+    return 'Guest memory is not set: the launch cannot be guaranteed.';
   }
   const minimum = profile.minMemoryMiB;
   if (minimum !== undefined && configured < minimum) {
-    return `Mémoire invitée insuffisante : ${configured} Mio alloués pour ${minimum} Mio requis.`;
+    return `Insufficient guest memory: ${configured} MiB allocated for ${minimum} MiB required.`;
   }
   return null;
 }
 
-/** Options de la vérification de disponibilité runtime (injectables en test). */
+/** Options for the runtime availability check (injectable in tests). */
 export interface RuntimeCheckOptions {
   readonly signal?: AbortSignal;
   readonly fetchImpl?: typeof fetch;
 }
 
-/** Résultat d'une vérification de disponibilité runtime du média. */
+/** Result of a runtime media availability check. */
 export interface RuntimeAvailability {
   readonly available: boolean;
   readonly reason?: string;
-  /** Taille du disque annoncée par le serveur (`Content-Range`), si connue. */
+  /** Disk size announced by the server (`Content-Range`), when known. */
   readonly size?: number;
 }
 
 /**
- * Vérifie que le média DÉCLARÉ d'un système est réellement servable maintenant :
- * manifeste JSON valide, référence cohérente et disque servi en HTTP Range
- * (206 + `Content-Range`). Séparé de la disponibilité catalogue : un `ready`
- * déclaré peut très bien correspondre à un disque absent (gitignoré), à un repli
- * HTML de SPA ou à un serveur qui ignore Range.
+ * Checks that the DECLARED media of a system is really servable right now: valid
+ * JSON manifest, consistent reference and disk served over HTTP Range
+ * (206 + `Content-Range`). Separate from catalogue availability: a declared
+ * `ready` may well map to a missing disk (gitignored), to an SPA HTML fallback or
+ * to a server ignoring Range.
  *
- * Pour un système `user-import`, le média est local (blob du navigateur) : il
- * n'est jamais vérifié par HTTP — seule la présence importée (`userMediaReady`)
- * compte, contrôlée par l'appelant.
+ * For a `user-import` system, the media is local (browser blob): it is never
+ * checked over HTTP — only the imported presence (`userMediaReady`) matters,
+ * checked by the caller.
  */
 export async function checkSystemRuntimeAvailability(
   system: OSDefinition,
@@ -186,7 +184,7 @@ export async function checkSystemRuntimeAvailability(
 
   const ref = system.imageRef;
   if (!ref) {
-    return { available: false, reason: 'Aucun média n’est associé à ce système.' };
+    return { available: false, reason: 'No media is associated with this system.' };
   }
 
   const assetOptions: AssetAvailabilityOptions = {
@@ -205,15 +203,15 @@ export async function checkSystemRuntimeAvailability(
   const reason =
     result.message ??
     RUNTIME_REASON_MESSAGES[result.reason ?? 'network'] ??
-    'Le média système est indisponible.';
+    'The system media is unavailable.';
   return { available: false, reason };
 }
 
 /**
- * Readiness COMPLÈTE du bouton de lancement : d'abord les contraintes déclarées
- * (catalogue, moteur, architecture, mémoire, média importé), puis la
- * disponibilité runtime (manifeste + disque HTTP Range). Renvoie la première
- * raison de refus explicite.
+ * COMPLETE readiness of the launch button: first the declared constraints
+ * (catalogue, engine, architecture, memory, imported media), then the runtime
+ * availability (manifest + HTTP Range disk). Returns the first explicit refusal
+ * reason.
  */
 export async function resolveLaunchReadiness(
   system: OSDefinition,
@@ -231,7 +229,7 @@ export async function resolveLaunchReadiness(
   if (!runtime.available) {
     return {
       canLaunch: false,
-      reason: runtime.reason ?? 'Le média système est indisponible.',
+      reason: runtime.reason ?? 'The system media is unavailable.',
     };
   }
   return { canLaunch: true };

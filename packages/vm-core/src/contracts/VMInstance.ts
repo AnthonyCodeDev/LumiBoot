@@ -1,11 +1,11 @@
 import type { SessionEvent } from '@lumiboot/contracts';
 
 /**
- * Machine virtuelle réellement créée par un moteur.
+ * Virtual machine actually created by an engine.
  *
- * `dispose()` doit toujours être appelé au démontage et après `stop()` : aucun
- * worker WASM ne doit rester orphelin. Une instance arrêtée n'est pas encore
- * libérée tant que `dispose()` n'a pas été appelé.
+ * `dispose()` must always be called on unmount and after `stop()`: no WASM
+ * worker must stay orphaned. A stopped instance is not yet released as long as
+ * `dispose()` has not been called.
  */
 export interface VMInstance {
   readonly id: string;

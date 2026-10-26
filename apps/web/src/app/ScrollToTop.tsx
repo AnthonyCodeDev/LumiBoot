@@ -2,8 +2,8 @@ import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
 /**
- * Remet la fenêtre en haut à chaque changement de route (navigation client).
- * Force un saut instantané malgré `scroll-behavior: smooth` global.
+ * Scrolls the window back to the top on every route change (client navigation).
+ * Forces an instant jump despite the global `scroll-behavior: smooth`.
  */
 export function ScrollToTop() {
   const { pathname } = useLocation();

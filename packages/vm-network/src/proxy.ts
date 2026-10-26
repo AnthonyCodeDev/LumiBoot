@@ -1,10 +1,11 @@
 /**
- * Concepts **communs** du proxy réseau local LumiBoot (aucune dépendance
- * React/Go).
+ * **Shared** concepts of the LumiBoot local network proxy (no React/Go
+ * dependency).
  *
- * Le proxy réseau local est un serveur WISP local exposé sur loopback
- * (`http://127.0.0.1:37892` par défaut). La VM s'y relie via une URL WebSocket
- * `ws(s)://…/wisp/` dérivée de l'URL HTTP(S) du proxy réseau local.
+ * The local network proxy is a local WISP server exposed on loopback
+ * (`http://127.0.0.1:37892` by default). The VM connects to it through a
+ * WebSocket URL `ws(s)://…/wisp/` derived from the HTTP(S) URL of the local
+ * network proxy.
  */
 
 import type { NetworkMode } from './modes';
@@ -14,7 +15,7 @@ export const DEFAULT_PROXY_HOST = '127.0.0.1';
 export const DEFAULT_PROXY_PORT = 37892;
 export const DEFAULT_PROXY_URL = `http://${DEFAULT_PROXY_HOST}:${DEFAULT_PROXY_PORT}`;
 
-/** Version du protocole WISP requise par le client v86 actuel. */
+/** WISP protocol version required by the current v86 client. */
 export const PROXY_WISP_VERSION = 1;
 
 export const PROXY_STATES = [
@@ -42,49 +43,49 @@ function isLoopbackHostname(hostname: string): boolean {
 }
 
 /**
- * Valide une URL de proxy réseau local : `http:`/`https:` loopback uniquement, pas de
- * userinfo ni fragment. Renvoie l'URL normalisée (`URL.href`) en cas de succès.
+ * Validates a local network proxy URL: loopback `http:`/`https:` only, no
+ * userinfo and no fragment. Returns the normalized URL (`URL.href`) on success.
  */
 export function validateProxyUrl(raw: unknown): ProxyValidation {
   if (typeof raw !== 'string') {
     return {
       ok: false,
-      error: 'Adresse du proxy réseau local invalide : une chaîne est attendue.',
+      error: 'Invalid local network proxy address: a string is expected.',
     };
   }
 
   const trimmed = raw.trim();
   if (trimmed.length === 0) {
-    return { ok: false, error: 'Adresse du proxy réseau local vide.' };
+    return { ok: false, error: 'Empty local network proxy address.' };
   }
 
   let url: URL;
   try {
     url = new URL(trimmed);
   } catch {
-    return { ok: false, error: 'Adresse du proxy réseau local mal formée.' };
+    return { ok: false, error: 'Malformed local network proxy address.' };
   }
 
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    return { ok: false, error: 'Seuls les protocoles « http: » et « https: » sont autorisés.' };
+    return { ok: false, error: 'Only the "http:" and "https:" protocols are allowed.' };
   }
 
   if (url.username !== '' || url.password !== '') {
-    return { ok: false, error: "Les identifiants (userinfo) ne sont pas autorisés dans l'URL." };
+    return { ok: false, error: 'Credentials (userinfo) are not allowed in the URL.' };
   }
 
   if (url.hash !== '') {
-    return { ok: false, error: 'Le fragment (« #… ») n’est pas autorisé.' };
+    return { ok: false, error: 'The fragment ("#…") is not allowed.' };
   }
 
   if (url.hostname === '') {
-    return { ok: false, error: 'Le nom d’hôte est obligatoire.' };
+    return { ok: false, error: 'The hostname is required.' };
   }
 
   if (!isLoopbackHostname(url.hostname)) {
     return {
       ok: false,
-      error: 'Le proxy réseau local doit être une adresse loopback (127.0.0.1, ::1, localhost).',
+      error: 'The local network proxy must be a loopback address (127.0.0.1, ::1, localhost).',
     };
   }
 
@@ -92,18 +93,18 @@ export function validateProxyUrl(raw: unknown): ProxyValidation {
 }
 
 /**
- * Construit l'URL de relais WISP locale (`ws://`/`wss://…/wisp/`) à partir de
- * l'URL proxy réseau local et d'un jeton optionnel.
+ * Builds the local WISP relay URL (`ws://`/`wss://…/wisp/`) from the local
+ * network proxy URL and an optional token.
  *
- * Ex : `buildProxyWispUrl('http://127.0.0.1:37892', 'abc')` →
+ * E.g.: `buildProxyWispUrl('http://127.0.0.1:37892', 'abc')` →
  * `'ws://127.0.0.1:37892/wisp/?token=abc'`.
  *
- * Lève si l'URL proxy réseau local est invalide.
+ * Throws if the local network proxy URL is invalid.
  */
 export function buildProxyWispUrl(proxyUrl: string, token?: string): string {
   const validation = validateProxyUrl(proxyUrl);
   if (!validation.ok || validation.url === undefined) {
-    throw new Error(validation.error ?? 'Adresse du proxy réseau local invalide.');
+    throw new Error(validation.error ?? 'Invalid local network proxy address.');
   }
 
   const url = new URL(validation.url);
@@ -120,24 +121,26 @@ export function buildProxyWispUrl(proxyUrl: string, token?: string): string {
   return url.href;
 }
 
-/** Mode de repli quand `local-proxy` est demandé mais que le proxy réseau local est absent. */
+/** Fallback mode when `local-proxy` is requested but the local network proxy is absent. */
 export const DEFAULT_NETWORK_FALLBACK_MODE: NetworkMode = 'browser-fetch';
 
 export interface ProxyAvailability {
-  /** Le proxy réseau local est-il activé côté config ? Défaut : true. */
+  /** Is the local network proxy enabled in the config? Default: true. */
   enabled?: boolean;
-  /** Connecté ET appairé (le jeton doit être présent). */
+  /** Connected AND paired (the token must be present). */
   connected: boolean;
   proxyUrl?: string;
   proxyToken?: string;
 }
 
 /**
- * Sélectionne le profil réseau effectif :
- * - proxy réseau local connecté (activé, `connected`, jeton présent) et mode de base ni
- *   `offline` ni `user-relay` → `local-proxy` (avec URL + jeton runtime) ;
- * - mode de base `local-proxy` sans proxy réseau local → repli `browser-fetch` ;
- * - sinon → mode de base inchangé.
+ * Selects the effective network profile:
+ * - local network proxy connected (enabled, `connected`, token present) and base
+ *   mode neither `offline` nor `user-relay` → `local-proxy` (with runtime URL +
+ *   token);
+ * - base mode `local-proxy` without a local network proxy → `browser-fetch`
+ *   fallback;
+ * - otherwise → unchanged base mode.
  */
 export function selectEffectiveNetworkProfile(
   base: NetworkProfile,

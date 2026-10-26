@@ -9,8 +9,8 @@ import {
   validateProxyUrl,
 } from './proxy';
 
-describe('constantes du proxy réseau local', () => {
-  it('expose le loopback et le port par défaut', () => {
+describe('local network proxy constants', () => {
+  it('exposes the loopback and the default port', () => {
     expect(DEFAULT_PROXY_HOST).toBe('127.0.0.1');
     expect(DEFAULT_PROXY_PORT).toBe(37892);
     expect(DEFAULT_PROXY_URL).toBe('http://127.0.0.1:37892');
@@ -18,31 +18,31 @@ describe('constantes du proxy réseau local', () => {
 });
 
 describe('validateProxyUrl', () => {
-  it('accepte les URL loopback http/https', () => {
+  it('accepts loopback http/https URLs', () => {
     expect(validateProxyUrl('http://127.0.0.1:37892').ok).toBe(true);
     expect(validateProxyUrl('http://localhost').ok).toBe(true);
     expect(validateProxyUrl('https://[::1]').ok).toBe(true);
   });
 
-  it('normalise l’URL renvoyée', () => {
+  it('normalizes the returned URL', () => {
     const result = validateProxyUrl('http://127.0.0.1:37892');
     expect(result.ok).toBe(true);
     expect(result.url).toBe('http://127.0.0.1:37892/');
   });
 
-  it('rejette 0.0.0.0 et les domaines distants', () => {
+  it('rejects 0.0.0.0 and remote domains', () => {
     expect(validateProxyUrl('http://0.0.0.0:37892').ok).toBe(false);
     expect(validateProxyUrl('http://relay.example').ok).toBe(false);
     expect(validateProxyUrl('https://example.com').ok).toBe(false);
   });
 
-  it('rejette userinfo et fragment', () => {
+  it('rejects userinfo and fragment', () => {
     expect(validateProxyUrl('http://user@127.0.0.1:37892').ok).toBe(false);
     expect(validateProxyUrl('http://user:pass@127.0.0.1:37892').ok).toBe(false);
     expect(validateProxyUrl('http://127.0.0.1:37892#frag').ok).toBe(false);
   });
 
-  it('rejette les schémas non http(s) et les entrées non textuelles', () => {
+  it('rejects non-http(s) schemes and non-string input', () => {
     expect(validateProxyUrl('ws://127.0.0.1:37892').ok).toBe(false);
     expect(validateProxyUrl('wss://127.0.0.1:37892').ok).toBe(false);
     expect(validateProxyUrl('').ok).toBe(false);
@@ -52,29 +52,29 @@ describe('validateProxyUrl', () => {
 });
 
 describe('buildProxyWispUrl', () => {
-  it('construit l’URL WISP locale sans jeton', () => {
+  it('builds the local WISP URL without a token', () => {
     expect(buildProxyWispUrl('http://127.0.0.1:37892')).toBe('ws://127.0.0.1:37892/wisp/');
   });
 
-  it('ajoute le jeton encodé en requête', () => {
+  it('adds the encoded token as a query parameter', () => {
     expect(buildProxyWispUrl('http://127.0.0.1:37892', 'x')).toBe(
       'ws://127.0.0.1:37892/wisp/?token=x',
     );
   });
 
-  it('convertit https en wss', () => {
+  it('converts https to wss', () => {
     expect(buildProxyWispUrl('https://localhost:37892', 'abc')).toBe(
       'wss://localhost:37892/wisp/?token=abc',
     );
   });
 
-  it('lève sur une URL proxy réseau local invalide', () => {
+  it('throws on an invalid local network proxy URL', () => {
     expect(() => buildProxyWispUrl('https://relay.example')).toThrow();
   });
 });
 
 describe('selectEffectiveNetworkProfile', () => {
-  it('passe en local-proxy quand le proxy réseau local est connecté (jeton présent)', () => {
+  it('switches to local-proxy when the local network proxy is connected (token present)', () => {
     const result = selectEffectiveNetworkProfile(
       { mode: 'browser-fetch' },
       { connected: true, proxyUrl: 'http://127.0.0.1:37892', proxyToken: 'tok' },
@@ -86,7 +86,7 @@ describe('selectEffectiveNetworkProfile', () => {
     });
   });
 
-  it('replie local-proxy sur browser-fetch sans proxy réseau local connecté', () => {
+  it('falls back from local-proxy to browser-fetch without a connected local network proxy', () => {
     expect(selectEffectiveNetworkProfile({ mode: 'local-proxy' }, { connected: false })).toEqual({
       mode: DEFAULT_NETWORK_FALLBACK_MODE,
     });
@@ -95,7 +95,7 @@ describe('selectEffectiveNetworkProfile', () => {
     });
   });
 
-  it('respecte le mode offline même avec un proxy réseau local connecté', () => {
+  it('respects the offline mode even with a connected local network proxy', () => {
     const result = selectEffectiveNetworkProfile(
       { mode: 'offline' },
       { connected: true, proxyToken: 'tok' },
@@ -103,7 +103,7 @@ describe('selectEffectiveNetworkProfile', () => {
     expect(result).toEqual({ mode: 'offline' });
   });
 
-  it('respecte le mode user-relay même avec un proxy réseau local connecté', () => {
+  it('respects the user-relay mode even with a connected local network proxy', () => {
     const result = selectEffectiveNetworkProfile(
       { mode: 'user-relay', relayUrl: 'wss://relay.example/wisp/' },
       { connected: true, proxyToken: 'tok' },
@@ -111,7 +111,7 @@ describe('selectEffectiveNetworkProfile', () => {
     expect(result).toEqual({ mode: 'user-relay', relayUrl: 'wss://relay.example/wisp/' });
   });
 
-  it('conserve le mode de base si le proxy réseau local est désactivé', () => {
+  it('keeps the base mode when the local network proxy is disabled', () => {
     const result = selectEffectiveNetworkProfile(
       { mode: 'browser-fetch' },
       { enabled: false, connected: true, proxyToken: 'tok' },
@@ -119,7 +119,7 @@ describe('selectEffectiveNetworkProfile', () => {
     expect(result).toEqual({ mode: 'browser-fetch' });
   });
 
-  it('laisse browser-fetch inchangé sans proxy réseau local connecté', () => {
+  it('leaves browser-fetch unchanged without a connected local network proxy', () => {
     const result = selectEffectiveNetworkProfile({ mode: 'browser-fetch' }, { connected: false });
     expect(result).toEqual({ mode: 'browser-fetch' });
   });

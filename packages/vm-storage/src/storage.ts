@@ -48,12 +48,12 @@ export class VmStorage {
   setItem(key: string, value: string): void {
     const nextSize = this.#projectedUsage(key, value);
     if (this.#quotaBytes !== null && nextSize > this.#quotaBytes) {
-      throw new StorageError('STORAGE_QUOTA_EXCEEDED', 'Quota de stockage dépassée.', { key });
+      throw new StorageError('STORAGE_QUOTA_EXCEEDED', 'Storage quota exceeded.', { key });
     }
     try {
       this.#backend?.setItem(this.#key(key), value);
     } catch (error) {
-      throw new StorageError('STORAGE_WRITE_FAILED', `Échec de l'écriture de « ${key} ».`, {
+      throw new StorageError('STORAGE_WRITE_FAILED', `Failed to write "${key}".`, {
         key,
         cause: error,
       });
@@ -64,7 +64,7 @@ export class VmStorage {
     try {
       this.#backend?.removeItem(this.#key(key));
     } catch (error) {
-      throw new StorageError('STORAGE_WRITE_FAILED', `Échec de la suppression de « ${key} ».`, {
+      throw new StorageError('STORAGE_WRITE_FAILED', `Failed to delete "${key}".`, {
         key,
         cause: error,
       });
@@ -96,7 +96,7 @@ export class VmStorage {
         }
         records.push(parsed);
       } catch (error) {
-        throw new StorageError('STORAGE_CORRUPTED', `Enregistrement corrompu pour « ${key} ».`, {
+        throw new StorageError('STORAGE_CORRUPTED', `Corrupted record for "${key}".`, {
           key,
           cause: error,
         });
@@ -112,7 +112,7 @@ export class VmStorage {
       const record = JSON.parse(raw) as StoredRecord;
       return typeof record.value === 'string' ? record.value : null;
     } catch (error) {
-      throw new StorageError('STORAGE_CORRUPTED', `Valeur corrompue pour « ${key} ».`, {
+      throw new StorageError('STORAGE_CORRUPTED', `Corrupted value for "${key}".`, {
         key,
         cause: error,
       });
@@ -155,7 +155,7 @@ export class VmStorage {
       }
       return parsed;
     } catch (error) {
-      throw new StorageError('STORAGE_CORRUPTED', `Enregistrement corrompu pour « ${key} ».`, {
+      throw new StorageError('STORAGE_CORRUPTED', `Corrupted record for "${key}".`, {
         key,
         cause: error,
       });
@@ -174,10 +174,7 @@ export class VmStorage {
 
   importSnapshot(snapshot: StorageSnapshot<string>): void {
     if (snapshot.version !== SNAPSHOT_VERSION) {
-      throw new StorageError(
-        'STORAGE_VERSION_MISMATCH',
-        'Version de snapshot non prise en charge.',
-      );
+      throw new StorageError('STORAGE_VERSION_MISMATCH', 'Unsupported snapshot version.');
     }
     const previous = this.exportSnapshot();
     try {
@@ -190,7 +187,7 @@ export class VmStorage {
       for (const record of previous.records) {
         this.write(record.key, record.value);
       }
-      throw new StorageError('STORAGE_WRITE_FAILED', 'Importation transactionnelle échouée.', {
+      throw new StorageError('STORAGE_WRITE_FAILED', 'Transactional import failed.', {
         cause: error,
       });
     }

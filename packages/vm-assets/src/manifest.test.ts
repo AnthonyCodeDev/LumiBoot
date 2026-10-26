@@ -7,7 +7,7 @@ import {
 } from './manifest';
 
 describe('vm-assets manifest registry', () => {
-  it('enregistre et résout un manifeste', () => {
+  it('registers and resolves a manifest', () => {
     clearImageManifests();
     registerImageManifest({
       ref: 'debian-test',

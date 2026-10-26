@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { createAssetServer, parseRangeHeader } from '../scripts/lib/range-server.mjs';
 
 /**
- * Tests réels du serveur HTTP Range local (aucun mock réseau) : on démarre un
- * serveur sur un port éphémère et on lit les octets exacts renvoyés. C'est la
- * preuve que v86 (`Range: bytes=...`) obtient bien des réponses 206 conformes.
+ * Real tests of the local Range HTTP server (no network mock): a server starts
+ * on an ephemeral port and the exact returned bytes are read. This proves that
+ * v86 (`Range: bytes=...`) really gets compliant 206 responses.
  */
 
 const SIZE = 1000;
@@ -77,13 +77,13 @@ afterAll(async () => {
 });
 
 describe('parseRangeHeader', () => {
-  it('rejette un en-tête absent ou d’unité inconnue (ressource entière)', () => {
+  it('rejects a missing header or unknown unit (whole resource)', () => {
     expect(parseRangeHeader(undefined, SIZE)).toEqual({ kind: 'none' });
     expect(parseRangeHeader('', SIZE)).toEqual({ kind: 'none' });
     expect(parseRangeHeader('items=0-1', SIZE)).toEqual({ kind: 'none' });
   });
 
-  it('normalise les plages simple, ouverte et suffixe', () => {
+  it('normalizes simple, open and suffix ranges', () => {
     expect(parseRangeHeader('bytes=10-19', SIZE)).toEqual({
       kind: 'ranges',
       ranges: [{ start: 10, end: 19 }],
@@ -98,15 +98,15 @@ describe('parseRangeHeader', () => {
     });
   });
 
-  it('signale une plage non satisfaisable', () => {
+  it('reports an unsatisfiable range', () => {
     expect(parseRangeHeader('bytes=1000-1100', SIZE)).toEqual({ kind: 'unsatisfiable' });
   });
 
-  it('ignore une plage syntaxiquement invalide (last < first)', () => {
+  it('ignores a syntactically invalid range (last < first)', () => {
     expect(parseRangeHeader('bytes=5-3', SIZE)).toEqual({ kind: 'none' });
   });
 
-  it('fusionne les plages adjacentes', () => {
+  it('merges adjacent ranges', () => {
     expect(parseRangeHeader('bytes=0-4,5-9', SIZE)).toEqual({
       kind: 'ranges',
       ranges: [{ start: 0, end: 9 }],
@@ -114,8 +114,8 @@ describe('parseRangeHeader', () => {
   });
 });
 
-describe('createAssetServer — HTTP Range réel', () => {
-  it('sert la ressource entière en 200 avec Accept-Ranges', async () => {
+describe('createAssetServer - real HTTP Range', () => {
+  it('serves the whole resource as 200 with Accept-Ranges', async () => {
     const res = await rawRequest(`${DISK_PATH}?token=${TOKEN}`);
     expect(res.status).toBe(200);
     expect(res.headers['accept-ranges']).toBe('bytes');
@@ -123,7 +123,7 @@ describe('createAssetServer — HTTP Range réel', () => {
     expect(res.body.equals(pattern)).toBe(true);
   });
 
-  it('répond 206 à la sonde v86 `Range: bytes=0-0` avec Content-Range total', async () => {
+  it('answers 206 to the v86 probe `Range: bytes=0-0` with the total Content-Range', async () => {
     const res = await rawRequest(`${DISK_PATH}?token=${TOKEN}`, {
       headers: { Range: 'bytes=0-0', 'X-Accept-Encoding': 'identity' },
     });
@@ -131,11 +131,11 @@ describe('createAssetServer — HTTP Range réel', () => {
     expect(res.headers['content-range']).toBe(`bytes 0-0/${SIZE}`);
     expect(res.headers['content-length']).toBe('1');
     expect(res.body).toEqual(pattern.subarray(0, 1));
-    // v86 abandonne si le serveur renvoie 200 à une requête Range.
+    // v86 gives up if the server answers 200 to a Range request.
     expect(res.status).not.toBe(200);
   });
 
-  it('sert une plage simple avec des octets exacts', async () => {
+  it('serves a simple range with the exact bytes', async () => {
     const res = await rawRequest(`${DISK_PATH}?token=${TOKEN}`, {
       headers: { Range: 'bytes=10-19' },
     });
@@ -145,7 +145,7 @@ describe('createAssetServer — HTTP Range réel', () => {
     expect(res.body.equals(pattern.subarray(10, 20))).toBe(true);
   });
 
-  it('sert une plage ouverte jusqu’à la fin', async () => {
+  it('serves an open range up to the end', async () => {
     const res = await rawRequest(`${DISK_PATH}?token=${TOKEN}`, {
       headers: { Range: 'bytes=990-' },
     });
@@ -154,7 +154,7 @@ describe('createAssetServer — HTTP Range réel', () => {
     expect(res.body.equals(pattern.subarray(990))).toBe(true);
   });
 
-  it('sert une plage suffixe', async () => {
+  it('serves a suffix range', async () => {
     const res = await rawRequest(`${DISK_PATH}?token=${TOKEN}`, {
       headers: { Range: 'bytes=-10' },
     });
@@ -163,7 +163,7 @@ describe('createAssetServer — HTTP Range réel', () => {
     expect(res.body.equals(pattern.subarray(990))).toBe(true);
   });
 
-  it('répond 416 avec Content-Range */taille pour une plage non satisfaisable', async () => {
+  it('answers 416 with Content-Range */size for an unsatisfiable range', async () => {
     const res = await rawRequest(`${DISK_PATH}?token=${TOKEN}`, {
       headers: { Range: 'bytes=1000-1100' },
     });
@@ -171,14 +171,14 @@ describe('createAssetServer — HTTP Range réel', () => {
     expect(res.headers['content-range']).toBe(`bytes */${SIZE}`);
   });
 
-  it('honore HEAD sans corps mais avec Content-Length exact', async () => {
+  it('honors HEAD without a body but with the exact Content-Length', async () => {
     const res = await rawRequest(`${DISK_PATH}?token=${TOKEN}`, { method: 'HEAD' });
     expect(res.status).toBe(200);
     expect(res.headers['content-length']).toBe(String(SIZE));
     expect(res.body.byteLength).toBe(0);
   });
 
-  it('répond aux préflights CORS OPTIONS (Range + X-Accept-Encoding)', async () => {
+  it('answers CORS OPTIONS preflights (Range + X-Accept-Encoding)', async () => {
     const res = await rawRequest(`${DISK_PATH}?token=${TOKEN}`, { method: 'OPTIONS' });
     expect(res.status).toBe(204);
     expect(res.headers['access-control-allow-origin']).toBe('*');
@@ -186,7 +186,7 @@ describe('createAssetServer — HTTP Range réel', () => {
     expect(String(res.headers['access-control-allow-headers'])).toContain('X-Accept-Encoding');
   });
 
-  it('sert un multi-range en multipart/byteranges', async () => {
+  it('serves a multi-range as multipart/byteranges', async () => {
     const res = await rawRequest(`${DISK_PATH}?token=${TOKEN}`, {
       headers: { Range: 'bytes=0-0,10-11' },
     });
@@ -197,28 +197,28 @@ describe('createAssetServer — HTTP Range réel', () => {
     expect(text).toContain(`--${boundary}`);
     expect(text).toContain(`Content-Range: bytes 0-0/${SIZE}`);
     expect(text).toContain(`Content-Range: bytes 10-11/${SIZE}`);
-    // Les octets exacts des deux plages doivent être présents.
+    // The exact bytes of both ranges must be present.
     expect(res.body.includes(pattern.subarray(0, 1))).toBe(true);
     expect(res.body.includes(pattern.subarray(10, 12))).toBe(true);
     expect(res.body.includes(Buffer.from(`--${boundary}--`))).toBe(true);
   });
 
-  it('refuse une requête sans jeton', async () => {
+  it('refuses a request without a token', async () => {
     const res = await rawRequest(DISK_PATH);
     expect(res.status).toBe(401);
   });
 
-  it('accepte le jeton par en-tête', async () => {
+  it('accepts the token through a header', async () => {
     const res = await rawRequest(DISK_PATH, { headers: { 'X-Lumiboot-Token': TOKEN } });
     expect(res.status).toBe(200);
   });
 
-  it('refuse une méthode non supportée', async () => {
+  it('refuses an unsupported method', async () => {
     const res = await rawRequest(`${DISK_PATH}?token=${TOKEN}`, { method: 'POST' });
     expect(res.status).toBe(405);
   });
 
-  it('sert le manifeste JSON local sur la même origine', async () => {
+  it('serves the local JSON manifest on the same origin', async () => {
     const res = await rawRequest(`${MANIFEST_PATH}?token=${TOKEN}`);
     expect(res.status).toBe(200);
     expect(String(res.headers['content-type'])).toContain('application/json');
@@ -229,19 +229,19 @@ describe('createAssetServer — HTTP Range réel', () => {
   });
 });
 
-describe('createAssetServer — garde-fous', () => {
-  it('retourne 404 pour une route inconnue', async () => {
-    const res = await rawRequest('/inconnu');
+describe('createAssetServer - guardrails', () => {
+  it('returns 404 for an unknown route', async () => {
+    const res = await rawRequest('/unknown');
     expect(res.status).toBe(404);
   });
 
-  it('refuse un jeton trop court', () => {
+  it('refuses a token that is too short', () => {
     expect(() =>
-      createAssetServer({ token: 'court', routes: { [DISK_PATH]: { file: diskFile } } }),
+      createAssetServer({ token: 'short', routes: { [DISK_PATH]: { file: diskFile } } }),
     ).toThrow();
   });
 
-  it('rejette une route sans file ni json', () => {
+  it('rejects a route without file or json', () => {
     expect(() => createAssetServer({ token: TOKEN, routes: { '/x': {} } })).toThrow();
   });
 });

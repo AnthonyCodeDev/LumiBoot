@@ -1,19 +1,19 @@
 #!/bin/sh
-# Démarrage de la session X sous v86 (flavors desktop ET xfce).
+# X session startup under v86 (desktop AND xfce flavors).
 #
-# Fichier PARTAGÉ par les deux flavors graphiques : le choix de la session
-# (Openbox ou XFCE) est fait par le ~/.xinitrc propre à chaque flavor ; seul le
-# lancement du serveur X (fbdev puis modesetting) est commun.
+# File SHARED by both graphical flavors: the session choice (Openbox or XFCE) is
+# made by the ~/.xinitrc of each flavor; only the X server start (fbdev then
+# modesetting) is common here.
 #
-# Sous v86 le noyau attache un pilote KMS « bochs-drm » (framebuffer /dev/fb0).
-# Un pilote VBE comme « vesa » refuse alors de s'attacher (« Ignoring device
-# with a bound kernel driver ») et X échoue avec « no screens found ». On tente
-# donc d'abord « fbdev » (framebuffer noyau, sans E/S) puis « modesetting »
-# (KMS bochs-drm) en repli ; les deux ServerLayout sont définis dans
+# Under v86 the kernel attaches a "bochs-drm" KMS driver (framebuffer /dev/fb0).
+# A VBE driver such as "vesa" then refuses to attach ("Ignoring device with a
+# bound kernel driver") and X fails with "no screens found". So we first try
+# "fbdev" (kernel framebuffer, no I/O ports) then "modesetting" (bochs-drm KMS)
+# as a fallback; both ServerLayouts are defined in
 # /etc/X11/xorg.conf.d/20-lumiboot-fbdev.conf.
 #
-# Le choix du pilote se fait côté serveur X (-layout) ; la SESSION, elle, reste
-# non privilégiée (utilisateur « lumiboot »).
+# The driver choice is made on the X server side (-layout); the SESSION itself
+# stays unprivileged (user "lumiboot").
 set -u
 
 if startx -- :0 vt1 -nolisten tcp -layout LumiBootFBDev; then

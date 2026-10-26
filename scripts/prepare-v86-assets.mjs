@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Prépare les binaires statiques du moteur v86 dans apps/web/public/v86/.
+// Prepares the static v86 engine binaries in apps/web/public/v86/.
 //
-//   node scripts/prepare-v86-assets.mjs          # copie/télécharge puis vérifie
-//   node scripts/prepare-v86-assets.mjs --check   # vérifie seulement (CI/déploiement)
+//   node scripts/prepare-v86-assets.mjs          # copy/download then verify
+//   node scripts/prepare-v86-assets.mjs --check   # verify only (CI/deployment)
 //
-// Le WASM provient de la version npm réellement installée ; les BIOS proviennent
-// du dépôt officiel copy/v86 au commit épinglé. Aucun fallback inventé : toute
-// divergence de SHA-256 ou de taille fait échouer le script.
+// The WASM comes from the actually installed npm version; the BIOS files come
+// from the official copy/v86 repository at the pinned commit. No invented
+// fallback: any SHA-256 or size mismatch makes the script fail.
 
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -24,13 +24,13 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 function verifyIntegrity(name, bytes) {
   const expected = lock.assets[name];
-  if (!expected) throw new Error(`Aucune entrée de verrou pour « ${name} ».`);
+  if (!expected) throw new Error(`No lock entry for "${name}".`);
   if (bytes.length !== expected.size) {
-    throw new Error(`Taille invalide pour ${name} : ${bytes.length} (attendu ${expected.size}).`);
+    throw new Error(`Invalid size for ${name}: ${bytes.length} (expected ${expected.size}).`);
   }
   const actual = sha256(bytes);
   if (actual !== expected.sha256) {
-    throw new Error(`SHA-256 invalide pour ${name} : ${actual} (attendu ${expected.sha256}).`);
+    throw new Error(`Invalid SHA-256 for ${name}: ${actual} (expected ${expected.sha256}).`);
   }
 }
 
@@ -41,7 +41,7 @@ function findInstalledWasm() {
   ];
   for (const candidate of candidates) if (existsSync(candidate)) return candidate;
   throw new Error(
-    'v86.wasm introuvable. Lancez « pnpm install » (dépendance v86 du package provider-v86).',
+    'v86.wasm not found. Run "pnpm install" (v86 dependency of the provider-v86 package).',
   );
 }
 
@@ -50,7 +50,7 @@ if (checkOnly) {
   for (const name of Object.keys(lock.assets)) {
     const target = join(publicDir, name);
     if (!existsSync(target)) {
-      console.error(`✗ ${name} absent de apps/web/public/v86/`);
+      console.error(`✗ ${name} missing from apps/web/public/v86/`);
       ok = false;
       continue;
     }
@@ -58,7 +58,7 @@ if (checkOnly) {
       verifyIntegrity(name, await readFile(target));
       console.log(`✓ ${name}`);
     } catch (error) {
-      console.error(`✗ ${name} : ${error.message}`);
+      console.error(`✗ ${name}: ${error.message}`);
       ok = false;
     }
   }
@@ -70,16 +70,16 @@ await mkdir(publicDir, { recursive: true });
 const wasmBytes = await readFile(findInstalledWasm());
 verifyIntegrity('v86.wasm', wasmBytes);
 await writeFile(join(publicDir, 'v86.wasm'), wasmBytes);
-console.log(`✓ v86.wasm (${wasmBytes.length} octets)`);
+console.log(`✓ v86.wasm (${wasmBytes.length} bytes)`);
 
 for (const name of ['seabios.bin', 'vgabios.bin']) {
   const { url } = lock.assets[name];
   const response = await fetch(url, { redirect: 'follow' });
-  if (!response.ok) throw new Error(`HTTP ${response.status} pour ${url}`);
+  if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
   const bytes = Buffer.from(await response.arrayBuffer());
   verifyIntegrity(name, bytes);
   await writeFile(join(publicDir, name), bytes);
-  console.log(`✓ ${name} (${bytes.length} octets)`);
+  console.log(`✓ ${name} (${bytes.length} bytes)`);
 }
 
-console.log('\nAssets v86 prêts dans apps/web/public/v86/.');
+console.log('\nv86 assets ready in apps/web/public/v86/.');

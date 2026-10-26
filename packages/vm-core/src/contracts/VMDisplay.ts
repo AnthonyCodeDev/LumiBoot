@@ -1,49 +1,49 @@
 /**
- * Contrat d'AFFICHAGE d'un moteur, indépendant du moteur lui-même.
+ * DISPLAY contract of an engine, independent of the engine itself.
  *
- * Un moteur expose les éléments où il dessine (écran principal, sortie texte)
- * en les balisant avec le marqueur standard `data-vm-display`. L'UI générique
- * retrouve ainsi les CIBLES RÉELLES du rendu, du Pointer Lock et du plein écran
- * SANS jamais citer un moteur précis (`.v86-screen`, …). Un futur moteur non
- * v86 n'a qu'à poser les mêmes marqueurs pour être pris en charge tel quel.
+ * An engine exposes the elements it draws into (main screen, text output) by
+ * tagging them with the standard `data-vm-display` marker. The generic UI then
+ * finds the REAL targets of rendering, Pointer Lock and fullscreen WITHOUT ever
+ * naming a specific engine (`.v86-screen`, …). A future non-v86 engine only has
+ * to set the same markers to be supported as-is.
  *
- * Ce fichier reste volontairement pur (aucun type ni API du DOM) : `vm-core`
- * orchestre, il ne touche pas au moteur de rendu.
+ * This file intentionally stays pure (no DOM type or API): `vm-core`
+ * orchestrates, it does not touch the rendering engine.
  */
 
-/** Attribut DOM standard identifiant un élément d'affichage d'un moteur. */
+/** Standard DOM attribute identifying a display element of an engine. */
 export const VM_DISPLAY_ATTRIBUTE = 'data-vm-display';
 
-/** Rôles d'affichage reconnus par l'UI générique. */
+/** Display roles recognized by the generic UI. */
 export const VM_DISPLAY_ROLES = {
-  /** Écran principal : cible du rendu, du Pointer Lock et du plein écran. */
+  /** Main screen: target of rendering, Pointer Lock and fullscreen. */
   screen: 'screen',
-  /** Sortie texte (console) : lecture et diagnostic. */
+  /** Text output (console): reading and diagnostics. */
   text: 'text',
 } as const;
 
 export type VMDisplayRole = (typeof VM_DISPLAY_ROLES)[keyof typeof VM_DISPLAY_ROLES];
 
-/** Sélecteur CSS d'un rôle d'affichage (ex. `[data-vm-display="screen"]`). */
+/** CSS selector for a display role (e.g. `[data-vm-display="screen"]`). */
 export function vmDisplaySelector(role: VMDisplayRole): string {
   return `[${VM_DISPLAY_ATTRIBUTE}="${role}"]`;
 }
 
 /**
- * Contrat d'affichage : cibles réelles décrites par des sélecteurs CSS, sans
- * dépendre d'un moteur ni du DOM. La cible `screen` est UNIQUE et partagée par
- * le rendu, le Pointer Lock et le plein écran : jamais deux éléments distincts.
+ * Display contract: real targets described by CSS selectors, without depending
+ * on an engine or on the DOM. The `screen` target is UNIQUE and shared by
+ * rendering, Pointer Lock and fullscreen: never two distinct elements.
  */
 export interface VMDisplay {
-  /** Sélecteur de l'écran principal (rendu + pointer + plein écran). */
+  /** Selector of the main screen (rendering + pointer + fullscreen). */
   readonly screenSelector: string;
-  /** Sélecteur de la sortie texte. */
+  /** Selector of the text output. */
   readonly textSelector: string;
 }
 
 /**
- * Implémentation standard du contrat, que tout moteur DOM doit respecter.
- * C'est le repli de l'UI générique quand aucun moteur ne fournit de contrat.
+ * Standard implementation of the contract, which every DOM engine must honor.
+ * It is the fallback of the generic UI when no engine provides a contract.
  */
 export const STANDARD_VM_DISPLAY: VMDisplay = {
   screenSelector: vmDisplaySelector(VM_DISPLAY_ROLES.screen),

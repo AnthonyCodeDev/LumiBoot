@@ -8,27 +8,26 @@ import {
 import type { OSDefinition } from '@lumiboot/contracts';
 
 /**
- * Capacités du moteur v86 telles que l'UI doit les connaître.
+ * v86 engine capabilities as the UI must know them.
  *
- * SOURCE COMMUNE : ces valeurs sont alignées à l'identique sur
- * `V86Provider.capabilities()` (`@lumiboot/provider-v86`). Le provider réel est
- * chargé paresseusement (import dynamique au démarrage d'une session) : on ne
- * peut donc pas l'importer ici sans casser la séparation du bundle. La garantie
- * d'alignement est assurée par un test dédié (`registry.test.ts`) qui compare
- * ces capacités à celles du `V86Provider` réel ; toute divergence fait échouer
- * la suite.
+ * SHARED SOURCE: these values are aligned exactly with
+ * `V86Provider.capabilities()` (`@lumiboot/provider-v86`). The real provider is
+ * loaded lazily (dynamic import when a session starts), so it cannot be imported
+ * here without breaking the bundle split. The alignment guarantee is provided by
+ * a dedicated test (`registry.test.ts`) that compares these capabilities with the
+ * real `V86Provider`; any divergence fails the suite.
  *
- * `ramSnapshots`/`diskSnapshots` restent `false` : `VMInstance` n'expose AUCUN
- * point d'entrée de snapshot, donc l'UI ne doit jamais annoncer une fonction
- * qui n'existe pas (signalé par le lot A).
+ * `ramSnapshots`/`diskSnapshots` stay `false`: `VMInstance` exposes NO snapshot
+ * entry point, so the UI must never advertise a feature that does not exist
+ * (reported by batch A).
  */
 export const V86_LAZY_CAPABILITIES: VMCapabilities = {
   runtime: 'browser',
   architectures: ['i386'],
   ramSnapshots: false,
   diskSnapshots: false,
-  // v86 lit `hda` par requêtes HTTP Range (`hda.async`) : le disque n'est jamais
-  // téléchargé en entier. Aligné sur `V86Provider` (`partialDownload`).
+  // v86 reads `hda` through HTTP Range requests (`hda.async`): the disk is never
+  // downloaded as a whole. Aligned with `V86Provider` (`partialDownload`).
   partialDownload: true,
   resumable: false,
   configurableMemory: true,
@@ -62,10 +61,10 @@ class LazyV86Provider implements VMEngine {
 }
 
 /**
- * Construit le registre de moteurs de l'application.
+ * Builds the application engine registry.
  *
- * Le moteur v86 est chargé à la demande afin de garder le bundle initial léger
- * et de séparer clairement le shell React du code d'émulation.
+ * The v86 engine is loaded on demand to keep the initial bundle light and to
+ * clearly separate the React shell from the emulation code.
  */
 export function createRegistry(): VMRegistry {
   const registry = new VMRegistry();
@@ -75,19 +74,19 @@ export function createRegistry(): VMRegistry {
 }
 
 /**
- * Registre dédié aux vérifications de compatibilité (résolution de profil /
- * architecture / WebAssembly). Il partage la MÊME source de capacités que le
- * registre de session (`V86_LAZY_CAPABILITIES`), donc l'UI ne peut pas
- * contredire le moteur réellement utilisé.
+ * Registry dedicated to compatibility checks (profile / architecture /
+ * WebAssembly resolution). It shares the SAME capability source as the session
+ * registry (`V86_LAZY_CAPABILITIES`), so the UI cannot contradict the engine
+ * actually in use.
  */
 const compatibilityRegistry = createRegistry();
 
 /**
- * Explique si un système peut réellement être lancé sur l'appareil courant :
- * architecture/CPU servie par le moteur et prérequis navigateur satisfaits.
- * Liste de motifs vide = compatible. Sert de source unique au bouton de
- * lancement (voir `lib/launch.ts`) pour refuser explicitement une mauvaise
- * architecture plutôt que d'échouer au démarrage.
+ * Explains whether a system can really be launched on the current device: an
+ * architecture/CPU served by the engine and browser prerequisites satisfied.
+ * An empty reason list means compatible. Single source for the launch button
+ * (see `lib/launch.ts`), so a wrong architecture is refused explicitly instead of
+ * failing at boot.
  */
 export function explainSystemCompatibility(os: OSDefinition): EngineCompatibilityResult {
   return compatibilityRegistry.explain(os);

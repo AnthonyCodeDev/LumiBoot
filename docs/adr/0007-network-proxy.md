@@ -1,20 +1,19 @@
-# ADR 0007 — Proxy réseau local
+# ADR 0007 — Local network proxy
 
-- Statut : accepté
-- Date : 2026-10-15
+- Status: accepted
+- Date: 2026-10-15
 
-## Décision
+## Context
 
-`apps/network-proxy` fournit un binaire Go multiplateforme qui expose WISP V1 sur `127.0.0.1:37892`. Il établit uniquement des connexions TCP sortantes ; il n'exécute aucune VM.
+v86 0.5.471 sends neither a custom header nor a WebSocket subprotocol: the token travels in the URL.
 
-Le navigateur doit demander un appairage, faire approuver le code dans la console du proxy, puis échanger l'autorisation contre un token lié à l'origine. Le token est stocké haché et transmis dans l'URL WISP parce que v86 0.5.471 ne permet ni en-tête ni sous-protocole WebSocket personnalisé.
+## Decision
 
-## Garde-fous
+`apps/network-proxy` exposes WISP V1 on `127.0.0.1:37892` in cross-platform Go, outbound TCP only, no VM. The browser requests a pairing, the user approves the code in the console, then exchanges the authorization for a hashed token bound to the origin.
 
-- écoute loopback par défaut ;
-- origine exacte et token obligatoires ;
-- blocage des réseaux privés, loopback et métadonnées cloud après résolution DNS ;
-- quotas, délais, révocation et arrêt gracieux ;
-- UDP refusé, aucun trafic entrant, ICMP non garanti.
+## Consequences
 
-Le protocole HTTP est défini dans [`../proxy-contract.md`](../proxy-contract.md) et l'exploitation dans [`../network-proxy.md`](../network-proxy.md).
+- Loopback listener by default; exact origin and token mandatory.
+- Private networks, loopback and cloud metadata blocked after DNS resolution.
+- Quotas, timeouts, revocation, graceful shutdown; UDP refused, no inbound traffic, ICMP not guaranteed.
+- Protocol: [`../proxy-contract.md`](../proxy-contract.md); operations: [`../network-proxy.md`](../network-proxy.md).

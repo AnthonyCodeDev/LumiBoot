@@ -2,19 +2,19 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { STANDARD_VM_DISPLAY, STANDARD_VM_INPUT } from '@lumiboot/vm-core';
 import { DomConsoleAdapter } from './console-adapter';
 
-describe('DomConsoleAdapter — contrat d’affichage/entrée', () => {
+describe('DomConsoleAdapter — display/input contract', () => {
   afterEach(() => {
     document.body.innerHTML = '';
   });
 
-  it('balise l’écran et la sortie texte avec le marqueur standard', () => {
+  it('tags the screen and the text output with the standard marker', () => {
     const container = document.createElement('div');
     document.body.append(container);
 
     const adapter = new DomConsoleAdapter();
     const mount = adapter.attach(container);
 
-    // La cible écran est trouvable via le contrat, sans connaître v86.
+    // The screen target is findable through the contract, without knowing v86.
     const screen = container.querySelector(STANDARD_VM_DISPLAY.screenSelector);
     const text = container.querySelector(STANDARD_VM_DISPLAY.textSelector);
     expect(screen).not.toBeNull();
@@ -25,7 +25,7 @@ describe('DomConsoleAdapter — contrat d’affichage/entrée', () => {
     adapter.detach();
   });
 
-  it('conserve la structure attendue par v86 (div texte puis canvas)', () => {
+  it('keeps the structure expected by v86 (text div then canvas)', () => {
     const container = document.createElement('div');
     document.body.append(container);
 
@@ -39,13 +39,13 @@ describe('DomConsoleAdapter — contrat d’affichage/entrée', () => {
     adapter.detach();
   });
 
-  it('expose les contrats d’affichage et d’entrée standard', () => {
+  it('exposes the standard display and input contracts', () => {
     const adapter = new DomConsoleAdapter();
     expect(adapter.display).toEqual(STANDARD_VM_DISPLAY);
     expect(adapter.input).toEqual(STANDARD_VM_INPUT);
   });
 
-  it('détache réellement le sous-arbre injecté', () => {
+  it('really detaches the injected subtree', () => {
     const container = document.createElement('div');
     document.body.append(container);
 

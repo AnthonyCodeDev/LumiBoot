@@ -1,146 +1,132 @@
 # Architecture
 
-## Vue d'ensemble
+## Overview
 
 ```text
 React UI
-  ├─ catalogue validé (@lumiboot/catalog + @lumiboot/contracts)
+  ├─ validated catalogue (@lumiboot/catalog + @lumiboot/contracts)
   └─ SessionLifecycle / VMRegistry (@lumiboot/vm-core)
-       └─ V86Provider chargé à la demande
-            ├─ assets et manifestes (@lumiboot/vm-assets)
-            ├─ stockage local (@lumiboot/vm-storage)
-            └─ profil réseau (@lumiboot/vm-network)
-                 ├─ Fetch v86
-                 ├─ proxy local WISP
-                 └─ relais WISP utilisateur
+       └─ lazy adapter → V86Provider (dynamic import)
+            ├─ assets and manifests (@lumiboot/vm-assets)
+            └─ network profile (@lumiboot/vm-network)
+                 ├─ v86 Fetch
+                 ├─ WISP local proxy
+                 └─ user WISP relay
 ```
 
-La VM, son CPU et sa RAM s'exécutent dans le navigateur. Le proxy local et les relais WISP ne transportent que le réseau.
+VM, CPU and RAM run in the browser; local proxy and WISP relay: network only.
 
-## Composants
+## Components
 
-| Chemin | Responsabilité |
+| Path | Responsibility |
 |---|---|
-| `apps/web` | React/Vite, catalogue, fiche système et écran de session |
-| `apps/network-proxy` | binaire Go WISP V1 sur loopback |
-| `packages/contracts` | types et schémas Zod partagés |
-| `packages/catalog` | familles, images, profils, variantes et disponibilité |
-| `packages/vm-core` | contrats moteur, registre et cycle de vie |
-| `packages/provider-v86` | intégration v86, console, readiness et réseau |
-| `packages/vm-assets` | manifestes, téléchargement, intégrité et disques locaux |
-| `packages/vm-storage` | stockage versionné et quotas |
-| `packages/vm-network` | modes, profils, capacités et diagnostics réseau |
-| `images` | scripts et métadonnées de construction ; gros binaires ignorés |
-| `infra` | Nginx, développement local et relais WISP optionnel |
+| `apps/web` | React/Vite, catalogue, system detail, session, dynamic provider import |
+| `apps/network-proxy` | Go WISP V1 binary on loopback |
+| `packages/contracts` | shared types and Zod schemas |
+| `packages/catalog` | families, images, profiles, variants and availability |
+| `packages/vm-core` | engine contracts, registry, compatibility and lifecycle |
+| `packages/provider-v86` | v86 integration, console, readiness and network |
+| `packages/vm-assets` | manifests, download, integrity and local disks |
+| `packages/vm-storage` | versioned storage, quotas, backends; no consumer |
+| `packages/vm-network` | network modes, profiles, capabilities and diagnostics |
+| `images` | build scripts and metadata; large binaries ignored |
+| `infra` | Nginx, Docker dev service, WISP relay |
 
-## Garde-fous d'architecture
+## Architecture guardrails
 
-Les règles ci-dessous sont vérifiées automatiquement par
-`tests/architecture.test.ts`, adossé à l'outil d'analyse de graphe
-`tests/arch/dependency-graph.ts` (aucune dépendance externe). `pnpm test` les
-exécute en local comme en CI : une violation échoue le build, elle n'est jamais
-un simple avertissement.
+Enforced by `tests/architecture.test.ts` (`tests/arch/dependency-graph.ts`, no external dependency); a violation fails `pnpm test`, locally and in CI.
 
-### Frontières de paquets
+### Package boundaries
 
-Le sens des dépendances est figé dans `ALLOWED_INTERNAL_DEPS` :
+Dependency direction pinned in `ALLOWED_INTERNAL_DEPS`:
 
 ```text
-apps/web
-  ├─ @lumiboot/catalog      → @lumiboot/contracts
-  ├─ @lumiboot/vm-core      → @lumiboot/vm-network → @lumiboot/contracts
-  ├─ @lumiboot/vm-assets    → @lumiboot/contracts
-  └─ @lumiboot/provider-v86 → {contracts, vm-assets, vm-core, vm-network}
+apps/web                → {catalog, contracts, provider-v86, vm-assets, vm-core, vm-network}
+contracts               → ∅
+catalog                 → contracts
+vm-network              → contracts
+vm-assets               → contracts
+vm-storage              → ∅
+vm-core                 → {contracts, vm-network}
+provider-v86            → {contracts, vm-assets, vm-core, vm-network}
 ```
 
-Règles appliquées :
-
-- `@lumiboot/contracts` est une **feuille** : aucun `@lumiboot/*` ;
-- un paquet ne dépend jamais d'un paquet hors de sa frontière, ni d'un
-  `@lumiboot/*` non déclaré (pas de dépendance fantôme) ;
-- aucun paquet ne dépend de `@lumiboot/web`, de React ou de Zustand ;
-- aucun import profond `@lumiboot/<pkg>/…` ni chemin relatif traversant un autre
-  paquet : la surface publique est `src/index.ts` ;
-- ajouter un paquet impose de **déclarer explicitement** sa frontière (test
-  « chaque paquet de l'espace de travail déclare ses frontières »).
+- `@lumiboot/contracts` is a **leaf**: no `@lumiboot/*`;
+- out-of-boundary dependency or undeclared `@lumiboot/*` forbidden (no phantom dependency);
+- no package depends on `@lumiboot/web`, React or Zustand;
+- deep imports `@lumiboot/<pkg>/…` and relative paths crossing a package are forbidden; public surface = `src/index.ts`;
+- adding a package requires **declaring its boundary** (test "each workspace package declares its boundaries").
 
 ### Cycles
 
-Le graphe déclaré (`package.json`) **et** le graphe des imports réels sont
-acycliques (détection Tarjan, `findCycles`). Un cycle est une régression de
-conception : il doit être cassé, jamais toléré.
+Declared graph (`package.json`) and the actual import graph are acyclic (Tarjan, `findCycles`); a cycle fails the test suite.
 
-### Compatibilité runtime profil / `engineId`
+### Profile / `engineId` runtime compatibility
 
-- tout `engineId` de profil appartient au catalogue (`packages/catalog/src/engines.ts`) ;
-- l'architecture du système est servie par le moteur du profil (table
-  `ENGINE_ARCHITECTURES` du test) ;
-- un système `ready` ne s'appuie que sur un moteur `integrated` ;
-- `checkEngineCompatibility` accepte tout profil intégré lorsque WebAssembly est
-  disponible, et le refuse sinon.
+- profile `engineId` present in the catalogue (`packages/catalog/src/engines.ts`);
+- system architecture served by the profile engine (test table `ENGINE_ARCHITECTURES`);
+- `validated` profile backed by an `integrated` engine;
+- `checkEngineCompatibility` (`packages/vm-core/src/compatibility/`) checks `canRun`, the architecture when the engine declares one, and WebAssembly for every `browser` profile.
 
-### Concurrence
+### Concurrency
 
-Garanties vérifiées sur le vrai `SessionLifecycle`/`VMRegistry`, sans disque
-propriétaire :
+Checked on `SessionLifecycle`/`VMRegistry` with a fake engine, no disk:
 
-- deux `start()` concurrents ne créent qu'une seule instance (single-flight) ;
-- deux sessions concurrentes restent isolées : aucun état partagé ;
-- `dispose()` pendant un `start()` en vol libère l'instance, sans orpheline ;
-- `register()` est idempotent pour un même moteur.
+- two concurrent `start()` calls → a single instance (single-flight);
+- two concurrent sessions isolated: no shared state;
+- `dispose()` during an in-flight `start()` releases the instance, without orphan;
+- `register()` idempotent for the same engine.
 
-## Flux de lancement
+## Launch flow
 
-1. Le catalogue construit et valide les `OSDefinition` depuis une image et un profil.
-2. L'UI crée une session avec l'identifiant du système ou de la variante.
-3. `VMRegistry` résout le moteur ; v86 est importé dynamiquement.
-4. `V86Provider` vérifie le manifeste et construit l'émulateur avec la configuration du profil.
-5. La session devient `running` après la preuve déclarée : marqueur série Debian ou première lecture disque en mode `disk-boot`.
-6. L'arrêt libère le contrôleur réseau, l'émulateur, les listeners et la session.
+1. The catalogue builds and validates the `OSDefinition` objects (image + profile).
+2. The UI creates a session from the system or variant id.
+3. `VMRegistry` resolves the engine; the web adapter imports `@lumiboot/provider-v86` dynamically.
+4. `V86Provider` checks the manifest and builds the emulator according to the profile.
+5. `running` after proof: Debian serial marker or first disk read (`disk-boot`).
+6. Stop: network controller, emulator, listeners and session released.
 
-États : `idle → preparing → downloading → booting → running → stopping → stopped`, avec `error` en cas d'échec.
+States: `idle → preparing → downloading → booting → running → stopping → stopped`, `error` on failure (`packages/vm-core/src/lifecycle/SessionState.ts`).
 
-## Catalogue et disponibilité
+## Catalogue and availability
 
-Le moteur appartient au profil, pas à l'image. La disponibilité est calculée, jamais saisie manuellement :
+The engine comes from the profile. Availability is computed by `getAggregatedAvailability`, never entered by hand:
 
 ```text
-imageRef présent
-+ profil browser compatible
-+ moteur intégré
+imageRef present
++ compatible browser profile
++ integrated engine
 + validated = true
 = ready
 ```
 
-Les systèmes exigeant un média utilisateur ou un asset local manquant restent indisponibles au lancement. Les variantes sont décrites dans [`system-variants.md`](system-variants.md).
+Each image × profile candidate is evaluated separately. User media required → `resource-required`; an unproven `ready` is downgraded to the non-ready state of `packages/catalog/src/availability.ts`. Variants: [`system-variants.md`](system-variants.md).
 
 ## Routes
 
-| Route | Vue |
+| Route | View |
 |---|---|
 | `/` | catalogue |
-| `/systems/:slug` | fiche et choix de variante |
-| `/session/:id` | session locale |
+| `/systems/:slug` | detail and variant selection |
+| `/session/:id` | local session |
 
-Il n'existe pas de route Settings. La configuration globale est chargée depuis `apps/web/public/lumiboot.config.json`.
+No Settings route (`/settings` → page not found). Global configuration: `apps/web/public/lumiboot.config.json`.
 
-## État fonctionnel
+## Functional state
 
-- Moteur intégré : v86, x86 32 bits.
-- Debian 12 : CLI, X11/Openbox et XFCE validés.
-- Windows 7 : variantes Lite et Professionnel, disques RAW locaux lus par HTTP Range.
-- Windows 10 x86 : boot réel prouvé en développement local (disque RAW opérateur servi en HTTP Range, carte `virtio-net` + pilote VirtIO NetKVM) ; voir [`windows-10.md`](windows-10.md).
-- Windows 11, Ubuntu, Fedora, Mint et macOS : catalogue seulement, moteurs ou images absents.
-- Réseau : `offline`, `browser-fetch`, `local-proxy`, `user-relay`; `local-network` prévu.
+- Integrated engine: v86, x86 32-bit.
+- Debian 12: CLI, X11/Openbox and XFCE validated.
+- Windows 7: Lite and Professional SP1, local RAW disks over HTTP Range.
+- Windows 10 x86: real boot proven (operator RAW disk over HTTP Range, `virtio-net` + VirtIO NetKVM driver); guest connectivity not covered by a test. See [`windows-10.md`](windows-10.md).
+- Windows 11, Ubuntu, Fedora, Mint and macOS: catalogue only, engines or images missing.
+- Network: `offline`, `browser-fetch`, `local-proxy`, `user-relay` implemented.
 
 ## Invariants
 
-- Pas de VM distante, VNC/RDP ni API d'orchestration.
-- Pas de gros disque ou média propriétaire dans Git.
-- Pas de secret dans une variable `VITE_*` ou un JSON public.
-- Pas de logique moteur dans les composants React.
-- Pas d'état `ready`, `running` ou `connected` sans preuve correspondante.
-- Pas de dépendance inter-paquets hors frontière autorisée, ni de cycle entre
-  paquets (`tests/architecture.test.ts`).
-- Un profil de lancement ne peut associer une architecture à un moteur qui ne la
-  sert pas (`ENGINE_ARCHITECTURES`).
+- No remote VM, VNC/RDP or orchestration API.
+- No large disk or proprietary media in Git.
+- No secret in a `VITE_*` variable or a public JSON file.
+- No engine logic in React components.
+- No `ready`, `running` or `connected` state without matching proof.
+- No cross-package dependency outside the allowed boundaries, no cycle between packages (`tests/architecture.test.ts`).
+- A launch profile never pairs an architecture with an engine that does not serve it (`ENGINE_ARCHITECTURES`).

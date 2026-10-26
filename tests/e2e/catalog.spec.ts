@@ -1,33 +1,33 @@
 import { expect, test } from '@playwright/test';
 
-test.describe('Bibliothèque', () => {
-  test('affiche les huit systèmes affichés du catalogue (mères + autonomes)', async ({ page }) => {
+test.describe('Library', () => {
+  test('shows the eight displayed catalog systems (mothers + standalone)', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Bibliothèque' })).toBeVisible();
-    // 11 entrées au catalogue plat, mais les 3 variantes enfants (2 Debian +
-    // 1 Windows 7 Professionnel) sont repliées sur la carte de leur mère :
-    // 8 cartes affichées.
+    await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible();
+    // 11 entries in the flat catalog, but the 3 child variants (2 Debian +
+    // 1 Windows 7 Professional) are folded onto their mother card:
+    // 8 displayed cards.
     await expect(page.locator('.os-card')).toHaveCount(8);
   });
 
-  test('recherche un système et filtre par famille', async ({ page }) => {
+  test('searches for a system and filters by family', async ({ page }) => {
     await page.goto('/');
-    await page.getByLabel('Rechercher un système').fill('debian');
-    // « debian » matche la console, la variante Bureau ET XFCE, mais la grille
-    // ne montre que la carte de la mère : une seule carte.
+    await page.getByLabel('Search for a system').fill('debian');
+    // "debian" matches the console, the Desktop AND the XFCE variant, but the
+    // grid only shows the mother card: a single card.
     await expect(page.locator('.os-card')).toHaveCount(1);
     await expect(page.locator('.os-card[data-id="debian-12-i386"]')).toHaveCount(1);
-    // La recherche matche les variantes enfants, mais elles ne s'affichent pas
-    // comme cartes autonomes.
+    // The search matches child variants, but they are not displayed as
+    // standalone cards.
     await expect(page.locator('.os-card[data-id="debian-12-i386-desktop"]')).toHaveCount(0);
     await expect(page.locator('.os-card[data-id="debian-12-i386-xfce"]')).toHaveCount(0);
 
-    await page.getByLabel('Rechercher un système').fill('');
+    await page.getByLabel('Search for a system').fill('');
     await page.getByRole('button', { name: 'Windows' }).click();
     await expect(page.locator('.os-card')).toHaveCount(3);
   });
 
-  test('le clic ouvre directement la fiche (sans popup)', async ({ page }) => {
+  test('a click opens the page directly (no popup)', async ({ page }) => {
     await page.goto('/');
     await page.locator('.os-card').first().click();
     await expect(page).toHaveURL(/\/systems\//);
@@ -35,7 +35,7 @@ test.describe('Bibliothèque', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
-  test('la touche Entrée sur une carte navigue vers la fiche', async ({ page }) => {
+  test('the Enter key on a card navigates to the page', async ({ page }) => {
     await page.goto('/');
     const card = page.locator('.os-card').first();
     await card.focus();
@@ -47,20 +47,20 @@ test.describe('Bibliothèque', () => {
 });
 
 /**
- * Windows 10 x86 : système autonome (plus de groupe de variantes), validé et
- * donc `ready` comme Windows 7. La disponibilité repose sur le même pipeline de
- * boot réel que Windows 7 (voir tests/e2e/windows10-desktop.spec.ts).
+ * Windows 10 x86: standalone system (no more variant group), validated and
+ * therefore `ready` like Windows 7. Availability relies on the same real boot
+ * pipeline as Windows 7 (see tests/e2e/windows10-desktop.spec.ts).
  */
-test.describe('Windows 10 x86 (système autonome)', () => {
-  test('expose une carte unique `ready` et ouvre la fiche', async ({ page }) => {
+test.describe('Windows 10 x86 (standalone system)', () => {
+  test('exposes a single `ready` card and opens the page', async ({ page }) => {
     await page.goto('/');
-    await page.getByLabel('Rechercher un système').fill('windows');
+    await page.getByLabel('Search for a system').fill('windows');
 
     const card = page.locator('.os-card[data-id="windows-10-x86"]');
     await expect(card).toHaveCount(1);
-    // Plus aucune carte fantôme : la variante x64 n'existe pas.
+    // No phantom card anymore: the x64 variant does not exist.
     await expect(page.locator('.os-card[data-id="windows-10-x64"]')).toHaveCount(0);
-    // Validé (même pipeline que Windows 7) : annoncé « Disponible » (`ready`).
+    // Validated (same pipeline as Windows 7): advertised as "Available" (`ready`).
     await expect(card.locator('.card-status')).toHaveAttribute('data-state', 'ready');
 
     await card.click();

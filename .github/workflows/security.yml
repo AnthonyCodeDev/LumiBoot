@@ -1,9 +1,9 @@
 name: Security
 
-# Scan de sécurité de la chaîne d'approvisionnement, en UN job pour limiter le
-# nombre de checks : secrets versionnés (gitleaks, historique complet),
-# vulnérabilités des dépendances livrées (pnpm audit) et vulnérabilités Go
-# atteignables (govulncheck). Complète `ci.yml` sans le dupliquer.
+# Supply-chain security scan, in a SINGLE job to limit the number of
+# checks: committed secrets (gitleaks, full history), vulnerabilities in
+# shipped dependencies (pnpm audit) and reachable Go vulnerabilities
+# (govulncheck). Complements `ci.yml` without duplicating it.
 on:
   push:
     branches: [main]
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   security:
-    name: Sécurité
+    name: Security
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -33,15 +33,15 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - name: Secrets versionnés (gitleaks)
+      - name: Committed secrets (gitleaks)
         run: |
           go install github.com/zricethezav/gitleaks/v8@latest
           "$(go env GOPATH)/bin/gitleaks" detect --source . --config .gitleaks.toml --redact --verbose
-      - name: Dépendances livrées (pnpm audit)
+      - name: Shipped dependencies (pnpm audit)
         run: |
           pnpm install --frozen-lockfile
           pnpm audit --prod --audit-level high
-      - name: Vulnérabilités Go (govulncheck)
+      - name: Go vulnerabilities (govulncheck)
         working-directory: apps/network-proxy
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest

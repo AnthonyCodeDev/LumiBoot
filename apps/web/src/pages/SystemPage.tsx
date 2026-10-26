@@ -26,12 +26,12 @@ import {
 } from '../lib/labels';
 import { NotFoundPage } from './NotFoundPage';
 
-/** Taille lisible ; miroir local du formatage du store (non exporté). */
+/** Human-readable size; local mirror of the store formatting (not exported). */
 function formatBytes(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} Gio`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} Mio`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} Kio`;
-  return `${bytes} octets`;
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${bytes} bytes`;
 }
 
 export function SystemPage() {
@@ -39,11 +39,11 @@ export function SystemPage() {
   const system = slug ? getSystemBySlug(slug) : null;
   const createSession = useSessionsStore((state) => state.create);
   const navigate = useNavigate();
-  // Id de la variante À LANCER (état purement local : ne pilote ni l'URL ni le
-  // contenu affiché, qui reste toujours celui de la mère/base).
+  // ID of the variant TO LAUNCH (purely local state: it drives neither the URL nor
+  // the displayed content, which always stays the base/parent one).
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Médias importés (store persisté : IndexedDB navigateur, repli mémoire).
+  // Imported media (persisted store: browser IndexedDB, in-memory fallback).
   const mediaRecords = useUserMediaStore((state) => state.records);
   const mediaLoading = useUserMediaStore((state) => state.loading);
   const mediaImporting = useUserMediaStore((state) => state.importing);
@@ -51,21 +51,21 @@ export function SystemPage() {
   const loadMedia = useUserMediaStore((state) => state.load);
   const importMedia = useUserMediaStore((state) => state.importFor);
   const removeMedia = useUserMediaStore((state) => state.remove);
-  // Champs du formulaire d'import.
+  // Import form fields.
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaManifest, setMediaManifest] = useState<File | null>(null);
   const [licenseAcknowledged, setLicenseAcknowledged] = useState(false);
 
-  // Disponibilité runtime (manifeste + disque HTTP Range) de la variante à lancer.
+  // Runtime availability (manifest + HTTP Range disk) of the variant to launch.
   type RuntimeState =
     { status: 'checking' } | { status: 'available' } | { status: 'unavailable'; reason: string };
   const [runtime, setRuntime] = useState<RuntimeState | null>(null);
 
-  // Synchronise la sélection quand le système résolu change :
-  // - mère (ou système autonome) → meilleure variante par défaut ;
-  // - lien direct sur un enfant → cet enfant.
-  // `system` provient du catalogue : sa référence est stable tant que le slug
-  // ne change pas (aucune boucle de rendu).
+  // Sync the selection when the resolved system changes:
+  // - parent (or standalone system) → best variant by default;
+  // - direct link to a child → that child.
+  // `system` comes from the catalogue: its reference is stable as long as the
+  // slug does not change (no render loop).
   useEffect(() => {
     if (!system) {
       setSelectedId(null);
@@ -75,18 +75,18 @@ export function SystemPage() {
     setSelectedId(system.id === parent.id ? getDefaultVariant(parent).id : system.id);
   }, [system]);
 
-  // Restoration après rafraîchissement : recharge les médias persistés une fois
-  // au montage (le store est un singleton ; `load` est stable).
+  // Restore after refresh: reload persisted media once on mount (the store is a
+  // singleton and `load` is stable).
   useEffect(() => {
     void loadMedia();
   }, [loadMedia]);
 
-  // Contenu affiché : TOUJOURS celui de la mère/base (« Debian de base »), quel
-  // que soit la variante choisie dans le dropdown.
+  // Displayed content: ALWAYS the parent/base one ("base Debian"), whatever
+  // variant is picked in the dropdown.
   const base = system ? getVariantParent(system) : null;
   const variants = base ? getVariantGroup(base) : [];
-  // Variante à lancer : la sélection locale, ou la meilleure variante par défaut
-  // (couvre le premier rendu, avant l'exécution du `useEffect`).
+  // Variant to launch: the local selection, or the best variant by default
+  // (covers the first render, before the `useEffect` runs).
   const selected = base
     ? (variants.find((variant) => variant.id === selectedId) ?? getDefaultVariant(base))
     : null;
@@ -95,13 +95,13 @@ export function SystemPage() {
   const userMediaReady = mediaRecord !== undefined;
   const isUserImport = selected?.mediaStrategy === 'user-import';
 
-  // Readiness déclarée (catalogue, moteur, architecture, mémoire, média importé).
+  // Declared readiness (catalogue, engine, architecture, memory, imported media).
   const declaredReadiness = selected
     ? getLaunchReadiness(selected, { userMediaReady })
     : { canLaunch: false };
 
-  // Vérifie le média réellement servable (manifeste JSON + disque HTTP Range)
-  // dès que la variante change et que les conditions déclarées sont réunies.
+  // Checks that the media is really servable (JSON manifest + HTTP Range disk)
+  // whenever the variant changes and the declared conditions are met.
   useEffect(() => {
     if (!selected || !declaredReadiness.canLaunch) {
       setRuntime(null);
@@ -117,7 +117,7 @@ export function SystemPage() {
             ? { status: 'available' }
             : {
                 status: 'unavailable',
-                reason: result.reason ?? 'Le média système est indisponible.',
+                reason: result.reason ?? 'The system media is unavailable.',
               },
         );
       })
@@ -126,9 +126,7 @@ export function SystemPage() {
         setRuntime({
           status: 'unavailable',
           reason:
-            error instanceof Error && error.message
-              ? error.message
-              : 'La vérification du média a échoué.',
+            error instanceof Error && error.message ? error.message : 'The media check failed.',
         });
       });
     return () => {
@@ -142,23 +140,23 @@ export function SystemPage() {
     '--accent': base.accent,
     '--accent-rgb': base.accentRgb,
   } as CSSProperties;
-  // Profil principal de la variante À LANCER : le tableau de spécifications
-  // reflète la sélection (mémoire, réseau…), pas la mère affichée.
+  // Main profile of the variant TO LAUNCH: the spec table reflects the selection
+  // (memory, network…), not the displayed parent.
   const profile = getPrimaryLaunchProfile(selected);
   const memoryMiB = profile.configuration?.memoryMiB ?? selected.minMemoryMiB;
   const bootDevice = profile.configuration?.bootDevice;
   const network = profile.hardwareProfile?.network;
 
-  // Le bouton n'est actif que si le catalogue autorise le lancement ET que le
-  // média est réellement disponible au runtime. Toute indisponibilité produit
-  // une raison EXPLICITE (404, repli HTML de SPA, absence de Range, archi…).
+  // The button is only enabled when the catalogue allows the launch AND the media
+  // is really available at runtime. Any unavailability yields an EXPLICIT reason
+  // (404, SPA HTML fallback, missing Range, architecture…).
   const readiness: LaunchReadiness = !declaredReadiness.canLaunch
     ? declaredReadiness
     : runtime?.status === 'available'
       ? { canLaunch: true }
       : runtime?.status === 'unavailable'
         ? { canLaunch: false, reason: runtime.reason }
-        : { canLaunch: false, reason: 'Vérification de la disponibilité du média…' };
+        : { canLaunch: false, reason: 'Checking media availability…' };
 
   async function handleImport(): Promise<void> {
     if (!selected || mediaFile === null) return;
@@ -168,7 +166,7 @@ export function SystemPage() {
       setMediaManifest(null);
       setLicenseAcknowledged(false);
     } catch {
-      // L'erreur est déjà exposée par le store (`mediaError`) : pas de doublon.
+      // The error is already exposed by the store (`mediaError`): no duplicate.
     }
   }
 
@@ -183,7 +181,7 @@ export function SystemPage() {
   return (
     <main className="system-detail">
       <p>
-        <Link to="/">← Retour à la bibliothèque</Link>
+        <Link to="/">← Back to the library</Link>
       </p>
       <div className="system-detail-hero" style={style}>
         <img src={base.iconUrl} alt="" />
@@ -197,7 +195,7 @@ export function SystemPage() {
           <p className="drawer-description">{base.description}</p>
           <div className="spec-box">
             <div>
-              <span>Moteur</span>
+              <span>Engine</span>
               <strong>{engineLabels[profile.engineId]}</strong>
             </div>
             <div>
@@ -206,24 +204,24 @@ export function SystemPage() {
             </div>
             {memoryMiB !== undefined ? (
               <div>
-                <span>Mémoire</span>
-                <strong>{memoryMiB} Mio</strong>
+                <span>Memory</span>
+                <strong>{memoryMiB} MiB</strong>
               </div>
             ) : null}
             {bootDevice !== undefined ? (
               <div>
-                <span>Démarrage</span>
+                <span>Boot</span>
                 <strong>{bootDeviceLabels[bootDevice] ?? bootDevice}</strong>
               </div>
             ) : null}
             {network !== undefined ? (
               <div>
-                <span>Réseau</span>
+                <span>Network</span>
                 <strong>{hardwareNetworkLabels[network]}</strong>
               </div>
             ) : null}
             <div>
-              <span>État</span>
+              <span>Status</span>
               <strong className={selected.availability === 'ready' ? '' : 'planned-label'}>
                 {availabilityLabels[selected.availability]}
               </strong>
@@ -231,27 +229,26 @@ export function SystemPage() {
           </div>
           {base.licenseNotes ? (
             <>
-              <h3>Licences</h3>
+              <h3>Licenses</h3>
               <p className="drawer-bodytext">{base.licenseNotes}</p>
             </>
           ) : null}
           {isUserImport ? (
-            <section className="media-import" aria-label="Média requis (fourni par vous)">
-              <h3>Média requis (fourni par vous)</h3>
+            <section className="media-import" aria-label="Required media (provided by you)">
+              <h3>Required media (provided by you)</h3>
               <p className="drawer-bodytext">
-                LumiBoot ne distribue ni ne télécharge aucune image de ce système. Importez un média
-                disque que vous détenez légalement : il reste dans votre navigateur et n’est jamais
-                envoyé à un serveur.
+                LumiBoot neither distributes nor downloads any image for this system. Import a disk
+                media you own legally: it stays in your browser and is never uploaded to a server.
               </p>
-              {mediaLoading ? <p className="drawer-bodytext">Chargement des médias…</p> : null}
+              {mediaLoading ? <p className="drawer-bodytext">Loading media…</p> : null}
               {mediaRecord ? (
                 <div className="media-import-current" role="status">
                   <p className="drawer-bodytext">
-                    Média importé : <strong>{mediaRecord.fileName}</strong> (
+                    Imported media: <strong>{mediaRecord.fileName}</strong> (
                     {mediaRecord.format.toUpperCase()}, {formatBytes(mediaRecord.size)}) —{' '}
                     {mediaRecord.integrity === 'verified'
-                      ? 'intégrité vérifiée'
-                      : 'intégrité non vérifiée'}
+                      ? 'integrity verified'
+                      : 'integrity not verified'}
                   </p>
                   <Button
                     variant="ghost"
@@ -261,17 +258,17 @@ export function SystemPage() {
                       void removeMedia(mediaRecord.ref);
                     }}
                   >
-                    Supprimer le média
+                    Remove media
                   </Button>
                 </div>
               ) : null}
               <div className="media-import-fields">
                 <label>
-                  <span>Fichier média (.iso, .img, .raw)</span>
+                  <span>Media file (.iso, .img, .raw)</span>
                   <input type="file" accept=".iso,.img,.raw" onChange={handleFileChange} />
                 </label>
                 <label>
-                  <span>Manifeste d’intégrité optionnel (JSON)</span>
+                  <span>Optional integrity manifest (JSON)</span>
                   <input
                     type="file"
                     accept=".json,application/json"
@@ -284,7 +281,7 @@ export function SystemPage() {
                     checked={licenseAcknowledged}
                     onChange={(event) => setLicenseAcknowledged(event.target.checked)}
                   />
-                  <span>J’atteste détenir une licence et le droit d’usage de ce média.</span>
+                  <span>I confirm that I hold a license and the right to use this media.</span>
                 </label>
               </div>
               <Button
@@ -295,7 +292,7 @@ export function SystemPage() {
                   void handleImport();
                 }}
               >
-                {mediaImporting ? 'Import en cours…' : 'Importer le média'}
+                {mediaImporting ? 'Importing…' : 'Import media'}
               </Button>
               {mediaError ? (
                 <p className="drawer-bodytext" role="alert">
@@ -310,15 +307,15 @@ export function SystemPage() {
                 variants={variants.map((variant) => ({
                   id: variant.id,
                   slug: variant.slug,
-                  // Libellé « nom de base + spécificité » (ex. « Debian XFCE »).
+                  // Label "base name + specificity" (e.g. "Debian XFCE").
                   name: variant.variantName
                     ? `${base.displayName} ${variant.variantName}`
                     : variant.displayName,
                 }))}
                 value={selected.id}
                 onSelect={(variantSlug) => {
-                  // Le dropdown ne sert qu'à choisir la variante à lancer :
-                  // aucune navigation, le contenu de la page reste celui de base.
+                  // The dropdown only picks the variant to launch: no navigation,
+                  // the page content stays the base one.
                   const next = variants.find((variant) => variant.slug === variantSlug);
                   if (next) setSelectedId(next.id);
                 }}
@@ -334,7 +331,7 @@ export function SystemPage() {
                 navigate(`/session/${id}`);
               }}
             >
-              Lancer une session
+              Start session
             </Button>
             {!readiness.canLaunch && readiness.reason ? (
               <p className="drawer-bodytext" role="status">
