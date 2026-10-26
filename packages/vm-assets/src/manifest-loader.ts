@@ -359,6 +359,18 @@ function unavailable(
   return { available: false, reason, message };
 }
 
+/**
+ * Canonical user-facing messages for the "file is not published" cause. They are
+ * shown as-is by the UI (`RUNTIME_REASON_MESSAGES` in
+ * `apps/web/src/lib/launch.ts`, which reuses them), so their wording — notably
+ * the "manifest … missing … 404" word order — is part of the contract and must
+ * stay stable.
+ */
+export const ASSET_UNAVAILABLE_MESSAGES = {
+  'manifest-missing': 'The media manifest is missing from the server (HTTP 404).',
+  'disk-missing': 'The media disk is missing from the server (HTTP 404).',
+} as const satisfies Partial<Record<AssetUnavailableReason, string>>;
+
 type JsonDocumentResult =
   | { readonly kind: 'json'; readonly json: unknown }
   | {
@@ -399,7 +411,7 @@ export async function fetchJsonDocument(
     return {
       kind: 'unavailable',
       reason: 'manifest-missing',
-      message: 'Missing manifest (HTTP 404).',
+      message: ASSET_UNAVAILABLE_MESSAGES['manifest-missing'],
     };
   }
   if (readHeader(response, 'content-type').includes('text/html')) {
@@ -460,7 +472,7 @@ export async function probeRangeAvailability(
 
   if (response.status === 404) {
     discardBody(response);
-    return unavailable('disk-missing', 'Missing disk (HTTP 404).');
+    return unavailable('disk-missing', ASSET_UNAVAILABLE_MESSAGES['disk-missing']);
   }
 
   if (response.status === 200) {

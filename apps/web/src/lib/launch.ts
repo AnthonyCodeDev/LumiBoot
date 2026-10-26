@@ -2,6 +2,7 @@ import type { LaunchProfile, OSDefinition } from '@lumiboot/contracts';
 import {
   checkImageAvailability,
   checkLocalDiskAvailability,
+  ASSET_UNAVAILABLE_MESSAGES,
   type AssetAvailabilityOptions,
   type AssetUnavailableReason,
 } from '@lumiboot/vm-assets';
@@ -26,17 +27,18 @@ export interface LaunchReadinessOptions {
 /**
  * Stable user message per runtime unavailability cause. A raw technical reason is
  * never shown: every cause (404, SPA HTML fallback, missing HTTP Range…) has an
- * actionable explanation.
+ * actionable explanation. The "file not published" causes reuse the canonical
+ * strings of `@lumiboot/vm-assets`, so both layers cannot drift apart.
  */
 const RUNTIME_REASON_MESSAGES: Record<AssetUnavailableReason, string> = {
   'ref-invalid': 'The system media reference is invalid.',
-  'manifest-missing': 'The media manifest is missing from the server (HTTP 404).',
+  'manifest-missing': ASSET_UNAVAILABLE_MESSAGES['manifest-missing'],
   'manifest-html':
     'The server returned an HTML page (SPA fallback) instead of the media JSON manifest.',
   'manifest-invalid': 'The media manifest is not readable JSON.',
   'manifest-schema': 'The media manifest does not match the expected schema.',
   'ref-mismatch': 'The manifest reference does not match the requested system.',
-  'disk-missing': 'The media disk is missing from the server (HTTP 404).',
+  'disk-missing': ASSET_UNAVAILABLE_MESSAGES['disk-missing'],
   'disk-html': 'The server returned an HTML page (SPA fallback) instead of the disk file.',
   'disk-mismatch': 'The served disk size does not match the one announced by the manifest.',
   'range-unsupported':
