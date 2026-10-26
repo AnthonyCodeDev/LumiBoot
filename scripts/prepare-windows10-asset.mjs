@@ -1,35 +1,35 @@
 #!/usr/bin/env node
-// Prépare le manifeste du disque système Windows 10 x86 fourni LOCALEMENT par
-// l'opérateur, destiné à être streamé vers v86 par HTTP Range.
+// Builds the manifest of the Windows 10 x86 system disk supplied LOCALLY by the
+// operator, so it can be streamed to v86 over HTTP Range.
 //
-// Ce script est un DÉLÉGANT : il ne réimplémente RIEN et se contente d'appeler
-// le générateur éprouvé `scripts/prepare-windows7-asset.mjs` (même format de
-// manifeste `LocalDiskManifest`, même SHA-256 en flux, même garantie « source
-// jamais écrite ») en fixant les valeurs propres à Windows 10 x86
-// (ref/display-name/architecture/mémoire/VGA/dossier de sortie/notes).
+// This script is a DELEGATE: it reimplements NOTHING and simply calls the proven
+// generator `scripts/prepare-windows7-asset.mjs` (same `LocalDiskManifest`
+// format, same streamed SHA-256, same "source never written" guarantee) while
+// pinning the Windows 10 x86 values (ref/display-name/architecture/memory/VGA/
+// output directory/notes).
 //
 //   pnpm assets:windows10:prepare -- --source "D:\VM\Windows10-32bit.img"
 //   pnpm assets:windows10:check
 //   node scripts/prepare-windows10-asset.mjs --source D:\VM\win10.img --skip-hash
 //   node scripts/prepare-windows10-asset.mjs --source D:\VM\win10.img --json
 //
-// Le disque est servi IN-PLACE : le manifeste enregistre `source.path` RELATIF à
-// la racine du dépôt (ex. `images/windows-10-x86/disk.img`, séparateurs `/`) et
-// ne copie RIEN dans le dépôt. Un disque HORS dépôt (ex. `--source D:\VM\win10.img`)
-// n'enregistre AUCUN chemin : `source` devient `{ external: true, size, mtimeMs }`,
-// et `--check` réclame alors explicitement `--source` (aucun chemin absolu n'est
-// jamais publié). Le middleware de dev (`scripts/lib/disk-asset-dev.mjs`) découvre
-// automatiquement le dossier `images/windows-10-x86/`, il n'y a rien à câbler.
+// The disk is served IN PLACE: the manifest records `source.path` RELATIVE to the
+// repository root (e.g. `images/windows-10-x86/disk.img`, `/` separators) and
+// copies NOTHING into the repository. A disk OUTSIDE the repository (e.g.
+// `--source D:\VM\win10.img`) records NO path: `source` becomes
+// `{ external: true, size, mtimeMs }`, and `--check` then explicitly requires
+// `--source` (no absolute path is ever published). The dev middleware
+// (`scripts/lib/disk-asset-dev.mjs`) discovers the `images/windows-10-x86/`
+// directory automatically, nothing needs to be wired.
 //
-// CONTRAINTE DE PIPELINE : Windows 10 démarre en `disk-boot` via `hda`
-// asynchrone, donc le média DOIT être un disque RAW **déjà installé**. Une ISO
-// seule n'est pas un disque de démarrage et un QCOW2 n'est pas un RAW : les
-// deux sont refusés AVANT toute génération (aucun faux manifeste écrit).
+// PIPELINE CONSTRAINT: Windows 10 boots in `disk-boot` mode through an async
+// `hda`, so the media MUST be a RAW disk **already installed**. A standalone ISO
+// is not a bootable disk and a QCOW2 is not a RAW disk: both are rejected BEFORE
+// any generation (no bogus manifest is written).
 //
-// Options transférées telles quelles au générateur : --check, --force,
-// --skip-hash, --resume, --json, --copy-to, etc. Les éventuelles options
-// fournies par l'opérateur (dont --source) sont placées APRÈS les valeurs par
-// défaut : elles les surchargent.
+// Options forwarded as-is to the generator: --check, --force, --skip-hash,
+// --resume, --json, --copy-to, etc. Any option supplied by the operator
+// (including --source) is placed AFTER the default values, so it overrides them.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -49,11 +49,11 @@ const OUT_DIR = resolve(repoRoot, 'images', REF);
 const DEFAULT_SOURCE = process.env.WINDOWS10_IMG ?? join(OUT_DIR, 'disk.img');
 
 const NOTES = [
-  `Disque RAW x86 de l’opérateur (Windows 10, déjà installé), servi in-place (images/${REF}/disk.img) : jamais copié, ignoré par Git, ni distribué.`,
-  'Démarré par BIOS sous v86 via HTTP Range (hda.async = true), jamais en cdrom.',
+  `Operator-provided x86 RAW disk (Windows 10, already installed), served in place (images/${REF}/disk.img): never copied, git-ignored, never distributed.`,
+  'Booted by the BIOS under v86 over HTTP Range (hda.async = true), never as a cdrom.',
 ];
 
-/** Extensions de disques virtuels non bruts, refusées pour un boot `hda`. */
+/** Non-raw virtual disk extensions, rejected for an `hda` boot. */
 const NOT_RAW_EXTENSIONS = new Map([
   ['.qcow', 'QCOW'],
   ['.qcow2', 'QCOW2'],
@@ -64,31 +64,31 @@ const NOT_RAW_EXTENSIONS = new Map([
 ]);
 
 function usage() {
-  return `Usage : node scripts/prepare-windows10-asset.mjs [options]
+  return `Usage: node scripts/prepare-windows10-asset.mjs [options]
 
-Générateur Windows 10 x86 (délègue à prepare-windows7-asset.mjs).
+Windows 10 x86 generator (delegates to prepare-windows7-asset.mjs).
 
-  --source <chemin>       Disque RAW x86 DÉJÀ INSTALLÉ (défaut :
-                          images/${REF}/disk.img, ou WINDOWS10_IMG).
-                          Une ISO seule ou un QCOW2 sont refusés.
-                          Un disque hors dépôt n'enregistre aucun chemin local.
-  --out <dossier>         Dossier de sortie (défaut images/${REF})
-  --check                 Vérifie le manifeste existant sans rien écrire
-                          (réclame --source si le manifeste vient d'un disque
-                          externe, faute de chemin enregistré)
-  --force                 Autorise l'écrasement du manifeste existant
-  --skip-hash             Ne pas calculer le SHA-256 (documente taille + mtime)
-  --resume                Réutilise le SHA-256 existant si taille+mtime identiques
-  --json                  Imprime le manifeste sur stdout (logs sur stderr)
-  --copy-to <chemin>      Copie vérifiée optionnelle (jamais la source, jamais public/)
-  -h, --help              Affiche cette aide
+  --source <path>         ALREADY INSTALLED x86 RAW disk (default:
+                          images/${REF}/disk.img, or WINDOWS10_IMG).
+                          A standalone ISO or a QCOW2 is rejected.
+                          A disk outside the repository records no local path.
+  --out <dir>             Output directory (default images/${REF})
+  --check                 Verify the existing manifest without writing anything
+                          (requires --source when the manifest comes from an
+                          external disk, since no path is recorded)
+  --force                 Allow overwriting the existing manifest
+  --skip-hash             Do not compute the SHA-256 (documents size + mtime)
+  --resume                Reuse the existing SHA-256 when size+mtime match
+  --json                  Print the manifest on stdout (logs on stderr)
+  --copy-to <path>        Optional verified copy (never the source, never public/)
+  -h, --help              Show this help
 
-Exemple :
+Example:
   pnpm assets:windows10:prepare -- --source "D:\\\\VM\\\\Windows10-32bit.img"
 `;
 }
 
-/** Dernière valeur d'une option `--nom valeur` ou `--nom=valeur` (dernier gagne). */
+/** Last value of a `--name value` or `--name=value` option (last one wins). */
 function lastValue(args, name) {
   let value;
   for (let i = 0; i < args.length; i += 1) {
@@ -107,32 +107,34 @@ function hasFlag(args, ...names) {
 }
 
 /**
- * Refuse tout média qui ne peut pas démarrer en `hda` asynchrone : ISO seule
- * (pas un disque) et formats conteneurs (QCOW/QCOW2/VHD/VMDK/VDI) non bruts.
- * Lève avant toute génération, donc aucun manifeste factice n'est écrit.
+ * Rejects any media that cannot boot from an async `hda`: a standalone ISO
+ * (not a disk) and container formats (QCOW/QCOW2/VHD/VMDK/VDI) that are not raw.
+ * Throws before any generation, so no fake manifest is ever written.
  */
 function assertBootableRawDisk(sourcePath, requestedFormat) {
   if (typeof sourcePath !== 'string' || sourcePath.length === 0) {
-    throw new Error('Disc source manquant : fournissez --source <disque RAW> ou WINDOWS10_IMG.');
+    throw new Error('Missing source disk: provide --source <RAW disk> or WINDOWS10_IMG.');
   }
   const format = (requestedFormat ?? '').toLowerCase();
   const extension = extname(sourcePath).toLowerCase();
 
   if (format === 'iso' || extension === '.iso') {
     throw new Error(
-      'Refus : une image ISO seule n’est pas un disque de démarrage pour hda ' +
-        '(pipeline disk-boot). Fournissez le disque RAW de Windows 10 déjà installé.',
+      'Refused: a standalone ISO image is not a bootable disk for hda ' +
+        '(disk-boot pipeline). Provide the RAW disk of an already installed Windows 10.',
     );
   }
   if (NOT_RAW_EXTENSIONS.has(extension)) {
     const kind = NOT_RAW_EXTENSIONS.get(extension);
     throw new Error(
-      `Refus : format ${kind} non supporté par hda asynchrone (pipeline disk-boot exige un RAW). ` +
-        'Convertissez d’abord le disque en RAW, puis relancez avec --source.',
+      `Refused: ${kind} format is not supported by async hda (the disk-boot pipeline requires a RAW disk). ` +
+        'Convert the disk to RAW first, then re-run with --source.',
     );
   }
   if (format !== '' && format !== 'raw') {
-    throw new Error(`Refus : format « ${format} » non supporté (RAW requis pour disk-boot).`);
+    throw new Error(
+      `Refused: format "${format}" is not supported (RAW is required for disk-boot).`,
+    );
   }
 }
 
@@ -142,17 +144,17 @@ function runGenerator(args) {
     stdio: 'inherit',
   });
   if (result.error) {
-    process.stderr.write(`✗ Échec du lancement du générateur : ${result.error.message}\n`);
+    process.stderr.write(`✗ Failed to start the generator: ${result.error.message}\n`);
     return 1;
   }
   return result.status ?? 1;
 }
 
 function main() {
-  // Neutralise un `--` isolé injecté par `pnpm <script> -- <opts>` : il n'est ni
-  // une option du wrapper ni une valeur, donc on le retire AVANT toute
-  // validation et avant de le transmettre au générateur (qui le tolérerait
-  // aussi, mais on évite ainsi toute ambiguïté avec `lastValue`/`hasFlag`).
+  // Neutralizes a lone `--` injected by `pnpm <script> -- <opts>`: it is neither
+  // an option of the wrapper nor a value, so it is dropped BEFORE any validation
+  // and before being forwarded to the generator (which would tolerate it too,
+  // but this avoids any ambiguity with `lastValue`/`hasFlag`).
   const userArgs = process.argv.slice(2).filter((arg) => arg !== '--');
 
   if (hasFlag(userArgs, '--help', '-h')) {
@@ -162,7 +164,7 @@ function main() {
 
   const check = hasFlag(userArgs, '--check');
 
-  // Valeurs propres à Windows 10 x86, puis options de l'opérateur (qui gagnent).
+  // Windows 10 x86 specific values, then the operator options (which win).
   const defaults = [
     '--ref',
     REF,
@@ -177,11 +179,11 @@ function main() {
     '--out',
     OUT_DIR,
     '--provenance',
-    `images/${REF}/disk.img (disque local servi in-place)`,
+    `images/${REF}/disk.img (local disk served in place)`,
     ...NOTES.flatMap((note) => ['--note', note]),
   ];
-  // En vérification sans --source, on laisse le générateur suivre le chemin
-  // enregistré dans le manifeste ; sinon on propose la source par défaut.
+  // On a check without --source, let the generator follow the path recorded in
+  // the manifest; otherwise offer the default source.
   if (!check) defaults.push('--source', DEFAULT_SOURCE);
 
   const args = [...defaults, ...userArgs];
@@ -194,10 +196,10 @@ function main() {
     const absoluteSource = resolve(source);
     if (!existsSync(absoluteSource)) {
       process.stderr.write(
-        `✗ Aucune image locale « ${REF} » trouvée.\n` +
-          `  Source attendue : ${absoluteSource}\n` +
-          '  Préparez un disque RAW x86 déjà installé, puis relancez :\n' +
-          `    pnpm assets:windows10:prepare -- --source "<chemin\\\\disk.img>"\n`,
+        `✗ No local "${REF}" image found.\n` +
+          `  Expected source: ${absoluteSource}\n` +
+          '  Prepare an already installed x86 RAW disk, then re-run:\n' +
+          `    pnpm assets:windows10:prepare -- --source "<path\\\\disk.img>"\n`,
       );
       return 1;
     }

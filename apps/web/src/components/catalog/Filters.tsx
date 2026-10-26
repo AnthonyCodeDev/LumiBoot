@@ -2,7 +2,7 @@ import type { FamilyFilter } from '@lumiboot/catalog';
 import { useCatalogStore } from '../../features/catalog/catalog.store';
 
 const FILTERS: ReadonlyArray<{ value: FamilyFilter; label: string }> = [
-  { value: 'all', label: 'Tous' },
+  { value: 'all', label: 'All' },
   { value: 'linux', label: 'Linux' },
   { value: 'windows', label: 'Windows' },
   { value: 'macos', label: 'macOS' },
@@ -13,7 +13,7 @@ export function Filters() {
   const setFamily = useCatalogStore((state) => state.setFamily);
 
   return (
-    <div className="filter-row" aria-label="Filtrer les systèmes">
+    <div className="filter-row" aria-label="Filter systems">
       {FILTERS.map((filter) => {
         const active = filter.value === family;
         return (

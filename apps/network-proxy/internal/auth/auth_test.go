@@ -24,13 +24,13 @@ func TestOriginMatching(t *testing.T) {
 	a := testAuth(&now)
 	allowed := []string{
 		"http://localhost:5200",
-		"http://localhost:5200/",          // slash final toléré
-		"HTTP://LOCALHOST:5200/some/path", // casse + chemin tolérés
+		"http://localhost:5200/",          // trailing slash tolerated
+		"HTTP://LOCALHOST:5200/some/path", // case + path tolerated
 		"https://lumiboot.app",
 	}
 	for _, o := range allowed {
 		if !a.IsOriginAllowed(o) {
-			t.Fatalf("origine autorisée refusée: %s", o)
+			t.Fatalf("allowed origin refused: %s", o)
 		}
 	}
 	denied := []string{
@@ -39,7 +39,7 @@ func TestOriginMatching(t *testing.T) {
 	}
 	for _, o := range denied {
 		if a.IsOriginAllowed(o) {
-			t.Fatalf("origine interdite acceptée: %q", o)
+			t.Fatalf("forbidden origin accepted: %q", o)
 		}
 	}
 }
@@ -53,12 +53,12 @@ func TestPairingFlow(t *testing.T) {
 		t.Fatalf("request: %v", err)
 	}
 	if p.ID == "" || p.UserCode == "" || p.Status != StatusPending {
-		t.Fatalf("appairage incomplet: %+v", p)
+		t.Fatalf("incomplete pairing: %+v", p)
 	}
 
-	// Échange avant approbation : refusé.
+	// Exchange before approval: refused.
 	if _, _, err := a.Exchange(p.ID, "http://localhost:5200"); !errors.Is(err, ErrPairingNotApproved) {
-		t.Fatalf("échange pré-approbation: %v", err)
+		t.Fatalf("pre-approval exchange: %v", err)
 	}
 
 	if err := a.Approve(p.ID, true); err != nil {
@@ -69,38 +69,38 @@ func TestPairingFlow(t *testing.T) {
 		t.Fatalf("exchange: %v", err)
 	}
 	if token == "" || expiresAt.IsZero() {
-		t.Fatal("token vide")
+		t.Fatal("empty token")
 	}
-	// Usage unique.
+	// Single use.
 	if _, _, err := a.Exchange(p.ID, "http://localhost:5200"); !errors.Is(err, ErrPairingNotFound) {
-		t.Fatalf("réutilisation d'appairage: %v", err)
+		t.Fatalf("pairing reuse: %v", err)
 	}
 
 	if !a.Verify(token, "http://localhost:5200") {
-		t.Fatal("token valide refusé")
+		t.Fatal("valid token refused")
 	}
-	// Liaison d'origine.
+	// Origin binding.
 	if a.Verify(token, "https://lumiboot.app") {
-		t.Fatal("token accepté depuis une autre origine")
+		t.Fatal("token accepted from another origin")
 	}
 	if a.Verify("", "http://localhost:5200") {
-		t.Fatal("token vide accepté")
+		t.Fatal("empty token accepted")
 	}
-	if a.Verify("nawak", "http://localhost:5200") {
-		t.Fatal("token inconnu accepté")
+	if a.Verify("garbage", "http://localhost:5200") {
+		t.Fatal("unknown token accepted")
 	}
 
 	if got := len(a.ListSessions()); got != 1 {
 		t.Fatalf("sessions: %d", got)
 	}
 	if !a.Revoke(token) {
-		t.Fatal("révocation échouée")
+		t.Fatal("revocation failed")
 	}
 	if a.Verify(token, "http://localhost:5200") {
-		t.Fatal("token révoqué accepté")
+		t.Fatal("revoked token accepted")
 	}
 	if a.Revoke(token) {
-		t.Fatal("double révocation acceptée")
+		t.Fatal("double revocation accepted")
 	}
 }
 
@@ -115,7 +115,7 @@ func TestPairingDenied(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, ok := a.Status(p.ID); ok {
-		t.Fatal("appairage refusé toujours présent")
+		t.Fatal("denied pairing still present")
 	}
 }
 
@@ -123,7 +123,7 @@ func TestPairingBadOrigin(t *testing.T) {
 	now := time.Now()
 	a := testAuth(&now)
 	if _, err := a.RequestPairing("http://evil.com"); !errors.Is(err, ErrOriginNotAllowed) {
-		t.Fatalf("origine hostile: %v", err)
+		t.Fatalf("hostile origin: %v", err)
 	}
 	p, err := a.RequestPairing("http://localhost:5200")
 	if err != nil {
@@ -133,7 +133,7 @@ func TestPairingBadOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, _, err := a.Exchange(p.ID, "https://lumiboot.app"); !errors.Is(err, ErrOriginMismatch) {
-		t.Fatalf("origine différente acceptée: %v", err)
+		t.Fatalf("different origin accepted: %v", err)
 	}
 }
 
@@ -144,12 +144,12 @@ func TestExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now = now.Add(11 * time.Minute) // au-delà de PairingTTL
+	now = now.Add(11 * time.Minute) // beyond PairingTTL
 	if _, ok := a.Status(p.ID); ok {
-		t.Fatal("appairage expiré toujours présent")
+		t.Fatal("expired pairing still present")
 	}
 	if err := a.Approve(p.ID, true); !errors.Is(err, ErrPairingNotFound) && !errors.Is(err, ErrPairingExpired) {
-		t.Fatalf("approve expiré: %v", err)
+		t.Fatalf("expired approve: %v", err)
 	}
 
 	now = time.Now()
@@ -165,12 +165,12 @@ func TestExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now = now.Add(2 * time.Hour) // au-delà de SessionTokenTTL
+	now = now.Add(2 * time.Hour) // beyond SessionTokenTTL
 	if a.Verify(token, "http://localhost:5200") {
-		t.Fatal("session expirée acceptée")
+		t.Fatal("expired session accepted")
 	}
 	if got := len(a.ListSessions()); got != 0 {
-		t.Fatalf("sessions expirées listées: %d", got)
+		t.Fatalf("expired sessions listed: %d", got)
 	}
 }
 
@@ -185,13 +185,13 @@ func TestAdminRevoke(t *testing.T) {
 		t.Fatalf("sessions: %d", len(sessions))
 	}
 	if !a.AdminRevoke(sessions[0].ID) {
-		t.Fatal("révocation admin échouée")
+		t.Fatal("admin revocation failed")
 	}
 	if a.Verify(token, "http://localhost:5200") {
-		t.Fatal("session révoquée par l'admin toujours valide")
+		t.Fatal("session revoked by admin still valid")
 	}
 	if a.AdminRevoke("abcd") {
-		t.Fatal("révocation admin d'un inconnu acceptée")
+		t.Fatal("admin revocation of an unknown session accepted")
 	}
 }
 
@@ -203,11 +203,11 @@ func TestPendingPairings(t *testing.T) {
 	}
 	pending := a.PendingPairings()
 	if len(pending) != 1 || pending[0].UserCode == "" {
-		t.Fatalf("attente: %+v", pending)
+		t.Fatalf("pending: %+v", pending)
 	}
 }
 
-// issueToken appaire et échange une session de test.
+// issueToken pairs and exchanges a test session.
 func issueToken(t *testing.T, a *Authenticator) string {
 	t.Helper()
 	p, err := a.RequestPairing("http://localhost:5200")
@@ -233,23 +233,23 @@ func TestTransportClosedOnRevoke(t *testing.T) {
 	closed := make(chan struct{}, 1)
 	info, tid, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
 	if !ok || info.ID == "" || tid == "" {
-		t.Fatal("attachement de transport refusé")
+		t.Fatal("transport attachment refused")
 	}
-	// Token invalide / origine différente : pas d'attachement.
-	if _, _, ok := a.AttachSession("mauvais", "http://localhost:5200", func() {}); ok {
-		t.Fatal("attachement d'un token invalide accepté")
+	// Invalid token / different origin: no attachment.
+	if _, _, ok := a.AttachSession("wrong", "http://localhost:5200", func() {}); ok {
+		t.Fatal("attachment of an invalid token accepted")
 	}
 	if _, _, ok := a.AttachSession(token, "https://lumiboot.app", func() {}); ok {
-		t.Fatal("attachement depuis une autre origine accepté")
+		t.Fatal("attachment from another origin accepted")
 	}
 
 	if !a.Revoke(token) {
-		t.Fatal("révocation échouée")
+		t.Fatal("revocation failed")
 	}
 	select {
 	case <-closed:
 	case <-time.After(2 * time.Second):
-		t.Fatal("callback de fermeture non invoqué après Revoke")
+		t.Fatal("close callback not invoked after Revoke")
 	}
 }
 
@@ -263,7 +263,7 @@ func TestTransportClosedOnAdminRevokeAndExpiry(t *testing.T) {
 		closed = make(chan struct{}, 1)
 		info, _, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
 		if !ok {
-			t.Fatal("attachement refusé")
+			t.Fatal("attachment refused")
 		}
 		return token, info.ID, closed
 	}
@@ -271,22 +271,22 @@ func TestTransportClosedOnAdminRevokeAndExpiry(t *testing.T) {
 	// AdminRevoke.
 	_, id, closed := attach()
 	if !a.AdminRevoke(id) {
-		t.Fatal("AdminRevoke échoué")
+		t.Fatal("AdminRevoke failed")
 	}
 	select {
 	case <-closed:
 	case <-time.After(2 * time.Second):
-		t.Fatal("callback non invoqué après AdminRevoke")
+		t.Fatal("callback not invoked after AdminRevoke")
 	}
 
-	// Expiration : CleanupExpired ferme le transport.
+	// Expiration: CleanupExpired closes the transport.
 	_, _, closed = attach()
 	now = now.Add(2 * time.Hour)
 	a.CleanupExpired()
 	select {
 	case <-closed:
 	case <-time.After(2 * time.Second):
-		t.Fatal("callback non invoqué après expiration")
+		t.Fatal("callback not invoked after expiration")
 	}
 }
 
@@ -298,15 +298,15 @@ func TestDetachSessionPreventsCallback(t *testing.T) {
 	closed := make(chan struct{}, 1)
 	_, tid, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
 	if !ok {
-		t.Fatal("attachement refusé")
+		t.Fatal("attachment refused")
 	}
 	a.DetachSession(token, tid)
 	if !a.Revoke(token) {
-		t.Fatal("révocation échouée")
+		t.Fatal("revocation failed")
 	}
 	select {
 	case <-closed:
-		t.Fatal("callback invoqué après DetachSession")
+		t.Fatal("callback invoked after DetachSession")
 	case <-time.After(100 * time.Millisecond):
 	}
 }
@@ -317,37 +317,38 @@ func TestPairingFloodLimit(t *testing.T) {
 	a := testAuth(&now)
 	for i := 0; i < maxPendingPerOrigin; i++ {
 		if _, err := a.RequestPairing("http://localhost:5200"); err != nil {
-			t.Fatalf("demande %d: %v", i, err)
+			t.Fatalf("request %d: %v", i, err)
 		}
 	}
 	if _, err := a.RequestPairing("http://localhost:5200"); !errors.Is(err, ErrPairingLimit) {
-		t.Fatalf("plafond par origine non appliqué: %v", err)
+		t.Fatalf("per-origin cap not applied: %v", err)
 	}
-	// Une autre origine autorisée n'est pas pénalisée.
+	// Another allowed origin is not penalized.
 	if _, err := a.RequestPairing("https://lumiboot.app"); err != nil {
-		t.Fatalf("autre origine bloquée à tort: %v", err)
+		t.Fatalf("other origin wrongly blocked: %v", err)
 	}
-	// Le nettoyage des expirées libère le quota.
+	// Purging expired entries frees the quota.
 	now = now.Add(11 * time.Minute)
 	if _, err := a.RequestPairing("http://localhost:5200"); err != nil {
-		t.Fatalf("après nettoyage: %v", err)
+		t.Fatalf("after cleanup: %v", err)
 	}
 }
 
-// --- Régressions P0 : registre multi-transports par token ---
+// --- P0 regressions: multi-transport registry per token ---
 
-// expectClosed attend l'invocation d'un callback de fermeture.
+// expectClosed waits for a close callback invocation.
 func expectClosed(t *testing.T, ch <-chan struct{}, label string) {
 	t.Helper()
 	select {
 	case <-ch:
 	case <-time.After(2 * time.Second):
-		t.Fatalf("%s: callback de fermeture non invoqué", label)
+		t.Fatalf("%s: close callback not invoked", label)
 	}
 }
 
-// TestTwoTransportsSameTokenRevokeClosesBoth : bug P0 — deux WebSocket attachés
-// au même token ne doivent plus s'écraser (onClose unique) ; Revoke ferme 2/2.
+// TestTwoTransportsSameTokenRevokeClosesBoth: P0 bug — two WebSockets attached
+// to the same token must no longer overwrite each other (single onClose);
+// Revoke closes 2/2.
 func TestTwoTransportsSameTokenRevokeClosesBoth(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -359,16 +360,16 @@ func TestTwoTransportsSameTokenRevokeClosesBoth(t *testing.T) {
 	_, tidA, okA := a.AttachSession(token, "http://localhost:5200", func() { closedA <- struct{}{} })
 	_, tidB, okB := a.AttachSession(token, "http://localhost:5200", func() { closedB <- struct{}{} })
 	if !okA || !okB || tidA == "" || tidB == "" || tidA == tidB {
-		t.Fatalf("attachements: okA=%v okB=%v tidA=%q tidB=%q", okA, okB, tidA, tidB)
+		t.Fatalf("attachments: okA=%v okB=%v tidA=%q tidB=%q", okA, okB, tidA, tidB)
 	}
 	if !a.Revoke(token) {
-		t.Fatal("révocation échouée")
+		t.Fatal("revocation failed")
 	}
 	expectClosed(t, closedA, "transport A")
 	expectClosed(t, closedB, "transport B")
 }
 
-// TestDetachOnlyRemovesTargetTransport : bug P0 — detach A ne doit PAS fermer B.
+// TestDetachOnlyRemovesTargetTransport: P0 bug — detaching A must NOT close B.
 func TestDetachOnlyRemovesTargetTransport(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -382,18 +383,18 @@ func TestDetachOnlyRemovesTargetTransport(t *testing.T) {
 	a.DetachSession(token, tidA)
 
 	if !a.Revoke(token) {
-		t.Fatal("révocation échouée")
+		t.Fatal("revocation failed")
 	}
 	expectClosed(t, closedB, "transport B")
 	select {
 	case <-closedA:
-		t.Fatal("transport A fermé alors qu'il avait été détaché")
+		t.Fatal("transport A closed although it had been detached")
 	case <-time.After(100 * time.Millisecond):
 	}
 }
 
-// TestVerifyExpiredClosesAllTransports : une session expirée rencontrée par
-// Verify est purgée ET tous ses transports sont fermés (aucune fuite).
+// TestVerifyExpiredClosesAllTransports: an expired session encountered by
+// Verify is purged AND all its transports are closed (no leak).
 func TestVerifyExpiredClosesAllTransports(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -405,16 +406,16 @@ func TestVerifyExpiredClosesAllTransports(t *testing.T) {
 	a.AttachSession(token, "http://localhost:5200", func() { closedA <- struct{}{} })
 	a.AttachSession(token, "http://localhost:5200", func() { closedB <- struct{}{} })
 
-	now = now.Add(2 * time.Hour) // au-delà de SessionTokenTTL
+	now = now.Add(2 * time.Hour) // beyond SessionTokenTTL
 	if a.Verify(token, "http://localhost:5200") {
-		t.Fatal("session expirée acceptée")
+		t.Fatal("expired session accepted")
 	}
 	expectClosed(t, closedA, "Verify transport A")
 	expectClosed(t, closedB, "Verify transport B")
 }
 
-// TestListSessionsExpiredClosesAllTransports : ListSessions ne purge jamais une
-// session expirée sans fermer ses connexions.
+// TestListSessionsExpiredClosesAllTransports: ListSessions never purges an
+// expired session without closing its connections.
 func TestListSessionsExpiredClosesAllTransports(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -428,14 +429,14 @@ func TestListSessionsExpiredClosesAllTransports(t *testing.T) {
 
 	now = now.Add(2 * time.Hour)
 	if got := a.ListSessions(); len(got) != 0 {
-		t.Fatalf("sessions expirées listées: %d", len(got))
+		t.Fatalf("expired sessions listed: %d", len(got))
 	}
 	expectClosed(t, closedA, "ListSessions transport A")
 	expectClosed(t, closedB, "ListSessions transport B")
 }
 
-// TestCleanupExpiredClosesAllTransports : le balayage périodique (sweeper) ferme
-// TOUS les transports d'une session expirée.
+// TestCleanupExpiredClosesAllTransports: the periodic sweep closes ALL
+// transports of an expired session.
 func TestCleanupExpiredClosesAllTransports(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -453,8 +454,8 @@ func TestCleanupExpiredClosesAllTransports(t *testing.T) {
 	expectClosed(t, closedB, "sweep transport B")
 }
 
-// TestCloseAllSessionsClosesEveryTransport : l'arrêt du serveur ferme tous les
-// transports de toutes les sessions (tokens distincts).
+// TestCloseAllSessionsClosesEveryTransport: server shutdown closes every
+// transport of every session (distinct tokens).
 func TestCloseAllSessionsClosesEveryTransport(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -477,8 +478,8 @@ func TestCloseAllSessionsClosesEveryTransport(t *testing.T) {
 	}
 }
 
-// TestCloseAllSessionsIdempotent : le sync.Once par transport évite tout double
-// close même si CloseAllSessions est rappelé.
+// TestCloseAllSessionsIdempotent: the per-transport sync.Once prevents any
+// double close even if CloseAllSessions is called again.
 func TestCloseAllSessionsIdempotent(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -492,12 +493,12 @@ func TestCloseAllSessionsIdempotent(t *testing.T) {
 	a.CloseAllSessions()
 
 	if got := atomic.LoadInt32(&calls); got != 1 {
-		t.Fatalf("callback invoqué %d fois, attendu 1 (double close)", got)
+		t.Fatalf("callback invoked %d times, expected 1 (double close)", got)
 	}
 }
 
-// TestConcurrentAttachDetachRevoke : sous -race, pas de deadlock ni de double
-// close lorsque attach/detach/revoke se chevauchent.
+// TestConcurrentAttachDetachRevoke: under -race, no deadlock and no double close
+// when attach/detach/revoke overlap.
 func TestConcurrentAttachDetachRevoke(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -522,7 +523,7 @@ func TestConcurrentAttachDetachRevoke(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Détache la moitié des transports : la révocation ne doit fermer que le reste.
+	// Detach half of the transports: revocation must only close the rest.
 	for i := 0; i < n; i += 2 {
 		if tids[i] != "" {
 			a.DetachSession(token, tids[i])
@@ -537,14 +538,14 @@ func TestConcurrentAttachDetachRevoke(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("Revoke bloqué (deadlock ?)")
+		t.Fatal("Revoke blocked (deadlock?)")
 	}
 
 	got := atomic.LoadInt32(&closed)
 	if got > n {
-		t.Fatalf("double close: %d fermetures pour %d transports", got, n)
+		t.Fatalf("double close: %d closes for %d transports", got, n)
 	}
 	if got != int32(n/2) {
-		t.Fatalf("fermetures=%d, attendu %d (transports non détachés)", got, n/2)
+		t.Fatalf("closes=%d, expected %d (non-detached transports)", got, n/2)
 	}
 }

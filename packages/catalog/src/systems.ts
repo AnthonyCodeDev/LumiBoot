@@ -22,17 +22,17 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
   const launchProfilesForImage = launchProfilesByImageId.get(image.id) ?? [];
 
   if (!family || launchProfilesForImage.length === 0) {
-    throw new Error(`Image ou profil de lancement invalide : ${image.id}`);
+    throw new Error(`Invalid image or launch profile: ${image.id}`);
   }
 
-  // La disponibilité n'est jamais déclarée par une image ou un profil : elle
-  // est DÉRIVÉE des faits (image présente, profil compatible, moteur intégré,
-  // fonctionnement validé). Un système ne devient donc pas disponible parce que
-  // son image existe.
+  // Availability is never declared by an image or a profile: it is DERIVED from
+  // facts (image present, compatible profile, integrated engine, validated
+  // operation). A system therefore does not become available just because its
+  // image exists.
   //
-  // Audit #19 : on évalue chaque candidat (image × profil × moteur) POUR LUI-
-  // MÊME. On ne mélange jamais la validation d'un profil avec le moteur d'un
-  // autre : un faux `ready` exigerait qu'un MÊME profil coche les quatre
+  // Audit #19: each candidate (image × profile × engine) is evaluated ON ITS
+  // OWN. The validation of one profile is never mixed with the engine of another
+  // one: a false `ready` would require the SAME profile to satisfy all four
   // conditions.
   const availability = getAggregatedAvailability(
     launchProfilesForImage.map((launchProfile) => ({
@@ -40,9 +40,9 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
       hasCompatibleProfile: launchProfile.executionMode === 'browser',
       engineIntegrated: isEngineIntegrated(launchProfile.engineId),
       validated: launchProfile.validated,
-      // `mediaStrategy: 'user-import'` IMPLIQUE un média utilisateur, même si le
-      // drapeau explicite est absent : l'état reste honnêtement
-      // `resource-required` au lieu d'un `planned` indifférencié.
+      // `mediaStrategy: 'user-import'` IMPLIES user media, even when the
+      // explicit flag is absent: the state honestly stays `resource-required`
+      // instead of an undifferentiated `planned`.
       requiresUserMedia: image.requiresUserMedia === true || image.mediaStrategy === 'user-import',
     })),
   );
@@ -76,8 +76,8 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
     accentRgb: family.accentRgb,
     featured: launchProfilesForImage.some((launchProfile) => launchProfile.featured) || undefined,
     integrationNote: image.integrationNote,
-    // Rattachement éventuel au groupe de variantes. Spread conditionnel : on
-    // n'introduit jamais de clé `undefined` (rétro-compatibilité des manifestes).
+    // Optional attachment to the variant group. Conditional spread: an
+    // `undefined` key is never introduced (manifest backward compatibility).
     ...(launchProfilesForImage[0]!.variantGroupId !== undefined
       ? { variantGroupId: launchProfilesForImage[0]!.variantGroupId }
       : {}),
@@ -91,16 +91,16 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
 });
 
 /**
- * Catalogue LumiBoot — source unique de vérité.
+ * LumiBoot catalog — single source of truth.
  *
- * RÈGLE UNIQUE DE DISPONIBILITÉ : `availability` est dérivée par
- * `getEffectiveAvailability` et vaut `ready` uniquement si l'image est présente
- * (`imageRef`), qu'un profil compatible existe, que le moteur est intégré et
- * que le fonctionnement est validé. Les images de systèmes propriétaires ne
- * sont jamais incluses ni récupérées automatiquement (voir docs/LICENSES.md).
+ * SINGLE AVAILABILITY RULE: `availability` is derived by
+ * `getEffectiveAvailability` and is `ready` only if the image is present
+ * (`imageRef`), a compatible profile exists, the engine is integrated and the
+ * operation is validated. Images of proprietary systems are never included nor
+ * fetched automatically (see docs/LICENSES.md).
  *
- * Les définitions sont validées par Zod au chargement : un manifeste invalide
- * fait échouer immédiatement l'application au lieu de produire une UI incohérente.
+ * Definitions are validated by Zod on load: an invalid manifest makes the
+ * application fail immediately instead of producing an inconsistent UI.
  */
 export const systems: readonly OSDefinition[] = validateCatalog(definitions);
 
@@ -113,49 +113,48 @@ export function getSystemBySlug(slug: string): OSDefinition | null {
 }
 
 export function getFeaturedSystem(): OSDefinition | null {
-  // La une se choisit parmi les systèmes AFFICHÉS (mères + autonomes), jamais
-  // parmi les variants enfants.
+  // The featured system is chosen among the DISPLAYED systems (parents +
+  // standalone), never among child variants.
   const display = getDisplaySystems();
   return display.find((system) => system.featured) ?? display[0] ?? null;
 }
 
 /**
- * Id de la mère du groupe de variantes : `variantGroupId` pour un enfant, ou
- * l'id du système lui-même quand il est la mère (ou un système autonome).
+ * Id of the parent of the variant group: `variantGroupId` for a child, or the
+ * system's own id when it is the parent (or a standalone system).
  */
 export function getVariantParentId(system: Pick<OSDefinition, 'id' | 'variantGroupId'>): string {
   return system.variantGroupId ?? system.id;
 }
 
 /**
- * Systèmes AFFICHÉS dans la grille : mères de groupe + systèmes autonomes
- * (ceux qui ne portent PAS de `variantGroupId`). Les variants enfants en sont
- * exclus : ils se choisissent depuis la fiche de leur mère.
+ * Systems DISPLAYED in the grid: group parents + standalone systems (those that
+ * do NOT carry a `variantGroupId`). Child variants are excluded: they are
+ * chosen from their parent's page.
  */
 export function getDisplaySystems(): OSDefinition[] {
   return systems.filter((system) => system.variantGroupId === undefined);
 }
 
 /**
- * Groupe de variantes d'un système : tous les membres (mère + enfants) triés
- * par `variantOrder` croissant (la plus petite valeur = meilleure variante, donc
- * première et sélectionnée par défaut). Les membres sans `variantOrder` viennent
- * après les membres ordonnés ; à égalité, l'ordre du catalogue est conservé
- * (tri stable). Si aucune mère n'est trouvée, renvoie `[system]` (dégradation
- * sûre).
+ * Variant group of a system: all members (parent + children) sorted by
+ * ascending `variantOrder` (the smallest value = best variant, so first and
+ * selected by default). Members without `variantOrder` come after the ordered
+ * ones; on a tie, catalog order is preserved (stable sort). If no parent is
+ * found, returns `[system]` (safe degradation).
  */
 export function getVariantGroup(system: OSDefinition): OSDefinition[] {
   const parentId = getVariantParentId(system);
   const parent = systems.find((candidate) => candidate.id === parentId);
   if (!parent) return [system];
 
-  // Tous les membres du groupe dans l'ordre du catalogue (mère + enfants).
+  // All group members in catalog order (parent + children).
   const members = systems.filter(
     (candidate) => candidate.id === parentId || candidate.variantGroupId === parentId,
   );
 
-  // `Array.prototype.sort` est stable (ES2019) : à `variantOrder` égal, l'ordre
-  // du catalogue est préservé. `undefined` passe en dernier (infini).
+  // `Array.prototype.sort` is stable (ES2019): with equal `variantOrder`,
+  // catalog order is preserved. `undefined` goes last (infinity).
   return [...members].sort(
     (a, b) =>
       (a.variantOrder ?? Number.POSITIVE_INFINITY) - (b.variantOrder ?? Number.POSITIVE_INFINITY),
@@ -163,52 +162,50 @@ export function getVariantGroup(system: OSDefinition): OSDefinition[] {
 }
 
 /**
- * Meilleure variante du groupe d'un système : la première de `getVariantGroup`
- * (celle au plus petit `variantOrder`), soit le système lui-même s'il est
- * autonome.
+ * Best variant of a system's group: the first of `getVariantGroup` (the one
+ * with the smallest `variantOrder`), or the system itself if it is standalone.
  */
 export function getDefaultVariant(system: OSDefinition): OSDefinition {
   return getVariantGroup(system)[0] ?? system;
 }
 
 /**
- * Système « mère » d'un variant (ou le système lui-même s'il est autonome ou
- * déjà la mère).
+ * Parent system of a variant (or the system itself if it is standalone or
+ * already the parent).
  */
 export function getVariantParent(system: OSDefinition): OSDefinition {
   const parentId = getVariantParentId(system);
   return systems.find((candidate) => candidate.id === parentId) ?? system;
 }
 
-/** Vrai si ce système appartient à un groupe de plus d'une entrée. */
+/** True if this system belongs to a group with more than one entry. */
 export function hasVariants(system: OSDefinition): boolean {
   return getVariantGroup(system).length > 1;
 }
 
 /**
- * Origine du média d'un système, telle que DÉCLARÉE par le catalogue. Sert à
- * l'UI pour choisir la vérification runtime adaptée :
- * - `bundled-image` : manifeste d'image publié (`/images/<ref>/manifest.json`)
- *   + disque servi en HTTP Range ;
- * - `local-disk` : manifeste de disque local (`disk-boot`) + disque servi en
- *   HTTP Range (ex. Windows 7, disque gitignoré) ;
- * - `user-import` : média fourni localement par l'utilisateur (jamais distribué,
- *   jamais vérifié par HTTP) — seule sa présence importée compte.
+ * Media origin of a system, as DECLARED by the catalog. Used by the UI to pick
+ * the right runtime check:
+ * - `bundled-image`: published image manifest (`/images/<ref>/manifest.json`)
+ *   + disk served over HTTP Range;
+ * - `local-disk`: local disk manifest (`disk-boot`) + disk served over
+ *   HTTP Range (e.g. Windows 7, gitignored disk);
+ * - `user-import`: media provided locally by the user (never distributed,
+ *   never checked over HTTP) — only its imported presence matters.
  */
 export type DeclaredMediaSource = 'bundled-image' | 'local-disk' | 'user-import';
 
 /**
- * Readiness DÉCLARÉE par le catalogue, volontairement séparée de la
- * disponibilité RUNTIME.
+ * Readiness DECLARED by the catalog, deliberately separate from RUNTIME
+ * availability.
  *
- * `availability` est un état de catalogue : `ready` signifie que l'image est
- * référencée, qu'un profil compatible existe, que le moteur est intégré et que
- * le fonctionnement a été validé. Il ne présume JAMAIS que le média est
- * réellement servable sur la machine : manifeste JSON valide, disque présent,
- * HTTP Range (206), compatibilité architecture/mémoire restent à vérifier au
- * runtime (voir `getLaunchReadiness` / `checkSystemRuntimeAvailability` côté
- * `apps/web`). Confondre les deux produirait un faux `ready` et un bouton de
- * lancement mensonger.
+ * `availability` is a catalog state: `ready` means the image is referenced, a
+ * compatible profile exists, the engine is integrated and operation has been
+ * validated. It NEVER assumes the media is really servable on the machine: a
+ * valid JSON manifest, a present disk, HTTP Range (206), architecture/memory
+ * compatibility all remain to be checked at runtime (see `getLaunchReadiness` /
+ * `checkSystemRuntimeAvailability` in `apps/web`). Confusing the two would
+ * produce a false `ready` and a misleading launch button.
  */
 export interface DeclaredReadiness {
   readonly availability: Availability;

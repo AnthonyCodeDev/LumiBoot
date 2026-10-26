@@ -30,7 +30,7 @@ const HEALTH_OK = { status: 200, body: { status: 'ok', version: '0.1.0', wispVer
 const VERIFY_OK = { status: 200, body: { ok: true, expiresAt: futureIso() } };
 
 beforeEach(() => {
-  // Arrête toute surveillance résiduelle entre les tests.
+  // Stops any leftover watch between tests.
   useProxyStore.getState().dismissError();
   localStorage.clear();
   sessionStorage.clear();
@@ -47,14 +47,14 @@ beforeEach(() => {
 });
 
 describe('useProxyStore', () => {
-  it('/health OK sans token → pairing-required (jamais connected sans preuve)', async () => {
+  it('/health OK without a token → pairing-required (never connected without proof)', async () => {
     await useProxyStore.getState().refresh(fetchRouter({ '/health': HEALTH_OK }));
     const { state, token } = useProxyStore.getState();
     expect(state).toBe('pairing-required');
     expect(token).toBeNull();
   });
 
-  it('connexion réussie : pairing → approved → exchange → connected', async () => {
+  it('successful connection: pairing → approved → exchange → connected', async () => {
     const fetchImpl = fetchRouter({
       '/health': HEALTH_OK,
       '/api/pair/request': {
@@ -77,7 +77,7 @@ describe('useProxyStore', () => {
     expect(useProxyStore.getState().authenticated).toBe(true);
   });
 
-  it('auto-connexion : approbation détectée par polling → connected sans connect()', async () => {
+  it('auto-connect: approval detected by polling → connected without connect()', async () => {
     vi.useFakeTimers();
     try {
       const fetchImpl = fetchRouter({
@@ -109,7 +109,7 @@ describe('useProxyStore', () => {
     }
   });
 
-  it('approbation mais verifyToken KO (401) → pairing-required, jamais connected', async () => {
+  it('approved but verifyToken KO (401) → pairing-required, never connected', async () => {
     vi.useFakeTimers();
     try {
       const fetchImpl = fetchRouter({
@@ -123,7 +123,7 @@ describe('useProxyStore', () => {
           body: { status: 'approved', expiresAt: 'x' },
         },
         '/api/pair/exchange': { status: 200, body: { token: 'tok', expiresAt: futureIso() } },
-        '/api/session/verify': { status: 401, body: { error: 'jeton invalide' } },
+        '/api/session/verify': { status: 401, body: { error: 'invalid token' } },
       });
       await useProxyStore.getState().startPairing(fetchImpl);
 
@@ -138,7 +138,7 @@ describe('useProxyStore', () => {
     }
   });
 
-  it('auto-connexion : refus depuis la console → error explicite', async () => {
+  it('auto-connect: refusal from the console → explicit error', async () => {
     vi.useFakeTimers();
     try {
       const fetchImpl = fetchRouter({
@@ -157,14 +157,14 @@ describe('useProxyStore', () => {
       await vi.advanceTimersByTimeAsync(PAIRING_POLL_INTERVAL_MS);
 
       expect(useProxyStore.getState().state).toBe('error');
-      expect(useProxyStore.getState().error).toBe('Accès refusé depuis la console du proxy.');
+      expect(useProxyStore.getState().error).toBe('Access refused from the proxy console.');
     } finally {
       useProxyStore.getState().dismissError();
       vi.useRealTimers();
     }
   });
 
-  it('auto-connexion : appairage expiré/introuvable (404) → error', async () => {
+  it('auto-connect: expired/unknown pairing (404) → error', async () => {
     vi.useFakeTimers();
     try {
       const fetchImpl = fetchRouter({
@@ -180,14 +180,14 @@ describe('useProxyStore', () => {
       await vi.advanceTimersByTimeAsync(PAIRING_POLL_INTERVAL_MS);
 
       expect(useProxyStore.getState().state).toBe('error');
-      expect(useProxyStore.getState().error).toMatch(/introuvable ou expirée/);
+      expect(useProxyStore.getState().error).toMatch(/not found or expired/);
     } finally {
       useProxyStore.getState().dismissError();
       vi.useRealTimers();
     }
   });
 
-  it('dismissError arrête la surveillance (plus de passage à connected)', async () => {
+  it('dismissError stops the watch (no more switch to connected)', async () => {
     vi.useFakeTimers();
     try {
       const fetchImpl = fetchRouter({
@@ -215,14 +215,14 @@ describe('useProxyStore', () => {
     }
   });
 
-  it('proxy réseau local arrêté → not-running', async () => {
+  it('local network proxy stopped → not-running', async () => {
     await useProxyStore.getState().refresh(async () => {
       throw new TypeError('Failed to fetch');
     });
     expect(useProxyStore.getState().state).toBe('not-running');
   });
 
-  it('révocation → token effacé, retour à pairing-required', async () => {
+  it('revocation → token cleared, back to pairing-required', async () => {
     useProxyStore.setState({ token: 'tok', state: 'connected' });
     const fetchImpl = fetchRouter({
       '/health': HEALTH_OK,
@@ -233,7 +233,7 @@ describe('useProxyStore', () => {
     expect(useProxyStore.getState().state).toBe('pairing-required');
   });
 
-  it('connect persiste le token après vérification authentifiée', async () => {
+  it('connect persists the token after authenticated verification', async () => {
     const fetchImpl = fetchRouter({
       '/health': HEALTH_OK,
       '/api/pair/status?id=p1': {
@@ -250,7 +250,7 @@ describe('useProxyStore', () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('connect ne persiste PAS un token refusé par verifyToken', async () => {
+  it('connect does NOT persist a token refused by verifyToken', async () => {
     const fetchImpl = fetchRouter({
       '/health': HEALTH_OK,
       '/api/pair/status?id=p1': {
@@ -258,7 +258,7 @@ describe('useProxyStore', () => {
         body: { status: 'approved', expiresAt: futureIso() },
       },
       '/api/pair/exchange': { status: 200, body: { token: 'tok', expiresAt: futureIso() } },
-      '/api/session/verify': { status: 403, body: { error: 'refusé' } },
+      '/api/session/verify': { status: 403, body: { error: 'refused' } },
     });
     await useProxyStore.getState().connect('p1', fetchImpl);
     expect(useProxyStore.getState().state).toBe('pairing-required');
@@ -266,7 +266,7 @@ describe('useProxyStore', () => {
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('refresh restaure un token persisté valide (verifyToken OK) → connected', async () => {
+  it('refresh restores a valid persisted token (verifyToken OK) → connected', async () => {
     saveProxySession({
       token: 'persisted',
       expiresAt: futureIso(),
@@ -280,7 +280,7 @@ describe('useProxyStore', () => {
     expect(useProxyStore.getState().authenticated).toBe(true);
   });
 
-  it('refresh avec un token persisté expiré → pairing-required', async () => {
+  it('refresh with an expired persisted token → pairing-required', async () => {
     saveProxySession({
       token: 'expired',
       expiresAt: new Date(Date.now() - 1000).toISOString(),
@@ -291,7 +291,7 @@ describe('useProxyStore', () => {
     expect(useProxyStore.getState().token).toBeNull();
   });
 
-  it('revoke efface le stockage persisté', async () => {
+  it('revoke clears the persisted storage', async () => {
     saveProxySession({
       token: 'tok',
       expiresAt: futureIso(),
@@ -306,7 +306,7 @@ describe('useProxyStore', () => {
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('/health OK mais verifyToken KO (401) → pairing-required, jeton persisté effacé', async () => {
+  it('/health OK but verifyToken KO (401) → pairing-required, persisted token cleared', async () => {
     saveProxySession({
       token: 'stale',
       expiresAt: futureIso(),
@@ -315,7 +315,7 @@ describe('useProxyStore', () => {
     await useProxyStore.getState().refresh(
       fetchRouter({
         '/health': HEALTH_OK,
-        '/api/session/verify': { status: 401, body: { error: 'jeton invalide' } },
+        '/api/session/verify': { status: 401, body: { error: 'invalid token' } },
       }),
     );
     const { state, token, authenticated } = useProxyStore.getState();
@@ -325,12 +325,12 @@ describe('useProxyStore', () => {
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it('/health OK, jeton mémoire refusé (403) → pairing-required, jamais connected', async () => {
+  it('/health OK, in-memory token refused (403) → pairing-required, never connected', async () => {
     useProxyStore.setState({ token: 'mem', state: 'connected', authenticated: true });
     await useProxyStore.getState().refresh(
       fetchRouter({
         '/health': HEALTH_OK,
-        '/api/session/verify': { status: 403, body: { error: 'refusé' } },
+        '/api/session/verify': { status: 403, body: { error: 'refused' } },
       }),
     );
     const { state, token, authenticated } = useProxyStore.getState();
@@ -339,23 +339,23 @@ describe('useProxyStore', () => {
     expect(authenticated).toBe(false);
   });
 
-  it('/health OK mais verifyToken en erreur réseau → error incertain, jamais connected', async () => {
+  it('/health OK but verifyToken hits a network error → uncertain error, never connected', async () => {
     useProxyStore.setState({ token: 'mem', state: 'connected', authenticated: true });
-    // Le routeur n'expose pas `/api/session/verify` : la vérification échoue.
+    // The router does not expose `/api/session/verify`: the check fails.
     await useProxyStore.getState().refresh(fetchRouter({ '/health': HEALTH_OK }));
     const { state, authenticated } = useProxyStore.getState();
     expect(state).toBe('error');
     expect(authenticated).toBe(false);
   });
 
-  it('getProxyRuntimeCredentials ne renvoie un jeton que si authentifié', () => {
+  it('getProxyRuntimeCredentials only returns a token when authenticated', () => {
     useProxyStore.setState({ token: 'tok', state: 'pairing-required', authenticated: false });
     expect(getProxyRuntimeCredentials().proxyToken).toBeNull();
     useProxyStore.setState({ token: 'tok', state: 'connected', authenticated: true });
     expect(getProxyRuntimeCredentials().proxyToken).toBe('tok');
   });
 
-  it('course : une approbation tardive d’un poll annulé est ignorée', async () => {
+  it('race: a late approval from a cancelled poll is ignored', async () => {
     vi.useFakeTimers();
     let settleStatus: ((value: Response) => void) | undefined;
     try {
@@ -387,9 +387,9 @@ describe('useProxyStore', () => {
       }) as FetchLike;
 
       await useProxyStore.getState().startPairing(fetchImpl);
-      // Premier tick : la requête de statut reste en attente.
+      // First tick: the status request stays pending.
       await vi.advanceTimersByTimeAsync(PAIRING_POLL_INTERVAL_MS);
-      // Nouvelle tentative : annule le poll précédent.
+      // New attempt: cancels the previous poll.
       useProxyStore.getState().dismissError();
       expect(typeof settleStatus).toBe('function');
       settleStatus?.({
@@ -407,7 +407,7 @@ describe('useProxyStore', () => {
     }
   });
 
-  it('revoke annule le poll : aucune approbation tardive ne reconnecte', async () => {
+  it('revoke cancels the poll: no late approval reconnects', async () => {
     vi.useFakeTimers();
     try {
       const fetchImpl = fetchRouter({

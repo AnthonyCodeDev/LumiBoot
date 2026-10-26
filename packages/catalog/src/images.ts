@@ -1,11 +1,11 @@
 import type { Architecture, MediaStrategy } from '@lumiboot/contracts';
 
 /**
- * Description factuelle d'une image système.
+ * Factual description of a system image.
  *
- * Ce fichier ne déclare AUCUN statut de disponibilité : la disponibilité est
- * calculée une seule fois, dans `systems.ts`, via `getEffectiveAvailability`.
- * La présence effective d'une image se lit uniquement à travers `imageRef`.
+ * This file declares NO availability status: availability is computed once, in
+ * `systems.ts`, through `getEffectiveAvailability`. An image really being
+ * present is only read through `imageRef`.
  */
 export interface SystemImageDefinition {
   readonly id: string;
@@ -13,14 +13,14 @@ export interface SystemImageDefinition {
   readonly architecture: Architecture;
   readonly imageRef?: string;
   /**
-   * Origine du média : `bundled` (défaut, servi par LumiBoot) ou `user-import`
-   * (média fourni par l'utilisateur, jamais distribué). Voir docs/windows-7.md.
+   * Media origin: `bundled` (default, served by LumiBoot) or `user-import`
+   * (media supplied by the user, never distributed). See docs/windows-7.md.
    */
   readonly mediaStrategy?: MediaStrategy;
   /**
-   * Vrai si ce système ne peut PAS démarrer sans média local importé par
-   * l'utilisateur. Pilote l'état honnête `resource-required` tant que le média
-   * n'est pas présent (aucun `imageRef` n'est alors déclaré).
+   * True if this system can NOT boot without a local media imported by the
+   * user. Drives the honest `resource-required` state as long as the media is
+   * absent (no `imageRef` is declared then).
    */
   readonly requiresUserMedia?: boolean;
   readonly requirements: readonly string[];
@@ -33,150 +33,149 @@ export const images = [
     id: 'debian-12-i386-image',
     familyId: 'debian',
     architecture: 'i386',
-    // Référence du manifeste d'image (indépendante du moteur choisi par le profil).
-    // C'est la seule preuve qu'une image est réellement construite/disponible.
+    // Image manifest reference (independent of the engine chosen by the profile).
+    // It is the only proof that an image is really built/available.
     imageRef: 'debian-12-i386',
-    requirements: ['Navigateur moderne', 'WebAssembly', 'Mémoire suffisante'],
-    integrationNote: "Premier système du MVP. L'image Linux arrive en premier lot.",
+    requirements: ['Modern browser', 'WebAssembly', 'Enough memory'],
+    integrationNote: 'First system of the MVP. The Linux image ships in the first batch.',
   },
   {
     id: 'debian-12-i386-desktop-image',
     familyId: 'debian',
     architecture: 'i386',
-    // Image desktop construite et publiée. La seule preuve de présence reste
-    // `imageRef` ; la disponibilité demeure DÉRIVÉE et dépend aussi d'un boot
-    // réel validé (`validated` du profil — voir docs/debian-desktop.md).
+    // Desktop image built and published. The only proof of presence remains
+    // `imageRef`; availability stays DERIVED and also depends on a real
+    // validated boot (`validated` on the profile — see docs/debian-desktop.md).
     imageRef: 'debian-12-i386-desktop',
     requirements: [
-      'Navigateur moderne',
+      'Modern browser',
       'WebAssembly',
-      'Mémoire suffisante (≥ 1 Gio)',
-      'Image graphique (Xorg) publiée',
+      'Enough memory (≥ 1 GiB)',
+      'Published graphical image (Xorg)',
     ],
     integrationNote:
-      'Variante graphique de Debian 12 (Xorg + Openbox sous v86) : boot réel ' +
-      'validé (voir docs/debian-desktop.md).',
+      'Graphical variant of Debian 12 (Xorg + Openbox under v86): real boot ' +
+      'validated (see docs/debian-desktop.md).',
   },
   {
     id: 'debian-12-i386-xfce-image',
     familyId: 'debian',
     architecture: 'i386',
-    // Image XFCE construite (flavor xfce) et publiée. La seule preuve de
-    // présence reste `imageRef` ; la disponibilité demeure DÉRIVÉE et dépend
-    // aussi d'un boot réel validé (`validated` du profil — voir docs/debian-xfce.md).
+    // XFCE image built (xfce flavor) and published. The only proof of presence
+    // remains `imageRef`; availability stays DERIVED and also depends on a real
+    // validated boot (`validated` on the profile — see docs/debian-xfce.md).
     imageRef: 'debian-12-i386-xfce',
     requirements: [
-      'Navigateur moderne',
+      'Modern browser',
       'WebAssembly',
-      'Mémoire suffisante (≥ 1 Gio)',
-      'Disque XFCE (~4 Gio)',
+      'Enough memory (≥ 1 GiB)',
+      'XFCE disk (~4 GiB)',
     ],
     integrationNote:
-      'Variante Debian 12 à environnement de bureau complet XFCE (Xorg + XFCE sous v86) : ' +
-      'boot réel validé (voir docs/debian-xfce.md).',
+      'Debian 12 variant with the full XFCE desktop environment (Xorg + XFCE under v86): ' +
+      'real boot validated (see docs/debian-xfce.md).',
   },
   {
     id: 'ubuntu-18-i386-image',
     familyId: 'ubuntu',
     architecture: 'i386',
-    requirements: ['Image i386 compatible', 'Tests de démarrage'],
+    requirements: ['Compatible i386 image', 'Boot tests'],
     integrationNote:
-      'Version ancienne retenue pour une compatibilité navigateur plausible. Image à brancher au lot Debian.',
+      'Old release kept for plausible browser compatibility. Image to be wired with the Debian batch.',
   },
   {
     id: 'fedora-workstation-image',
     familyId: 'fedora',
     architecture: 'x86_64',
-    requirements: ['WebAssembly', 'Mémoire suffisante', 'Architecture x86-64'],
-    integrationNote: 'Image de base à associer à un moteur navigateur x86-64.',
+    requirements: ['WebAssembly', 'Enough memory', 'x86-64 architecture'],
+    integrationNote: 'Base image to pair with an x86-64 browser engine.',
   },
   {
     id: 'mint-x64-image',
     familyId: 'mint',
     architecture: 'x86_64',
-    requirements: ['WebAssembly', 'Mémoire suffisante', 'Architecture x86-64'],
-    integrationNote: 'Image de base à associer à un moteur navigateur x86-64.',
+    requirements: ['WebAssembly', 'Enough memory', 'x86-64 architecture'],
+    integrationNote: 'Base image to pair with an x86-64 browser engine.',
   },
   {
     id: 'windows-7-x86-image',
     familyId: 'windows',
     architecture: 'i386',
-    // Disque RAW 16 Gio de l'opérateur (images/windows-7-x86/disk.img, ignoré
-    // par Git) servi localement en HTTP Range. Aucun import : il est démarré
-    // directement par BIOS sous v86 (voir docs/windows-7.md). Variante « Lite »,
-    // base (mère) du groupe de variantes Windows 7.
+    // Operator's 16 GiB RAW disk (images/windows-7-x86/disk.img, ignored by
+    // Git) served locally over HTTP Range. No import: it is booted directly by
+    // BIOS under v86 (see docs/windows-7.md). "Lite" variant, base (parent) of
+    // the Windows 7 variant group.
     imageRef: 'windows-7-x86',
     requirements: [
-      'Navigateur moderne avec WebAssembly (v86)',
-      'Disque RAW local servi en HTTP Range (images/windows-7-x86/disk.img)',
-      'Mémoire invitée 1024 Mio',
-      'Démarrage disque (MBR) ; pas de noyau Linux',
+      'Modern browser with WebAssembly (v86)',
+      'Local RAW disk served over HTTP Range (images/windows-7-x86/disk.img)',
+      '1024 MiB guest memory',
+      'Disk boot (MBR); no Linux kernel',
     ],
     integrationNote:
-      'Démarrage BIOS direct du disque RAW local par hda IDE (jamais en cdrom), ' +
-      'lu en HTTP Range via v86. Base immuable, écritures invitées en mémoire le ' +
-      'temps de la session. Variante « Lite ».',
+      'Direct BIOS boot of the local RAW disk through IDE hda (never cdrom), ' +
+      'read over HTTP Range via v86. Immutable base, guest writes kept in memory ' +
+      'for the duration of the session. "Lite" variant.',
   },
   {
     id: 'windows-7-pro-sp1-x86-image',
     familyId: 'windows',
     architecture: 'i386',
-    // Disque RAW 32 Gio de l'opérateur (images/windows-7-pro-sp1-x86/disk.img,
-    // ignoré par Git) servi localement en HTTP Range. Aucun import : il est
-    // démarré directement par BIOS sous v86 (voir docs/windows-7.md). Variante
-    // « Professionnel » du groupe de variantes Windows 7.
+    // Operator's 32 GiB RAW disk (images/windows-7-pro-sp1-x86/disk.img, ignored
+    // by Git) served locally over HTTP Range. No import: it is booted directly
+    // by BIOS under v86 (see docs/windows-7.md). "Professional" variant of the
+    // Windows 7 variant group.
     imageRef: 'windows-7-pro-sp1-x86',
     requirements: [
-      'Navigateur moderne avec WebAssembly (v86)',
-      'Disque RAW 32 Gio servi en HTTP Range (images/windows-7-pro-sp1-x86/disk.img)',
-      'Mémoire invitée 1536 Mio (arrondie à 128 Kio près par v86)',
-      'Démarrage disque (MBR) ; pas de noyau Linux',
+      'Modern browser with WebAssembly (v86)',
+      '32 GiB RAW disk served over HTTP Range (images/windows-7-pro-sp1-x86/disk.img)',
+      '1536 MiB guest memory (rounded to 128 KiB by v86)',
+      'Disk boot (MBR); no Linux kernel',
     ],
     integrationNote:
-      'Démarrage BIOS direct du disque RAW local par hda en IDE (jamais en cdrom), ' +
-      'lu en HTTP Range via v86. La base disque n’est jamais modifiée : les écritures ' +
-      'invitées restent en mémoire le temps de la session.',
+      'Direct BIOS boot of the local RAW disk through IDE hda (never cdrom), ' +
+      'read over HTTP Range via v86. The disk base is never modified: guest ' +
+      'writes stay in memory for the duration of the session.',
   },
   {
     id: 'windows-10-x86-image',
     familyId: 'windows',
     architecture: 'i386',
-    // Disque RAW installé de l'opérateur (images/windows-10-x86/disk.img, ignoré
-    // par Git) servi localement en HTTP Range et démarré par BIOS sous v86 —
-    // exactement le pipeline de Windows 7. Aucune ISO n'est distribuée : le
-    // disque n'est pas importé, il est lu directement par l'émulateur x86 32 bits.
-    // Système autonome (aucun groupe de variantes).
+    // Operator's installed RAW disk (images/windows-10-x86/disk.img, ignored by
+    // Git) served locally over HTTP Range and booted by BIOS under v86 — exactly
+    // the Windows 7 pipeline. No ISO is distributed: the disk is not imported,
+    // it is read directly by the 32-bit x86 emulator. Standalone system (no
+    // variant group).
     imageRef: 'windows-10-x86',
     requirements: [
-      'Navigateur moderne avec WebAssembly (v86, 32 bits)',
-      'Disque RAW local servi en HTTP Range (images/windows-10-x86/disk.img)',
-      'Mémoire invitée 2048 Mio',
-      'Démarrage disque (MBR) ; pas de noyau Linux',
+      'Modern browser with WebAssembly (v86, 32-bit)',
+      'Local RAW disk served over HTTP Range (images/windows-10-x86/disk.img)',
+      '2048 MiB guest memory',
+      'Disk boot (MBR); no Linux kernel',
     ],
     licenseNotes:
-      'Licence Windows requise (détenue par l’utilisateur). Aucune ISO ni aucun ' +
-      'disque propriétaire n’est distribué par LumiBoot.',
+      'Windows license required (held by the user). No ISO and no proprietary ' +
+      'disk is distributed by LumiBoot.',
     integrationNote:
-      'Réutilise le pipeline disque RAW local + v86 32 bits de Windows 7 (hda ' +
-      'IDE, HTTP Range, écritures invitées en mémoire le temps de la session). ' +
-      'Aucune ISO n’est distribuée. Système validé, démarré par BIOS comme ' +
-      'Windows 7.',
+      'Reuses the Windows 7 local RAW disk + 32-bit v86 pipeline (IDE hda, ' +
+      'HTTP Range, guest writes kept in memory for the duration of the session). ' +
+      'No ISO is distributed. Validated system, booted by BIOS like Windows 7.',
   },
   {
     id: 'windows-11-x64-image',
     familyId: 'windows',
     architecture: 'x86_64',
     mediaStrategy: 'user-import',
-    requirements: ['WebAssembly', 'TPM virtuel selon configuration', 'Licence Windows'],
-    licenseNotes: 'Licence Windows requise. Aucune ISO propriétaire fournie.',
-    integrationNote: 'Image de base à associer à un moteur navigateur x86-64.',
+    requirements: ['WebAssembly', 'Virtual TPM depending on configuration', 'Windows license'],
+    licenseNotes: 'Windows license required. No proprietary ISO provided.',
+    integrationNote: 'Base image to pair with an x86-64 browser engine.',
   },
   {
     id: 'macos-sequoia-image',
     familyId: 'macos',
     architecture: 'arm64',
-    requirements: ['WebAssembly', 'Mémoire suffisante', 'Conformité à la licence macOS'],
-    licenseNotes: 'Virtualisation macOS soumise à la licence Apple et au matériel compatible.',
-    integrationNote: 'Image de base à associer à un moteur navigateur ARM.',
+    requirements: ['WebAssembly', 'Enough memory', 'macOS license compliance'],
+    licenseNotes: 'macOS virtualization subject to the Apple license and compatible hardware.',
+    integrationNote: 'Base image to pair with an ARM browser engine.',
   },
 ] as const satisfies readonly SystemImageDefinition[];

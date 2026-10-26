@@ -17,12 +17,12 @@ function validManifest(): Record<string, unknown> {
   return {
     version: 1,
     ref: 'windows-7-x86',
-    displayName: 'Windows 7 x86 (média local)',
+    displayName: 'Windows 7 x86 (local media)',
     architecture: 'i386',
     memoryMiB: 1024,
     vgaMemoryMiB: 16,
-    license: 'Licence utilisateur',
-    provenance: 'Disque local',
+    license: 'User license',
+    provenance: 'Local disk',
     source: { path: 'C:/Windows7.img', size: SIZE, mtimeMs: 1792155200430 },
     disk: {
       fileName: 'disk.img',
@@ -50,14 +50,14 @@ function validManifest(): Record<string, unknown> {
 }
 
 describe('parseLocalDiskManifest', () => {
-  it('accepte un manifeste complet conforme', () => {
+  it('accepts a complete conforming manifest', () => {
     const manifest = parseLocalDiskManifest(validManifest());
     expect(manifest.ref).toBe('windows-7-x86');
     expect(manifest.disk.size).toBe(SIZE);
     expect(manifest.boot.async).toBe(true);
   });
 
-  it('accepte une forme publique (sans source ni provenance)', () => {
+  it('accepts a public form (without source or provenance)', () => {
     const raw = validManifest();
     delete raw.source;
     delete raw.provenance;
@@ -66,38 +66,38 @@ describe('parseLocalDiskManifest', () => {
     expect(manifest.provenance).toBeUndefined();
   });
 
-  it('accepte un manifeste sans SHA-256 (taille + mtime documentés)', () => {
+  it('accepts a manifest without SHA-256 (size + mtime documented)', () => {
     const raw = validManifest();
     delete (raw.disk as Record<string, unknown>).sha256;
     const manifest = parseLocalDiskManifest(raw);
     expect(manifest.disk.sha256).toBeUndefined();
   });
 
-  it('rejette une clé inconnue (.strict)', () => {
+  it('rejects an unknown key (.strict)', () => {
     const raw = validManifest();
     raw.extra = true;
     expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
   });
 
-  it('rejette une URL disque hors /images/', () => {
+  it('rejects a disk URL outside /images/', () => {
     const raw = validManifest();
     (raw.disk as Record<string, unknown>).url = 'https://exemple.test/disk.img';
     expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
   });
 
-  it('rejette un binaire moteur hors /v86/', () => {
+  it('rejects an engine binary outside /v86/', () => {
     const raw = validManifest();
     ((raw.engine as Record<string, unknown>).wasm as Record<string, unknown>).url = '/other/x';
     expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
   });
 
-  it('rejette une taille non positive', () => {
+  it('rejects a non-positive size', () => {
     const raw = validManifest();
     (raw.disk as Record<string, unknown>).size = 0;
     expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
   });
 
-  it('rejette un SHA-256 non hexadécimal de 64 caractères', () => {
+  it('rejects a non-hexadecimal 64-character SHA-256', () => {
     const raw = validManifest();
     (raw.disk as Record<string, unknown>).sha256 = 'deadbeef';
     expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
@@ -107,7 +107,7 @@ describe('parseLocalDiskManifest', () => {
 describe('helpers', () => {
   const manifest = parseLocalDiskManifest(validManifest());
 
-  it('toV86AsyncDrive produit hda async avec la taille exacte', () => {
+  it('toV86AsyncDrive produces an async hda with the exact size', () => {
     expect(toV86AsyncDrive(manifest)).toEqual({
       url: '/images/windows-7-x86/disk.img',
       async: true,
@@ -115,7 +115,7 @@ describe('helpers', () => {
     });
   });
 
-  it('toLocalDiskMedia produit un média disque compatible VMMedia', () => {
+  it('toLocalDiskMedia produces a VMMedia-compatible disk media', () => {
     expect(toLocalDiskMedia(manifest)).toEqual({
       kind: 'disk',
       url: '/images/windows-7-x86/disk.img',
@@ -125,7 +125,7 @@ describe('helpers', () => {
     });
   });
 
-  it('toLocalDiskMedia omet sha256 si absent', () => {
+  it('toLocalDiskMedia omits sha256 when absent', () => {
     const raw = validManifest();
     delete (raw.disk as Record<string, unknown>).sha256;
     const withoutHash = parseLocalDiskManifest(raw);
@@ -136,7 +136,7 @@ describe('helpers', () => {
 describe('diffLocalDiskIntegrity', () => {
   const manifest: LocalDiskManifest = parseLocalDiskManifest(validManifest());
 
-  it('ne signale rien quand tout concorde', () => {
+  it('reports nothing when everything matches', () => {
     expect(
       diffLocalDiskIntegrity(manifest, {
         size: SIZE,
@@ -146,7 +146,7 @@ describe('diffLocalDiskIntegrity', () => {
     ).toEqual([]);
   });
 
-  it('signale taille, mtime et empreinte divergents', () => {
+  it('reports diverging size, mtime and checksum', () => {
     const problems = diffLocalDiskIntegrity(manifest, {
       size: SIZE + 1,
       mtimeMs: 1,
@@ -156,10 +156,10 @@ describe('diffLocalDiskIntegrity', () => {
   });
 });
 
-describe('sérialisation publique/privée', () => {
+describe('public/private serialization', () => {
   const privateManifest = parseLocalDiskManifest(validManifest());
 
-  it('toPublicLocalDiskManifest retire source et provenance', () => {
+  it('toPublicLocalDiskManifest removes source and provenance', () => {
     const publicManifest = toPublicLocalDiskManifest(privateManifest);
     expect(publicManifest).not.toHaveProperty('source');
     expect(publicManifest).not.toHaveProperty('provenance');
@@ -167,18 +167,18 @@ describe('sérialisation publique/privée', () => {
     expect(publicManifest.boot).toEqual(privateManifest.boot);
   });
 
-  it('ne diffuse AUCUN chemin source absolu dans le JSON public', () => {
+  it('leaks NO absolute source path in the public JSON', () => {
     const json = JSON.stringify(toPublicLocalDiskManifest(privateManifest));
     expect(json).not.toContain('C:/Windows7.img');
     expect(json).not.toContain('source');
     expect(json).not.toContain('provenance');
   });
 
-  it('parseLocalDiskPublicManifest rejette un manifeste exposant source/provenance', () => {
+  it('parseLocalDiskPublicManifest rejects a manifest exposing source/provenance', () => {
     expect(() => parseLocalDiskPublicManifest(validManifest())).toThrow(AssetError);
   });
 
-  it('parseLocalDiskPublicManifest accepte la forme publique sérialisée', () => {
+  it('parseLocalDiskPublicManifest accepts the serialized public form', () => {
     const publicManifest = parseLocalDiskPublicManifest(toPublicLocalDiskManifest(privateManifest));
     expect(publicManifest.ref).toBe('windows-7-x86');
     expect(publicManifest).not.toHaveProperty('source');

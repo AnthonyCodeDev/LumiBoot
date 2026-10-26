@@ -16,27 +16,27 @@ const allFacts: SystemAvailabilityFacts = {
 };
 
 describe('getEffectiveAvailability', () => {
-  it('marque ready uniquement lorsque les quatre conditions sont réunies', () => {
+  it('marks ready only when the four conditions are met', () => {
     expect(getEffectiveAvailability(allFacts)).toBe('ready');
   });
 
-  it('ne rend pas disponible un système sans image', () => {
+  it('does not make a system without an image available', () => {
     expect(getEffectiveAvailability({ ...allFacts, hasImage: false })).toBe('planned');
   });
 
-  it('ne rend pas disponible un système avec image mais moteur non intégré', () => {
+  it('does not make a system with an image but a non-integrated engine available', () => {
     expect(getEffectiveAvailability({ ...allFacts, engineIntegrated: false })).toBe('planned');
   });
 
-  it('ne rend pas disponible un système sans profil compatible', () => {
+  it('does not make a system without a compatible profile available', () => {
     expect(getEffectiveAvailability({ ...allFacts, hasCompatibleProfile: false })).toBe('planned');
   });
 
-  it('ne rend pas disponible un système non validé', () => {
+  it('does not make a non-validated system available', () => {
     expect(getEffectiveAvailability({ ...allFacts, validated: false })).toBe('planned');
   });
 
-  it('rétrograde un ready déclaré mais non prouvé', () => {
+  it('downgrades a declared but unproven ready', () => {
     expect(getEffectiveAvailability({ ...allFacts, hasImage: false, declared: 'ready' })).toBe(
       'planned',
     );
@@ -44,14 +44,14 @@ describe('getEffectiveAvailability', () => {
 });
 
 describe('getAggregatedAvailability (audit #19)', () => {
-  it('ready si un MÊME candidat réunit les quatre conditions', () => {
+  it('ready when the SAME candidate meets the four conditions', () => {
     expect(getAggregatedAvailability([allFacts])).toBe('ready');
   });
 
-  it('ne mélange pas validation d’un profil et moteur d’un autre', () => {
-    // Candidat A : validé mais moteur non intégré.
-    // Candidat B : moteur intégré mais non validé.
-    // Des `some()` indépendants produiraient un faux `ready`.
+  it('does not mix the validation of one profile with the engine of another', () => {
+    // Candidate A: validated but engine not integrated.
+    // Candidate B: engine integrated but not validated.
+    // Independent `some()` calls would produce a false `ready`.
     const candidates: SystemAvailabilityFacts[] = [
       { ...allFacts, engineIntegrated: false, validated: true },
       { ...allFacts, engineIntegrated: true, validated: false },
@@ -59,7 +59,7 @@ describe('getAggregatedAvailability (audit #19)', () => {
     expect(getAggregatedAvailability(candidates)).toBe('planned');
   });
 
-  it('ready dès qu’un candidat cohérent coche tout, même en présence d’autres partiels', () => {
+  it('ready as soon as one consistent candidate ticks everything, even among partial ones', () => {
     const candidates: SystemAvailabilityFacts[] = [
       { ...allFacts, engineIntegrated: false },
       { ...allFacts },
@@ -67,13 +67,13 @@ describe('getAggregatedAvailability (audit #19)', () => {
     expect(getAggregatedAvailability(candidates)).toBe('ready');
   });
 
-  it('sans candidat : planned', () => {
+  it('without any candidate: planned', () => {
     expect(getAggregatedAvailability([])).toBe('planned');
   });
 });
 
-describe('catalogue : disponibilité effective cohérente', () => {
-  it('marque Debian ready (image + moteur v86 intégré + boot validé)', () => {
+describe('catalog: consistent effective availability', () => {
+  it('marks Debian ready (image + integrated v86 engine + validated boot)', () => {
     const debian = getSystemById('debian-12-i386');
     const profile = debian?.launchProfiles[0];
     expect(debian?.imageRef).toBeDefined();
@@ -81,28 +81,28 @@ describe('catalogue : disponibilité effective cohérente', () => {
     expect(debian?.availability).toBe('ready');
   });
 
-  it('garde les autres systèmes à planned', () => {
+  it('keeps the other systems at planned', () => {
     expect(getSystemById('ubuntu-18-i386')?.availability).toBe('planned');
     expect(getSystemById('fedora-workstation')?.availability).toBe('planned');
     expect(getSystemById('macos-sequoia')?.availability).toBe('planned');
   });
 
-  it('ne rend pas disponible un système dont le moteur n’est pas intégré', () => {
+  it('does not make a system with a non-integrated engine available', () => {
     const fedora = getSystemById('fedora-workstation');
     const profile = fedora?.launchProfiles[0];
     expect(profile && isEngineIntegrated(profile.engineId)).toBe(false);
     expect(fedora?.availability).not.toBe('ready');
   });
 
-  it('ne rend pas disponible un système sans image référencée', () => {
+  it('does not make a system without a referenced image available', () => {
     const ubuntu = getSystemById('ubuntu-18-i386');
     expect(ubuntu?.imageRef).toBeUndefined();
     expect(ubuntu?.availability).not.toBe('ready');
   });
 });
 
-describe('getEffectiveAvailability : média utilisateur requis', () => {
-  it('marque resource-required lorsque le média utilisateur manque', () => {
+describe('getEffectiveAvailability: user media required', () => {
+  it('marks resource-required when the user media is missing', () => {
     expect(
       getEffectiveAvailability({
         ...allFacts,
@@ -113,7 +113,7 @@ describe('getEffectiveAvailability : média utilisateur requis', () => {
     ).toBe('resource-required');
   });
 
-  it('ne masque pas un état unavailable déclaré', () => {
+  it('does not hide a declared unavailable state', () => {
     expect(
       getEffectiveAvailability({
         ...allFacts,
@@ -125,11 +125,11 @@ describe('getEffectiveAvailability : média utilisateur requis', () => {
     ).toBe('unavailable');
   });
 
-  it('reste ready si un candidat coche les quatre conditions', () => {
+  it('stays ready if a candidate ticks the four conditions', () => {
     expect(getAggregatedAvailability([{ ...allFacts, requiresUserMedia: true }])).toBe('ready');
   });
 
-  it('resource-required prime sur planned dans l’agrégation', () => {
+  it('resource-required wins over planned in the aggregation', () => {
     expect(
       getAggregatedAvailability([
         { ...allFacts, hasImage: false, validated: false },
@@ -139,8 +139,8 @@ describe('getEffectiveAvailability : média utilisateur requis', () => {
   });
 });
 
-describe('catalogue : Windows 7 Professionnel (enfant validé) sous v86', () => {
-  it('est sélectionnable, moteur v86 intégré, disponibilité dérivée de validated', () => {
+describe('catalog: Windows 7 Professional (validated child) under v86', () => {
+  it('is selectable, with an integrated v86 engine and availability derived from validated', () => {
     const windows = getSystemById('windows-7-pro-sp1-x86');
     const profile = windows?.launchProfiles[0];
     const definition = launchProfiles.find((candidate) => candidate.id === 'windows-7-pro-sp1-x86');
@@ -149,58 +149,58 @@ describe('catalogue : Windows 7 Professionnel (enfant validé) sous v86', () => 
     expect(windows?.architecture).toBe('i386');
     expect(profile?.engineId).toBe('v86');
     expect(profile && isEngineIntegrated(profile.engineId)).toBe(true);
-    // `validated` vit sur la définition du catalogue, pas sur le contrat.
+    // `validated` lives on the catalog definition, not on the contract.
     expect(definition?.validated).toBe(true);
-    // La disponibilité est DÉRIVÉE de `validated` : jamais déclarée en dur.
+    // Availability is DERIVED from `validated`: never hard-coded.
     expect(windows?.availability).toBe(definition?.validated ? 'ready' : 'planned');
   });
 
-  it('référence le disque RAW local de la codebase (plus de média à importer)', () => {
-    // Le disque local est référencé : plus de `resource-required`.
+  it('references the local RAW disk of the codebase (no more media to import)', () => {
+    // The local disk is referenced: no more `resource-required`.
     expect(getSystemById('windows-7-pro-sp1-x86')?.imageRef).toBe('windows-7-pro-sp1-x86');
     expect(getSystemById('windows-7-pro-sp1-x86')?.mediaStrategy).toBe('bundled');
     expect(getSystemById('windows-7-pro-sp1-x86')?.availability).toBe('ready');
   });
 
-  it('utilise une preuve de démarrage disque (aucun marqueur invité simulé)', () => {
+  it('uses a disk boot proof (no simulated guest marker)', () => {
     const profile = getSystemById('windows-7-pro-sp1-x86')?.launchProfiles[0];
     expect(profile?.readiness?.mode).toBe('disk-boot');
     expect(profile?.readiness?.marker).toBe('LUMIBOOT_DISK_BOOT:windows-7-pro-sp1-x86');
   });
 
-  it('active l’ACPI et la NIC ne2k requises par l’invité', () => {
+  it('enables ACPI and the ne2k NIC required by the guest', () => {
     const profile = getSystemById('windows-7-pro-sp1-x86')?.launchProfiles[0];
     expect(profile?.hardwareProfile?.network).toBe('ne2k');
     expect(profile?.hardwareProfile?.acpi).toBe(true);
   });
 
-  it('expose l’identité Professionnel SP1 x86 et 1536 Mio acceptés par v86', () => {
+  it('exposes the Professional SP1 x86 identity and the 1536 MiB accepted by v86', () => {
     const system = getSystemById('windows-7-pro-sp1-x86');
     const profile = system?.launchProfiles[0];
-    expect(system?.displayName).toBe('Windows 7 (Professionnel)');
+    expect(system?.displayName).toBe('Windows 7 (Professional)');
     expect(system?.versionLabel).toBe('SP1 · x86');
-    // v86 arrondit `create_memory` à un multiple de 128 Kio et accepte les
-    // valeurs non-puissances-de-deux : 1536 Mio (installé sous QEMU) est valide.
+    // v86 rounds `create_memory` to a multiple of 128 KiB and accepts
+    // non-power-of-two values: 1536 MiB (installed under QEMU) is valid.
     expect(profile?.configuration?.memoryMiB).toBe(1536);
     expect(profile?.minMemoryMiB).toBe(1536);
   });
 
-  it('est rattaché à la mère neutre `windows-7-x86` comme variante par défaut', () => {
+  it('is attached to the neutral parent `windows-7-x86` as the default variant', () => {
     const system = getSystemById('windows-7-pro-sp1-x86');
     expect(system?.variantGroupId).toBe('windows-7-x86');
-    expect(system?.variantName).toBe('Professionnel');
+    expect(system?.variantName).toBe('Professional');
     expect(system?.variantOrder).toBe(1);
   });
 });
 
-describe('catalogue : Windows 7 Lite (mère du groupe) sous v86', () => {
-  it('est la mère neutre du groupe, avec son disque RAW 16 Gio local', () => {
+describe('catalog: Windows 7 Lite (group parent) under v86', () => {
+  it('is the neutral parent of the group, with its local 16 GiB RAW disk', () => {
     const lite = getSystemById('windows-7-x86');
     const profile = lite?.launchProfiles[0];
     expect(lite).not.toBeNull();
     expect(lite?.family).toBe('windows');
     expect(lite?.architecture).toBe('i386');
-    // La mère porte le groupe : elle n'a pas de `variantGroupId`.
+    // The parent carries the group: it has no `variantGroupId`.
     expect(lite?.variantGroupId).toBeUndefined();
     expect(lite?.variantName).toBe('Lite');
     expect(lite?.variantOrder).toBe(2);
@@ -209,24 +209,24 @@ describe('catalogue : Windows 7 Lite (mère du groupe) sous v86', () => {
     expect(profile?.engineId).toBe('v86');
   });
 
-  it('dérive la disponibilité de `validated` et est `ready` (boot réel prouvé)', () => {
+  it('derives availability from `validated` and is `ready` (real boot proven)', () => {
     const lite = getSystemById('windows-7-x86');
     const definition = launchProfiles.find((candidate) => candidate.id === 'windows-7-x86');
-    // `validated` vit sur la définition du catalogue, pas sur le contrat : la
-    // disponibilité suit la même règle que Professionnel (jamais déclarée).
+    // `validated` lives on the catalog definition, not on the contract: the
+    // availability follows the same rule as Professional (never declared).
     expect(definition?.validated).toBe(true);
     expect(lite?.availability).toBe(definition?.validated ? 'ready' : 'planned');
-    // Boot bureau réel prouvé (tests/e2e/windows7-desktop.spec.ts) : `ready`.
+    // Real desktop boot proven (tests/e2e/windows7-desktop.spec.ts): `ready`.
     expect(lite?.availability).toBe('ready');
   });
 
-  it('utilise une preuve de démarrage disque dédiée', () => {
+  it('uses a dedicated disk boot proof', () => {
     const profile = getSystemById('windows-7-x86')?.launchProfiles[0];
     expect(profile?.readiness?.mode).toBe('disk-boot');
     expect(profile?.readiness?.marker).toBe('LUMIBOOT_DISK_BOOT:windows-7-x86');
   });
 
-  it('active l’ACPI et la NIC ne2k et exige 1024 Mio', () => {
+  it('enables ACPI and the ne2k NIC and requires 1024 MiB', () => {
     const profile = getSystemById('windows-7-x86')?.launchProfiles[0];
     expect(profile?.hardwareProfile?.network).toBe('ne2k');
     expect(profile?.hardwareProfile?.acpi).toBe(true);
@@ -235,8 +235,8 @@ describe('catalogue : Windows 7 Lite (mère du groupe) sous v86', () => {
   });
 });
 
-describe('catalogue : Windows 10 x86 (mère) sous v86', () => {
-  it('a une image + moteur v86 intégré et est validé (`ready`)', () => {
+describe('catalog: Windows 10 x86 (parent) under v86', () => {
+  it('has an image plus an integrated v86 engine and is validated (`ready`)', () => {
     const system = getSystemById('windows-10-x86');
     const profile = system?.launchProfiles[0];
     const definition = launchProfiles.find((candidate) => candidate.id === 'windows-10-x86');
@@ -246,28 +246,28 @@ describe('catalogue : Windows 10 x86 (mère) sous v86', () => {
     expect(system?.imageRef).toBe('windows-10-x86');
     expect(profile?.engineId).toBe('v86');
     expect(profile && isEngineIntegrated(profile.engineId)).toBe(true);
-    // Même pipeline validé que Windows 7.
+    // Same validated pipeline as Windows 7.
     expect(definition?.validated).toBe(true);
-    // La disponibilité dérivée est `ready` comme Windows 7.
+    // The derived availability is `ready`, like Windows 7.
     expect(system?.availability).toBe('ready');
   });
 
-  it('est `ready` : même pipeline validé que Windows 7', () => {
+  it('is `ready`: same validated pipeline as Windows 7', () => {
     const definition = launchProfiles.find((candidate) => candidate.id === 'windows-10-x86');
     expect(definition?.validated).toBe(true);
     expect(getSystemById('windows-10-x86')?.availability).toBe('ready');
   });
 });
 
-describe('catalogue : profils matériels et preuves de démarrage', () => {
-  it('chaque profil porte un matériel et un marqueur explicites', () => {
+describe('catalog: hardware profiles and boot proofs', () => {
+  it('every profile carries explicit hardware and marker', () => {
     for (const system of systems) {
       for (const profile of system.launchProfiles) {
         expect(profile.hardwareProfile?.network).toBeDefined();
-        // L'OS opérationnel prouve son démarrage par LUMIBOOT_GUEST_READY ; une
-        // session graphique exige en plus LUMIBOOT_DESKTOP_READY, et un média
-        // importé est prouvé par une lecture disque (LUMIBOOT_DISK_BOOT), jamais
-        // simulé côté JavaScript.
+        // The operational OS proves its boot with LUMIBOOT_GUEST_READY; a
+        // graphical session also requires LUMIBOOT_DESKTOP_READY, and imported
+        // media are proven by a disk read (LUMIBOOT_DISK_BOOT), never simulated
+        // on the JavaScript side.
         expect(profile.readiness?.marker).toMatch(
           /^LUMIBOOT_(GUEST|DESKTOP)_READY:|^LUMIBOOT_DISK_BOOT:/,
         );
@@ -275,7 +275,7 @@ describe('catalogue : profils matériels et preuves de démarrage', () => {
     }
   });
 
-  it('respecte les choix matériels documentés', () => {
+  it('respects the documented hardware choices', () => {
     expect(getSystemById('debian-12-i386')?.launchProfiles[0]?.hardwareProfile?.network).toBe(
       'virtio',
     );
@@ -287,15 +287,15 @@ describe('catalogue : profils matériels et preuves de démarrage', () => {
     ).toBe('ne2k');
   });
 
-  it('conserve le marqueur Debian historique', () => {
+  it('keeps the historical Debian marker', () => {
     expect(getSystemById('debian-12-i386')?.launchProfiles[0]?.readiness?.marker).toBe(
       'LUMIBOOT_GUEST_READY:debian-12-i386',
     );
   });
 });
 
-describe('catalogue : flavor Debian Desktop (image publiée + boot validé)', () => {
-  it('expose le profil graphique avec son marqueur Desktop dédié', () => {
+describe('catalog: Debian Desktop flavor (published image + validated boot)', () => {
+  it('exposes the graphical profile with its dedicated Desktop marker', () => {
     const desktop = getSystemById('debian-12-i386-desktop');
     const profile = desktop?.launchProfiles[0];
     expect(profile?.engineId).toBe('v86');
@@ -303,16 +303,16 @@ describe('catalogue : flavor Debian Desktop (image publiée + boot validé)', ()
     expect(profile?.hardwareProfile?.network).toBe('virtio');
   });
 
-  it('devient disponible : image publiée (`imageRef`) + boot graphique réel validé', () => {
+  it('becomes available: published image (`imageRef`) + real validated graphical boot', () => {
     const desktop = getSystemById('debian-12-i386-desktop');
     const profile = launchProfiles.find((candidate) => candidate.id === 'debian-12-i386-desktop');
-    // Image publiée et boot Xorg+Openbox prouvé (voir docs/debian-desktop.md).
+    // Published image and proven Xorg+Openbox boot (see docs/debian-desktop.md).
     expect(desktop?.imageRef).toBe('debian-12-i386-desktop');
     expect(profile?.validated).toBe(true);
     expect(desktop?.availability).toBe('ready');
   });
 
-  it('laisse le profil console Debian inchangé et ready', () => {
+  it('leaves the Debian console profile unchanged and ready', () => {
     const consoleSystem = getSystemById('debian-12-i386');
     const profile = launchProfiles.find((candidate) => candidate.id === 'debian-12-i386');
     expect(consoleSystem?.imageRef).toBeDefined();
@@ -321,8 +321,8 @@ describe('catalogue : flavor Debian Desktop (image publiée + boot validé)', ()
   });
 });
 
-describe('catalogue : flavor Debian XFCE (image publiée + boot validé)', () => {
-  it('expose le profil graphique XFCE avec son marqueur Desktop dédié', () => {
+describe('catalog: Debian XFCE flavor (published image + validated boot)', () => {
+  it('exposes the XFCE graphical profile with its dedicated Desktop marker', () => {
     const xfce = getSystemById('debian-12-i386-xfce');
     const profile = xfce?.launchProfiles[0];
     expect(profile?.engineId).toBe('v86');
@@ -332,10 +332,10 @@ describe('catalogue : flavor Debian XFCE (image publiée + boot validé)', () =>
     expect(profile?.hardwareProfile?.network).toBe('virtio');
   });
 
-  it('devient disponible : image publiée (`imageRef`) + boot graphique réel validé', () => {
+  it('becomes available: published image (`imageRef`) + real validated graphical boot', () => {
     const xfce = getSystemById('debian-12-i386-xfce');
     const profile = launchProfiles.find((candidate) => candidate.id === 'debian-12-i386-xfce');
-    // Image publiée et boot Xorg + XFCE prouvé (voir docs/debian-xfce.md).
+    // Published image and proven Xorg + XFCE boot (see docs/debian-xfce.md).
     expect(xfce?.imageRef).toBe('debian-12-i386-xfce');
     expect(profile?.validated).toBe(true);
     expect(xfce?.availability).toBe('ready');

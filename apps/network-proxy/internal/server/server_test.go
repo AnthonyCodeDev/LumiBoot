@@ -19,7 +19,7 @@ func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
 	cfg := config.Default()
 	cfg.AllowedOrigins = []string{testOrigin}
-	// Tests sur loopback : appairage local explicitement autorisé.
+	// Tests on loopback: local pairing explicitly allowed.
 	cfg.AllowLocalOrigins = true
 	s, err := New(cfg)
 	if err != nil {
@@ -34,7 +34,7 @@ func decodeJSON(t *testing.T, resp *http.Response, v any) {
 	t.Helper()
 	defer func() { _ = resp.Body.Close() }()
 	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
-		t.Fatalf("décodage JSON: %v", err)
+		t.Fatalf("JSON decoding: %v", err)
 	}
 }
 
@@ -52,7 +52,7 @@ func TestHealth(t *testing.T) {
 	}
 	decodeJSON(t, resp, &body)
 	if resp.StatusCode != http.StatusOK || body.Status != "ok" {
-		t.Fatalf("santé: %+v (%d)", body, resp.StatusCode)
+		t.Fatalf("health: %+v (%d)", body, resp.StatusCode)
 	}
 	if body.WispVersion != 1 || body.Version == "" {
 		t.Fatalf("version: %+v", body)
@@ -61,7 +61,7 @@ func TestHealth(t *testing.T) {
 
 func TestCORS(t *testing.T) {
 	_, ts := newTestServer(t)
-	// Préflight autorisé.
+	// Allowed preflight.
 	req, _ := http.NewRequest(http.MethodOptions, ts.URL+"/api/pair/request", nil)
 	req.Header.Set("Origin", testOrigin)
 	resp, err := http.DefaultClient.Do(req)
@@ -70,12 +70,12 @@ func TestCORS(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("préflight autorisé: %d", resp.StatusCode)
+		t.Fatalf("allowed preflight: %d", resp.StatusCode)
 	}
 	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != testOrigin {
 		t.Fatalf("CORS: %q", got)
 	}
-	// Préflight hostile refusé, jamais "*".
+	// Hostile preflight refused, never "*".
 	req, _ = http.NewRequest(http.MethodOptions, ts.URL+"/api/pair/request", nil)
 	req.Header.Set("Origin", "http://evil.com")
 	resp, err = http.DefaultClient.Do(req)
@@ -84,10 +84,10 @@ func TestCORS(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("préflight hostile: %d", resp.StatusCode)
+		t.Fatalf("hostile preflight: %d", resp.StatusCode)
 	}
 	if got := resp.Header.Get("Access-Control-Allow-Origin"); got == "*" {
-		t.Fatal("CORS '*' interdit")
+		t.Fatal("CORS '*' forbidden")
 	}
 }
 
@@ -95,7 +95,7 @@ func TestPairingAPI(t *testing.T) {
 	s, ts := newTestServer(t)
 	client := ts.Client()
 
-	// Demande depuis une origine autorisée (via Origin).
+	// Request from an allowed origin (via Origin).
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/pair/request", nil)
 	req.Header.Set("Origin", testOrigin)
 	resp, err := client.Do(req)
@@ -109,10 +109,10 @@ func TestPairingAPI(t *testing.T) {
 	}
 	decodeJSON(t, resp, &created)
 	if resp.StatusCode != http.StatusCreated || created.PairingID == "" || created.UserCode == "" {
-		t.Fatalf("création: %+v (%d)", created, resp.StatusCode)
+		t.Fatalf("creation: %+v (%d)", created, resp.StatusCode)
 	}
 
-	// Demande hostile refusée.
+	// Hostile request refused.
 	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/pair/request", nil)
 	req.Header.Set("Origin", "http://evil.com")
 	resp, err = client.Do(req)
@@ -121,10 +121,10 @@ func TestPairingAPI(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("origine hostile: %d", resp.StatusCode)
+		t.Fatalf("hostile origin: %d", resp.StatusCode)
 	}
 
-	// Échange avant approbation : refusé.
+	// Exchange before approval: refused.
 	exchange := func() *http.Response {
 		r, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/pair/exchange",
 			strings.NewReader(`{"pairingId":"`+created.PairingID+`"}`))
@@ -139,30 +139,30 @@ func TestPairingAPI(t *testing.T) {
 	resp = exchange()
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("échange pré-approbation: %d", resp.StatusCode)
+		t.Fatalf("pre-approval exchange: %d", resp.StatusCode)
 	}
 
-	// Approbation depuis la console (appel direct à l'authentificateur).
+	// Approval from the console (direct call to the authenticator).
 	if err := s.Authenticator().Approve(created.PairingID, true); err != nil {
-		t.Fatalf("approbation: %v", err)
+		t.Fatalf("approval: %v", err)
 	}
 
-	// Échange : token émis une seule fois.
+	// Exchange: token issued only once.
 	resp = exchange()
 	var exchanged struct {
 		Token string `json:"token"`
 	}
 	decodeJSON(t, resp, &exchanged)
 	if resp.StatusCode != http.StatusOK || exchanged.Token == "" {
-		t.Fatalf("échange: %+v (%d)", exchanged, resp.StatusCode)
+		t.Fatalf("exchange: %+v (%d)", exchanged, resp.StatusCode)
 	}
 	resp = exchange()
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("réutilisation d'appairage: %d", resp.StatusCode)
+		t.Fatalf("pairing reuse: %d", resp.StatusCode)
 	}
 
-	// Auto-révocation.
+	// Self-revocation.
 	revoke, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/session/revoke",
 		strings.NewReader(`{"token":"`+exchanged.Token+`"}`))
 	revoke.Header.Set("Content-Type", "application/json")
@@ -172,11 +172,11 @@ func TestPairingAPI(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("révocation: %d", resp.StatusCode)
+		t.Fatalf("revocation: %d", resp.StatusCode)
 	}
 }
 
-// obtainToken exécute appairage + approbation + échange et renvoie le token.
+// obtainToken runs pairing + approval + exchange and returns the token.
 func obtainToken(t *testing.T, s *Server, ts *httptest.Server) string {
 	t.Helper()
 	client := ts.Client()
@@ -191,7 +191,7 @@ func obtainToken(t *testing.T, s *Server, ts *httptest.Server) string {
 	}
 	decodeJSON(t, resp, &created)
 	if err := s.Authenticator().Approve(created.PairingID, true); err != nil {
-		t.Fatalf("approbation: %v", err)
+		t.Fatalf("approval: %v", err)
 	}
 	ex, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/pair/exchange",
 		strings.NewReader(`{"pairingId":"`+created.PairingID+`"}`))
@@ -206,7 +206,7 @@ func obtainToken(t *testing.T, s *Server, ts *httptest.Server) string {
 	}
 	decodeJSON(t, resp, &exchanged)
 	if exchanged.Token == "" {
-		t.Fatal("token vide")
+		t.Fatal("empty token")
 	}
 	return exchanged.Token
 }
@@ -228,7 +228,7 @@ func TestSessionVerify(t *testing.T) {
 		return resp
 	}
 
-	// Token valide -> 200 {"ok":true,"expiresAt":...}.
+	// Valid token -> 200 {"ok":true,"expiresAt":...}.
 	resp := get(token, testOrigin)
 	var body struct {
 		Ok        bool   `json:"ok"`
@@ -236,49 +236,49 @@ func TestSessionVerify(t *testing.T) {
 	}
 	decodeJSON(t, resp, &body)
 	if resp.StatusCode != http.StatusOK || !body.Ok || body.ExpiresAt == "" {
-		t.Fatalf("verify valide: %+v (%d)", body, resp.StatusCode)
+		t.Fatalf("valid verify: %+v (%d)", body, resp.StatusCode)
 	}
 
-	// Token invalide -> 401.
-	resp = get("DeliberementFaux", testOrigin)
+	// Invalid token -> 401.
+	resp = get("DeliberatelyWrong", testOrigin)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("verify token invalide: %d", resp.StatusCode)
+		t.Fatalf("invalid token verify: %d", resp.StatusCode)
 	}
 
-	// Token absent -> 401.
+	// Missing token -> 401.
 	resp = get("", testOrigin)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("verify token absent: %d", resp.StatusCode)
+		t.Fatalf("missing token verify: %d", resp.StatusCode)
 	}
 
-	// Origine non autorisée -> 403.
+	// Disallowed origin -> 403.
 	resp = get(token, "http://evil.com")
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("verify origine hostile: %d", resp.StatusCode)
+		t.Fatalf("hostile origin verify: %d", resp.StatusCode)
 	}
 }
 
 func TestWispAuthGate(t *testing.T) {
 	_, ts := newTestServer(t)
-	wsURL := "ws://" + strings.TrimPrefix(ts.URL, "http://") + "/wisp/?token=DeliberementFaux"
+	wsURL := "ws://" + strings.TrimPrefix(ts.URL, "http://") + "/wisp/?token=DeliberatelyWrong"
 	dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second}
 	header := http.Header{"Origin": []string{testOrigin}}
 	if _, resp, err := dialer.Dial(wsURL, header); err == nil {
-		t.Fatal("token invalide accepté")
+		t.Fatal("invalid token accepted")
 	} else if resp != nil && resp.StatusCode != http.StatusForbidden {
 		_ = resp.Body.Close()
-		t.Fatalf("statut inattendu: %d", resp.StatusCode)
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
 
-	// Origine hostile, même sans token.
+	// Hostile origin, even without a token.
 	header = http.Header{"Origin": []string{"http://evil.com"}}
 	if _, resp, err := dialer.Dial(wsURL, header); err == nil {
-		t.Fatal("origine hostile acceptée")
+		t.Fatal("hostile origin accepted")
 	} else if resp != nil && resp.StatusCode != http.StatusForbidden {
 		_ = resp.Body.Close()
-		t.Fatalf("statut inattendu: %d", resp.StatusCode)
+		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
 }

@@ -8,10 +8,10 @@ export interface CatalogFilterCriteria {
   systems: readonly OSDefinition[];
 }
 
-/** Recherche accent-insensible et insensible à la casse. */
+/** Accent-insensitive and case-insensitive search. */
 export function normalizeText(value: string): string {
   return value
-    .toLocaleLowerCase('fr')
+    .toLocaleLowerCase('en')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 }

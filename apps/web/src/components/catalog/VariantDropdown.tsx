@@ -8,13 +8,13 @@ export interface VariantOption {
 
 export interface VariantDropdownProps {
   readonly variants: readonly VariantOption[];
-  /** id de la variante actuellement sélectionnée. */
+  /** ID of the currently selected variant. */
   readonly value: string;
-  /** Appelé au choix d'une variante (avec son slug). */
+  /** Called when a variant is picked (with its slug). */
   readonly onSelect: (slug: string) => void;
 }
 
-/** Chevron minimal : l'orientation est pilotée en CSS via `[data-open]`. */
+/** Minimal chevron: its orientation is driven by CSS through `[data-open]`. */
 function ChevronIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -24,11 +24,11 @@ function ChevronIcon() {
 }
 
 /**
- * Dropdown de variantes maison (présentationnel) : bouton + menu `listbox`.
+ * In-house variant dropdown (presentational): button + `listbox` menu.
  *
- * Le composant ne connaît ni le routeur ni le catalogue : il affiche le nom de
- * la variante sélectionnée et remonte le slug choisi via `onSelect`. Le libellé
- * « Variante » n'est pas affiché (seul `aria-label` le porte pour l'a11y).
+ * The component knows neither the router nor the catalogue: it shows the name of
+ * the selected variant and reports the chosen slug through `onSelect`. The
+ * "Variant" label is not rendered (only `aria-label` carries it for a11y).
  */
 export function VariantDropdown({ variants, value, onSelect }: VariantDropdownProps) {
   const [open, setOpen] = useState(false);
@@ -36,7 +36,7 @@ export function VariantDropdown({ variants, value, onSelect }: VariantDropdownPr
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  // Index à focaliser dès que le menu est monté (ouverture au clavier).
+  // Index to focus once the menu mounts (keyboard opening).
   const pendingFocusRef = useRef<number | null>(null);
 
   const selectedIndex = Math.max(
@@ -45,20 +45,20 @@ export function VariantDropdown({ variants, value, onSelect }: VariantDropdownPr
   );
   const selected = variants[selectedIndex] ?? variants[0];
 
-  /** Ouvre le menu en positionnant l'option active. */
+  /** Opens the menu, positioning the active option. */
   function openMenu(index: number, focusOption = false) {
     setActiveIndex(index);
     if (focusOption) pendingFocusRef.current = index;
     setOpen(true);
   }
 
-  /** Ferme le menu, en rendant (optionnellement) le focus au déclencheur. */
+  /** Closes the menu, optionally returning focus to the trigger. */
   function closeMenu(returnFocus = false) {
     setOpen(false);
     if (returnFocus) triggerRef.current?.focus();
   }
 
-  /** Valide la variante à l'index donné puis referme en rendant le focus. */
+  /** Commits the variant at the given index, then closes and restores focus. */
   function selectAt(index: number) {
     const option = variants[index];
     if (!option) return;
@@ -66,7 +66,7 @@ export function VariantDropdown({ variants, value, onSelect }: VariantDropdownPr
     closeMenu(true);
   }
 
-  /** Déplace le focus réel sur l'option `index` (navigation circulaire). */
+  /** Moves real focus to option `index` (wrapping navigation). */
   function focusOption(index: number) {
     const count = variants.length;
     if (count === 0) return;
@@ -75,7 +75,7 @@ export function VariantDropdown({ variants, value, onSelect }: VariantDropdownPr
     optionRefs.current[next]?.focus();
   }
 
-  // Fermeture au clic hors du composant.
+  // Close on click outside the component.
   useEffect(() => {
     if (!open) return;
     function handlePointerDown(event: MouseEvent) {
@@ -87,7 +87,7 @@ export function VariantDropdown({ variants, value, onSelect }: VariantDropdownPr
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, [open]);
 
-  // Focus différé dès que les options existent dans le DOM.
+  // Deferred focus once the options exist in the DOM.
   useEffect(() => {
     if (!open || pendingFocusRef.current === null) return;
     const index = pendingFocusRef.current;
@@ -127,8 +127,8 @@ export function VariantDropdown({ variants, value, onSelect }: VariantDropdownPr
         return;
       case 'Enter':
       case ' ':
-        // Entrée/Espace n'ouvrent que depuis le déclencheur : les options
-        // valident via leur propre clic natif.
+        // Enter/Space only open from the trigger: options commit
+        // through their own native click.
         if (!open && event.target === triggerRef.current) {
           event.preventDefault();
           openMenu(selectedIndex, true);
@@ -166,14 +166,14 @@ export function VariantDropdown({ variants, value, onSelect }: VariantDropdownPr
         className="variant-dropdown-trigger"
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label="Choisir la variante"
+        aria-label="Choose variant"
         onClick={() => (open ? closeMenu() : openMenu(selectedIndex))}
       >
         <span className="variant-dropdown-value">{selected?.name}</span>
         <ChevronIcon />
       </button>
       {open ? (
-        <ul role="listbox" className="variant-dropdown-menu" aria-label="Variantes disponibles">
+        <ul role="listbox" className="variant-dropdown-menu" aria-label="Available variants">
           {variants.map((variant, index) => (
             <li key={variant.id} role="option" aria-selected={variant.id === value}>
               <button

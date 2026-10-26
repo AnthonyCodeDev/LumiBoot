@@ -10,7 +10,7 @@ function makeSession(state: SessionSnapshot['state']): SessionSnapshot {
   return { id: 'session-test', systemId: system.id, providerId: 'v86', state };
 }
 
-/** Conteneur factice imitant `.session-console` (avec son `textarea.v86-serial`). */
+/** Fake container mimicking `.session-console` (with its `textarea.v86-serial`). */
 function makeConsoleRef(serialText?: string): { current: HTMLDivElement } {
   const container = document.createElement('div');
   if (serialText !== undefined) {
@@ -26,8 +26,8 @@ function readLines(container: HTMLElement): (string | null)[] {
   return Array.from(container.querySelectorAll('.session-logs-line')).map((el) => el.textContent);
 }
 
-describe('StatusOverlay — journal de démarrage', () => {
-  it('affiche les 3 dernières lignes non vides du terminal série (polling)', () => {
+describe('StatusOverlay — boot log', () => {
+  it('shows the last 3 non-empty lines of the serial terminal (polling)', () => {
     vi.useFakeTimers();
     try {
       const consoleRef = makeConsoleRef();
@@ -35,37 +35,37 @@ describe('StatusOverlay — journal de démarrage', () => {
         <StatusOverlay session={makeSession('booting')} system={system} consoleRef={consoleRef} />,
       );
 
-      // Le terminal se remplit après le montage : le polling doit le reprendre.
+      // The terminal fills up after mount: polling must pick it up.
       const textarea = document.createElement('textarea');
       textarea.className = 'v86-serial';
-      textarea.value = 'amorçage\n\nligne 1\nligne 2\nligne 3\nligne 4';
+      textarea.value = 'boot\n\nline 1\nline 2\nline 3\nline 4';
       consoleRef.current.appendChild(textarea);
 
       act(() => {
         vi.advanceTimersByTime(500);
       });
 
-      expect(readLines(container)).toEqual(['ligne 2', 'ligne 3', 'ligne 4']);
+      expect(readLines(container)).toEqual(['line 2', 'line 3', 'line 4']);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('affiche une ligne de repli quand le terminal est vide', () => {
+  it('shows a fallback line when the terminal is empty', () => {
     const consoleRef = makeConsoleRef();
     const { container } = render(
       <StatusOverlay session={makeSession('booting')} system={system} consoleRef={consoleRef} />,
     );
-    expect(readLines(container)).toEqual(['Démarrage du système…']);
+    expect(readLines(container)).toEqual(['Starting the system…']);
   });
 
-  it("ne rend ni barre de progression ni l'étape « Session active »", () => {
+  it('renders neither a progress bar nor the "Session running" step', () => {
     const consoleRef = makeConsoleRef();
     const { container } = render(
       <StatusOverlay session={makeSession('booting')} system={system} consoleRef={consoleRef} />,
     );
     expect(container.querySelector('[role="progressbar"]')).toBeNull();
     expect(container.querySelector('.session-steps')).toBeNull();
-    expect(container.textContent).not.toContain('Session active');
+    expect(container.textContent).not.toContain('Session running');
   });
 });

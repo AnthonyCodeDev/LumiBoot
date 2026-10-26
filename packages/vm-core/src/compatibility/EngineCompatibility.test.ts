@@ -43,7 +43,7 @@ function makeEngine(id: string, architectures: readonly Architecture[]): VMEngin
     capabilities: (): VMCapabilities => ({ ...NO_CAPABILITIES, architectures }),
     canRun: () => true,
     async start(): Promise<VMInstance> {
-      throw new Error('non démarré dans ce test');
+      throw new Error('not started in this test');
     },
   };
 }
@@ -51,12 +51,12 @@ function makeEngine(id: string, architectures: readonly Architecture[]): VMEngin
 const READY_ENV: RuntimeEnvironment = { webAssembly: true, crossOriginIsolated: true };
 
 describe('checkEngineCompatibility', () => {
-  it('accepte i386 sur un moteur qui déclare i386', () => {
+  it('accepts i386 on an engine that declares i386', () => {
     const result = checkEngineCompatibility(makeEngine('v86', ['i386']), makeOS(), READY_ENV);
     expect(result).toEqual({ compatible: true, reasons: [] });
   });
 
-  it('rejette x86_64 et arm64 avec une raison précise utilisable par l’UI', () => {
+  it('rejects x86_64 and arm64 with a precise reason usable by the UI', () => {
     const v86 = makeEngine('v86', ['i386']);
     const x64 = checkEngineCompatibility(v86, makeOS({ architecture: 'x86_64' }), READY_ENV);
     expect(x64.compatible).toBe(false);
@@ -69,7 +69,7 @@ describe('checkEngineCompatibility', () => {
     expect(arm.reasons.join(' ')).toContain('Architecture arm64');
   });
 
-  it('refuse un environnement sans WebAssembly', () => {
+  it('rejects an environment without WebAssembly', () => {
     const result = checkEngineCompatibility(makeEngine('v86', ['i386']), makeOS(), {
       webAssembly: false,
       crossOriginIsolated: false,
@@ -78,7 +78,7 @@ describe('checkEngineCompatibility', () => {
     expect(result.reasons.join(' ')).toContain('WebAssembly');
   });
 
-  it('ne contredit pas un moteur qui ne déclare aucune architecture', () => {
+  it('does not contradict an engine that declares no architecture', () => {
     const result = checkEngineCompatibility(
       makeEngine('stub', []),
       makeOS({ architecture: 'arm64' }),
@@ -89,7 +89,7 @@ describe('checkEngineCompatibility', () => {
 });
 
 describe('detectRuntimeEnvironment', () => {
-  it('lit WebAssembly et l’isolation d’origine depuis le scope fourni', () => {
+  it('reads WebAssembly and origin isolation from the provided scope', () => {
     const scope = {
       WebAssembly: { instantiate: () => undefined },
       crossOriginIsolated: true,
@@ -101,7 +101,7 @@ describe('detectRuntimeEnvironment', () => {
     });
   });
 
-  it('signale l’absence de WebAssembly', () => {
+  it('reports the absence of WebAssembly', () => {
     const scope = {
       crossOriginIsolated: false,
     } as unknown as typeof globalThis;

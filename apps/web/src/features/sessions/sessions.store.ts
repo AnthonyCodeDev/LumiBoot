@@ -12,26 +12,26 @@ import { normalizeVMError } from '../../lib/errors';
 const registry = createRegistry();
 const lifecycles = new Map<string, SessionLifecycle>();
 const unsubscribers = new Map<string, () => void>();
-/** Ids détruits : interdit toute réinsertion par un snapshot tardif. */
+/** Destroyed IDs: forbids any re-insertion through a late snapshot. */
 const disposedIds = new Set<string>();
 
 /**
- * Ressource média (URL de blob) rattachée à une SESSION, jamais à un système.
+ * Media resource (blob URL) attached to a SESSION, never to a system.
  *
- * Le `controller` identifie la génération de boot propriétaire : seule la
- * génération qui a réellement créé l'URL peut la révoquer. Deux VM du même OS
- * possèdent donc chacune leur URL, et libérer l'une ne touche jamais l'autre.
+ * The `controller` identifies the owning boot generation: only the generation
+ * that really created the URL may revoke it. Two VMs of the same OS therefore
+ * each own their URL, and releasing one never touches the other.
  */
 interface SessionMediaResource {
   readonly url: string;
   readonly controller: AbortController;
 }
 
-/** URL de blob des médias importés, indexées par identifiant de SESSION. */
+/** Blob URLs of imported media, indexed by SESSION ID. */
 const mediaObjectUrls = new Map<string, SessionMediaResource>();
-/** Génération de boot courante par session. */
+/** Current boot generation per session. */
 const bootGenerations = new Map<string, number>();
-/** Controller du boot en cours par session (annule un boot supplanté). */
+/** Controller of the running boot per session (cancels a superseded boot). */
 const bootControllers = new Map<string, AbortController>();
 
 function revokeUrl(url: string): void {
@@ -40,7 +40,7 @@ function revokeUrl(url: string): void {
   }
 }
 
-/** Révoque l'unique URL de blob appartenant à cette session, si elle existe. */
+/** Revokes the single blob URL owned by this session, when it exists. */
 function releaseSessionMedia(sessionId: string): void {
   const resource = mediaObjectUrls.get(sessionId);
   if (resource === undefined) return;
@@ -49,9 +49,8 @@ function releaseSessionMedia(sessionId: string): void {
 }
 
 /**
- * Révoque l'URL d'une session UNIQUEMENT si elle appartient encore à la
- * génération de boot donnée. Un boot supplanté ne révoque jamais l'URL de sa
- * remplaçante.
+ * Revokes a session URL ONLY when it still belongs to the given boot generation.
+ * A superseded boot never revokes its replacement's URL.
  */
 function releaseMediaOwnedBy(sessionId: string, controller: AbortController): void {
   const resource = mediaObjectUrls.get(sessionId);
@@ -61,8 +60,8 @@ function releaseMediaOwnedBy(sessionId: string, controller: AbortController): vo
 }
 
 /**
- * Démarre une nouvelle génération de boot pour une session : annule le boot
- * précédent (s'il existe) et libère le média qu'il possédait encore.
+ * Starts a new boot generation for a session: cancels the previous boot (when it
+ * exists) and releases the media it still owned.
  */
 function beginBoot(sessionId: string): { generation: number; controller: AbortController } {
   const previous = bootControllers.get(sessionId);
@@ -78,8 +77,8 @@ function beginBoot(sessionId: string): { generation: number; controller: AbortCo
 }
 
 /**
- * Invalide la génération de boot courante (stop/dispose) : plus aucun `await`
- * en vol ne pourra publier d'URL ni démarrer la session.
+ * Invalidates the current boot generation (stop/dispose): no in-flight `await`
+ * can publish a URL or start the session anymore.
  */
 function invalidateBoot(sessionId: string): void {
   bootGenerations.set(sessionId, (bootGenerations.get(sessionId) ?? 0) + 1);
@@ -89,7 +88,7 @@ function invalidateBoot(sessionId: string): void {
   bootControllers.delete(sessionId);
 }
 
-/** Vrai tant que la session et la génération de boot sont toujours valides. */
+/** True while the session and the boot generation are still valid. */
 function isBootCurrent(
   sessionId: string,
   generation: number,
@@ -108,15 +107,14 @@ type UserMediaResolution =
   { status: 'ready'; media: VMMedia } | { status: 'missing' } | { status: 'superseded' };
 
 /**
- * Résout le média local d'un système `user-import` : lit le blob importé et
- * fabrique une URL locale pour v86. Aucune donnée ne quitte le navigateur.
- * Retourne `missing` si aucun média n'a été importé (le provider échouera alors
- * honnêtement avec `MEDIA_REQUIRED`).
+ * Resolves the local media of a `user-import` system: reads the imported blob and
+ * builds a local URL for v86. No data leaves the browser. Returns `missing` when
+ * no media was imported (the provider then fails honestly with `MEDIA_REQUIRED`).
  *
- * La session ET sa génération de boot sont revalidées après CHAQUE `await`
- * (résolution IndexedDB, lecture des octets). Une résolution devenue obsolète
- * (session détruite, arrêtée, ou boot supplanté) ne publie jamais d'URL — et
- * révoque immédiatement toute URL qu'elle viendrait de créer.
+ * The session AND its boot generation are revalidated after EVERY `await`
+ * (IndexedDB resolution, byte read). A resolution that became stale (session
+ * destroyed, stopped, or boot superseded) never publishes a URL — and immediately
+ * revokes any URL it just created.
  */
 async function resolveUserMedia(
   sessionId: string,
@@ -136,12 +134,12 @@ async function resolveUserMedia(
   }
   const url = URL.createObjectURL(bytes);
   if (!isCurrent()) {
-    // Arrivée tardive : la session n'est plus propriétaire, on révoque aussitôt.
+    // Late arrival: the session no longer owns it, revoke immediately.
     revokeUrl(url);
     return { status: 'superseded' };
   }
-  // Un (re)démarrage de la même session remplace sa propre URL : l'ancienne est
-  // révoquée pour ne jamais accumuler deux blobs pour une même session.
+  // A (re)start of the same session replaces its own URL: the previous one is
+  // revoked so two blobs never pile up for one session.
   releaseSessionMedia(sessionId);
   mediaObjectUrls.set(sessionId, { url, controller });
   return {
@@ -150,9 +148,9 @@ async function resolveUserMedia(
   };
 }
 
-/** Construit un snapshot d'erreur honnête à partir de n'importe quelle erreur. */
+/** Builds an honest error snapshot from any error. */
 function toErrorSnapshot(snapshot: SessionSnapshot, error: unknown): SessionSnapshot {
-  const vmError = normalizeVMError(error, 'Le démarrage de la session a échoué.');
+  const vmError = normalizeVMError(error, 'The session failed to start.');
   return {
     ...snapshot,
     state: 'error',
@@ -163,10 +161,9 @@ function toErrorSnapshot(snapshot: SessionSnapshot, error: unknown): SessionSnap
 export interface SessionsState {
   sessions: Record<string, SessionSnapshot>;
   /**
-   * Mode réseau **effectivement utilisé** au démarrage de chaque session
-   * (résolu par `selectEffectiveNetworkProfile`, potentiellement
-   * `local-proxy` via l'appairage automatique). Distinct du mode
-   * configuré : sert au badge de la barre d'outils.
+   * Network mode **actually used** when each session boots (resolved by
+   * `selectEffectiveNetworkProfile`, possibly `local-proxy` through automatic
+   * pairing). Distinct from the configured mode: used by the toolbar badge.
    */
   networkModes: Record<string, NetworkMode>;
   create: (systemId: string) => string;
@@ -176,8 +173,8 @@ export interface SessionsState {
 }
 
 /**
- * Le store ne fait que relayer le cycle de vie géré par `SessionLifecycle`
- * (vm-core). Aucune logique d'état de VM n'est dupliquée côté React.
+ * The store only relays the lifecycle managed by `SessionLifecycle` (vm-core).
+ * No VM state logic is duplicated on the React side.
  */
 export const useSessionsStore = create<SessionsState>((set) => ({
   sessions: {},
@@ -185,14 +182,14 @@ export const useSessionsStore = create<SessionsState>((set) => ({
   create: (systemId) => {
     const system = getSystemById(systemId);
     if (!system) {
-      throw new VMError('START_FAILED', `Système inconnu : « ${systemId} ».`, { systemId });
+      throw new VMError('START_FAILED', `Unknown system: "${systemId}".`, { systemId });
     }
     const lifecycle = new SessionLifecycle(system, registry);
     lifecycles.set(lifecycle.id, lifecycle);
     const unsubscribe = lifecycle.subscribe((snapshot) => {
-      // Un listener conservé ne doit jamais réinsérer une session détruite.
+      // A kept listener must never re-insert a destroyed session.
       if (disposedIds.has(lifecycle.id)) return;
-      // Une session en erreur ne réutilisera plus son média : on le libère.
+      // A session in error will not reuse its media: release it.
       if (snapshot.state === 'error') releaseSessionMedia(lifecycle.id);
       set((state) => ({ sessions: { ...state.sessions, [lifecycle.id]: snapshot } }));
     });
@@ -208,12 +205,12 @@ export const useSessionsStore = create<SessionsState>((set) => ({
     const isCurrent = (): boolean => isBootCurrent(id, generation, controller);
 
     try {
-      // Le profil réseau est résolu au démarrage puis reste figé pour la session
-      // (tout changement de mode exige un redémarrage de la session).
-      // Sélection automatique : proxy réseau local appairé/connecté → `local-proxy`
-      // (jeton runtime fusionné ici, jamais persisté dans `lumiboot.config.json`) ;
-      // sinon mode de base (`browser-fetch` par défaut). `offline`/`user-relay`
-      // restent des choix explicites respectés.
+      // The network profile is resolved at boot and then frozen for the session
+      // (any mode change requires restarting the session).
+      // Automatic selection: paired/connected local network proxy → `local-proxy`
+      // (runtime token merged here, never persisted in `lumiboot.config.json`);
+      // otherwise the base mode (`browser-fetch` by default). `offline`/`user-relay`
+      // remain explicit choices and are respected.
       const base = resolveNetworkProfile(lifecycle.system.id);
       const proxyConfig = resolveProxyConfig();
       const credentials = getProxyRuntimeCredentials();
@@ -225,12 +222,12 @@ export const useSessionsStore = create<SessionsState>((set) => ({
       });
       if (!isCurrent()) return;
 
-      // Mémorise le mode effectif avant le démarrage : la barre d'outils affiche
-      // ce qui tourne réellement, pas le mode configuré.
+      // Records the effective mode before boot: the toolbar shows what really
+      // runs, not the configured mode.
       set((s) => ({ networkModes: { ...s.networkModes, [id]: network.mode } }));
 
-      // Système à média importé : on branche le disque local fourni par
-      // l'utilisateur. Absent -> le provider échoue avec `MEDIA_REQUIRED`.
+      // System with imported media: wire the local disk provided by the user.
+      // Missing -> the provider fails with `MEDIA_REQUIRED`.
       let media: VMMedia | undefined;
       if (lifecycle.system.mediaStrategy === 'user-import') {
         const resolution = await resolveUserMedia(id, lifecycle.system.id, controller, isCurrent);
@@ -248,15 +245,15 @@ export const useSessionsStore = create<SessionsState>((set) => ({
       await lifecycle.start(mountElement, {
         network,
         ...(media === undefined ? {} : { media }),
-        // Le signal externe annule le démarrage si le boot est supplanté.
+        // The external signal cancels the boot when it is superseded.
         signal: controller.signal,
       });
     } catch (error) {
       releaseMediaOwnedBy(id, controller);
-      // Un échec asynchrone (IndexedDB, réseau) survenu avant/après
-      // `lifecycle.start` doit devenir un statut de session observable, jamais
-      // une promesse rejetée silencieuse. Une session déjà supplantée n'est
-      // jamais écrasée (pas de clobber de la nouvelle session).
+      // An asynchronous failure (IndexedDB, network) before or after
+      // `lifecycle.start` must become an observable session status, never a
+      // silently rejected promise. A session that was already superseded is never
+      // overwritten (no clobbering of the new session).
       if (!isCurrent()) return;
       set((state) => ({
         sessions: {
@@ -272,8 +269,8 @@ export const useSessionsStore = create<SessionsState>((set) => ({
       releaseSessionMedia(id);
       return;
     }
-    // Invalide toute résolution de média en vol et interdit une arrivée tardive
-    // avant même de commencer l'arrêt.
+    // Invalidates any in-flight media resolution and forbids a late arrival
+    // before the stop even begins.
     invalidateBoot(id);
     try {
       await lifecycle.stop();
@@ -284,7 +281,7 @@ export const useSessionsStore = create<SessionsState>((set) => ({
   dispose: async (id) => {
     const lifecycle = lifecycles.get(id);
     if (!lifecycle) {
-      // Session déjà retirée : on garantit malgré tout l'absence de fuite.
+      // Session already removed: still guarantee the absence of a leak.
       disposedIds.add(id);
       releaseSessionMedia(id);
       bootGenerations.delete(id);

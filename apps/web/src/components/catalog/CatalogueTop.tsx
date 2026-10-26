@@ -28,8 +28,8 @@ export function CatalogueTop() {
   return (
     <div className="catalogue-top">
       <div className="catalogue-heading-group">
-        <h2 id="catalogue-heading">Bibliothèque</h2>
-        <p>Systèmes disponibles dans votre environnement</p>
+        <h2 id="catalogue-heading">Library</h2>
+        <p>Systems available in your environment</p>
       </div>
       <div className="catalogue-tools">
         <label className="search" htmlFor="search-input">
@@ -42,8 +42,8 @@ export function CatalogueTop() {
             id="search-input"
             type="search"
             autoComplete="off"
-            placeholder="Rechercher un système"
-            aria-label="Rechercher un système"
+            placeholder="Search for a system"
+            aria-label="Search for a system"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />

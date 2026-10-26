@@ -9,13 +9,13 @@ import {
 
 function system(id: string): OSDefinition {
   const found = getSystemById(id);
-  if (!found) throw new Error(`système de test introuvable : ${id}`);
+  if (!found) throw new Error(`test system not found: ${id}`);
   return found;
 }
 
 const HEX64 = 'a'.repeat(64);
 
-/** Réponse JSON minimale compatible avec `fetchJsonDocument`. */
+/** Minimal JSON response compatible with `fetchJsonDocument`. */
 function jsonResponse(body: unknown, contentType = 'application/json'): Response {
   return {
     status: 200,
@@ -28,7 +28,7 @@ function jsonResponse(body: unknown, contentType = 'application/json'): Response
   } as unknown as Response;
 }
 
-/** Réponse de disque pour `probeRangeAvailability`. */
+/** Disk response for `probeRangeAvailability`. */
 function rangeResponse(status: number, contentRange?: string): Response {
   return {
     status,
@@ -65,10 +65,10 @@ function diskManifest(size: number): unknown {
   return {
     version: 1,
     ref: 'windows-7-x86',
-    displayName: 'Windows 7 x86 (disque local)',
+    displayName: 'Windows 7 x86 (local disk)',
     architecture: 'i386',
     memoryMiB: 1024,
-    license: 'Disque local',
+    license: 'Local disk',
     disk: {
       fileName: 'disk.img',
       format: 'raw',
@@ -90,32 +90,32 @@ function diskManifest(size: number): unknown {
 }
 
 describe('getLaunchReadiness', () => {
-  it('autorise un système bundled ready avec moteur intégré', () => {
+  it('allows a bundled ready system with an integrated engine', () => {
     expect(getLaunchReadiness(system('debian-12-i386'))).toEqual({ canLaunch: true });
   });
 
-  it('refuse un système planned dont le moteur n’est pas intégré', () => {
+  it('refuses a not-ready system whose engine is not integrated', () => {
     const readiness = getLaunchReadiness(system('fedora-workstation'));
     expect(readiness.canLaunch).toBe(false);
-    expect(readiness.reason).toMatch(/préparation|intégré/i);
+    expect(readiness.reason).toMatch(/not ready|integrated/i);
   });
 
-  it('autorise Windows 7 Professionnel directement depuis le disque local, sans média importé', () => {
+  it('allows Windows 7 Professional straight from the local disk, without imported media', () => {
     expect(getLaunchReadiness(system('windows-7-pro-sp1-x86'))).toEqual({ canLaunch: true });
   });
 
-  it('refuse un système user-import tant que le média n’est pas importé, puis l’autorise', () => {
+  it('refuses a user-import system until the media is imported, then allows it', () => {
     const userImport: OSDefinition = { ...system('debian-12-i386'), mediaStrategy: 'user-import' };
 
     const withoutMedia = getLaunchReadiness(userImport, { userMediaReady: false });
     expect(withoutMedia.canLaunch).toBe(false);
-    expect(withoutMedia.reason).toMatch(/importez un média/i);
+    expect(withoutMedia.reason).toMatch(/import a disk media/i);
 
     const withMedia = getLaunchReadiness(userImport, { userMediaReady: true });
     expect(withMedia).toEqual({ canLaunch: true });
   });
 
-  it('refuse explicitement une architecture non servie par le moteur (x86_64 sous v86)', () => {
+  it('explicitly refuses an architecture the engine does not serve (x86_64 under v86)', () => {
     const wrongArch: OSDefinition = {
       ...system('debian-12-i386'),
       id: 'debian-x64',
@@ -128,10 +128,10 @@ describe('getLaunchReadiness', () => {
     expect(readiness.reason).toMatch(/x86_64/);
   });
 
-  it('bloque Windows 11 64 bits tant que le moteur wasm-x86_64 n’est pas intégré', () => {
-    // v86 n’émule que le x86 32 bits : le profil Windows 11 64 bits cible
-    // `wasm-x86_64`, non intégré. Le lancement doit être refusé explicitement,
-    // sans jamais promettre un boot.
+  it('blocks 64-bit Windows 11 while the wasm-x86_64 engine is not integrated', () => {
+    // v86 only emulates 32-bit x86: the 64-bit Windows 11 profile targets
+    // `wasm-x86_64`, which is not integrated. The launch must be refused
+    // explicitly, never promising a boot.
     const readiness = getLaunchReadiness(system('windows-11-x64'));
     expect(readiness.canLaunch).toBe(false);
     expect(readiness.reason).toMatch(/wasm-x86_64/);
@@ -139,7 +139,7 @@ describe('getLaunchReadiness', () => {
 });
 
 describe('checkSystemRuntimeAvailability', () => {
-  it('confirme un système bundled servi avec manifeste et HTTP Range', async () => {
+  it('confirms a bundled system served with a manifest and HTTP Range', async () => {
     const fetchImpl = (async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/manifest.json')) return jsonResponse(debianImageManifest(10));
@@ -150,7 +150,7 @@ describe('checkSystemRuntimeAvailability', () => {
     expect(result).toEqual({ available: true, size: 10 });
   });
 
-  it('motiver explicitement un manifeste absent (HTTP 404)', async () => {
+  it('explicitly explains a missing manifest (HTTP 404)', async () => {
     const fetchImpl = (async () =>
       ({
         status: 404,
@@ -164,7 +164,7 @@ describe('checkSystemRuntimeAvailability', () => {
     expect(result.reason).toMatch(/404/);
   });
 
-  it('motiver explicitement un repli HTML de SPA', async () => {
+  it('explicitly explains an SPA HTML fallback', async () => {
     const fetchImpl = (async () =>
       jsonResponse('<html></html>', 'text/html; charset=utf-8')) as unknown as typeof fetch;
 
@@ -173,7 +173,7 @@ describe('checkSystemRuntimeAvailability', () => {
     expect(result.reason).toMatch(/HTML/i);
   });
 
-  it('motiver explicitement l’absence de support HTTP Range (HTTP 200)', async () => {
+  it('explicitly explains the lack of HTTP Range support (HTTP 200)', async () => {
     const fetchImpl = (async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/manifest.json')) return jsonResponse(debianImageManifest(10));
@@ -185,7 +185,7 @@ describe('checkSystemRuntimeAvailability', () => {
     expect(result.reason).toMatch(/Range/);
   });
 
-  it('vérifie un disque local (disk-boot) via son manifeste et son HTTP Range', async () => {
+  it('checks a local disk (disk-boot) through its manifest and HTTP Range', async () => {
     const fetchImpl = (async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/manifest.json')) return jsonResponse(diskManifest(100));
@@ -198,7 +198,7 @@ describe('checkSystemRuntimeAvailability', () => {
 });
 
 describe('resolveLaunchReadiness', () => {
-  it('combine readiness déclarée et disponibilité runtime', async () => {
+  it('combines declared readiness and runtime availability', async () => {
     const unavailable = (async () =>
       ({
         status: 404,
@@ -214,7 +214,7 @@ describe('resolveLaunchReadiness', () => {
     expect(result.reason).toMatch(/404/);
   });
 
-  it('n’interroge jamais le réseau pour un système refusé par le catalogue', async () => {
+  it('never queries the network for a system refused by the catalogue', async () => {
     let calls = 0;
     const fetchImpl = (async () => {
       calls += 1;

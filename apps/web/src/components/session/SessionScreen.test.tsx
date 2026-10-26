@@ -67,7 +67,7 @@ describe('SessionScreen — indicateur de capture souris', () => {
     mock = null;
   });
 
-  it('affiche un indicateur released puis captured dès l’appui dans l’écran', () => {
+  it('shows a released indicator, then captured when the screen is pressed', () => {
     const consoleRef = { current: null as HTMLDivElement | null };
     render(
       <SessionScreen
@@ -79,8 +79,8 @@ describe('SessionScreen — indicateur de capture souris', () => {
       />,
     );
 
-    // Le provider injecte l'écran APRÈS le montage, dans le conteneur de console.
-    // Écran conforme au contrat d'affichage standard, SANS classe `.v86-screen`.
+    // The provider injects the screen AFTER mount, inside the console container.
+    // Screen matching the standard display contract, WITHOUT a `.v86-screen` class.
     const container = consoleRef.current;
     expect(container).not.toBeNull();
     const screen = document.createElement('div');
@@ -100,7 +100,7 @@ describe('SessionScreen — indicateur de capture souris', () => {
     expect(screen.classList.contains('is-pointer-locked')).toBe(true);
   });
 
-  it('ne montre aucun indicateur tant que la session n’est pas active', () => {
+  it('shows no indicator while the session is not running', () => {
     const consoleRef = { current: null as HTMLDivElement | null };
     render(
       <SessionScreen

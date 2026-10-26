@@ -3,7 +3,7 @@ import type { ProxyConfig, LumibootConfig } from './schema';
 
 let runtimeConfig: LumibootConfig | null = null;
 
-/** Gèle récursivement la configuration : aucune mutation après chargement. */
+/** Recursively freezes the config: no mutation after loading. */
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
     for (const key of Object.keys(value as Record<string, unknown>)) {
@@ -14,31 +14,31 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-/** Enregistre la configuration chargée, figée et immuable. */
+/** Stores the loaded config, frozen and immutable. */
 export function setRuntimeConfig(config: LumibootConfig): void {
   runtimeConfig = deepFreeze(config);
 }
 
-/** Renvoie la configuration runtime ou lève si aucune n'est chargée. */
+/** Returns the runtime config, or throws when none is loaded. */
 export function getRuntimeConfig(): LumibootConfig {
   if (runtimeConfig === null) {
     throw new Error(
-      'Configuration runtime indisponible : setRuntimeConfig() doit être appelé avant tout accès.',
+      'Runtime config unavailable: setRuntimeConfig() must be called before any access.',
     );
   }
   return runtimeConfig;
 }
 
-/** Configuration proxy réseau local par défaut (hors runtime chargé). */
+/** Default local network proxy config (outside a loaded runtime). */
 export const DEFAULT_RUNTIME_PROXY: ProxyConfig = Object.freeze({
   enabled: true,
   url: DEFAULT_PROXY_URL,
 });
 
 /**
- * Configuration proxy réseau local : celle du runtime si chargée, sinon les défauts
- * (proxy réseau local activé, URL loopback par défaut). Ne lève jamais : le panneau
- * proxy réseau local doit rester affichable même sans configuration chargée.
+ * Local network proxy config: the runtime one when loaded, otherwise the defaults
+ * (local network proxy enabled, default loopback URL). Never throws: the local
+ * network proxy panel must stay displayable even without a loaded config.
  */
 export function resolveProxyConfig(): ProxyConfig {
   if (runtimeConfig === null) return { ...DEFAULT_RUNTIME_PROXY };
@@ -46,8 +46,8 @@ export function resolveProxyConfig(): ProxyConfig {
 }
 
 /**
- * Profil réseau d'un système : priorité au profil spécifique
- * `network.systems[systemId]`, sinon `network.defaultProfile`.
+ * Network profile of a system: the specific `network.systems[systemId]` profile
+ * wins, otherwise `network.defaultProfile`.
  */
 export function resolveNetworkProfile(systemId: string): NetworkProfile {
   const config = getRuntimeConfig();

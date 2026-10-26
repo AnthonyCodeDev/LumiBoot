@@ -4,7 +4,6 @@ build
 coverage
 playwright-report
 test-results
-prototype
 docs
 *.md
 pnpm-lock.yaml

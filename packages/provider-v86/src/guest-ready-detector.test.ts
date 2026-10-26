@@ -8,7 +8,7 @@ function readiness(marker: string = MARKER): { marker: string } {
 }
 
 describe('GuestReadyDetector', () => {
-  it('détecte le marqueur une seule fois, même émis octet par octet', () => {
+  it('detects the marker only once, even when emitted byte by byte', () => {
     const detector = new GuestReadyDetector(readiness());
     let hits = 0;
     for (const char of MARKER) {
@@ -23,7 +23,7 @@ describe('GuestReadyDetector', () => {
     expect(hits).toBe(1);
   });
 
-  it('reconnaît un marqueur réparti sur deux notifications', () => {
+  it('recognizes a marker split across two notifications', () => {
     const detector = new GuestReadyDetector(readiness());
     const middle = Math.floor(MARKER.length / 2);
     const first = MARKER.slice(0, middle);
@@ -35,26 +35,26 @@ describe('GuestReadyDetector', () => {
     expect(hits).toBe(1);
   });
 
-  it('garde un tampon borné face à de longs journaux du noyau', () => {
+  it('keeps a bounded buffer against long kernel logs', () => {
     const detector = new GuestReadyDetector(readiness());
     for (let index = 0; index < 100_000; index += 1) detector.pushByte(65);
     expect(detector.detected).toBe(false);
   });
 
-  it('le marqueur d’une instance ne dépend pas d’un autre (plus de constante globale)', () => {
+  it('the marker of an instance does not depend on another (no global constant)', () => {
     const debian = new GuestReadyDetector({ marker: 'LUMIBOOT_GUEST_READY:debian' });
     const windows = new GuestReadyDetector({ marker: 'LUMIBOOT_GUEST_READY:windows' });
 
     for (const char of 'LUMIBOOT_GUEST_READY:windows') windows.pushByte(char.charCodeAt(0));
     expect(windows.detected).toBe(true);
-    // Le marqueur Windows ne déclenche jamais l'instance Debian.
+    // The Windows marker never triggers the Debian instance.
     expect(debian.detected).toBe(false);
 
     expect(debian.marker).toBe('LUMIBOOT_GUEST_READY:debian');
     expect(windows.marker).toBe('LUMIBOOT_GUEST_READY:windows');
   });
 
-  it('expose le canal et le délai issus de readiness, avec défauts', () => {
+  it('exposes the channel and the delay from readiness, with defaults', () => {
     const explicit = new GuestReadyDetector({
       marker: MARKER,
       channel: 'vga',
@@ -68,31 +68,31 @@ describe('GuestReadyDetector', () => {
     expect(defaults.timeoutMs).toBe(120_000);
   });
 
-  it('expose le mode de preuve, avec `guest-marker` par défaut', () => {
+  it('exposes the proof mode, defaulting to `guest-marker`', () => {
     expect(new GuestReadyDetector({ marker: MARKER, mode: 'disk-boot' }).mode).toBe('disk-boot');
     expect(new GuestReadyDetector({ marker: MARKER }).mode).toBe('guest-marker');
   });
 
-  it('décrit la preuve attendue selon le mode (étiquette disk-boot correcte)', () => {
+  it('describes the expected proof depending on the mode (correct disk-boot label)', () => {
     const marker = new GuestReadyDetector({ marker: MARKER, channel: 'vga' });
     expect(marker.describeExpectedProof()).toContain(MARKER);
     expect(marker.describeExpectedProof()).toContain('VGA');
 
     const disk = new GuestReadyDetector({ marker: MARKER, mode: 'disk-boot' });
     const description = disk.describeExpectedProof();
-    expect(description).toMatch(/disque/i);
-    // La preuve disque n'est jamais présentée comme un marqueur invité.
+    expect(description).toMatch(/disk/i);
+    // The disk proof is never presented as a guest marker.
     expect(description).not.toContain(MARKER);
   });
 
-  it('markDiskBoot ne prouve le démarrage disque qu’une seule fois', () => {
+  it('markDiskBoot proves the disk boot only once', () => {
     const detector = new GuestReadyDetector({ marker: MARKER, mode: 'disk-boot' });
     expect(detector.markDiskBoot()).toBe(true);
     expect(detector.markDiskBoot()).toBe(false);
     expect(detector.detected).toBe(true);
   });
 
-  it('rejette un marqueur vide', () => {
+  it('rejects an empty marker', () => {
     expect(() => new GuestReadyDetector({ marker: '' })).toThrow();
   });
 });

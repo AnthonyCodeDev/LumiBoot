@@ -32,15 +32,15 @@ class FakeEmitter {
 }
 
 describe('toV86NetworkDevice', () => {
-  it('offline : aucune carte réseau', () => {
+  it('offline: no network card', () => {
     expect(toV86NetworkDevice({ mode: 'offline' })).toBeUndefined();
   });
 
-  it('browser-fetch : backend fetch natif', () => {
+  it('browser-fetch: native fetch backend', () => {
     expect(toV86NetworkDevice({ mode: 'browser-fetch' })).toEqual({ relay_url: 'fetch' });
   });
 
-  it('user-relay : convertit le wss validé en wisps:// compris par v86', () => {
+  it('user-relay: converts the validated wss into a wisps:// understood by v86', () => {
     const device = toV86NetworkDevice({
       mode: 'user-relay',
       relayUrl: 'wss://relay.example.com:8443/wisp',
@@ -48,7 +48,7 @@ describe('toV86NetworkDevice', () => {
     expect(device).toEqual({ relay_url: 'wisps://relay.example.com:8443/wisp' });
   });
 
-  it('user-relay : préserve le port et le chemin lors de la conversion wss->wisps', () => {
+  it('user-relay: preserves port and path during the wss->wisps conversion', () => {
     const device = toV86NetworkDevice({
       mode: 'user-relay',
       relayUrl: 'wss://relay.example.com:9443/a/b?x=1',
@@ -58,7 +58,7 @@ describe('toV86NetworkDevice', () => {
     });
   });
 
-  it('user-relay : sans port ni chemin, URL.href normalise en « / » (schéma wisps)', () => {
+  it('user-relay: without port or path, URL.href normalizes to "/" (wisps scheme)', () => {
     const device = toV86NetworkDevice({
       mode: 'user-relay',
       relayUrl: 'wss://relay.example.com',
@@ -66,7 +66,7 @@ describe('toV86NetworkDevice', () => {
     expect(device).toEqual({ relay_url: 'wisps://relay.example.com/' });
   });
 
-  it('user-relay : le schéma wisps:// résultant n’est jamais un wss:// brut', () => {
+  it('user-relay: the resulting wisps:// scheme is never a raw wss://', () => {
     const device = toV86NetworkDevice({
       mode: 'user-relay',
       relayUrl: 'wss://relay.example.com/wisp',
@@ -75,13 +75,13 @@ describe('toV86NetworkDevice', () => {
     expect(device?.relay_url?.startsWith('wss://')).toBe(false);
   });
 
-  it('user-relay : ws:// localhost reste refusé (le provider n’active pas l’insecure)', () => {
+  it('user-relay: ws:// localhost stays rejected (the provider does not enable insecure)', () => {
     expect(() =>
       toV86NetworkDevice({ mode: 'user-relay', relayUrl: 'ws://localhost:8080' }),
     ).toThrowError(expect.objectContaining({ code: 'NETWORK_INVALID_RELAY_URL' }));
   });
 
-  it('user-relay sans URL valide : rejette avec NETWORK_INVALID_RELAY_URL', () => {
+  it('user-relay without a valid URL: rejects with NETWORK_INVALID_RELAY_URL', () => {
     expect(() => toV86NetworkDevice({ mode: 'user-relay' })).toThrowError(
       expect.objectContaining({ code: 'NETWORK_INVALID_RELAY_URL' }),
     );
@@ -90,25 +90,25 @@ describe('toV86NetworkDevice', () => {
     ).toThrowError(expect.objectContaining({ code: 'NETWORK_INVALID_RELAY_URL' }));
   });
 
-  it('local-network : non implémenté', () => {
+  it('local-network: not implemented', () => {
     expect(() => toV86NetworkDevice({ mode: 'local-network' })).toThrowError(
       expect.objectContaining({ code: 'NETWORK_UNSUPPORTED_MODE' }),
     );
   });
 
-  it('local-proxy sans token : relais WISP local par défaut', () => {
+  it('local-proxy without token: default local WISP relay', () => {
     expect(toV86NetworkDevice({ mode: 'local-proxy' })).toEqual({
       relay_url: 'wisp://127.0.0.1:37892/wisp/',
     });
   });
 
-  it('local-proxy avec token : query ?token conservée', () => {
+  it('local-proxy with token: ?token query preserved', () => {
     expect(toV86NetworkDevice({ mode: 'local-proxy', proxyToken: 'abc' })).toEqual({
       relay_url: 'wisp://127.0.0.1:37892/wisp/?token=abc',
     });
   });
 
-  it('local-proxy avec URL loopback personnalisée : host/port conservés', () => {
+  it('local-proxy with a custom loopback URL: host/port preserved', () => {
     expect(
       toV86NetworkDevice({
         mode: 'local-proxy',
@@ -118,7 +118,7 @@ describe('toV86NetworkDevice', () => {
     ).toEqual({ relay_url: 'wisp://127.0.0.1:40000/wisp/?token=abc' });
   });
 
-  it('local-proxy avec URL non loopback : rejette avec NETWORK_INVALID_PROXY_URL', () => {
+  it('local-proxy with a non-loopback URL: rejects with NETWORK_INVALID_PROXY_URL', () => {
     expect(() =>
       toV86NetworkDevice({
         mode: 'local-proxy',
@@ -129,31 +129,31 @@ describe('toV86NetworkDevice', () => {
 });
 
 describe('toV86NetworkDeviceType', () => {
-  it('profil matériel absent : défaut documenté virtio', () => {
+  it('absent hardware profile: documented virtio default', () => {
     expect(toV86NetworkDeviceType(undefined)).toBe('virtio');
   });
 
-  it('network virtio : NIC virtio (noyaux modernes)', () => {
+  it('virtio network: virtio NIC (modern kernels)', () => {
     expect(toV86NetworkDeviceType({ network: 'virtio' })).toBe('virtio');
   });
 
-  it('network ne2k : NIC NE2000 (invités anciens)', () => {
+  it('ne2k network: NE2000 NIC (legacy guests)', () => {
     expect(toV86NetworkDeviceType({ network: 'ne2k' })).toBe('ne2k');
   });
 
-  it('network none : aucune carte réseau', () => {
+  it('none network: no network card', () => {
     expect(toV86NetworkDeviceType({ network: 'none' })).toBeUndefined();
   });
 
-  it('la traduction ne dépend que du contrat, pas du système', () => {
-    // Le même profil matériel donne la même carte quel que soit l'invité.
+  it('the translation only depends on the contract, not on the system', () => {
+    // The same hardware profile yields the same card whatever the guest.
     expect(toV86NetworkDeviceType({ network: 'ne2k', machine: 'pc' })).toBe('ne2k');
     expect(toV86NetworkDeviceType({ network: 'virtio', audio: true })).toBe('virtio');
   });
 });
 
 describe('attachNetworkDiagnostics', () => {
-  it('compte tx/rx depuis les événements v86 et se détache proprement', () => {
+  it('counts tx/rx from v86 events and detaches cleanly', () => {
     const controller = createNetworkController({ profile: defaultNetworkProfile });
     const emitter = new FakeEmitter();
     const detach = attachNetworkDiagnostics(emitter as unknown as NetworkEventSource, controller);
@@ -167,7 +167,7 @@ describe('attachNetworkDiagnostics', () => {
     emitter.emit('net0-send', new Uint8Array(64));
     expect(controller.snapshot().txBytes).toBe(192);
 
-    // v86 émet aussi eth-transmit-end pour la même trame : pas de double comptage.
+    // v86 also emits eth-transmit-end for the same frame: no double counting.
     emitter.emit('eth-transmit-end', [128]);
     expect(controller.snapshot().txBytes).toBe(192);
 

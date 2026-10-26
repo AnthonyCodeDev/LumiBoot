@@ -7,15 +7,16 @@ import type {
 } from '@lumiboot/contracts';
 
 /**
- * Description factuelle d'un profil de lancement (image + moteur + paramètres).
+ * Factual description of a launch profile (image + engine + settings).
  *
- * Ce fichier ne déclare AUCUN statut de disponibilité : la disponibilité est
- * calculée une seule fois, dans `systems.ts`. `validated` atteste uniquement
- * qu'un boot réel a été prouvé pour ce couple image/moteur.
+ * This file declares NO availability status: availability is computed once, in
+ * `systems.ts`. `validated` only attests that a real boot was proven for this
+ * image/engine pair.
  *
- * `hardwareProfile` décrit le matériel émulé vu par l'invité (indépendant du
- * moteur) et `readiness` la preuve de démarrage attendue : ils sont portés par
- * le PROFIL afin que le provider n'ait plus à les deviner par famille/arch.
+ * `hardwareProfile` describes the emulated hardware seen by the guest
+ * (independent of the engine) and `readiness` the expected boot proof: they are
+ * carried by the PROFILE so the provider no longer has to guess them per
+ * family/arch.
  */
 export interface LaunchProfileDefinition {
   readonly id: string;
@@ -30,37 +31,37 @@ export interface LaunchProfileDefinition {
   readonly displayName: string;
   readonly versionLabel: string;
   readonly description: string;
-  /** Boot réel prouvé pour ce profil (tests E2E). */
+  /** Real boot proven for this profile (E2E tests). */
   readonly validated: boolean;
   readonly featured?: boolean;
   /**
-   * Id du système « mère » de ce variant (absent = ce profil EST la mère ou un
-   * système autonome). Recopié dans l'`OSDefinition` par `systems.ts`.
+   * Id of the parent system of this variant (absent = this profile IS the
+   * parent, or a standalone system). Copied into the `OSDefinition` by
+   * `systems.ts`.
    */
   readonly variantGroupId?: string;
-  /** Libellé court du variant (affiché dans un sélecteur côté fiche). */
+  /** Short label of the variant (shown in a selector on the system page). */
   readonly variantName?: string;
   /**
-   * Ordre d'affichage de la variante dans son groupe (croissant). La plus
-   * petite valeur = meilleure variante = sélection par défaut. Absent = après
-   * les variantes ordonnées (ordre du catalogue). Recopié dans l'`OSDefinition`
-   * par `systems.ts`.
+   * Display order of the variant within its group (ascending). The smallest
+   * value = best variant = default selection. Absent = after the ordered
+   * variants (catalog order). Copied into the `OSDefinition` by `systems.ts`.
    */
   readonly variantOrder?: number;
 }
 
 /**
- * Matériel émulé commun aux invités PC de ce catalogue : machine standard,
- * VGA, entrée PS/2, disque IDE/ATA, sans son. Seule la carte réseau varie.
+ * Emulated hardware shared by the PC guests of this catalog: standard machine,
+ * VGA, PS/2 input, IDE/ATA disk, no audio. Only the network card varies.
  */
 function pcHardware(network: HardwareProfile['network']): HardwareProfile {
   return { network, machine: 'pc', video: 'vga', input: 'ps2', disk: 'ide', audio: false };
 }
 
 /**
- * Preuve de démarrage propre à un système : le marqueur reste celui émis par
- * `lumiboot-ready.service` sur `ttyS0` (canal série), avec un délai de sécurité
- * de 120 s.
+ * Boot proof specific to a system: the marker is the one emitted by
+ * `lumiboot-ready.service` on `ttyS0` (serial channel), with a 120 s safety
+ * timeout.
  */
 function guestReadiness(systemId: string): GuestReadiness {
   return {
@@ -71,33 +72,33 @@ function guestReadiness(systemId: string): GuestReadiness {
 }
 
 /**
- * Preuve de démarrage d'un système à interface graphique.
+ * Boot proof of a system with a graphical interface.
  *
- * Le marqueur `LUMIBOOT_DESKTOP_READY` n'est émis qu'APRÈS le démarrage effectif
- * du serveur X (socket + réponse) ET de la session graphique (gestionnaire de
- * fenêtres vivant). Il est distinct de `LUMIBOOT_GUEST_READY` (OS opérationnel)
- * et n'est jamais produit côté JavaScript : il vient du système invité réel.
+ * The `LUMIBOOT_DESKTOP_READY` marker is emitted only AFTER the X server has
+ * actually started (socket + response) AND the graphical session is up (window
+ * manager alive). It is distinct from `LUMIBOOT_GUEST_READY` (OS up) and is
+ * never produced on the JavaScript side: it comes from the real guest system.
  */
 function desktopReadiness(systemId: string): GuestReadiness {
   return {
     marker: `LUMIBOOT_DESKTOP_READY:${systemId}`,
     channel: 'serial',
-    // Délai normal : sous émulation logicielle (v86 sans accélération), Xorg et
-    // la session graphique demandent plusieurs minutes ; 240 s couvre les
-    // boots mesurés (voir docs/debian-desktop.md, docs/debian-xfce.md).
+    // Normal timeout: under software emulation (v86 without acceleration), Xorg
+    // and the graphical session take several minutes; 240 s covers the measured
+    // boots (see docs/debian-desktop.md, docs/debian-xfce.md).
     timeoutMs: 240_000,
   };
 }
 
 /**
- * Preuve de démarrage d'un système à disque démarré par BIOS (ex. Windows 7
- * à partir d'un disque RAW local ou d'un média importé).
+ * Boot proof of a system whose disk is started by BIOS (e.g. Windows 7 from a
+ * local RAW disk or an imported medium).
  *
- * Ce système n'émet AUCUN marqueur LumiBoot. La preuve est une **lecture réelle
- * du disque dur** après le démarrage de l'émulateur (le BIOS/l'amorce exécute
- * l'image disque). `marker` sert d'identifiant documentaire et n'est jamais
- * scanné. Le délai est large : le POST, l'amorce et le chargement NT prennent
- * plusieurs minutes sous émulation logicielle.
+ * This system emits NO LumiBoot marker. The proof is a **real read of the hard
+ * disk** after the emulator starts (the BIOS/boot loader executes the disk
+ * image). `marker` serves as a documentation identifier and is never scanned.
+ * The timeout is generous: POST, boot and NT loading take several minutes under
+ * software emulation.
  */
 function diskBootReadiness(systemId: string): GuestReadiness {
   return {
@@ -115,15 +116,15 @@ export const launchProfiles = [
     engineId: 'v86',
     executionMode: 'browser',
     minMemoryMiB: 128,
-    // Le choix du moteur et les paramètres d'exécution vivent dans le PROFIL,
-    // jamais dans l'image : un même disque Debian peut ainsi être associé à
-    // plusieurs profils (v86, puis un autre émulateur) sans dupliquer l'image.
+    // Engine choice and execution settings live in the PROFILE, never in the
+    // image: the same Debian disk can thus back several profiles (v86, then
+    // another emulator) without duplicating the image.
     configuration: {
       memoryMiB: 512,
       vgaMemoryMiB: 16,
       bootDevice: 'disk',
     },
-    // Noyau 6.x : `virtio-net` natif, marqueur conservé tel quel.
+    // Kernel 6.x: native `virtio-net`, marker kept as is.
     hardwareProfile: pcHardware('virtio'),
     readiness: guestReadiness('debian-12-i386'),
     slug: 'debian-12-i386',
@@ -131,71 +132,71 @@ export const launchProfiles = [
     versionLabel: '12 Bookworm',
     validated: true,
     featured: true,
-    // Système MÈRE du groupe de variantes Debian : il n'a pas de
-    // `variantGroupId` (il porte le groupe) mais expose son libellé de variant.
-    // CLI est la variante la MOINS mise en avant : `variantOrder` le plus grand.
+    // PARENT system of the Debian variant group: it has no `variantGroupId`
+    // (it carries the group) but exposes its variant label. CLI is the LEAST
+    // promoted variant: highest `variantOrder`.
     variantName: 'CLI',
     variantOrder: 3,
     description:
-      "Une distribution Linux stable, flexible et idéale pour découvrir un véritable système d'exploitation en navigateur.",
+      'A stable, flexible Linux distribution, ideal for discovering a real operating system in the browser.',
   },
   {
     id: 'debian-12-i386-desktop',
     imageId: 'debian-12-i386-desktop-image',
     engineId: 'v86',
     executionMode: 'browser',
-    // Xorg + Openbox consomment plus de mémoire que la console : plancher 1 Gio.
+    // Xorg + Openbox use more memory than the console: 1 GiB floor.
     minMemoryMiB: 1024,
     configuration: {
       memoryMiB: 1024,
       vgaMemoryMiB: 16,
       bootDevice: 'disk',
     },
-    // Même carte réseau émulée que le profil console (noyau 6.x, `virtio-net`).
+    // Same emulated network card as the console profile (kernel 6.x, `virtio-net`).
     hardwareProfile: pcHardware('virtio'),
-    // Le marqueur Desktop n'est émis qu'après le démarrage réel de X + session.
+    // The Desktop marker is emitted only after X + session actually start.
     readiness: desktopReadiness('debian-12-i386-desktop'),
     slug: 'debian-12-i386-desktop',
-    displayName: 'Debian (Bureau)',
+    displayName: 'Debian (Desktop)',
     versionLabel: '12 Bookworm · X11',
-    // Variant enfant rattaché à la mère console `debian-12-i386`.
+    // Child variant attached to the console parent `debian-12-i386`.
     variantGroupId: 'debian-12-i386',
     variantName: 'X11',
     variantOrder: 2,
-    // Validé par un boot RÉEL (Xorg + Openbox) : voir docs/debian-desktop.md.
+    // Validated by a REAL boot (Xorg + Openbox): see docs/debian-desktop.md.
     validated: true,
     description:
-      'La variante graphique de Debian 12 : session Xorg + Openbox directement dans le navigateur, validée par un boot réel.',
+      'The graphical variant of Debian 12: an Xorg + Openbox session right in the browser, validated by a real boot.',
   },
   {
     id: 'debian-12-i386-xfce',
     imageId: 'debian-12-i386-xfce-image',
     engineId: 'v86',
     executionMode: 'browser',
-    // Xorg + session XFCE consomment plus de mémoire que la console : plancher 1 Gio.
+    // Xorg + XFCE session use more memory than the console: 1 GiB floor.
     minMemoryMiB: 1024,
     configuration: {
       memoryMiB: 1024,
       vgaMemoryMiB: 16,
       bootDevice: 'disk',
     },
-    // Même carte réseau émulée que les autres profils Debian (noyau 6.x, `virtio-net`).
+    // Same emulated network card as the other Debian profiles (kernel 6.x, `virtio-net`).
     hardwareProfile: pcHardware('virtio'),
-    // Le marqueur Desktop n'est émis qu'après le démarrage réel de X + session XFCE.
+    // The Desktop marker is emitted only after X + XFCE session actually start.
     readiness: desktopReadiness('debian-12-i386-xfce'),
     slug: 'debian-12-i386-xfce',
     displayName: 'Debian (XFCE)',
     versionLabel: '12 Bookworm · XFCE',
-    // Variant enfant rattaché à la mère console `debian-12-i386`.
+    // Child variant attached to the console parent `debian-12-i386`.
     variantGroupId: 'debian-12-i386',
     variantName: 'XFCE',
-    // XFCE est la MEILLEURE variante Debian : `variantOrder` le plus petit, donc
-    // première du groupe et sélectionnée par défaut.
+    // XFCE is the BEST Debian variant: smallest `variantOrder`, so first in the
+    // group and selected by default.
     variantOrder: 1,
-    // Validé par un boot RÉEL (Xorg + session XFCE) : voir docs/debian-xfce.md.
+    // Validated by a REAL boot (Xorg + XFCE session): see docs/debian-xfce.md.
     validated: true,
     description:
-      "La variante Debian 12 avec l'environnement de bureau complet XFCE : session Xorg + XFCE directement dans le navigateur, validée par un boot réel.",
+      'The Debian 12 variant with the full XFCE desktop environment: an Xorg + XFCE session right in the browser, validated by a real boot.',
   },
   {
     id: 'ubuntu-18-i386',
@@ -208,15 +209,14 @@ export const launchProfiles = [
       vgaMemoryMiB: 16,
       bootDevice: 'cdrom',
     },
-    // Noyau 4.15 : `virtio-net` natif.
+    // Kernel 4.15: native `virtio-net`.
     hardwareProfile: pcHardware('virtio'),
     readiness: guestReadiness('ubuntu-18-i386'),
     slug: 'ubuntu-18-i386',
     displayName: 'Ubuntu',
     versionLabel: '18.04 LTS',
     validated: false,
-    description:
-      'Une version 32 bits historique d’Ubuntu envisageable avec un émulateur x86 en navigateur.',
+    description: 'A historical 32-bit release of Ubuntu, run by an x86 emulator in the browser.',
   },
   {
     id: 'fedora-workstation',
@@ -234,7 +234,7 @@ export const launchProfiles = [
     displayName: 'Fedora',
     versionLabel: 'Workstation · x64',
     validated: false,
-    description: 'Un environnement Linux de bureau moderne prévu pour un moteur navigateur adapté.',
+    description: 'A modern Linux desktop environment, run by an x86-64 browser engine.',
   },
   {
     id: 'mint-x64',
@@ -252,14 +252,14 @@ export const launchProfiles = [
     displayName: 'Linux Mint',
     versionLabel: 'Cinnamon · x64',
     validated: false,
-    description: 'Un bureau Linux classique et accessible, à lancer dans le navigateur.',
+    description: 'A classic, approachable Linux desktop, launched in the browser.',
   },
   {
     id: 'windows-7-x86',
     imageId: 'windows-7-x86-image',
-    // v86 est le seul moteur navigateur x86 32 bits intégré : la variante Lite
-    // démarre directement le disque RAW local de l'opérateur par BIOS, sans
-    // média à importer ni noyau Linux.
+    // v86 is the only integrated 32-bit x86 browser engine: the Lite variant
+    // boots the operator's local RAW disk directly through BIOS, with no media
+    // to import and no Linux kernel.
     engineId: 'v86',
     executionMode: 'browser',
     minMemoryMiB: 1024,
@@ -268,103 +268,104 @@ export const launchProfiles = [
       vgaMemoryMiB: 16,
       bootDevice: 'disk',
     },
-    // Invité NT : pilotes virtio absents, `ne2k` est le support commun émulé
-    // par v86 (seuls `ne2k` et `virtio` existent). ACPI est requise par la
-    // famille Vista+ (voir docs/windows-nt.md de v86).
+    // NT guest: no virtio drivers, `ne2k` is the common hardware emulated by v86
+    // (only `ne2k` and `virtio` exist). ACPI is required by the Vista+ family
+    // (see v86 docs/windows-nt.md).
     hardwareProfile: { ...pcHardware('ne2k'), acpi: true },
-    // Disque local : le démarrage est prouvé par une lecture disque réelle.
+    // Local disk: the boot is proven by a real disk read.
     readiness: diskBootReadiness('windows-7-x86'),
     slug: 'windows-7-x86',
-    // Système MÈRE du groupe de variantes Windows 7 : pas de `variantGroupId`.
-    // Nom de base (le dropdown ajoute le `variantName`). Lite est la variante la
-    // MOINS mise en avant : `variantOrder` le plus grand.
+    // PARENT system of the Windows 7 variant group: no `variantGroupId`. Base
+    // name (the dropdown appends `variantName`). Lite is the LEAST promoted
+    // variant: highest `variantOrder`.
     displayName: 'Windows 7',
     versionLabel: 'x86',
     variantName: 'Lite',
     variantOrder: 2,
-    // Boot bureau réel prouvé (canvas VGA 2D sous v86, E2E
-    // tests/e2e/windows7-desktop.spec.ts, `VM_E2E_ASSETS=1`) : le profil est
-    // validé, la disponibilité dérivée passe donc à `ready`.
+    // Real desktop boot proven (2D VGA canvas under v86, E2E
+    // tests/e2e/windows7-desktop.spec.ts, `VM_E2E_ASSETS=1`): the profile is
+    // validated, so the derived availability becomes `ready`.
     validated: true,
     description:
-      'La variante « Lite » : Windows 7 x86 allégé, démarré par BIOS depuis ' +
-      'son disque RAW 16 Gio local, sans installation.',
+      'The "Lite" variant: a slimmed-down Windows 7 x86, booted by BIOS from ' +
+      'its local 16 GiB RAW disk, with no installation.',
   },
   {
     id: 'windows-7-pro-sp1-x86',
     imageId: 'windows-7-pro-sp1-x86-image',
-    // v86 est le seul moteur navigateur x86 32 bits intégré : Windows 7
-    // Professionnel SP1 x86 démarre directement le disque RAW local de
-    // l'opérateur par BIOS, sans média à importer ni noyau Linux.
+    // v86 is the only integrated 32-bit x86 browser engine: Windows 7
+    // Professional SP1 x86 boots the operator's local RAW disk directly through
+    // BIOS, with no media to import and no Linux kernel.
     engineId: 'v86',
     executionMode: 'browser',
-    // v86 arrondit `memory_size` à un multiple de 128 Kio et accepte les
-    // valeurs non-puissances-de-deux : 1536 Mio (installé sous QEMU) est
-    // accepté et requis par l'invité.
+    // v86 rounds `memory_size` to a multiple of 128 KiB and accepts
+    // non-power-of-two values: 1536 MiB (installed under QEMU) is accepted and
+    // required by the guest.
     minMemoryMiB: 1536,
     configuration: {
       memoryMiB: 1536,
       vgaMemoryMiB: 16,
       bootDevice: 'disk',
     },
-    // Invité NT : pilotes virtio absents, `ne2k` est le support commun émulé
-    // par v86 (seuls `ne2k` et `virtio` existent). ACPI est requise par la
-    // famille Vista+ (voir docs/windows-nt.md de v86).
+    // NT guest: no virtio drivers, `ne2k` is the common hardware emulated by v86
+    // (only `ne2k` and `virtio` exist). ACPI is required by the Vista+ family
+    // (see v86 docs/windows-nt.md).
     hardwareProfile: { ...pcHardware('ne2k'), acpi: true },
-    // Disque local : le démarrage est prouvé par une lecture disque réelle.
+    // Local disk: the boot is proven by a real disk read.
     readiness: diskBootReadiness('windows-7-pro-sp1-x86'),
     slug: 'windows-7-pro-sp1-x86',
-    displayName: 'Windows 7 (Professionnel)',
+    displayName: 'Windows 7 (Professional)',
     versionLabel: 'SP1 · x86',
-    // Variant enfant rattaché à la mère Lite `windows-7-x86`. Professionnel est
-    // la MEILLEURE variante Windows 7 : `variantOrder` le plus petit, donc
-    // première du groupe et sélectionnée par défaut.
+    // Child variant attached to the Lite parent `windows-7-x86`. Professional
+    // is the BEST Windows 7 variant: smallest `variantOrder`, so first in the
+    // group and selected by default.
     variantGroupId: 'windows-7-x86',
-    variantName: 'Professionnel',
+    variantName: 'Professional',
     variantOrder: 1,
-    // Boot prouvé par une lecture disque réelle (mode `disk-boot`, voir
-    // docs/windows-7.md) : le profil est désormais validé.
+    // Boot proven by a real disk read (`disk-boot` mode, see docs/windows-7.md):
+    // the profile is now validated.
     validated: true,
     description:
-      'Une session Windows 7 Professionnel SP1 x86 dans le navigateur via v86, ' +
-      'démarrée directement par BIOS depuis le disque RAW 32 Gio local, sans ' +
-      'installation ni média à importer.',
+      'A Windows 7 Professional SP1 x86 session in the browser via v86, ' +
+      'booted directly by BIOS from the local 32 GiB RAW disk, with no ' +
+      'installation and no media to import.',
   },
   {
     id: 'windows-10-x86',
     imageId: 'windows-10-x86-image',
-    // v86 est le seul moteur navigateur x86 32 bits intégré : la variante x86
-    // démarre directement le disque RAW local par BIOS, sans média à importer
-    // ni noyau Linux — même pipeline que Windows 7.
+    // v86 is the only integrated 32-bit x86 browser engine: the x86 variant
+    // boots the local RAW disk directly through BIOS, with no media to import
+    // and no Linux kernel — same pipeline as Windows 7.
     engineId: 'v86',
     executionMode: 'browser',
-    // Plancher 2 Gio (aligné sur le lot matériel) : Windows 10 exige plus de
-    // mémoire que Windows 7. v86 arrondit `memory_size` à un multiple de 128 Kio.
+    // 2 GiB floor (aligned with the hardware batch): Windows 10 needs more
+    // memory than Windows 7. v86 rounds `memory_size` to a multiple of 128 KiB.
     minMemoryMiB: 2048,
     configuration: {
       memoryMiB: 2048,
       vgaMemoryMiB: 16,
       bootDevice: 'disk',
     },
-    // L'image Windows 10 fournie embarque le pilote VirtIO NetKVM x86 : on
-    // expose donc `virtio-net`, que v86 émulé supporte (device 0x1AF4:0x1041).
-    // ACPI est requise par la famille Vista+ (voir docs/windows-nt.md de v86).
+    // The shipped Windows 10 image embeds the x86 VirtIO NetKVM driver: we
+    // therefore expose `virtio-net`, which emulated v86 supports (device
+    // 0x1AF4:0x1041). ACPI is required by the Vista+ family (see v86
+    // docs/windows-nt.md).
     hardwareProfile: { ...pcHardware('virtio'), acpi: true },
-    // Disque local : le démarrage est prouvé par une lecture disque réelle (le
-    // BIOS/l'amorce exécute l'image), jamais par un marqueur LumiBoot simulé.
+    // Local disk: the boot is proven by a real disk read (the BIOS/boot loader
+    // executes the image), never by a simulated LumiBoot marker.
     readiness: diskBootReadiness('windows-10-x86'),
     slug: 'windows-10-x86',
-    // Système AUTONOME : Windows 10 x86 n'appartient à aucun groupe de variantes
-    // (v86 n'émule que le x86 32 bits).
+    // STANDALONE system: Windows 10 x86 belongs to no variant group (v86 only
+    // emulates 32-bit x86).
     displayName: 'Windows 10',
-    versionLabel: 'x86 (32 bits)',
-    // Même pipeline disque local validé que Windows 7 : le profil est validé,
-    // la disponibilité dérivée passe donc à `ready`.
+    versionLabel: 'x86 (32-bit)',
+    // Same validated local-disk pipeline as Windows 7: the profile is validated,
+    // so the derived availability becomes `ready`.
     validated: true,
     description:
-      'Une session Windows 10 x86 (32 bits) dans le navigateur via v86, démarrée ' +
-      'directement par BIOS depuis le disque RAW local, sans installation ni média ' +
-      'à importer.',
+      'A Windows 10 x86 (32-bit) session in the browser via v86, booted ' +
+      'directly by BIOS from the local RAW disk, with no installation and no ' +
+      'media to import.',
   },
   {
     id: 'windows-11-x64',
@@ -380,10 +381,9 @@ export const launchProfiles = [
     readiness: guestReadiness('windows-11-x64'),
     slug: 'windows-11-x64',
     displayName: 'Windows 11',
-    versionLabel: '64 bits',
+    versionLabel: '64-bit',
     validated: false,
-    description:
-      'Une machine virtuelle Windows moderne pensée pour une exécution locale dans le navigateur.',
+    description: 'A modern Windows virtual machine built for local execution in the browser.',
   },
   {
     id: 'macos-sequoia',
@@ -401,6 +401,6 @@ export const launchProfiles = [
     displayName: 'macOS',
     versionLabel: 'Sequoia · Apple Silicon',
     validated: false,
-    description: 'Une session macOS pensée pour un futur moteur navigateur compatible ARM.',
+    description: 'A macOS session built for an ARM-capable browser engine.',
   },
 ] as const satisfies readonly LaunchProfileDefinition[];

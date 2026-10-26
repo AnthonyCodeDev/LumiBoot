@@ -3,36 +3,38 @@ import type { NetworkErrorCode } from './errors';
 import type { NetworkMode } from './modes';
 
 /**
- * État du sous-système réseau d'une session.
+ * State of the network subsystem of a session.
  *
- * Sémantique (chaque état décrit une étape distincte, jamais confondue) :
+ * Semantics (each state describes a distinct step, never confused):
  *
- * - `idle`       : contrôleur créé, `start()` pas encore appelé.
- * - `offline`    : mode hors ligne ; **aucun transport** n'est établi.
- * - `configured` : le profil a été **accepté** (relais syntaxiquement valide),
- *                  mais **le transport n'est pas encore établi**. C'est l'état
- *                  par défaut renvoyé par `start()` pour un mode à transport :
- *                  une URL de relais valide ne prouve rien de plus.
- * - `connecting` : le transport a réellement commencé à se connecter (rapporté
- *                  par le provider, jamais déduit du mode).
- * - `connected`  : le transport est établi, **uniquement** lorsque le provider
- *                  le rapporte via `setStatus('connected')`. Jamais automatique.
- * - `online`     : le transport est établi **et** la connectivité Internet a été
- *                  **vérifiée à l'exécution** (`verified === true`, donc sur
- *                  **sonde `tcp`/`https` réussie**). Jamais déduit du mode, ni
- *                  d'une adresse syntaxiquement correcte, ni du seul `setStatus`.
- * - `error`      : une erreur normalisée a été enregistrée (`lastError`).
- * - `stopped`    : arrêt/destruction explicites.
+ * - `idle`       : controller created, `start()` not called yet.
+ * - `offline`    : offline mode; **no transport** is established.
+ * - `configured` : the profile was **accepted** (syntactically valid relay), but
+ *                  **the transport is not established yet**. This is the default
+ *                  state returned by `start()` for a mode with a transport: a
+ *                  valid relay URL proves nothing more.
+ * - `connecting` : the transport really started connecting (reported by the
+ *                  provider, never inferred from the mode).
+ * - `connected`  : the transport is established, **only** when the provider
+ *                  reports it through `setStatus('connected')`. Never automatic.
+ * - `online`     : the transport is established **and** Internet connectivity was
+ *                  **verified at runtime** (`verified === true`, i.e. a
+ *                  successful **`tcp`/`https` probe**). Never inferred from the
+ *                  mode, from a syntactically correct address, or from
+ *                  `setStatus` alone.
+ * - `error`      : a normalized error was recorded (`lastError`).
+ * - `stopped`    : explicit stop/disposal.
  */
 export type NetworkStatus =
   'idle' | 'configured' | 'connecting' | 'connected' | 'online' | 'offline' | 'error' | 'stopped';
 
-/** Nature d'une **sonde réseau réelle** exécutée à l'exécution. */
+/** Kind of a **real network probe** run at runtime. */
 export type NetworkProbeKind = 'dns' | 'http' | 'https' | 'tcp';
 
 /**
- * Résultat d'une sonde réseau, **fourni par le provider**. `at` est l'horodatage
- * (ms) de la mesure ; `detail` porte un motif lisible éventuel.
+ * Result of a network probe, **supplied by the provider**. `at` is the
+ * measurement timestamp (ms); `detail` carries an optional human-readable
+ * reason.
  */
 export interface NetworkProbeResult {
   ok: boolean;
@@ -43,21 +45,21 @@ export interface NetworkProbeResult {
 export interface NetworkDiagnostics {
   mode: NetworkMode;
   status: NetworkStatus;
-  /** Backend de transport associé au mode (`none`, `fetch` ou `wisp`). */
+  /** Transport backend associated with the mode (`none`, `fetch` or `wisp`). */
   transport: NetworkTransportKind;
   /**
-   * Vrai **uniquement** sur **preuve réelle** : une sonde `tcp` ou `https`
-   * réussie (`ok`). C'est une **fonctionnalité vérifiée** (runtime), alimentée
-   * par le provider, et **jamais** déduite du mode ni d'une simple sélection de
-   * transport. Les sondes `dns`/`http` ne suffisent pas.
+   * True **only** on **real proof**: a successful `tcp` or `https` probe
+   * (`ok`). This is a **verified feature** (runtime), fed by the provider, and
+   * **never** inferred from the mode or from a mere transport selection. `dns`/
+   * `http` probes are not enough.
    */
   verified: boolean;
   txBytes: number;
   rxBytes: number;
   lastError?: { code: NetworkErrorCode; message: string };
   /**
-   * Dernière sonde connue par nature. Optionnel : absent tant qu'aucune sonde
-   * n'a été rapportée.
+   * Last known probe per kind. Optional: absent as long as no probe has been
+   * reported.
    */
   probes?: Partial<Record<NetworkProbeKind, NetworkProbeResult>>;
 }

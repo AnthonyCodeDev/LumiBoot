@@ -28,10 +28,10 @@ import {
   isDeepInternalSpecifier,
 } from './arch/dependency-graph';
 
-/** Vitest s'exécute depuis la racine du dépôt. */
+/** Vitest runs from the repository root. */
 const repoRoot = process.cwd();
 
-/** Packages qui ne doivent dépendre d'aucun framework d'UI ni de `apps/web`. */
+/** Packages that must not depend on any UI framework or on `apps/web`. */
 const ISOLATED_PACKAGES = [
   'packages/vm-core',
   'packages/vm-network',
@@ -61,17 +61,18 @@ const workspacePackages = collectWorkspacePackages(repoRoot);
 const packageByName = new Map(workspacePackages.map((pkg) => [pkg.name, pkg] as const));
 
 /**
- * Dépendances internes AUTORISÉES, par paquet. Toute arête absente de cette
- * table est interdite : ajouter une dépendance inter-paquets exige une décision
- * explicite (et met à jour cette table + `docs/ARCHITECTURE.md`).
+ * ALLOWED internal dependencies, per package. Any edge missing from this table is
+ * forbidden: adding a cross-package dependency requires an explicit decision
+ * (and updates this table + `docs/ARCHITECTURE.md`).
  *
- * Règles de sens :
- * - `contracts` est une feuille (aucun `@lumiboot/*`) ;
- * - `catalog` ne dépend que des types partagés ;
- * - `vm-core` orchestre (`vm-network` pour le profil réseau) sans connaître les
- *   providers ;
- * - `provider-v86` dépend de l'orchestrateur et des assets, jamais du catalogue ;
- * - `apps/web` assemble, jamais l'inverse.
+ * Direction rules:
+ * - `contracts` is a leaf (no `@lumiboot/*`);
+ * - `catalog` only depends on the shared types;
+ * - `vm-core` orchestrates (`vm-network` for the network profile) without
+ *   knowing the providers;
+ * - `provider-v86` depends on the orchestrator and the assets, never on the
+ *   catalog;
+ * - `apps/web` assembles, never the other way around.
  */
 const ALLOWED_INTERNAL_DEPS: Record<string, readonly string[]> = {
   '@lumiboot/contracts': [],
@@ -97,9 +98,9 @@ const ALLOWED_INTERNAL_DEPS: Record<string, readonly string[]> = {
 };
 
 /**
- * Architectures réellement servies par chaque moteur du catalogue. Sert de
- * contrat de compatibilité `architecture × engineId` : un profil qui associe un
- * système i386 à un moteur x86-64 casse l'invariant runtime.
+ * Architectures actually served by each catalog engine. This is the
+ * `architecture x engineId` compatibility contract: a profile that pairs an
+ * i386 system with an x86-64 engine breaks the runtime invariant.
  */
 const ENGINE_ARCHITECTURES: Record<EngineId, readonly Architecture[]> = {
   v86: ['i386', 'x86'],
@@ -114,22 +115,22 @@ function collectPackageSourceFiles(relDir: string): string[] {
   return collectSourceFiles(join(repoRoot, relDir, 'src'));
 }
 
-describe('isolation architecturale', () => {
+describe('architectural isolation', () => {
   for (const pkg of ISOLATED_PACKAGES) {
-    it(`${pkg} n'importe ni React, ni Zustand, ni le front-end`, () => {
+    it(`${pkg} imports neither React, nor Zustand, nor the front-end`, () => {
       const files = collectSourceFiles(join(repoRoot, pkg, 'src'));
       const violations: string[] = [];
       for (const file of files) {
         const content = readFileSync(file, 'utf8');
         for (const rule of FORBIDDEN) {
-          if (rule.pattern.test(content)) violations.push(`${file} importe ${rule.name}`);
+          if (rule.pattern.test(content)) violations.push(`${file} imports ${rule.name}`);
         }
       }
       expect(violations).toEqual([]);
     });
   }
 
-  it('packages/vm-core reste indépendant du DOM', () => {
+  it('packages/vm-core stays independent from the DOM', () => {
     const files = collectSourceFiles(join(repoRoot, 'packages/vm-core', 'src')).filter(
       (file) => !file.endsWith('.test.ts'),
     );
@@ -137,47 +138,47 @@ describe('isolation architecturale', () => {
     for (const file of files) {
       const content = readFileSync(file, 'utf8');
       for (const rule of VM_CORE_FORBIDDEN) {
-        if (rule.pattern.test(content)) violations.push(`${file} utilise ${rule.name}`);
+        if (rule.pattern.test(content)) violations.push(`${file} uses ${rule.name}`);
       }
     }
     expect(violations).toEqual([]);
   });
 });
 
-describe('frontières de paquets', () => {
-  it('chaque paquet de l’espace de travail déclare ses frontières', () => {
+describe('package boundaries', () => {
+  it('every workspace package declares its boundaries', () => {
     const undeclared = workspacePackages
       .map((pkg) => pkg.name)
       .filter((name) => ALLOWED_INTERNAL_DEPS[name] === undefined);
     expect(undeclared).toEqual([]);
   });
 
-  it('aucun paquet ne dépend d’un paquet interne inexistant', () => {
+  it('no package depends on a non-existent internal package', () => {
     const violations: string[] = [];
     for (const pkg of workspacePackages) {
       for (const dep of pkg.internalDeps) {
         if (!packageByName.has(dep)) {
-          violations.push(`${pkg.name} déclare « ${dep} », absent de l’espace de travail`);
+          violations.push(`${pkg.name} declares "${dep}", missing from the workspace`);
         }
       }
     }
     expect(violations).toEqual([]);
   });
 
-  it('chaque déclaration de dépendance interne reste dans la frontière autorisée', () => {
+  it('every internal dependency declaration stays inside the allowed boundary', () => {
     const violations: string[] = [];
     for (const pkg of workspacePackages) {
       const allowed = ALLOWED_INTERNAL_DEPS[pkg.name] ?? [];
       for (const dep of pkg.internalDeps) {
         if (!allowed.includes(dep)) {
-          violations.push(`${pkg.name} → ${dep} : dépendance interdite`);
+          violations.push(`${pkg.name} -> ${dep}: forbidden dependency`);
         }
       }
     }
     expect(violations).toEqual([]);
   });
 
-  it('les imports réels restent dans les dépendances déclarées (pas de dépendance fantôme)', () => {
+  it('actual imports stay inside the declared dependencies (no phantom dependency)', () => {
     const violations: string[] = [];
     for (const pkg of workspacePackages) {
       const declared = new Set(pkg.internalDeps);
@@ -188,11 +189,11 @@ describe('frontières de paquets', () => {
           const target = internalPackageFromSpecifier(specifier);
           if (target === null) continue;
           if (target === pkg.name) {
-            violations.push(`${pkg.relDir}: ${file} s’importe lui-même via « ${target} »`);
+            violations.push(`${pkg.relDir}: ${file} imports itself via "${target}"`);
           } else if (!declared.has(target)) {
-            violations.push(`${pkg.relDir}: ${file} importe « ${target} » non déclaré`);
+            violations.push(`${pkg.relDir}: ${file} imports undeclared "${target}"`);
           } else if (!allowed.includes(target)) {
-            violations.push(`${pkg.relDir}: ${file} importe « ${target} » hors frontière`);
+            violations.push(`${pkg.relDir}: ${file} imports "${target}" outside its boundary`);
           }
         }
       }
@@ -200,21 +201,21 @@ describe('frontières de paquets', () => {
     expect(violations).toEqual([]);
   });
 
-  it('contracts est une feuille sans aucune dépendance interne', () => {
+  it('contracts is a leaf without any internal dependency', () => {
     const contracts = packageByName.get('@lumiboot/contracts');
     expect(contracts?.internalDeps).toEqual([]);
     const graph = buildPackageImportGraph(workspacePackages);
     expect([...(graph.get('@lumiboot/contracts') ?? [])]).toEqual([]);
   });
 
-  it('aucun import profond `@lumiboot/<pkg>/…` ne contourne la surface publique', () => {
+  it('no deep `@lumiboot/<pkg>/...` import bypasses the public surface', () => {
     const violations: string[] = [];
     for (const pkg of workspacePackages) {
       for (const file of collectPackageSourceFiles(pkg.relDir)) {
         const source = readFileSync(file, 'utf8');
         for (const specifier of extractModuleSpecifiers(source)) {
           if (isDeepInternalSpecifier(specifier)) {
-            violations.push(`${pkg.relDir}: ${file} importe « ${specifier} »`);
+            violations.push(`${pkg.relDir}: ${file} imports "${specifier}"`);
           }
         }
       }
@@ -222,21 +223,21 @@ describe('frontières de paquets', () => {
     expect(violations).toEqual([]);
   });
 
-  it('aucun import relatif ne traverse un autre paquet', () => {
+  it('no relative import crosses another package', () => {
     expect(findCrossPackageRelativeImports(workspacePackages)).toEqual([]);
   });
 });
 
-describe('cycles de dépendances', () => {
-  it('le graphe déclaré est acyclique', () => {
+describe('dependency cycles', () => {
+  it('the declared graph is acyclic', () => {
     expect(findCycles(buildDeclaredPackageGraph(workspacePackages))).toEqual([]);
   });
 
-  it('le graphe d’imports réels est acyclique', () => {
+  it('the actual import graph is acyclic', () => {
     expect(findCycles(buildPackageImportGraph(workspacePackages))).toEqual([]);
   });
 
-  it('l’outil voit réellement les arêtes et les sources (non vacuité)', () => {
+  it('the tool really sees the edges and the sources (non-vacuity)', () => {
     expect(collectPackageSourceFiles('packages/vm-core').length).toBeGreaterThan(0);
     const graph = buildPackageImportGraph(workspacePackages);
     expect([...(graph.get('@lumiboot/provider-v86') ?? [])]).toContain('@lumiboot/vm-core');
@@ -244,7 +245,7 @@ describe('cycles de dépendances', () => {
     expect([...(graph.get('@lumiboot/contracts') ?? [])]).toEqual([]);
   });
 
-  it('le détecteur de cycles détecte réellement un cycle', () => {
+  it('the cycle detector really detects a cycle', () => {
     const graph = new Map<string, Set<string>>([
       ['a', new Set(['b'])],
       ['b', new Set(['c'])],
@@ -255,31 +256,31 @@ describe('cycles de dépendances', () => {
   });
 });
 
-describe('compatibilité runtime profil / engineId', () => {
-  it('chaque profil référence un moteur connu du catalogue', () => {
+describe('runtime profile / engineId compatibility', () => {
+  it('every profile references a catalog engine that exists', () => {
     const violations: string[] = [];
     for (const system of systems) {
       for (const profile of system.launchProfiles) {
         if (engines[profile.engineId] === undefined) {
-          violations.push(`${system.id}/${profile.id} : moteur « ${profile.engineId} » inconnu`);
+          violations.push(`${system.id}/${profile.id}: unknown engine "${profile.engineId}"`);
         }
       }
     }
     expect(violations).toEqual([]);
   });
 
-  it('la table d’architectures couvre exactement les moteurs du catalogue', () => {
+  it('the architecture table covers exactly the catalog engines', () => {
     expect(Object.keys(engines).sort()).toEqual(Object.keys(ENGINE_ARCHITECTURES).sort());
   });
 
-  it('l’architecture du système est supportée par le moteur de chaque profil', () => {
+  it('the system architecture is supported by the engine of every profile', () => {
     const violations: string[] = [];
     for (const system of systems) {
       for (const profile of system.launchProfiles) {
         const supported = ENGINE_ARCHITECTURES[profile.engineId];
         if (supported !== undefined && !supported.includes(system.architecture)) {
           violations.push(
-            `${system.id}/${profile.id} : architecture ${system.architecture} non servie par ${profile.engineId}`,
+            `${system.id}/${profile.id}: architecture ${system.architecture} not served by ${profile.engineId}`,
           );
         }
       }
@@ -287,7 +288,7 @@ describe('compatibilité runtime profil / engineId', () => {
     expect(violations).toEqual([]);
   });
 
-  it('aucun profil validé ne s’appuie sur un moteur non intégré', () => {
+  it('no validated profile relies on a non-integrated engine', () => {
     const violations: string[] = [];
     for (const system of systems) {
       for (const profile of system.launchProfiles) {
@@ -295,7 +296,7 @@ describe('compatibilité runtime profil / engineId', () => {
         if (!engine) continue;
         if (!engine.integrated && system.availability === 'ready') {
           violations.push(
-            `${system.id}/${profile.id} : moteur « ${profile.engineId} » non intégré`,
+            `${system.id}/${profile.id}: engine "${profile.engineId}" not integrated`,
           );
         }
       }
@@ -303,7 +304,7 @@ describe('compatibilité runtime profil / engineId', () => {
     expect(violations).toEqual([]);
   });
 
-  it('checkEngineCompatibility accepte chaque profil intégré avec WebAssembly', () => {
+  it('checkEngineCompatibility accepts every integrated profile with WebAssembly', () => {
     const env = { webAssembly: true, crossOriginIsolated: true };
     const violations: string[] = [];
     for (const system of systems) {
@@ -312,14 +313,14 @@ describe('compatibilité runtime profil / engineId', () => {
         if (!definition?.integrated) continue;
         const result = checkEngineCompatibility(makeStubEngine(profile.engineId), system, env);
         if (!result.compatible) {
-          violations.push(`${system.id}/${profile.id} : ${result.reasons.join(' ')}`);
+          violations.push(`${system.id}/${profile.id}: ${result.reasons.join(' ')}`);
         }
       }
     }
     expect(violations).toEqual([]);
   });
 
-  it('checkEngineCompatibility refuse un environnement sans WebAssembly', () => {
+  it('checkEngineCompatibility rejects an environment without WebAssembly', () => {
     const system = systems.find((candidate) =>
       candidate.launchProfiles.some(
         (profile) => profile.engineId === 'v86' && profile.executionMode === 'browser',
@@ -335,8 +336,8 @@ describe('compatibilité runtime profil / engineId', () => {
   });
 });
 
-describe('concurrence et isolation des sessions', () => {
-  it('deux start() concurrents ne créent qu’une seule instance', async () => {
+describe('session concurrency and isolation', () => {
+  it('two concurrent start() calls create a single instance', async () => {
     const fake = createFakeEngine();
     const lifecycle = new SessionLifecycle(
       systems[0]!,
@@ -351,7 +352,7 @@ describe('concurrence et isolation des sessions', () => {
     await lifecycle.dispose();
   });
 
-  it('deux sessions concurrentes restent isolées', async () => {
+  it('two concurrent sessions stay isolated', async () => {
     const first = createFakeEngine('engine-a');
     const second = createFakeEngine('engine-b');
     const lifecycleA = new SessionLifecycle(
@@ -376,7 +377,7 @@ describe('concurrence et isolation des sessions', () => {
     await Promise.all([lifecycleA.dispose(), lifecycleB.dispose()]);
   });
 
-  it('dispose() pendant un start en vol libère l’instance sans orpheline', async () => {
+  it('dispose() during an in-flight start releases the instance without orphans', async () => {
     const deferred = createDeferredEngine();
     const lifecycle = new SessionLifecycle(
       systems[0]!,
@@ -393,7 +394,7 @@ describe('concurrence et isolation des sessions', () => {
     expect(lifecycle.disposed).toBe(true);
   });
 
-  it('register() est idempotent pour un même moteur', () => {
+  it('register() is idempotent for the same engine', () => {
     const registry = new VMRegistry([]);
     const engine = createFakeEngine().engine;
     registry.register(engine);
@@ -402,7 +403,7 @@ describe('concurrence et isolation des sessions', () => {
   });
 });
 
-/** Moteur factice minimal pour les tests de concurrence du cycle de vie. */
+/** Minimal fake engine for the lifecycle concurrency tests. */
 function createFakeEngine(id = 'fake-engine'): {
   engine: VMEngine;
   starts: () => number;
@@ -439,7 +440,7 @@ function createFakeEngine(id = 'fake-engine'): {
   return { engine, starts: () => starts, instances };
 }
 
-/** Moteur dont `start()` reste en vol jusqu’à `release()`. */
+/** Engine whose `start()` stays in flight until `release()`. */
 function createDeferredEngine(): {
   engine: VMEngine;
   release: () => void;
@@ -481,7 +482,7 @@ function createDeferredEngine(): {
   };
 }
 
-/** Moteur factice reflétant les capacités et `canRun` du catalogue. */
+/** Fake engine mirroring the catalog capabilities and `canRun`. */
 function makeStubEngine(engineId: EngineId): VMEngine {
   return {
     id: engineId,
@@ -499,7 +500,7 @@ function makeStubEngine(engineId: EngineId): VMEngine {
         (profile) => profile.engineId === engineId && profile.executionMode === 'browser',
       ),
     start: async (os: OSDefinition): Promise<VMInstance> => {
-      throw new Error(`Moteur factice : démarrage non supporté pour ${os.id}.`);
+      throw new Error(`Fake engine: start not supported for ${os.id}.`);
     },
   };
 }

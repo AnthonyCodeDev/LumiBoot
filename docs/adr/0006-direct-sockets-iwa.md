@@ -1,19 +1,19 @@
-# ADR 0006 — Direct Sockets dans une Isolated Web App
+# ADR 0006 — Direct Sockets in an Isolated Web App
 
-- Statut : proposé, non implémenté
-- Date : 2026-10-15
+- Status: not implemented
+- Date: 2026-10-15
 
-## Proposition
+## Context
 
-Étudier un transport TCP/UDP direct pour une future Isolated Web App Chrome disposant de la permission `direct-sockets`. Une page Web ou une PWA ordinaire ne possède pas cette API.
+The `direct-sockets` permission exists only in a signed and installed Chrome Isolated Web App, never in a web page or a PWA.
 
-Le transport vivrait dans `@lumiboot/vm-network`, pas dans `VMEngine`. Une pile IP côté navigateur resterait nécessaire pour convertir les trames Ethernet de l'invité en sockets.
+## Decision
 
-## Limites
+No `direct-sockets` transport is implemented. Its place is `@lumiboot/vm-network`, never `VMEngine`; a browser IP stack would convert guest Ethernet frames into sockets.
 
-- aucun code ni mode `direct-sockets` n'existe aujourd'hui ;
-- pas d'ICMP ni de sockets IP bruts ;
-- distribution IWA signée et installée ;
-- trafic sortant depuis l'adresse IP de l'utilisateur.
+## Consequences
 
-Toute implémentation demandera une nouvelle validation de sécurité, de licence et de distribution.
+- No ICMP, no raw IP sockets.
+- Signed IWA distribution to maintain.
+- Outbound traffic from the user's IP.
+- Security, licence and distribution validation required.

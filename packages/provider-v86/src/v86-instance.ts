@@ -12,36 +12,36 @@ export interface V86InstanceDeps {
   readonly systemId: string;
   readonly emulator: V86;
   readonly console: V86ConsoleAdapter;
-  /** Preuve de démarrage attendue (marqueur + canal + délai) issue du profil. */
+  /** Expected boot proof (marker + channel + delay) from the profile. */
   readonly readiness: GuestReadiness;
   readonly id?: string;
   readonly onCleanupError?: (error: unknown) => void;
-  /** Contrôleur réseau optionnel : ses diagnostics sont relayés en événements. */
+  /** Optional network controller: its diagnostics are relayed as events. */
   readonly network?: NetworkController;
 }
 
 /**
- * Phases internes de disponibilité d'une instance, strictement ordonnées :
+ * Internal readiness stages of an instance, strictly ordered:
  *
- * - `idle` : rien n'a encore été observé ;
- * - `emulator-ready` : le WASM de v86 est prêt, l'émulateur peut être lancé ;
- * - `booting` : le noyau/invité a commencé à démarrer (aucune preuve encore) ;
- * - `guest-ready` : la preuve déclarée par le profil est arrivée (marqueur
- *   invité ou lecture disque en `disk-boot`) ;
- * - `unverified` : le délai est échu sans preuve. L'état réel de l'invité reste
- *   NON vérifié : jamais `guest-ready`, jamais `running`.
+ * - `idle`: nothing has been observed yet;
+ * - `emulator-ready`: the v86 WASM is ready, the emulator can be started;
+ * - `booting`: the kernel/guest started booting (no proof yet);
+ * - `guest-ready`: the proof declared by the profile arrived (guest marker or
+ *   disk read in `disk-boot`);
+ * - `unverified`: the delay expired without proof. The real state of the guest
+ *   stays NOT verified: never `guest-ready`, never `running`.
  */
 export type V86ReadinessStage =
   'idle' | 'emulator-ready' | 'booting' | 'guest-ready' | 'unverified';
 
 /**
- * Phases de progression publiées. Elles distinguent explicitement les trois
- * signaux souvent confondus :
- * - `emulatorReady` : WASM chargé (rien de plus) ;
- * - `booting` : démarrage du noyau invité en cours ;
- * - `guestReady` : preuve invité forte (marqueur) ;
- * - `diskBoot` : preuve faible (lecture disque BIOS), jamais un marqueur invité ;
- * - `bootTimeout` : délai échu sans preuve, état non vérifié.
+ * Published progress phases. They explicitly distinguish the three signals that
+ * are often confused:
+ * - `emulatorReady`: WASM loaded (nothing more);
+ * - `booting`: guest kernel startup in progress;
+ * - `guestReady`: strong guest proof (marker);
+ * - `diskBoot`: weak proof (BIOS disk read), never a guest marker;
+ * - `bootTimeout`: delay expired without proof, unverified state.
  */
 export const V86_PROGRESS = {
   emulatorReady: 'emulator-ready',
@@ -51,24 +51,24 @@ export const V86_PROGRESS = {
   bootTimeout: 'boot-timeout',
 } as const;
 
-/** Code d'erreur publié quand aucune preuve de démarrage n'arrive dans le délai. */
+/** Error code published when no boot proof arrives within the delay. */
 export const V86_BOOT_TIMEOUT_CODE = 'BOOT_TIMEOUT';
 
 /**
- * Instance de session adossée à un émulateur v86 unique.
+ * Session instance backed by a single v86 emulator.
  *
- * Garanties :
- * - les événements émis avant le premier `subscribe()` sont mémorisés puis
- *   rejoués dans l'ordre (aucune perte de la phase `booting`) ;
- * - `stop()` / `dispose()` sont idempotents et partagent une même promesse de
- *   nettoyage, même si `destroy()` rejette ;
- * - `running` n'est émis qu'une seule fois, et UNIQUEMENT sur la preuve déclarée
- *   par le profil (marqueur invité, ou lecture disque en `disk-boot`). Le délai
- *   n'est jamais une preuve : son échéance publie `BOOT_TIMEOUT` et laisse
- *   l'invité NON vérifié, sans détruire l'écran ;
- * - un arrêt spontané de l'émulateur (`emulator-stopped`) publie un `stopped`
- *   réconciliable et libère les ressources de façon idempotente ;
- * - aucun événement tardif (`running`, `stopped`) n'est émis après `stop()` /
+ * Guarantees:
+ * - events emitted before the first `subscribe()` are memorized then replayed in
+ *   order (no loss of the `booting` phase);
+ * - `stop()` / `dispose()` are idempotent and share the same cleanup promise,
+ *   even if `destroy()` rejects;
+ * - `running` is emitted only once, and ONLY on the proof declared by the
+ *   profile (guest marker, or disk read in `disk-boot`). The delay is never a
+ *   proof: its expiry publishes `BOOT_TIMEOUT` and leaves the guest NOT
+ *   verified, without destroying the screen;
+ * - a spontaneous stop of the emulator (`emulator-stopped`) publishes a
+ *   reconcilable `stopped` and releases resources idempotently;
+ * - no late event (`running`, `stopped`) is emitted after `stop()` /
  *   `dispose()`.
  */
 export class V86Instance implements VMInstance {
@@ -108,20 +108,20 @@ export class V86Instance implements VMInstance {
     this.#onCleanupError = deps.onCleanupError;
   }
 
-  /** Phase de disponibilité observée (voir {@link V86ReadinessStage}). */
+  /** Observed readiness stage (see {@link V86ReadinessStage}). */
   get readiness(): V86ReadinessStage {
     return this.#readinessStage;
   }
 
-  /** Branche les écouteurs v86. À appeler immédiatement après construction. */
+  /** Wires the v86 listeners. Must be called right after construction. */
   wire(): void {
     const emulator = this.#emulator;
     emulator.add_listener('emulator-ready', this.#onEmulatorReady);
     emulator.add_listener('emulator-stopped', this.#onEmulatorStopped);
     emulator.add_listener('download-progress', this.#onDownloadProgress);
     emulator.add_listener('download-error', this.#onDownloadError);
-    // Le mode de preuve vient du profil : marqueur invité (série/VGA) ou
-    // démarrage disque réel pour un média importé.
+    // The proof mode comes from the profile: guest marker (serial/VGA) or a real
+    // disk boot for an imported media.
     if (this.#detector.mode === 'disk-boot') {
       emulator.add_listener('ide-read-end', this.#onDiskRead);
     } else if (this.#detector.channel === 'vga') {
@@ -130,7 +130,7 @@ export class V86Instance implements VMInstance {
       emulator.add_listener('serial0-output-byte', this.#onSerialByte);
     }
     this.#wireNetwork();
-    // Molette -> Shift+PageUp/PageDown (scrollback console Linux en mode texte).
+    // Wheel -> Shift+PageUp/PageDown (Linux console scrollback in text mode).
     const screen = this.#console.screen;
     if (screen !== null) {
       this.#detachScroll = attachConsoleWheelScroll(screen, this.#emulator);
@@ -144,7 +144,7 @@ export class V86Instance implements VMInstance {
     this.#unsubscribeNetwork = network.subscribe((diagnostics) => {
       this.#emit({ type: 'network', network: diagnostics });
     });
-    // État initial rejoué au premier abonné, même sans changement ultérieur.
+    // Initial state replayed to the first subscriber, even without later change.
     this.#emit({ type: 'network', network: network.snapshot() });
   }
 
@@ -177,13 +177,13 @@ export class V86Instance implements VMInstance {
   }
 
   /**
-   * Publie l'arrêt une seule fois, sous la forme `stopping` puis `stopped`.
+   * Publishes the stop once, as `stopping` then `stopped`.
    *
-   * Le cycle de vie (`SessionStateMachine`) n'autorise PAS la transition directe
-   * `running -> stopped` : un arrêt spontané doit traverser `stopping` pour être
-   * réconcilié. `#emit` neutralise tout envoi après `dispose()`, et le drapeau
-   * partagé rend l'opération idempotente (stop volontaire, arrêt spontané,
-   * `dispose()`). L'arrêt bloque aussi tout `running` tardif (`#stopping`).
+   * The lifecycle (`SessionStateMachine`) does NOT allow the direct
+   * `running -> stopped` transition: a spontaneous stop must traverse `stopping`
+   * to be reconciled. `#emit` neutralizes any send after `dispose()`, and the
+   * shared flag makes the operation idempotent (deliberate stop, spontaneous
+   * stop, `dispose()`). The stop also blocks any late `running` (`#stopping`).
    */
   #signalStopped(): void {
     if (this.#stopSignalled) return;
@@ -204,11 +204,11 @@ export class V86Instance implements VMInstance {
   }
 
   /**
-   * Émet `running` au plus une fois, UNIQUEMENT sur la preuve déclarée par le
-   * profil. `proof` étiquette la transition (`guest-ready` pour un marqueur
-   * invité, `disk-boot` pour une lecture disque) afin de ne jamais présenter une
-   * activité BIOS comme un marqueur invité. Un échec de démarrage déjà publié
-   * (`BOOT_TIMEOUT`) ou un arrêt neutralise toute émission tardive.
+   * Emits `running` at most once, ONLY on the proof declared by the profile.
+   * `proof` labels the transition (`guest-ready` for a guest marker, `disk-boot`
+   * for a disk read) so BIOS activity is never presented as a guest marker. An
+   * already published boot failure (`BOOT_TIMEOUT`) or a stop neutralizes any
+   * late emission.
    */
   #emitRunning(proof: 'guest-marker' | 'disk-boot'): void {
     if (this.#runningEmitted || this.#bootFailed || this.#stopping || this.#disposed) return;
@@ -224,28 +224,25 @@ export class V86Instance implements VMInstance {
 
   readonly #onEmulatorReady = (): void => {
     if (this.#disposed || this.#stopping) return;
-    // Étape 1 : le WASM de v86 est prêt. Cela ne prouve RIEN sur l'invité.
+    // Step 1: the v86 WASM is ready. This proves NOTHING about the guest.
     this.#readinessStage = 'emulator-ready';
     this.#emit({ type: 'progress', phase: V86_PROGRESS.emulatorReady });
-    // Étape 2 : on lance réellement l'émulateur ; le noyau invité DÉBUTE.
+    // Step 2: we actually start the emulator; the guest kernel BEGINS.
     this.#readinessStage = 'booting';
     this.#emit({ type: 'progress', phase: V86_PROGRESS.booting });
     this.#armReadyTimeout();
     void this.#emulator.run().catch((error: unknown) => {
-      this.#failBoot(
-        'START_FAILED',
-        `Le noyau invité n'a pas pu démarrer : ${describeError(error)}`,
-      );
+      this.#failBoot('START_FAILED', `The guest kernel could not boot: ${describeError(error)}`);
     });
   };
 
   /**
-   * Arme le délai d'attente de la preuve, issu de `readiness.timeoutMs`.
+   * Arms the proof timeout, taken from `readiness.timeoutMs`.
    *
-   * La preuve reste le SEUL chemin vers `running`. À l'échéance sans preuve, on
-   * publie un échec explicite `BOOT_TIMEOUT` : l'état de l'invité reste NON
-   * vérifié et `running` n'est jamais simulé. On ne détruit ni l'émulateur ni la
-   * console : l'écran reste visible et vivant pour le diagnostic.
+   * The proof remains the ONLY path to `running`. On expiry without proof, an
+   * explicit `BOOT_TIMEOUT` failure is published: the guest state stays NOT
+   * verified and `running` is never simulated. Neither the emulator nor the
+   * console is destroyed: the screen stays visible and alive for diagnostics.
    */
   #armReadyTimeout(): void {
     if (this.#readyTimer !== null) return;
@@ -259,9 +256,9 @@ export class V86Instance implements VMInstance {
   }
 
   /**
-   * Échéance du délai sans preuve. Publie `BOOT_TIMEOUT` et fige l'invité en
-   * `unverified`. Aucun nettoyage : l'écran (VGA/série) doit rester affiché.
-   * Toute preuve ultérieure est ignorée par `#emitRunning` (`#bootFailed`).
+   * Timeout expiry without proof. Publishes `BOOT_TIMEOUT` and freezes the guest
+   * as `unverified`. No cleanup: the screen (VGA/serial) must stay displayed.
+   * Any later proof is ignored by `#emitRunning` (`#bootFailed`).
    */
   #bootTimedOut(): void {
     this.#bootFailed = true;
@@ -277,9 +274,9 @@ export class V86Instance implements VMInstance {
   #describeBootTimeout(): string {
     const seconds = Math.round(this.#detector.timeoutMs / 1000);
     return (
-      `Preuve de démarrage absente après ${seconds} s : ` +
-      `${this.#detector.describeExpectedProof()} n'a pas été observée. ` +
-      'Le démarrage de l’invité reste NON vérifié (aucun état « running » simulé).'
+      `Boot proof missing after ${seconds}s: ` +
+      `${this.#detector.describeExpectedProof()} was not observed. ` +
+      'The guest boot stays NOT verified (no simulated "running" state).'
     );
   }
 
@@ -290,13 +287,13 @@ export class V86Instance implements VMInstance {
   }
 
   /**
-   * Échec fatal d'amorçage : publie l'erreur puis libère immédiatement les
-   * ressources (listeners v86/réseau, émulateur, **et** `NetworkController`).
+   * Fatal boot failure: publishes the error then immediately releases the
+   * resources (v86/network listeners, emulator, **and** `NetworkController`).
    *
-   * On appelle `#cleanup()` plutôt que `dispose()` pour ne pas effacer les
-   * événements en attente de rejeu : un abonné tardif voit toujours l'erreur.
-   * Le nettoyage reste idempotent (`#cleanupPromise` partagée), donc un
-   * `stop()`/`dispose()` ultérieur de l'hôte est sans effet supplémentaire.
+   * We call `#cleanup()` instead of `dispose()` so pending replay events are not
+   * erased: a late subscriber always sees the error. Cleanup stays idempotent
+   * (shared `#cleanupPromise`), so a later host `stop()`/`dispose()` has no
+   * additional effect.
    */
   #failBoot(code: string, message: string): void {
     this.#emit({ type: 'error', code, message });
@@ -310,7 +307,7 @@ export class V86Instance implements VMInstance {
     }
   };
 
-  /** Canal VGA : la preuve est lue sur la sortie texte de l'écran. */
+  /** VGA channel: the proof is read from the screen text output. */
   readonly #onScreenChar = (arg: V86Event['screen-put-char']): void => {
     if (this.#disposed || this.#stopping || this.#bootFailed) return;
     if (this.#detector.pushByte(arg[2])) {
@@ -319,11 +316,11 @@ export class V86Instance implements VMInstance {
   };
 
   /**
-   * Mode `disk-boot` : la preuve est la première lecture réelle du disque dur
-   * (`hda`, canal 0). C'est une preuve FAIBLE : une activité d'amorçage BIOS,
-   * PAS un marqueur prouvant un OS opérationnel. Elle est étiquetée `disk-boot`
-   * pour ne jamais passer pour une preuve invité. Un média non amorçable n'en
-   * produit pas ; aucun `running` n'est alors simulé (voir `#bootTimedOut`).
+   * `disk-boot` mode: the proof is the first real read of the hard disk (`hda`,
+   * channel 0). It is a WEAK proof: BIOS boot activity, NOT a marker proving an
+   * operational OS. It is labeled `disk-boot` so it never passes for a guest
+   * proof. A non-bootable media produces none; no `running` is then simulated
+   * (see `#bootTimedOut`).
    */
   readonly #onDiskRead = (arg: V86Event['ide-read-end']): void => {
     if (this.#disposed || this.#stopping || this.#bootFailed) return;
@@ -347,21 +344,18 @@ export class V86Instance implements VMInstance {
 
   readonly #onDownloadError = (arg: V86Event['download-error']): void => {
     if (this.#disposed || this.#stopping) return;
-    // Un téléchargement d'artefact raté est fatal : même libération que pour
-    // une erreur de `run()` (aucune ressource ne doit rester orpheline).
-    this.#failBoot(
-      'ASSET_DOWNLOAD_FAILED',
-      `Échec du chargement de l'artefact « ${arg.file_name} ».`,
-    );
+    // A failed artifact download is fatal: same release as for a `run()` error
+    // (no resource must stay orphaned).
+    this.#failBoot('ASSET_DOWNLOAD_FAILED', `Failed to load artifact "${arg.file_name}".`);
   };
 
   readonly #onEmulatorStopped = (): void => {
-    // Un arrêt volontaire est déjà signalé par `stop()` ; on ignore l'écho.
+    // A deliberate stop is already signalled by `stop()`; the echo is ignored.
     if (this.#disposed || this.#stopping) return;
-    // Arrêt spontané (extinction/crash invité) : on publie `stopped` pour que le
-    // cycle de vie puisse réconcilier, puis on libère idempotemment (listeners,
-    // émulateur, console, réseau). `#cleanup()` est partagé avec `stop()` /
-    // `dispose()` : une seule libération effective.
+    // Spontaneous stop (guest shutdown/crash): `stopped` is published so the
+    // lifecycle can reconcile, then resources are released idempotently
+    // (listeners, emulator, console, network). `#cleanup()` is shared with
+    // `stop()` / `dispose()`: a single effective release.
     this.#signalStopped();
     void this.#cleanup();
   };

@@ -15,19 +15,19 @@ func TestCounters(t *testing.T) {
 
 	snap := c.Snapshot()
 	if snap.TotalConnections != 2 || snap.ActiveConnections != 1 {
-		t.Fatalf("connexions: %+v", snap)
+		t.Fatalf("connections: %+v", snap)
 	}
 	if snap.BytesTX != 100 || snap.BytesRX != 50 {
-		t.Fatalf("octets: %+v", snap)
+		t.Fatalf("bytes: %+v", snap)
 	}
 	if snap.Errors != 1 || snap.BlockedDestinations != 1 || snap.RejectedAuth != 1 {
-		t.Fatalf("erreurs: %+v", snap)
+		t.Fatalf("errors: %+v", snap)
 	}
 
-	// Jamais sous zéro.
+	// Never below zero.
 	c.DecConnections()
 	c.DecConnections()
 	if got := c.Snapshot().ActiveConnections; got != 0 {
-		t.Fatalf("actives sous zéro: %d", got)
+		t.Fatalf("active below zero: %d", got)
 	}
 }

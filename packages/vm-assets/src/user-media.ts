@@ -4,30 +4,30 @@ import { AssetError } from './errors';
 import { sha256Hex } from './hash';
 
 /**
- * Média système fourni **localement par l'utilisateur** (import navigateur).
+ * System media provided **locally by the user** (browser import).
  *
- * LumiBoot ne distribue ni ne télécharge aucun média propriétaire (Windows,
- * macOS). Ce module décrit, valide et conserve uniquement les métadonnées du
- * fichier choisi par l'utilisateur ; les octets restent dans son navigateur
- * (blob en mémoire ou IndexedDB côté `apps/web`). Voir docs/windows-7.md.
+ * LumiBoot neither distributes nor downloads any proprietary media (Windows,
+ * macOS). This module only describes, validates and keeps the metadata of the
+ * file chosen by the user; the bytes stay in their browser (in-memory blob or
+ * IndexedDB on the `apps/web` side). See docs/windows-7.md.
  */
 
 const HEX64 = /^[0-9a-f]{64}$/i;
 const IMAGE_REF = /^[a-z0-9-]+$/;
 
 /**
- * Manifeste optionnel qu'un utilisateur peut fournir avec son propre média pour
- * permettre une vérification d'intégrité (taille, SHA-256). Il ne contient
- * jamais l'image elle-même — seulement des métadonnées et une provenance.
+ * Optional manifest a user may provide with their own media to allow an
+ * integrity check (size, SHA-256). It never contains the image itself — only
+ * metadata and a provenance.
  */
 export const userMediaManifestSchema = z
   .object({
     version: z.literal(1),
-    ref: z.string().regex(IMAGE_REF, 'référence : minuscules, chiffres et tirets'),
+    ref: z.string().regex(IMAGE_REF, 'reference: lowercase letters, digits and dashes'),
     displayName: z.string().min(1),
     format: vmMediaFormatSchema,
     architecture: z.enum(['i386', 'x86', 'x86_64', 'arm', 'arm64', 'powerpc', 'm68k']),
-    sha256: z.string().regex(HEX64, 'SHA-256 hexadécimal de 64 caractères attendu').optional(),
+    sha256: z.string().regex(HEX64, '64-character hexadecimal SHA-256 expected').optional(),
     sizeBytes: z.number().int().positive().optional(),
     license: z.string().min(1),
     provenance: z.string().min(1),
@@ -37,11 +37,11 @@ export const userMediaManifestSchema = z
 
 export type UserMediaManifest = z.infer<typeof userMediaManifestSchema>;
 
-/** État d'intégrité réellement constaté d'un média importé. */
+/** Integrity state actually observed for an imported media. */
 export type UserMediaIntegrity =
-  /** SHA-256 recalculé ET conforme au manifeste fourni par l'utilisateur. */
+  /** SHA-256 recomputed AND matching the manifest provided by the user. */
   | 'verified'
-  /** Aucune vérification possible (pas d'empreinte de référence, ou fichier trop gros). */
+  /** No possible verification (no reference checksum, or file too large). */
   | 'unverified';
 
 export interface UserMediaDescriptor {
@@ -60,13 +60,13 @@ export interface UserMediaInput {
   readonly displayName: string;
   readonly fileName: string;
   readonly format: VMMediaFormat;
-  /** L'utilisateur atteste détenir une licence/média légal et autorisé. */
+  /** The user certifies holding a legal and authorized license/media. */
   readonly licenseAcknowledged: boolean;
 }
 
 /**
- * Persistance des médias importés. Le contrat ne présume PAS du stockage :
- * mémoire (tests), IndexedDB/OPFS (navigateur, voir `apps/web`).
+ * Persistence of imported media. The contract does NOT presume the storage:
+ * memory (tests), IndexedDB/OPFS (browser, see `apps/web`).
  */
 export interface UserMediaStore {
   get(ref: string): Promise<UserMediaDescriptor | null>;
@@ -76,44 +76,44 @@ export interface UserMediaStore {
   remove(ref: string): Promise<void>;
 }
 
-/** Taille maximale hachée par défaut (256 Mio) — au-delà, vérification ignorée. */
+/** Maximum size hashed by default (256 MiB) — beyond it, verification is skipped. */
 export const DEFAULT_MAX_HASH_BYTES = 256 * 1024 * 1024;
 
 export interface UserMediaImportOptions {
-  /** Empreinte attendue (manifeste utilisateur) : si absente, intégrité `unverified`. */
+  /** Expected checksum (user manifest): if absent, integrity is `unverified`. */
   readonly expectedSha256?: string;
-  /** Taille attendue (manifeste utilisateur) : rejet si différente. */
+  /** Expected size (user manifest): rejected if different. */
   readonly expectedSize?: number;
-  /** Cap de hachage (défaut 256 Mio) ; au-delà, l'intégrité reste `unverified`. */
+  /** Hashing cap (256 MiB default); beyond it, integrity stays `unverified`. */
   readonly maxHashBytes?: number;
-  /** Implémentation de hachage injectable (tests). */
+  /** Injectable hashing implementation (tests). */
   readonly hash?: (bytes: Blob) => Promise<string>;
 }
 
 /**
- * Valide un manifeste utilisateur. Lève un `AssetError` explicite en cas
- * d'incohérence, jamais une erreur anonyme.
+ * Validates a user manifest. Throws an explicit `AssetError` on inconsistency,
+ * never an anonymous error.
  */
 export function parseUserMediaManifest(input: unknown): UserMediaManifest {
   const parsed = userMediaManifestSchema.safeParse(input);
   if (!parsed.success) {
     const details = parsed.error.issues
-      .map((issue) => `${issue.path.join('.') || 'manifeste'} : ${issue.message}`)
-      .join(' ; ');
-    throw new AssetError('ASSET_INVALID_MANIFEST', `Manifeste utilisateur invalide — ${details}`);
+      .map((issue) => `${issue.path.join('.') || 'manifest'}: ${issue.message}`)
+      .join('; ');
+    throw new AssetError('ASSET_INVALID_MANIFEST', `Invalid user manifest — ${details}`);
   }
   return parsed.data;
 }
 
 /**
- * Importe un média utilisateur : contrôle la licence, la taille et (si fourni)
- * le SHA-256, puis persiste métadonnées + octets dans le store.
+ * Imports a user media: checks the license, the size and (if provided) the
+ * SHA-256, then persists metadata + bytes in the store.
  *
- * Règles d'honnêteté :
- * - sans attestation de licence, l'import est refusé ;
- * - une taille ou une empreinte attendue non respectée fait échouer l'import ;
- * - sans empreinte de référence, le média est marqué `unverified` : l'interface
- *   ne doit jamais le présenter comme vérifié.
+ * Honesty rules:
+ * - without a license acknowledgement, the import is rejected;
+ * - an unexpected size or checksum makes the import fail;
+ * - without a reference checksum, the media is marked `unverified`: the
+ *   interface must never present it as verified.
  */
 export async function importUserMedia(
   store: UserMediaStore,
@@ -124,7 +124,7 @@ export async function importUserMedia(
   if (!input.licenseAcknowledged) {
     throw new AssetError(
       'ASSET_IMPORT_REJECTED',
-      'Import refusé : la licence et le droit d’usage du média doivent être attestés.',
+      'Import rejected: the license and the right to use the media must be acknowledged.',
       { ref: input.ref },
     );
   }
@@ -132,7 +132,7 @@ export async function importUserMedia(
   if (options.expectedSize !== undefined && bytes.size !== options.expectedSize) {
     throw new AssetError(
       'ASSET_SIZE_MISMATCH',
-      `Taille inattendue pour « ${input.fileName} » : ${bytes.size} octets au lieu de ${options.expectedSize}.`,
+      `Unexpected size for "${input.fileName}": ${bytes.size} bytes instead of ${options.expectedSize}.`,
       { ref: input.ref },
     );
   }
@@ -159,8 +159,8 @@ export async function importUserMedia(
 }
 
 /**
- * Calcule l'empreinte seulement si une référence est attendue et si le fichier
- * reste sous le cap. Sinon retourne `null` (aucune vérification).
+ * Computes the checksum only if a reference is expected and if the file stays
+ * under the cap. Otherwise returns `null` (no verification).
  */
 async function resolveIntegrity(
   bytes: Blob,
@@ -174,10 +174,10 @@ async function resolveIntegrity(
   const hash = options.hash ?? defaultHash;
   const computed = await hash(bytes);
   if (!HEX64.test(computed)) {
-    throw new AssetError('ASSET_INVALID_MANIFEST', 'Empreinte SHA-256 calculée invalide.');
+    throw new AssetError('ASSET_INVALID_MANIFEST', 'Invalid computed SHA-256 checksum.');
   }
   if (computed.toLowerCase() !== options.expectedSha256.toLowerCase()) {
-    throw new AssetError('ASSET_CHECKSUM_MISMATCH', 'Empreinte SHA-256 non conforme au média.');
+    throw new AssetError('ASSET_CHECKSUM_MISMATCH', 'SHA-256 checksum does not match the media.');
   }
   return computed.toLowerCase();
 }
@@ -187,7 +187,7 @@ async function defaultHash(bytes: Blob): Promise<string> {
   return sha256Hex(buffer);
 }
 
-/** Store en mémoire (tests, fallback sans persistance navigateur). */
+/** In-memory store (tests, fallback without browser persistence). */
 export function createMemoryUserMediaStore(): UserMediaStore {
   const entries = new Map<string, { descriptor: UserMediaDescriptor; bytes: Blob }>();
   return {

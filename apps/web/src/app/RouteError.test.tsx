@@ -4,7 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { RouteError } from './RouteError';
 
 function Boom(): never {
-  throw new Error('échec de rendu simulé');
+  throw new Error('simulated render failure');
 }
 
 function renderErrorRouter() {
@@ -27,26 +27,26 @@ describe('RouteError', () => {
     vi.restoreAllMocks();
   });
 
-  it('affiche une page conviviale avec un lien de retour à la bibliothèque', async () => {
+  it('shows a friendly page with a link back to the library', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     renderErrorRouter();
 
-    expect(await screen.findByRole('heading', { name: /Oups, quelque chose/ })).toBeTruthy();
-    expect(
-      screen.getByRole('link', { name: 'Retour à la bibliothèque' }).getAttribute('href'),
-    ).toBe('/');
-    expect(screen.getByRole('button', { name: 'Recharger la page' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /Something went wrong/ })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Back to the library' }).getAttribute('href')).toBe(
+      '/',
+    );
+    expect(screen.getByRole('button', { name: 'Reload the page' })).toBeTruthy();
     expect(screen.getByRole('alert')).toBeTruthy();
   });
 
-  it("n'expose pas le détail technique hors développement", async () => {
+  it('does not expose technical details outside development', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubEnv('DEV', false);
 
     renderErrorRouter();
 
-    expect(await screen.findByRole('heading', { name: /Oups, quelque chose/ })).toBeTruthy();
-    expect(screen.queryByText('échec de rendu simulé')).toBeNull();
+    expect(await screen.findByRole('heading', { name: /Something went wrong/ })).toBeTruthy();
+    expect(screen.queryByText('simulated render failure')).toBeNull();
   });
 });

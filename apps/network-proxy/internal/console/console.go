@@ -1,7 +1,7 @@
-// Package console fournit une console interactive pour piloter le proxy réseau
-// local depuis le terminal : affichage des demandes d'appairage (accepter/refuser),
-// sessions actives et révocation. Aucun accès HTTP n'est nécessaire ; la page
-// d'administration web a été retirée.
+// Package console provides an interactive console to drive the local network
+// proxy from the terminal: display pairing requests (approve/deny), active
+// sessions and revocation. No HTTP access is needed; the web administration
+// page has been removed.
 package console
 
 import (
@@ -17,8 +17,8 @@ import (
 	"github.com/lumiboot/network-proxy/internal/auth"
 )
 
-// Controller est l'abstraction minimale dont la console a besoin pour piloter
-// l'appairage et les sessions. *auth.Authenticator la satisfait directement.
+// Controller is the minimal abstraction the console needs to drive pairing and
+// sessions. *auth.Authenticator satisfies it directly.
 type Controller interface {
 	PendingPairings() []auth.Pairing
 	ListSessions() []auth.SessionInfo
@@ -26,9 +26,9 @@ type Controller interface {
 	AdminRevoke(id string) bool
 }
 
-// Console pilote l'appairage depuis un flux d'entrée/sortie textuel.
-// La boucle interactive (Run) s'exécute dans une seule goroutine ; les
-// écritures sont protégées par un mutex.
+// Console drives pairing from a textual input/output stream.
+// The interactive loop (Run) executes in a single goroutine; writes are
+// protected by a mutex.
 type Console struct {
 	ctrl Controller
 	in   io.Reader
@@ -36,7 +36,7 @@ type Console struct {
 
 	pollInterval time.Duration
 
-	mu sync.Mutex // protège les écritures sur out
+	mu sync.Mutex // protects writes to out
 
 	seenPairings   map[string]struct{}
 	seenSessions   map[string]struct{}
@@ -45,7 +45,7 @@ type Console struct {
 	queue          []auth.Pairing
 }
 
-// New construit une console alimentée par in et écrivant sur out.
+// New builds a console fed by in and writing to out.
 func New(ctrl Controller, in io.Reader, out io.Writer) *Console {
 	return &Console{
 		ctrl:         ctrl,
@@ -57,9 +57,9 @@ func New(ctrl Controller, in io.Reader, out io.Writer) *Console {
 	}
 }
 
-// Run exécute la boucle interactive jusqu'à `quit`/`exit`, fin de l'entrée
-// (EOF) ou annulation du contexte. La goroutine de lecture gère EOF sans
-// bloquer (entrée non interactive / pipe).
+// Run executes the interactive loop until `quit`/`exit`, end of input (EOF) or
+// context cancellation. The reader goroutine handles EOF without blocking
+// (non-interactive input / pipe).
 func (c *Console) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -89,7 +89,7 @@ func (c *Console) Run(ctx context.Context) error {
 	}
 }
 
-// readLines lit stdin ligne par ligne et pousse vers lines ; ferme lines à EOF.
+// readLines reads stdin line by line and pushes into lines; closes lines on EOF.
 func (c *Console) readLines(ctx context.Context, lines chan<- string) {
 	defer close(lines)
 	sc := bufio.NewScanner(c.in)
@@ -103,13 +103,13 @@ func (c *Console) readLines(ctx context.Context, lines chan<- string) {
 	}
 }
 
-// poll interroge le contrôleur : annonce les nouvelles demandes et sessions,
-// puis affiche le prompt de décision pour la prochaine demande.
+// poll queries the controller: announces new requests and sessions, then shows
+// the decision prompt for the next request.
 func (c *Console) poll() {
 	pending := c.ctrl.PendingPairings()
 	sessions := c.ctrl.ListSessions()
 
-	// Nouvelles demandes d'appairage (jamais ré-annoncées).
+	// New pairing requests (never announced twice).
 	for _, p := range pending {
 		if _, ok := c.seenPairings[p.ID]; ok {
 			continue
@@ -118,8 +118,8 @@ func (c *Console) poll() {
 		c.queue = append(c.queue, p)
 	}
 
-	// Nouvelles sessions (les sessions déjà présentes au démarrage sont
-	// mémorisées sans annonce individuelle).
+	// New sessions (sessions already present at startup are remembered without
+	// an individual announcement).
 	var fresh []auth.SessionInfo
 	if !c.sessionsSeeded {
 		c.sessionsSeeded = true
@@ -141,7 +141,7 @@ func (c *Console) poll() {
 	c.promptNext()
 }
 
-// promptNext affiche le prompt de décision pour la demande suivante.
+// promptNext shows the decision prompt for the next request.
 func (c *Console) promptNext() {
 	if c.awaiting != nil || len(c.queue) == 0 {
 		return
@@ -150,12 +150,12 @@ func (c *Console) promptNext() {
 	c.queue = c.queue[1:]
 	c.awaiting = &p
 	c.announcePairing(p)
-	c.write("Approuver ? [y/N] ")
+	c.write("Approve? [y/N] ")
 }
 
-// handleLine traite une ligne saisie. Si une décision d'appairage est en
-// attente, la ligne est interprétée comme la réponse (y/yes/o/oui = approbation,
-// tout le reste = refus). Renvoie true pour demander l'arrêt.
+// handleLine processes an entered line. If a pairing decision is pending, the
+// line is interpreted as the answer (y/yes/o/oui = approve, anything else =
+// deny). Returns true to request shutdown.
 func (c *Console) handleLine(line string) (quit bool) {
 	line = strings.TrimSpace(line)
 	if c.awaiting != nil {
@@ -163,11 +163,11 @@ func (c *Console) handleLine(line string) (quit bool) {
 		c.awaiting = nil
 		approve := isAffirmative(line)
 		if err := c.ctrl.Approve(p.ID, approve); err != nil {
-			c.printf("Échec de la décision pour %s : %v\n", p.UserCode, err)
+			c.printf("Decision failed for %s: %v\n", p.UserCode, err)
 		} else if approve {
-			c.printf("Approuvé : %s (%s).\n", p.UserCode, p.Origin)
+			c.printf("Approved: %s (%s).\n", p.UserCode, p.Origin)
 		} else {
-			c.printf("Refusé : %s (%s).\n", p.UserCode, p.Origin)
+			c.printf("Denied: %s (%s).\n", p.UserCode, p.Origin)
 		}
 		c.promptNext()
 		return false
@@ -175,7 +175,7 @@ func (c *Console) handleLine(line string) (quit bool) {
 	return c.handleCommand(line)
 }
 
-// handleCommand exécute une commande textuelle.
+// handleCommand executes a textual command.
 func (c *Console) handleCommand(line string) (quit bool) {
 	if line == "" {
 		return false
@@ -193,41 +193,41 @@ func (c *Console) handleCommand(line string) (quit bool) {
 	case "revoke":
 		c.revoke(arg)
 	case "quit", "exit":
-		c.write("Arrêt demandé.\n")
+		c.write("Shutdown requested.\n")
 		return true
 	default:
-		c.printf("Commande inconnue : %q. Tapez « help ».\n", cmd)
+		c.printf("Unknown command: %q. Type \"help\".\n", cmd)
 	}
 	return false
 }
 
-// decide approuve ou refuse une demande identifiée par ID ou code utilisateur.
+// decide approves or denies a request identified by ID or user code.
 func (c *Console) decide(arg string, approve bool) {
 	if arg == "" {
-		c.write("Usage : approve|deny <id|code>.\n")
+		c.write("Usage: approve|deny <id|code>.\n")
 		return
 	}
 	p, ok := c.findPending(arg)
 	if !ok {
-		c.printf("Demande introuvable pour %q.\n", arg)
+		c.printf("No matching request for %q.\n", arg)
 		return
 	}
 	c.removeFromQueue(p.ID)
 	if err := c.ctrl.Approve(p.ID, approve); err != nil {
-		c.printf("Échec : %v\n", err)
+		c.printf("Failed: %v\n", err)
 		return
 	}
 	if approve {
-		c.printf("Approuvé : %s (%s).\n", p.UserCode, p.Origin)
+		c.printf("Approved: %s (%s).\n", p.UserCode, p.Origin)
 	} else {
-		c.printf("Refusé : %s (%s).\n", p.UserCode, p.Origin)
+		c.printf("Denied: %s (%s).\n", p.UserCode, p.Origin)
 	}
 }
 
-// revoke révoque une session par ID (ou préfixe unique), ou toutes.
+// revoke revokes a session by ID (or unique prefix), or all of them.
 func (c *Console) revoke(arg string) {
 	if arg == "" {
-		c.write("Usage : revoke <id|all>.\n")
+		c.write("Usage: revoke <id|all>.\n")
 		return
 	}
 	if strings.EqualFold(arg, "all") {
@@ -237,18 +237,18 @@ func (c *Console) revoke(arg string) {
 				n++
 			}
 		}
-		c.printf("%d session(s) révoquée(s).\n", n)
+		c.printf("%d session(s) revoked.\n", n)
 		return
 	}
 	id, ok := c.findSession(arg)
 	if !ok {
-		c.printf("Session introuvable : %q.\n", arg)
+		c.printf("Session not found: %q.\n", arg)
 		return
 	}
 	if c.ctrl.AdminRevoke(id) {
-		c.printf("Session révoquée : %s\n", id)
+		c.printf("Session revoked: %s\n", id)
 	} else {
-		c.printf("Échec de la révocation : %s\n", id)
+		c.printf("Revocation failed: %s\n", id)
 	}
 }
 
@@ -297,41 +297,41 @@ func (c *Console) printStatus() {
 	pending := c.ctrl.PendingPairings()
 	sessions := c.ctrl.ListSessions()
 
-	c.write("\nÉtat du proxy réseau local\n")
-	c.printf("  Demandes d'appairage en attente : %d\n", len(pending))
+	c.write("\nLocal network proxy status\n")
+	c.printf("  Pending pairing requests: %d\n", len(pending))
 	for _, p := range pending {
-		c.printf("    - code %s | %s | expire %s\n", p.UserCode, p.Origin, formatTime(p.ExpiresAt))
+		c.printf("    - code %s | %s | expires %s\n", p.UserCode, p.Origin, formatTime(p.ExpiresAt))
 	}
-	c.printf("  Sessions actives : %d\n", len(sessions))
+	c.printf("  Active sessions: %d\n", len(sessions))
 	for _, s := range sessions {
-		c.printf("    - %s | %s | expire %s\n", s.ID, s.Origin, formatTime(s.ExpiresAt))
+		c.printf("    - %s | %s | expires %s\n", s.ID, s.Origin, formatTime(s.ExpiresAt))
 	}
 	c.write("\n")
 }
 
 func (c *Console) printHelp() {
-	c.write(`Commandes :
-  help                 affiche cette aide
-  list, status         état, demandes en attente et sessions actives
-  approve <id|code>    approuve une demande d'appairage
-  deny <id|code>       refuse une demande d'appairage
-  revoke <id|all>      révoque une session (ou toutes)
-  quit, exit           arrête le proxy réseau local
+	c.write(`Commands:
+  help                 show this help
+  list, status         status, pending requests and active sessions
+  approve <id|code>    approve a pairing request
+  deny <id|code>       deny a pairing request
+  revoke <id|all>      revoke a session (or all of them)
+  quit, exit           stop the local network proxy
 `)
 }
 
 func (c *Console) announcePairing(p auth.Pairing) {
-	c.write("\n[Nouvelle demande d'appairage]\n")
-	c.printf("  Origine : %s\n", p.Origin)
+	c.write("\n[New pairing request]\n")
+	c.printf("  Origin  : %s\n", p.Origin)
 	c.printf("  Code    : %s\n", p.UserCode)
-	c.printf("  Expire  : %s\n", formatTime(p.ExpiresAt))
+	c.printf("  Expires : %s\n", formatTime(p.ExpiresAt))
 }
 
 func (c *Console) announceSession(s auth.SessionInfo) {
-	c.write("\n[Nouvelle session active]\n")
+	c.write("\n[New active session]\n")
 	c.printf("  ID      : %s\n", s.ID)
-	c.printf("  Origine : %s\n", s.Origin)
-	c.printf("  Expire  : %s\n", formatTime(s.ExpiresAt))
+	c.printf("  Origin  : %s\n", s.Origin)
+	c.printf("  Expires : %s\n", formatTime(s.ExpiresAt))
 }
 
 func (c *Console) write(s string) {
@@ -344,7 +344,8 @@ func (c *Console) printf(format string, args ...any) {
 	c.write(fmt.Sprintf(format, args...))
 }
 
-// parseCommand découpe une ligne en commande (minuscules) et argument éventuel.
+// parseCommand splits a line into a command (lowercase) and an optional
+// argument.
 func parseCommand(line string) (cmd, arg string) {
 	line = strings.TrimSpace(line)
 	if line == "" {

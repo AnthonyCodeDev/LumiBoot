@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 describe('checkProxy', () => {
-  it('proxy réseau local arrêté (erreur réseau) → not-running', async () => {
+  it('local network proxy stopped (network error) → not-running', async () => {
     const health = await checkProxy(
       'http://127.0.0.1:37892',
       fetchFail(new TypeError('Failed to fetch')),
@@ -36,7 +36,7 @@ describe('checkProxy', () => {
     expect(health.state).toBe('not-running');
   });
 
-  it('réponse non-JSON / forme inattendue → incompatible', async () => {
+  it('non-JSON response / unexpected shape → incompatible', async () => {
     const fetchImpl = (async () =>
       ({
         ok: true,
@@ -51,7 +51,7 @@ describe('checkProxy', () => {
     );
   });
 
-  it('wispVersion différente → incompatible', async () => {
+  it('different wispVersion → incompatible', async () => {
     const health = await checkProxy(
       'http://127.0.0.1:37892',
       fetchOk({ status: 'ok', version: '9.9.9', wispVersion: 2 }),
@@ -60,7 +60,7 @@ describe('checkProxy', () => {
     expect(health.wispVersion).toBe(2);
   });
 
-  it('succès /health → connected (joint)', async () => {
+  it('healthy /health → connected (reached)', async () => {
     const health = await checkProxy(
       'http://127.0.0.1:37892',
       fetchOk({ status: 'ok', version: '0.1.0', wispVersion: 1 }),
@@ -68,7 +68,7 @@ describe('checkProxy', () => {
     expect(health).toMatchObject({ state: 'connected', wispVersion: 1 });
   });
 
-  it('TypeError en contexte sécurisé Chromium → error incertain (jamais affirmé)', async () => {
+  it('TypeError in a secure Chromium context → uncertain error (never asserted)', async () => {
     Object.defineProperty(window, 'isSecureContext', {
       value: true,
       configurable: true,
@@ -83,6 +83,6 @@ describe('checkProxy', () => {
     );
     expect(health.state).toBe('error');
     expect(health.uncertain).toBe(true);
-    expect(health.error).toMatch(/proxy réseau local/i);
+    expect(health.error).toMatch(/local network proxy/i);
   });
 });

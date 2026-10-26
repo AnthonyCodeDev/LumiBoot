@@ -7,6 +7,6 @@ afterEach(() => {
   try {
     globalThis.localStorage?.clear();
   } catch {
-    /* localStorage indisponible : rien à nettoyer */
+    /* localStorage unavailable: nothing to clean */
   }
 });

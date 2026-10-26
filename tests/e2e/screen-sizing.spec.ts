@@ -1,17 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
 
 /**
- * Validation du dimensionnement du composant « screen » général, sans démarrer
- * de VM : on charge la vraie app/CSS depuis `/`, puis on injecte la structure
- * réelle produite par le provider v86 (`.session-screen` > `.session-toolbar` +
+ * Validation of the sizing of the generic "screen" component, without starting a
+ * VM: the real app/CSS is loaded from `/`, then the real structure produced by
+ * the v86 provider is injected (`.session-screen` > `.session-toolbar` +
  * `.session-viewport` > `.session-console` > `.v86-console` > `.v86-screen` >
- * `.v86-screen-text` + `canvas.v86-screen-canvas`, avec `.v86-serial`).
+ * `.v86-screen-text` + `canvas.v86-screen-canvas`, with `.v86-serial`).
  *
- * Preuves exigées :
- *  (a) aucun scroll vertical parasite de la page ;
- *  (b) le viewport de session ne dépasse jamais 80 % de la hauteur de fenêtre ;
- *  (c) en mode graphique, le canvas préserve son ratio intrinsèque (non étiré) ;
- *  (d) aucun débordement horizontal.
+ * Required proofs:
+ *  (a) no parasitic vertical page scroll;
+ *  (b) the session viewport never exceeds 80 % of the window height;
+ *  (c) in graphical mode, the canvas keeps its intrinsic ratio (not stretched);
+ *  (d) no horizontal overflow.
  */
 
 type ScreenMode = 'graphical' | 'text';
@@ -82,7 +82,7 @@ async function injectSessionScreen(page: Page, options: InjectOptions): Promise<
     canvas.width = intrinsicWidth;
     canvas.height = intrinsicHeight;
     if (opts.mode === 'graphical') {
-      // Imite v86 : styles inline en px que la CSS doit neutraliser.
+      // Mimics v86: inline px styles that the CSS must neutralize.
       canvas.style.display = 'block';
       canvas.style.width = `${intrinsicWidth}px`;
       canvas.style.height = `${intrinsicHeight}px`;
@@ -131,22 +131,22 @@ async function measure(page: Page): Promise<SizingMeasure> {
 }
 
 function expectNoOverflow(measurement: SizingMeasure): void {
-  // (a) pas de scroll vertical parasite.
+  // (a) no parasitic vertical scroll.
   expect(measurement.scrollHeight).toBeLessThanOrEqual(measurement.innerHeight + 1);
-  // (b) plafond : le viewport ne dépasse jamais 80 % de la fenêtre.
+  // (b) cap: the viewport never exceeds 80 % of the window.
   expect(measurement.viewportHeight).toBeLessThanOrEqual(measurement.innerHeight * 0.8 + 1);
-  // (d) pas de débordement horizontal.
+  // (d) no horizontal overflow.
   expect(measurement.scrollWidth).toBeLessThanOrEqual(measurement.innerWidth + 1);
 }
 
-test.describe('Dimensionnement du composant screen — CSS réel dans Chromium', () => {
+test.describe('Sizing of the screen component - real CSS in Chromium', () => {
   const desktopSizes = [
     { width: 1440, height: 900 },
     { width: 1280, height: 720 },
   ];
 
   for (const size of desktopSizes) {
-    test(`mode graphique (VGA 1024x768) sans logs — ${size.width}x${size.height}`, async ({
+    test(`graphical mode (VGA 1024x768) without logs - ${size.width}x${size.height}`, async ({
       page,
     }) => {
       await page.setViewportSize(size);
@@ -155,20 +155,20 @@ test.describe('Dimensionnement du composant screen — CSS réel dans Chromium',
 
       const m = await measure(page);
       expectNoOverflow(m);
-      // (c) ratio intrinsèque préservé (ni étiré, ni écrasé).
+      // (c) intrinsic ratio preserved (neither stretched nor squashed).
       const expectedRatio = 1024 / 768;
       const actualRatio = m.canvasWidth / m.canvasHeight;
       expect(Math.abs(actualRatio - expectedRatio)).toBeLessThan(0.02);
       expect(m.canvasWidth).toBeLessThanOrEqual(m.viewportWidth + 1);
-      // Surface noire ajustée au contenu rendu (pas de bandes noires latérales).
+      // Black surface fitted to the rendered content (no side black bars).
       expect(Math.abs(m.screenWidth - m.canvasWidth)).toBeLessThanOrEqual(2);
-      // Repli : la coque reste pleine largeur (un `fit-content` sur le
-      // conteneur se baserait sur la taille intrinsèque du canvas, pas sur sa
-      // taille contrainte en hauteur — circularité vérifiée empiriquement).
+      // Fallback: the shell stays full width (a `fit-content` on the container
+      // would rely on the intrinsic canvas size, not on its height-constrained
+      // size - circularity verified empirically).
       expect(m.viewportWidth).toBeLessThanOrEqual(m.innerWidth + 1);
     });
 
-    test(`mode graphique (VGA 1024x768) avec logs série — ${size.width}x${size.height}`, async ({
+    test(`graphical mode (VGA 1024x768) with serial logs - ${size.width}x${size.height}`, async ({
       page,
     }) => {
       await page.setViewportSize(size);
@@ -180,13 +180,13 @@ test.describe('Dimensionnement du composant screen — CSS réel dans Chromium',
       const expectedRatio = 1024 / 768;
       const actualRatio = m.canvasWidth / m.canvasHeight;
       expect(Math.abs(actualRatio - expectedRatio)).toBeLessThan(0.02);
-      // Écran + logs restent sous le plafond : l'écran se réduit.
+      // Screen + logs stay under the cap: the screen shrinks.
       expect(m.screenHeight).toBeLessThan(m.viewportHeight);
-      // La coque reste dans la largeur de la fenêtre.
+      // The shell stays within the window width.
       expect(m.viewportWidth).toBeLessThanOrEqual(m.innerWidth + 1);
     });
 
-    test(`mode texte (80x25) sans logs — ${size.width}x${size.height}`, async ({ page }) => {
+    test(`text mode (80x25) without logs - ${size.width}x${size.height}`, async ({ page }) => {
       await page.setViewportSize(size);
       await page.goto('/');
       await injectSessionScreen(page, { mode: 'text', logs: false });
@@ -194,16 +194,14 @@ test.describe('Dimensionnement du composant screen — CSS réel dans Chromium',
       const m = await measure(page);
       expectNoOverflow(m);
       expect(m.canvasVisible).toBe(false);
-      // L'écran texte reste dans la largeur disponible (coque pleine largeur,
-      // repli assumé identique au mode graphique).
+      // The text screen stays within the available width (full-width shell,
+      // same deliberate fallback as graphical mode).
       expect(m.screenWidth).toBeLessThanOrEqual(m.viewportWidth + 1);
       expect(m.viewportWidth).toBeLessThanOrEqual(m.innerWidth + 1);
     });
   }
 
-  test('résolution invitée large (1920x1080) : pas de débordement, ratio préservé', async ({
-    page,
-  }) => {
+  test('wide guest resolution (1920x1080): no overflow, ratio preserved', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto('/');
     await injectSessionScreen(page, {

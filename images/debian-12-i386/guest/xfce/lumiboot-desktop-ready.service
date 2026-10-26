@@ -1,16 +1,16 @@
 [Unit]
 Description=LumiBoot desktop readiness marker (Xorg + XFCE)
-# Marquage émis seulement APRÈS le démarrage effectif du serveur X et de la
-# session graphique (voir /usr/local/bin/lumiboot-desktop-ready). Jamais simulé.
+# Marker only emitted AFTER the X server and the graphical session have actually
+# started (see /usr/local/bin/lumiboot-desktop-ready). Never simulated.
 After=multi-user.target
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# Sonde réelle : attend que le serveur X réponde sur :0 et que la session XFCE
-# tourne, puis écrit LUMIBOOT_DESKTOP_READY sur ttyS0. Tant que ce n'est pas
-# vrai, le marqueur n'est PAS émis (échec signalé par un marqueur distinct).
-# Délai de démarrage large : l'émulation logicielle de v86 est lente.
+# Real probe: waits for the X server to answer on :0 and for the XFCE session to
+# run, then writes LUMIBOOT_DESKTOP_READY to ttyS0. As long as this is not true,
+# the marker is NOT emitted (failure signalled by a distinct marker).
+# Generous start timeout: the software emulation of v86 is slow.
 TimeoutStartSec=360
 ExecStart=/usr/local/bin/lumiboot-desktop-ready
 

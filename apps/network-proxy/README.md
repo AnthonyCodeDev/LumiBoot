@@ -1,10 +1,10 @@
 # LumiBoot Network Proxy
 
-Proxy WISP V1 local pour les VM v86 de LumiBoot. Il écoute par défaut sur `127.0.0.1:37892`, ouvre du TCP sortant et n'exécute aucune VM.
+Local WISP V1 proxy for v86 VMs: outbound TCP only, no VM. Listens on `127.0.0.1:37892` (`internal/config/config.go:141`).
 
-## Développer
+## Build and run
 
-Prérequis : Go 1.22+.
+Go 1.22+ (`go.mod:3`), from `apps/network-proxy`:
 
 ```bash
 go test ./...
@@ -13,21 +13,17 @@ go build ./...
 go run ./cmd/lumiboot-network
 ```
 
-Options :
-
-```text
---config PATH
---listen 127.0.0.1:37892
---version
-```
+Options (`cmd/lumiboot-network/main.go:32-34`): `--config PATH`, `--listen ADDR`, `--version`.
 
 ## Configuration
 
-Fichier par défaut : `<UserConfigDir>/LumiBoot/Network Proxy/config.json`.
+Default file: `<UserConfigDir>/LumiBoot/Network Proxy/config.json` (`internal/platform/platform.go:13-21`).
 
-| Champ | Défaut |
+| Field | Default |
 |---|---:|
 | `listenAddr` | `127.0.0.1:37892` |
+| `environment` | `production` |
+| `allowedOrigins` | `lumiboot.app`; `development` adds ports 5173/5200/3000/4173/8080 |
 | `maxConnections` | `64` |
 | `maxConnectionsPerSession` | `16` |
 | `connectTimeout` | `10s` |
@@ -38,23 +34,35 @@ Fichier par défaut : `<UserConfigDir>/LumiBoot/Network Proxy/config.json`.
 | `pairingTTL` | `10m` |
 | `sessionTokenTTL` | `24h` |
 
-Autres champs : `allowedOrigins`, `allowPrivateNetworks`, `allowNonLoopback`, `bandwidthLimitBytesPerSecond`.
+Booleans: `allowLocalOrigins`, `allowPrivateNetworks`, `allowNonLoopback`; `bandwidthLimitBytesPerSecond` (`0` = unlimited). Full defaults: `internal/config/config.go:139-158`.
 
-Chaque champ peut être surchargé par `LUMIBOOT_PROXY_<NOM_EN_MAJUSCULES>`. Cas particuliers : `BANDWIDTH_LIMIT_BPS`, `PAIRING_TTL` et `SESSION_TOKEN_TTL`. Les durées acceptent la syntaxe Go (`10s`, `5m`) ou un nombre de secondes.
+`LUMIBOOT_PROXY_<FIELD>` overrides (`internal/config/config.go:200-254`), including `LISTEN_ADDR`, `ENV`, `ALLOWED_ORIGINS`, `BANDWIDTH_LIMIT_BPS`, `PAIRING_TTL`, `SESSION_TOKEN_TTL`. Durations: `10s` or seconds.
 
-## Appairage et console
+## Endpoints
 
-Le frontend crée une demande, l'utilisateur la valide dans le terminal, puis le frontend reçoit un token lié à son origine. Commandes : `help`, `list`, `status`, `approve`, `deny`, `revoke`, `quit`.
+`internal/server/server.go:76-83`.
 
-Le token est envoyé à `/wisp/?token=…` parce que v86 0.5.471 ne permet pas d'ajouter un en-tête WebSocket. Il est stocké haché, expire et peut être révoqué.
+| Route | Purpose |
+|---|---|
+| `GET /health` | status, version, `wispVersion`, counters |
+| `POST /api/pair/request` | creates a pairing (`pairingId`, `userCode`) |
+| `GET /api/pair/status?id=…` | `pending`, `approved` or `denied` |
+| `POST /api/pair/exchange` | exchanges `{pairingId}` for `{token}` |
+| `GET /api/session/verify?token=…` | verifies origin and token |
+| `POST /api/session/revoke` | revokes a session and closes its streams |
+| `GET /wisp/?token=…` | WISP V1 upgrade |
 
-## Sécurité et limites
+## Pairing
 
-- loopback uniquement par défaut ;
-- origine et token obligatoires ;
-- destinations privées et métadonnées cloud bloquées après DNS ;
-- TCP sortant uniquement, sans UDP, ICMP ni port entrant ;
-- aucun droit administrateur requis ;
-- Windows, Linux et macOS, amd64/arm64.
+Request from the frontend, approval of the code in the terminal, origin-bound token. Console (`internal/console/console.go:314-319`): `help`, `list`/`status`, `approve`, `deny`, `revoke`, `quit`/`exit`.
 
-Contrat complet : [`../../docs/proxy-contract.md`](../../docs/proxy-contract.md). Modèle de sécurité : [`../../docs/network-proxy.md`](../../docs/network-proxy.md).
+The token travels in the query string (`internal/server/server.go:408-426`), is hashed with SHA-256 (`internal/auth/auth.go:565`), expirable and revocable.
+
+## Security
+
+- Loopback by default; exact origin and token required.
+- Cloud metadata and reserved ranges always blocked; private destinations blocked after DNS (`internal/security/policy.go:35-51`, `:83-107`).
+- TCP CONNECT only, UDP refused (`internal/wisp/handler.go:304`); no inbound port, ICMP not guaranteed.
+- No privileges required; Windows, Linux and macOS, amd64/arm64.
+
+Contract: [`../../docs/proxy-contract.md`](../../docs/proxy-contract.md). Security model: [`../../docs/network-proxy.md`](../../docs/network-proxy.md).

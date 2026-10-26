@@ -1,16 +1,16 @@
 /**
- * Adaptateur de console. Il isole totalement le rendu v86 (VGA + série) du
- * reste de l'application : le composant React ne fait que fournir un conteneur,
- * et n'importe jamais `v86`.
+ * Console adapter. It fully isolates the v86 rendering (VGA + serial) from the
+ * rest of the application: the React component only provides a container and
+ * never imports `v86`.
  *
- * v86 attend une structure DOM précise pour l'écran : un enfant `<div>` (mode
- * texte) suivi d'un `<canvas>` (mode graphique). On la fabrique ici, avec un
- * `<textarea>` réel monté et focalisable pour la console série.
+ * v86 expects a precise DOM structure for the screen: a `<div>` child (text
+ * mode) followed by a `<canvas>` (graphics mode). It is built here, with a real
+ * mounted and focusable `<textarea>` for the serial console.
  *
- * L'écran porte le marqueur provider-agnostique `data-vm-display="screen"`
- * (contrat `VMDisplay`) : l'UI générique retrouve la cible du rendu, du Pointer
- * Lock et du plein écran sans connaître v86. Les classes `.v86-*` restent pour
- * le style de l'émulateur et les tests E2E.
+ * The screen carries the provider-agnostic marker `data-vm-display="screen"`
+ * (`VMDisplay` contract): the generic UI finds the target of rendering, Pointer
+ * Lock and fullscreen without knowing about v86. The `.v86-*` classes remain for
+ * the emulator styling and the E2E tests.
  */
 import {
   STANDARD_VM_DISPLAY,
@@ -22,18 +22,18 @@ import {
 } from '@lumiboot/vm-core';
 
 export interface V86ConsoleMount {
-  /** Conteneur transmis à `V86Options.screen.container`. */
+  /** Container passed to `V86Options.screen.container`. */
   readonly screenContainer: HTMLElement;
-  /** Conteneur transmis à `V86Options.serial_console.container`. */
+  /** Container passed to `V86Options.serial_console.container`. */
   readonly serialTextarea: HTMLTextAreaElement;
 }
 
 export interface V86ConsoleAdapter {
-  /** Élément écran (`.v86-screen`), exposé pour le scrollback molette. */
+  /** Screen element (`.v86-screen`), exposed for the wheel scrollback. */
   readonly screen: HTMLElement | null;
-  /** Contrat d'affichage implémenté (marqueurs `data-vm-display`). */
+  /** Implemented display contract (`data-vm-display` markers). */
   readonly display?: VMDisplay;
-  /** Contrat d'entrée implémenté (stratégie de capture du pointeur). */
+  /** Implemented input contract (pointer capture strategy). */
   readonly input?: VMInput;
   attach(container: HTMLElement): V86ConsoleMount;
   detach(): void;
@@ -55,7 +55,7 @@ export class DomConsoleAdapter implements V86ConsoleAdapter {
 
     const screen = doc.createElement('div');
     screen.className = 'v86-screen';
-    // Cible réelle du rendu/pointer/fullscreen, indépendante du moteur.
+    // Real target of rendering/pointer/fullscreen, independent of the engine.
     screen.setAttribute(VM_DISPLAY_ATTRIBUTE, VM_DISPLAY_ROLES.screen);
 
     const textMode = doc.createElement('div');
@@ -77,7 +77,7 @@ export class DomConsoleAdapter implements V86ConsoleAdapter {
     serialTextarea.autocapitalize = 'off';
     serialTextarea.autocomplete = 'off';
     serialTextarea.setAttribute('autocorrect', 'off');
-    serialTextarea.setAttribute('aria-label', 'Console série du système invité');
+    serialTextarea.setAttribute('aria-label', 'Guest system serial console');
 
     const root = doc.createElement('div');
     root.className = 'v86-console';

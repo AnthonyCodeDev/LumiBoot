@@ -10,7 +10,6 @@ export default tseslint.config(
       'node_modules',
       '**/dist',
       '**/coverage',
-      'prototype/**',
       'docs/**',
       'playwright-report/**',
       'test-results/**',
@@ -37,7 +36,7 @@ export default tseslint.config(
     },
   },
   {
-    // Scripts Node (.mjs) : scripts/ et images/*/write-manifest.mjs
+    // Node scripts (.mjs): scripts/ and images/*/write-manifest.mjs
     files: ['**/*.{js,mjs,cjs}'],
     languageOptions: {
       ecmaVersion: 2022,

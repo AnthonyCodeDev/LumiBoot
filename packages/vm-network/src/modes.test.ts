@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NETWORK_MODES, networkModes } from './modes';
 
 describe('NETWORK_MODES', () => {
-  it('contient local-proxy entre browser-fetch et user-relay', () => {
+  it('contains local-proxy between browser-fetch and user-relay', () => {
     expect(NETWORK_MODES).toEqual([
       'offline',
       'browser-fetch',
@@ -14,10 +14,10 @@ describe('NETWORK_MODES', () => {
 });
 
 describe('networkModes', () => {
-  it('décrit le mode local-proxy', () => {
+  it('describes the local-proxy mode', () => {
     const info = networkModes['local-proxy'];
     expect(info.id).toBe('local-proxy');
-    expect(info.label).toBe('Proxy réseau local');
+    expect(info.label).toBe('Local network proxy');
     expect(info.availability).toBe('ready');
     expect(info.requiresRestart).toBe(true);
     expect(info.requiresConfiguration).toBe(true);

@@ -4,11 +4,11 @@ import type { VMConfiguration } from './VMConfiguration';
 import type { VMInstance } from './VMInstance';
 
 /**
- * Contrat unique d'un moteur d'émulation/virtualisation. C'est la seule porte
- * d'entrée pour démarrer un système : l'UI ne connaît jamais `new V86(...)`.
+ * Single contract of an emulation/virtualization engine. It is the only entry
+ * point to start a system: the UI never knows about `new V86(...)`.
  *
- * `canRun` doit rester déterministe et explicite ; les tests de compatibilité de
- * l'appareil sont gérés séparément par `EngineCompatibility`.
+ * `canRun` must stay deterministic and explicit; device compatibility checks are
+ * handled separately by `EngineCompatibility`.
  */
 export interface VMEngine {
   readonly id: string;
@@ -21,5 +21,5 @@ export interface VMEngine {
   ): Promise<VMInstance>;
 }
 
-/** @deprecated Utiliser `VMEngine`. Conservé pour la compatibilité des imports. */
+/** @deprecated Use `VMEngine`. Kept for import compatibility. */
 export type VMProvider = VMEngine;

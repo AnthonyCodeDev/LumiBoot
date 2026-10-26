@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "LumiBoot : bibliothèque et lanceur de systèmes d'exploitation dans le navigateur",
+  "description": "LumiBoot: a library and launcher for operating systems in the browser",
   "packageManager": "pnpm@9.14.2",
   "engines": {
     "node": ">=20"

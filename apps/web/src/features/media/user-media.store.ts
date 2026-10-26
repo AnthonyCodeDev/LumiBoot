@@ -10,13 +10,13 @@ import { toUserMessage } from '../../lib/errors';
 import { getUserMediaStore } from './user-media.storage';
 
 /**
- * Taille maximale acceptée pour un média disque importé (64 Gio). Le média
- * reste dans le navigateur de l'utilisateur : cette borne évite de saturer le
- * quota de stockage local, elle ne présume rien du contenu.
+ * Maximum accepted size for an imported disk media (64 GiB). The media stays in
+ * the user's browser: this bound avoids saturating the local storage quota and
+ * assumes nothing about the content.
  */
 export const MAX_USER_MEDIA_BYTES = 64 * 1024 * 1024 * 1024;
 
-/** Extensions reconnues, associées au format disque attendu par v86. */
+/** Recognized extensions, mapped to the disk format v86 expects. */
 export const USER_MEDIA_EXTENSIONS = ['.iso', '.img', '.raw'] as const;
 
 const EXTENSION_FORMATS: ReadonlyArray<{ extension: string; format: VMMediaFormat }> = [
@@ -30,46 +30,46 @@ interface FileLike {
   readonly size: number;
 }
 
-/** Déduit le format du média depuis l'extension ; inconnu -> disque brut. */
+/** Infers the media format from the extension; unknown -> raw disk. */
 export function detectMediaFormat(fileName: string): VMMediaFormat {
   return fileName.toLowerCase().endsWith('.iso') ? 'iso' : 'raw';
 }
 
-/** Format réellement accepté pour ce nom de fichier, ou `null` si inconnu. */
+/** Format actually accepted for this file name, or `null` when unknown. */
 export function mediaFormatForFile(fileName: string): VMMediaFormat | null {
   const lower = fileName.toLowerCase();
   return EXTENSION_FORMATS.find((entry) => lower.endsWith(entry.extension))?.format ?? null;
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} Gio`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} Mio`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} Kio`;
-  return `${bytes} octets`;
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${bytes} bytes`;
 }
 
 /**
- * Valide un fichier média AVANT tout import : extension reconnue, format disque
- * déductible, taille non nulle et sous le plafond. Lève un `AssetError` explicite
- * (message utilisateur clair), jamais une erreur anonyme.
+ * Validates a media file BEFORE any import: recognized extension, inferable disk
+ * format, non-zero size under the cap. Throws an explicit `AssetError` (clear
+ * user message), never an anonymous error.
  */
 export function validateUserMediaFile(file: FileLike): { format: VMMediaFormat } {
   const format = mediaFormatForFile(file.name);
   if (format === null) {
     throw new AssetError(
       'ASSET_IMPORT_REJECTED',
-      `Format non reconnu pour « ${file.name} ». Extensions acceptées : ${USER_MEDIA_EXTENSIONS.join(
+      `Unrecognized format for "${file.name}". Accepted extensions: ${USER_MEDIA_EXTENSIONS.join(
         ', ',
       )}.`,
     );
   }
   if (file.size <= 0) {
-    throw new AssetError('ASSET_IMPORT_REJECTED', `Le fichier « ${file.name} » est vide.`);
+    throw new AssetError('ASSET_IMPORT_REJECTED', `The file "${file.name}" is empty.`);
   }
   if (file.size > MAX_USER_MEDIA_BYTES) {
     throw new AssetError(
       'ASSET_IMPORT_REJECTED',
-      `« ${file.name} » (${formatBytes(file.size)}) dépasse la taille maximale autorisée (${formatBytes(
+      `"${file.name}" (${formatBytes(file.size)}) exceeds the maximum allowed size (${formatBytes(
         MAX_USER_MEDIA_BYTES,
       )}).`,
     );
@@ -83,8 +83,8 @@ interface StorageEstimateLike {
 }
 
 /**
- * Quota de stockage restant, ou `null` si l'API n'est pas exploitable. Ne lève
- * jamais : l'absence d'estimation ne doit pas bloquer un import légitime.
+ * Remaining storage quota, or `null` when the API cannot be used. Never throws:
+ * a missing estimate must not block a legitimate import.
  */
 async function getRemainingQuotaBytes(): Promise<number | null> {
   const storage =
@@ -103,8 +103,8 @@ async function getRemainingQuotaBytes(): Promise<number | null> {
 }
 
 /**
- * Vérifie que le média tient dans le quota de stockage local. Rejette avec un
- * message actionnable si l'espace restant est insuffisant.
+ * Checks that the media fits in the local storage quota. Rejects with an
+ * actionable message when the remaining space is insufficient.
  */
 export async function assertUserMediaFitsQuota(file: FileLike): Promise<void> {
   const remaining = await getRemainingQuotaBytes();
@@ -112,9 +112,9 @@ export async function assertUserMediaFitsQuota(file: FileLike): Promise<void> {
   if (remaining < file.size) {
     throw new AssetError(
       'ASSET_CACHE_QUOTA_EXCEEDED',
-      `Espace de stockage insuffisant pour « ${file.name} » : ${formatBytes(
+      `Not enough storage for "${file.name}": ${formatBytes(
         file.size,
-      )} requis, ${formatBytes(Math.max(remaining, 0))} disponible. Libérez des médias importés puis réessayez.`,
+      )} required, ${formatBytes(Math.max(remaining, 0))} available. Remove imported media and try again.`,
     );
   }
 }
@@ -123,24 +123,21 @@ function parseManifestJson(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch {
-    throw new AssetError(
-      'ASSET_INVALID_MANIFEST',
-      'Manifeste utilisateur illisible : JSON invalide.',
-    );
+    throw new AssetError('ASSET_INVALID_MANIFEST', 'Unreadable user manifest: invalid JSON.');
   }
 }
 
 export interface UserMediaState {
-  /** Médias importés, indexés par identifiant système. */
+  /** Imported media, indexed by system ID. */
   records: Record<string, UserMediaDescriptor>;
   loading: boolean;
   importing: boolean;
   error: string | undefined;
   load: () => Promise<void>;
   /**
-   * Importe le média d'un système. `licenseAcknowledged` est transmis TEL QUEL
-   * à `vm-assets` : l'attestation de licence est une contrainte du domaine, pas
-   * seulement une case de l'interface.
+   * Imports the media of a system. `licenseAcknowledged` is forwarded AS-IS to
+   * `vm-assets`: the license confirmation is a domain constraint, not just a UI
+   * checkbox.
    */
   importFor: (
     system: OSDefinition,
@@ -152,9 +149,9 @@ export interface UserMediaState {
 }
 
 /**
- * Store front-end des médias importés. Il ne fait que relayer `vm-assets` et le
- * store de persistance : aucune logique d'émulation ici, et **aucun upload** —
- * le média de l'utilisateur ne quitte jamais son navigateur (IndexedDB/OPFS).
+ * Front-end store for imported media. It only relays `vm-assets` and the
+ * persistence store: no emulation logic here, and **no upload** — the user media
+ * never leaves their browser (IndexedDB/OPFS).
  */
 export const useUserMediaStore = create<UserMediaState>((set) => ({
   records: {},
@@ -179,7 +176,7 @@ export const useUserMediaStore = create<UserMediaState>((set) => ({
       if (!licenseAcknowledged) {
         throw new AssetError(
           'ASSET_IMPORT_REJECTED',
-          'Import refusé : vous devez attester détenir une licence et le droit d’usage de ce média.',
+          'Import refused: you must confirm that you hold a license and the right to use this media.',
         );
       }
       const { format } = validateUserMediaFile(media);
@@ -192,13 +189,13 @@ export const useUserMediaStore = create<UserMediaState>((set) => ({
         if (declared.ref !== system.id) {
           throw new AssetError(
             'ASSET_INVALID_MANIFEST',
-            `Manifeste incohérent : référence « ${declared.ref} » au lieu de « ${system.id} ».`,
+            `Inconsistent manifest: reference "${declared.ref}" instead of "${system.id}".`,
           );
         }
         if (declared.format !== format) {
           throw new AssetError(
             'ASSET_INVALID_MANIFEST',
-            `Manifeste incohérent : format « ${declared.format} » au lieu de « ${format} » pour « ${media.name} ».`,
+            `Inconsistent manifest: format "${declared.format}" instead of "${format}" for "${media.name}".`,
           );
         }
       }

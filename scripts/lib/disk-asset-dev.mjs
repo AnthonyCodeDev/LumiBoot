@@ -1,44 +1,42 @@
-// Middleware de développement (connect/Vite) servant, sur la MÊME origine que
-// l'app, les manifestes des disques RAW locaux et les disques eux-mêmes par
-// HTTP Range (206). Objectif : v86 (`hda.async = true`) lit un disque par
-// plages sans jamais charger les dizaines de Gio en mémoire, sans copie dans
-// `public/` (donc sans entrer dans le bundle Vite) et sans l'exposer
-// publiquement.
+// Development middleware (connect/Vite) serving, from the SAME origin as the
+// app, the manifests of local RAW disks and the disks themselves over HTTP Range
+// (206). Goal: v86 (`hda.async = true`) reads a disk in ranges without ever
+// loading tens of GiB into memory, without a copy into `public/` (so it never
+// enters the Vite bundle) and without exposing it publicly.
 //
-// Découverte MULTI-DISQUES (mutualisée Windows XP/Vista/7/8/10) : au démarrage,
-// chaque sous-dossier de `images/` contenant un `manifest.json` de disque local
-// (`boot.mode === 'disk-boot'`) est enregistré. Le disque vit hors de `public/`
-// (soit `images/<ref>/<servedName>`, soit le `source.path` du manifeste, servi
-// IN-PLACE) et est ignoré par Git. En production, ce middleware n'existe pas :
-// aucun disque local n'est servi (voir docs/windows-7.md).
+// MULTI-DISK discovery (shared by Windows XP/Vista/7/8/10): at startup, every
+// subdirectory of `images/` holding a local disk `manifest.json`
+// (`boot.mode === 'disk-boot'`) is registered. The disk lives outside `public/`
+// (either `images/<ref>/<servedName>` or the manifest `source.path`, served IN
+// PLACE) and is ignored by Git. In production this middleware does not exist: no
+// local disk is served (see docs/windows-7.md).
 //
-// Réutilise le serveur Range testé de `range-server.mjs` : mêmes garanties
+// Reuses the tested Range server from `range-server.mjs`: same guarantees for
 // 206 / Content-Range / Accept-Ranges / CORS / OPTIONS.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { createJsonHandler, createRangeHandler } from './range-server.mjs';
 
-/** Référence valide (identique au schéma `LocalDiskManifest`). */
+/** Valid reference (same as the `LocalDiskManifest` schema). */
 const REF_PATTERN = /^[a-z0-9-]+$/;
 
-/** Taille lisible en Gio (ex. 42949672960 → « 40 Gio »). */
+/** Human-readable size in GiB (e.g. 42949672960 → "40 GiB"). */
 function formatGiB(bytes) {
   const gib = bytes / 1024 ** 3;
-  return `${Number.isInteger(gib) ? gib : gib.toFixed(1)} Gio`;
+  return `${Number.isInteger(gib) ? gib : gib.toFixed(1)} GiB`;
 }
 
 /**
- * Sérialise la forme PUBLIQUE d'un manifeste disque, telle que servie par HTTP.
+ * Serializes the PUBLIC form of a disk manifest, as served over HTTP.
  *
- * `source` (chemin réel de la machine de l'opérateur) et `provenance` (interne)
- * ne doivent JAMAIS sortir du poste : on construit explicitement la sortie
- * autorisée, de sorte qu'aucun champ interne inconnu présent dans le fichier
- * privé ne puisse être diffusé. Le schéma public correspondant vit dans
- * `@lumiboot/vm-assets` (`localDiskPublicManifestSchema`).
+ * `source` (real path of the operator's machine) and `provenance` (internal)
+ * must NEVER leave the host: the allowed output is built explicitly, so that no
+ * unknown internal field present in the private file can leak. The matching
+ * public schema lives in `@lumiboot/vm-assets` (`localDiskPublicManifestSchema`).
  *
- * @param {Record<string, unknown>} manifest manifeste privé lu sur disque
- * @returns {Record<string, unknown>} manifeste public (sans source/provenance)
+ * @param {Record<string, unknown>} manifest private manifest read from disk
+ * @returns {Record<string, unknown>} public manifest (without source/provenance)
  */
 export function toPublicDiskManifest(manifest) {
   const publicManifest = {
@@ -57,7 +55,7 @@ export function toPublicDiskManifest(manifest) {
   return publicManifest;
 }
 
-/** Vrai si `dir` contient au moins un sous-dossier portant un `manifest.json`. */
+/** True when `dir` holds at least one subdirectory containing a `manifest.json`. */
 function hasDiskManifest(dir) {
   try {
     return readdirSync(dir, { withFileTypes: true }).some(
@@ -69,9 +67,9 @@ function hasDiskManifest(dir) {
 }
 
 /**
- * Remonte l'arborescence à la recherche de la racine du dépôt. Marqueurs
- * robustes : `pnpm-workspace.yaml`, ou un dossier `images/` contenant au moins
- * un manifeste de disque. Aucune référence n'est codée en dur.
+ * Walks up the tree looking for the repository root. Robust markers:
+ * `pnpm-workspace.yaml`, or an `images/` directory holding at least one disk
+ * manifest. No path is hard-coded.
  */
 function findRepoRoot(start) {
   let dir = resolve(start);
@@ -86,18 +84,18 @@ function findRepoRoot(start) {
 }
 
 /**
- * Découvre tous les disques RAW locaux servables sous `images/`.
+ * Discovers every servable local RAW disk under `images/`.
  *
- * Pour chaque sous-dossier dont le `manifest.json` décrit un disque local
- * (`boot.mode === 'disk-boot'`), résout le fichier disque (candidats
- * `images/<ref>/<servedName>` puis `manifest.source.path`) et construit les
- * routes Range + manifeste. Les dossiers ignorés (manifeste d'image publiée,
- * disque absent, taille incohérente…) sont documentés mais non bloquants.
+ * For each subdirectory whose `manifest.json` describes a local disk
+ * (`boot.mode === 'disk-boot'`), resolves the disk file (candidates
+ * `images/<ref>/<servedName>` then `manifest.source.path`) and builds the Range
+ * route plus the manifest route. Skipped directories (published image manifest,
+ * missing disk, inconsistent size…) are reported but not blocking.
  *
- * `manifest.source.path` est RELATIF à la racine du dépôt (le dossier parent de
- * `images/`) et non au cwd : Vite démarre depuis `apps/web`, donc `resolve()`
- * seul chercherait au mauvais endroit et le disque paraîtrait introuvable. Un
- * chemin absolu hérité d'un ancien manifeste est accepté tel quel.
+ * `manifest.source.path` is RELATIVE to the repository root (the parent
+ * directory of `images/`), not to the cwd: Vite starts from `apps/web`, so
+ * `resolve()` alone would look in the wrong place and the disk would appear
+ * missing. An absolute path inherited from an older manifest is accepted as is.
  *
  * @returns {{ routes: Map<string, (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void>, served: Array<{ref: string, diskPath: string, size: number, diskRoute: string}>, skipped: string[] }}
  */
@@ -105,7 +103,7 @@ function discoverLocalDisks(imagesDir) {
   const routes = new Map();
   const served = [];
   const skipped = [];
-  // Racine du dépôt = dossier parent de `images/` (aucun chemin codé en dur).
+  // Repository root = parent directory of `images/` (no hard-coded path).
   const repoRoot = dirname(resolve(imagesDir));
 
   let entries;
@@ -124,19 +122,19 @@ function discoverLocalDisks(imagesDir) {
     try {
       manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
     } catch {
-      skipped.push(`${entry.name} (manifeste illisible)`);
+      skipped.push(`${entry.name} (unreadable manifest)`);
       continue;
     }
 
     const ref = manifest?.ref;
     if (typeof ref !== 'string' || !REF_PATTERN.test(ref)) {
-      skipped.push(`${entry.name} (référence absente ou invalide)`);
+      skipped.push(`${entry.name} (missing or invalid reference)`);
       continue;
     }
-    // Ne traiter QUE les manifestes de disque local. Les manifestes d'image
-    // publiée (`files`, sans `disk`) restent servis par Vite/`public/`.
+    // Only handle LOCAL disk manifests. Published image manifests (`files`, no
+    // `disk`) keep being served by Vite/`public/`.
     if (manifest?.boot?.mode !== 'disk-boot' || typeof manifest?.disk?.size !== 'number') {
-      skipped.push(`${ref} (manifeste d'image publiée, pas un disque local)`);
+      skipped.push(`${ref} (published image manifest, not a local disk)`);
       continue;
     }
 
@@ -154,15 +152,15 @@ function discoverLocalDisks(imagesDir) {
       }
     }
     if (diskPath === null) {
-      skipped.push(`${ref} (disque introuvable : ${candidates.join(' | ')})`);
+      skipped.push(`${ref} (disk not found: ${candidates.join(' | ')})`);
       continue;
     }
 
     const info = statSync(diskPath);
     if (manifest.disk.size !== info.size) {
       skipped.push(
-        `${ref} (taille incohérente : ${info.size} octets sur disque, ` +
-          `${manifest.disk.size} dans le manifeste)`,
+        `${ref} (inconsistent size: ${info.size} bytes on disk, ` +
+          `${manifest.disk.size} in the manifest)`,
       );
       continue;
     }
@@ -193,9 +191,9 @@ function discoverLocalDisks(imagesDir) {
 }
 
 /**
- * Construit un middleware connect servant tous les disques locaux découverts.
- * Retourne un passe-plat (`next()`) si aucun disque n'est disponible : le
- * développement des autres systèmes n'est pas cassé.
+ * Builds a connect middleware serving every discovered local disk.
+ * Returns a pass-through (`next()`) when no disk is available: development of
+ * the other systems is not broken.
  *
  * @param {{ cwd?: string, repoRoot?: string, imagesDir?: string, logger?: (message: string) => void }} [options]
  */
@@ -207,7 +205,7 @@ export function createDiskAssetMiddleware(options = {}) {
   const imagesDir = options.imagesDir ?? (repoRoot === null ? null : join(repoRoot, 'images'));
 
   if (imagesDir === null || !existsSync(imagesDir)) {
-    logger('[lumiboot] aucun disque local servi (dossier « images/ » introuvable).');
+    logger('[lumiboot] no local disk served ("images/" directory not found).');
     return passThrough;
   }
 
@@ -215,13 +213,13 @@ export function createDiskAssetMiddleware(options = {}) {
 
   if (served.length > 0) {
     const list = served.map((disk) => `${disk.ref} ${formatGiB(disk.size)}`).join(' · ');
-    logger(`[lumiboot] disques locaux prêts (HTTP Range) : ${list}`);
+    logger(`[lumiboot] local disks ready (HTTP Range): ${list}`);
   } else {
-    logger('[lumiboot] aucun disque local servi (Windows indisponibles).');
+    logger('[lumiboot] no local disk served (Windows unavailable).');
   }
-  // Détail des dossiers ignorés uniquement en mode debug explicite.
+  // Skipped directories are detailed only in explicit debug mode.
   if (process.env.LUMIBOOT_DISK_DEBUG === '1') {
-    for (const reason of skipped) logger(`[lumiboot] disque ignoré : ${reason}`);
+    for (const reason of skipped) logger(`[lumiboot] disk skipped: ${reason}`);
   }
 
   if (routes.size === 0) return passThrough;

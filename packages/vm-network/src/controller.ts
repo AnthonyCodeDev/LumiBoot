@@ -47,7 +47,7 @@ function accumulate(current: number, delta: number): number {
   return Math.min(total, MAX_COUNTER);
 }
 
-/** Backend de transport associé à un mode, purement descriptif. */
+/** Transport backend associated with a mode, purely descriptive. */
 function transportForMode(mode: NetworkMode): NetworkTransportKind {
   switch (mode) {
     case 'browser-fetch':
@@ -122,18 +122,18 @@ class DefaultNetworkController implements NetworkController {
   }
 
   /**
-   * Accepte la configuration et, au mieux, **configure** le transport.
+   * Accepts the configuration and, at best, **configures** the transport.
    *
-   * Un mode à transport (browser-fetch, user-relay, local-proxy) aboutit à `configured` :
-   * le profil est accepté mais **rien ne prouve que la connexion est établie**.
-   * Seul le provider peut faire évoluer l'état vers `connected`/`online` via
-   * `setStatus`, une fois le transport réellement opérationnel.
+   * A mode with a transport (browser-fetch, user-relay, local-proxy) ends up in
+   * `configured`: the profile is accepted but **nothing proves the connection is
+   * established**. Only the provider can move the state to `connected`/`online`
+   * through `setStatus`, once the transport is really operational.
    */
   async start(signal?: AbortSignal): Promise<void> {
     if (this.#disposed) return;
     if (signal?.aborted === true) {
-      this.#fail('NETWORK_ABORTED', 'Démarrage du réseau annulé avant établissement.');
-      throw new NetworkError('NETWORK_ABORTED', 'Démarrage du réseau annulé.');
+      this.#fail('NETWORK_ABORTED', 'Network start aborted before it was established.');
+      throw new NetworkError('NETWORK_ABORTED', 'Network start aborted.');
     }
 
     this.#now();
@@ -148,7 +148,7 @@ class DefaultNetworkController implements NetworkController {
       case 'user-relay': {
         const validation = validateRelayUrl(this.#profile.relayUrl);
         if (!validation.ok || validation.url === undefined) {
-          const message = validation.error ?? 'Adresse de relais invalide.';
+          const message = validation.error ?? 'Invalid relay address.';
           this.#fail('NETWORK_INVALID_RELAY_URL', message);
           throw new NetworkError('NETWORK_INVALID_RELAY_URL', message);
         }
@@ -158,7 +158,7 @@ class DefaultNetworkController implements NetworkController {
       case 'local-proxy': {
         const validation = validateProxyUrl(this.#profile.proxyUrl ?? DEFAULT_PROXY_URL);
         if (!validation.ok || validation.url === undefined) {
-          const message = validation.error ?? 'Adresse du proxy réseau local invalide.';
+          const message = validation.error ?? 'Invalid local network proxy address.';
           this.#fail('NETWORK_INVALID_PROXY_URL', message);
           throw new NetworkError('NETWORK_INVALID_PROXY_URL', message);
         }
@@ -166,7 +166,7 @@ class DefaultNetworkController implements NetworkController {
         return;
       }
       case 'local-network': {
-        const message = "Le mode « local-network » n'est pas encore implémenté.";
+        const message = 'The "local-network" mode is not implemented.';
         this.#fail('NETWORK_UNSUPPORTED_MODE', message);
         throw new NetworkError('NETWORK_UNSUPPORTED_MODE', message);
       }
@@ -226,9 +226,9 @@ class DefaultNetworkController implements NetworkController {
   }
 
   /**
-   * Enregistre le résultat d'une **sonde réelle** fournie par le provider.
-   * `verified` est **recalculé** : il ne devient vrai que si une sonde `tcp` ou
-   * `https` est `ok`, jamais à partir du mode. No-op silencieux après `dispose`.
+   * Records the result of a **real probe** supplied by the provider.
+   * `verified` is **recomputed**: it only becomes true if a `tcp` or `https`
+   * probe is `ok`, never from the mode. Silent no-op after `dispose`.
    */
   recordProbe(kind: NetworkProbeKind, result: NetworkProbeResult): void {
     if (this.#disposed) return;
@@ -243,8 +243,8 @@ class DefaultNetworkController implements NetworkController {
   }
 
   /**
-   * `verified` reflète une **preuve réelle** : uniquement une sonde `tcp` ou
-   * `https` réussie. `dns`/`http` et le mode lui-même ne suffisent pas.
+   * `verified` reflects a **real proof**: only a successful `tcp` or `https`
+   * probe. `dns`/`http` and the mode itself are not enough.
    */
   #recomputeVerified(): void {
     const tcp = this.#probes.tcp;
@@ -275,7 +275,7 @@ class DefaultNetworkController implements NetworkController {
       try {
         listener(diagnostics);
       } catch {
-        // Un auditeur défaillant ne doit jamais interrompre le contrôleur.
+        // A failing listener must never interrupt the controller.
       }
     }
   }

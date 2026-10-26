@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Moteur v86 (WebAssembly) x86 i386 : WASM, BIOS, disque HTTP Range, console VGA/série",
+  "description": "v86 (WebAssembly) x86 i386 engine: WASM, BIOS, HTTP Range disk, VGA/serial console",
   "exports": {
     ".": {
       "types": "./src/index.ts",

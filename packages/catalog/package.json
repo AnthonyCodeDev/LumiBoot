@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Source de vérité du catalogue de systèmes et des capacités d'exécution",
+  "description": "Source of truth for the system catalog and runtime capabilities",
   "exports": {
     ".": {
       "types": "./src/index.ts",

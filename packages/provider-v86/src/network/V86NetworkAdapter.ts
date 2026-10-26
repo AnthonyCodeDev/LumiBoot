@@ -10,26 +10,26 @@ import {
 import type { Event as V86Event, V86Options } from 'v86';
 
 /**
- * Traduction des profils réseau LumiBoot vers la couche réseau de v86.
+ * Translation of LumiBoot network profiles to the v86 network layer.
  *
- * Ce module est volontairement isolé : aucune dépendance à React, aucune
- * dépendance à un système invité particulier (Debian ou autre). Il constitue
- * l'unique point de contact entre `@lumiboot/vm-network` et `v86`.
+ * This module is deliberately isolated: no dependency on React, no dependency
+ * on a particular guest system (Debian or other). It is the single point of
+ * contact between `@lumiboot/vm-network` and `v86`.
  */
 
-/** Carte réseau v86 (`V86NetworkDevice` n'est pas exporté directement par v86). */
+/** v86 network card (`V86NetworkDevice` is not exported directly by v86). */
 export type V86NetworkDevice = NonNullable<V86Options['net_device']>;
 
-/** Type de carte émulée fournie au système invité. */
+/** Type of emulated card provided to the guest system. */
 export type V86NetworkDeviceType = NonNullable<V86NetworkDevice['type']>;
 
-/** Événements réseau exploités pour les diagnostics (cf. `V86Event`). */
+/** Network events used for diagnostics (cf. `V86Event`). */
 export type V86NetworkEventName = 'eth-transmit-end' | 'eth-receive-end' | 'net0-send';
 
 /**
- * Source d'événements minimale : uniquement les notifications réseau utiles aux
- * diagnostics. `V86` y satisfait structurellement, et un émetteur de test n'a
- * pas besoin d'implémenter tout l'émulateur.
+ * Minimal event source: only the network notifications useful for diagnostics.
+ * `V86` satisfies it structurally, and a test emitter does not need to implement
+ * the whole emulator.
  */
 export interface NetworkEventSource {
   add_listener<T extends V86NetworkEventName>(
@@ -43,56 +43,57 @@ export interface NetworkEventSource {
 }
 
 /**
- * Mapping LumiBoot -> v86, vérifié dans la version installée
+ * LumiBoot -> v86 mapping, verified against the installed version
  * `v86@0.5.471+g94faf3d` (`node_modules/v86/build/libv86.mjs`).
  *
- * v86 résout `options.network_relay_url || options.net_device.relay_url` ainsi :
- *   - `"fetch"`      -> backend fetch natif du navigateur (classe `Xb`) ;
- *   - `"inbrowser"`  -> backend réseau en mémoire (classe `rc`) ;
- *   - `"wisp://…"`   -> client Wisp au-dessus de `ws://` (classe `$b`) ;
- *   - `"wisps://…"`  -> client Wisp au-dessus de `wss://` (classe `$b`) ;
- *   - tout autre     -> relais WebSocket historique (classe `pb`).
+ * v86 resolves `options.network_relay_url || options.net_device.relay_url` as
+ * follows:
+ *   - `"fetch"`     -> native browser fetch backend (class `Xb`);
+ *   - `"inbrowser"` -> in-memory network backend (class `rc`);
+ *   - `"wisp://…"`  -> Wisp client over `ws://` (class `$b`);
+ *   - `"wisps://…"` -> Wisp client over `wss://` (class `$b`);
+ *   - anything else -> legacy WebSocket relay (class `pb`).
  *
- * Modes LumiBoot :
- *   - `offline` / `browser-fetch` / `user-relay` : voir
- *     {@link toV86NetworkDevice} ;
- *   - `local-proxy` : relais WISP local du proxy réseau local
- *     (`wisp://127.0.0.1:37892/wisp/`), dérivé de `proxyUrl` (+ token
- *     runtime `proxyToken`) via `buildProxyWispUrl`, puis converti par
- *     `toWispRelayUrl` comme les autres relais.
+ * LumiBoot modes:
+ *   - `offline` / `browser-fetch` / `user-relay`: see
+ *     {@link toV86NetworkDevice};
+ *   - `local-proxy`: local WISP relay of the local network proxy
+ *     (`wisp://127.0.0.1:37892/wisp/`), derived from `proxyUrl` (+ runtime
+ *     `proxyToken`) through `buildProxyWispUrl`, then converted by
+ *     `toWispRelayUrl` like the other relays.
  *
- * `network_relay_url` est marqué `@deprecated` dans `v86.d.ts` au profit de
- * `net_device` : LumiBoot n'utilise donc que `net_device.relay_url`.
+ * `network_relay_url` is marked `@deprecated` in `v86.d.ts` in favor of
+ * `net_device`: LumiBoot therefore only uses `net_device.relay_url`.
  *
- * Le client Wisp construit son WebSocket via `$b.prototype.register_ws` :
+ * The Wisp client builds its WebSocket through `$b.prototype.register_ws`:
  *   `new WebSocket(url.replace("wisp://","ws://").replace("wisps://","wss://"))`
- * `wisps://` est donc le schéma d'un relais Wisp **TLS** (`wss://`), et une URL
- * `wss://…` brute n'est PAS reconnue comme Wisp (elle tomberait sur le relais
- * historique `pb`). LumiBoot valide ses relais en `wss://`
- * ({@link validateRelayUrl}), on convertit donc fidèlement :
- *   - `wss://host:port/path[…]` -> `wisps://host:port/path[…]` ;
- *   - `ws://host:port/path[…]`  -> `wisp://host:port/path[…]` (uniquement si la
- *     validation a explicitement toléré le `ws:` localhost ; le provider ne
- *     l'active jamais, donc ce cas reste hors du chemin nominal).
+ * `wisps://` is thus the scheme of a **TLS** Wisp relay (`wss://`), and a raw
+ * `wss://…` URL is NOT recognized as Wisp (it would fall back to the legacy
+ * relay `pb`). LumiBoot validates its relays as `wss://`
+ * ({@link validateRelayUrl}), so the conversion is faithful:
+ *   - `wss://host:port/path[…]` -> `wisps://host:port/path[…]`;
+ *   - `ws://host:port/path[…]`  -> `wisp://host:port/path[…]` (only if the
+ *     validation explicitly tolerated a localhost `ws:`; the provider never
+ *     enables it, so this case stays off the nominal path).
  *
- * `validation.url` provient de `URL.href` : port et chemin sont déjà normalisés
- * et préservés tels quels, v86 ne réclame aucune retouche supplémentaire.
+ * `validation.url` comes from `URL.href`: port and path are already normalized
+ * and preserved as-is, v86 requires no further tweaking.
  */
 function toWispRelayUrl(relayUrl: string): string {
   return relayUrl.replace(/^wss:/i, 'wisps:').replace(/^ws:/i, 'wisp:');
 }
 
 /**
- * Construit la carte réseau v86 correspondant à un profil LumiBoot.
+ * Builds the v86 network card matching a LumiBoot profile.
  *
- * Le champ `type` (NIC) n'est pas fixé ici : il provient du PROFIL MATÉRIEL du
- * catalogue et est fusionné par le provider via
+ * The `type` field (NIC) is not set here: it comes from the HARDWARE PROFILE of
+ * the catalog and is merged by the provider via
  * {@link toV86NetworkDeviceType}.
  *
- * @throws NetworkError `NETWORK_INVALID_RELAY_URL` en mode `user-relay` sans
- *   adresse `wss://` valide, `NETWORK_INVALID_PROXY_URL` en mode
- *   `local-proxy` sans adresse loopback valide, `NETWORK_UNSUPPORTED_MODE`
- *   en mode `local-network`.
+ * @throws NetworkError `NETWORK_INVALID_RELAY_URL` in `user-relay` mode without
+ *   a valid `wss://` address, `NETWORK_INVALID_PROXY_URL` in `local-proxy` mode
+ *   without a valid loopback address, `NETWORK_UNSUPPORTED_MODE` in
+ *   `local-network` mode.
  */
 export function toV86NetworkDevice(profile: NetworkProfile): V86NetworkDevice | undefined {
   switch (profile.mode) {
@@ -105,7 +106,7 @@ export function toV86NetworkDevice(profile: NetworkProfile): V86NetworkDevice | 
       if (!validation.ok || validation.url === undefined) {
         throw new NetworkError(
           'NETWORK_INVALID_RELAY_URL',
-          validation.error ?? 'Adresse de relais invalide.',
+          validation.error ?? 'Invalid relay address.',
         );
       }
       return { relay_url: toWispRelayUrl(validation.url) };
@@ -117,7 +118,7 @@ export function toV86NetworkDevice(profile: NetworkProfile): V86NetworkDevice | 
       } catch (error) {
         throw new NetworkError(
           'NETWORK_INVALID_PROXY_URL',
-          error instanceof Error ? error.message : 'Adresse du proxy réseau local invalide.',
+          error instanceof Error ? error.message : 'Invalid local network proxy address.',
         );
       }
       return { relay_url: toWispRelayUrl(url) };
@@ -125,20 +126,21 @@ export function toV86NetworkDevice(profile: NetworkProfile): V86NetworkDevice | 
     case 'local-network':
       throw new NetworkError(
         'NETWORK_UNSUPPORTED_MODE',
-        "Le mode « local-network » n'est pas encore implémenté pour v86.",
+        'The "local-network" mode is not implemented for v86.',
       );
   }
 }
 
 /**
- * Traduit la carte réseau du PROFIL MATÉRIEL (`HardwareProfile.network`) vers le
- * type attendu par v86 (`net_device.type`).
+ * Translates the network card of the HARDWARE PROFILE
+ * (`HardwareProfile.network`) into the type expected by v86
+ * (`net_device.type`).
  *
- * Correctif audit #18 : le provider ne décide plus de la carte par `id`/famille
- * ou par une heuristique `family`+`architecture` ; il ne fait que LIRE le
- * contrat du catalogue et le traduire. `none` signifie « aucune carte ».
+ * Audit fix #18: the provider no longer decides the card by `id`/family or by a
+ * `family`+`architecture` heuristic; it only READS the catalog contract and
+ * translates it. `none` means "no card".
  *
- * `undefined` (profil matériel absent) retombe sur le défaut documenté
+ * `undefined` (hardware profile absent) falls back to the documented default
  * `'virtio'`.
  */
 const DEVICE_TYPE_BY_NETWORK: Readonly<
@@ -157,16 +159,15 @@ export function toV86NetworkDeviceType(
 }
 
 /**
- * Branche les compteurs de trafic réseau sur les événements réels de v86.
+ * Wires the network traffic counters to the real v86 events.
  *
- * v86 publie DEUX notifications pour chaque trame sortante : `net0-send` (trame
- * brute émise par la carte) puis `eth-transmit-end` (fin de transmission, avec
- * le nombre d'octets). Les compter toutes deux doublerait le trafic : on
- * privilégie `net0-send` et `eth-transmit-end` ne sert que de repli tant
- * qu'aucune trame `net0-send` n'a été observée. `eth-receive-end` alimente la
- * réception.
+ * v86 publishes TWO notifications for each outgoing frame: `net0-send` (raw
+ * frame emitted by the card) then `eth-transmit-end` (end of transmission, with
+ * the byte count). Counting both would double the traffic: `net0-send` is
+ * preferred and `eth-transmit-end` only serves as a fallback as long as no
+ * `net0-send` frame has been observed. `eth-receive-end` feeds the reception.
  *
- * @returns une fonction de détachement (retire les trois écouteurs).
+ * @returns a detach function (removes the three listeners).
  */
 export function attachNetworkDiagnostics(
   emulator: NetworkEventSource,

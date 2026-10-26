@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Stockage persistant versionné, quotas et export/import pour les états VM",
+  "description": "Versioned persistent storage, quotas and export/import for VM states",
   "exports": {
     ".": {
       "types": "./src/index.ts",

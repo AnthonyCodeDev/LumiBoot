@@ -7,7 +7,7 @@ function getTechnicalMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
-  return 'Une erreur inattendue est survenue.';
+  return 'An unexpected error occurred.';
 }
 
 export function RouteError() {
@@ -16,24 +16,24 @@ export function RouteError() {
 
   return (
     <main className="route-error" role="alert">
-      <span className="route-error-badge">Erreur</span>
-      <h1>Oups, quelque chose s&apos;est mal passé</h1>
+      <span className="route-error-badge">Error</span>
+      <h1>Something went wrong</h1>
       <p>
-        Cette page n&apos;a pas pu s&apos;afficher. Cela vient probablement d&apos;un problème
-        temporaire. Vous pouvez recharger la page ou revenir à la bibliothèque pour continuer.
+        This page could not be displayed. It is most likely a temporary problem. You can reload the
+        page or go back to the library to keep browsing.
       </p>
       {import.meta.env.DEV ? (
         <details>
-          <summary>Détail technique</summary>
+          <summary>Technical details</summary>
           <pre className="route-error-details">{technicalMessage}</pre>
         </details>
       ) : null}
       <div className="route-error-actions">
         <button type="button" className="btn btn-primary" onClick={() => window.location.reload()}>
-          Recharger la page
+          Reload the page
         </button>
         <Link className="btn" to="/">
-          Retour à la bibliothèque
+          Back to the library
         </Link>
       </div>
     </main>

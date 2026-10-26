@@ -1,43 +1,43 @@
-# Proxy réseau local
+# Local network proxy
 
-Le LumiBoot Network Proxy est le binaire Go de `apps/network-proxy`. Il expose WISP V1 sur `127.0.0.1:37892` et ouvre des connexions TCP sortantes au nom de l'invité. Il ne lance aucune VM.
+Go binary from `apps/network-proxy`: WISP V1 on `127.0.0.1:37892`, outbound TCP on behalf of the guest; no VM launched.
 
-## Flux
+## Flow
 
-1. Le frontend vérifie `GET /health` et la version WISP.
-2. Il crée une demande avec `POST /api/pair/request`.
-3. L'utilisateur approuve le code dans la console du proxy.
-4. Le frontend échange l'approbation contre un token, puis le vérifie.
-5. v86 ouvre `ws://127.0.0.1:37892/wisp/?token=…`.
+1. Frontend: `GET /health` and WISP version.
+2. `POST /api/pair/request`.
+3. Code approval in the proxy console.
+4. Exchange of the approval for a token, then verification.
+5. v86 opens `ws://127.0.0.1:37892/wisp/?token=…`.
 
-`/health` prouve seulement que le processus répond. L'état `connected` exige un succès de `/api/session/verify`.
+`/health` only proves the process responds; `connected` requires a successful `GET /api/session/verify`.
 
-## Exécution
+## Running
 
 ```bash
 cd apps/network-proxy
 go run ./cmd/lumiboot-network
 ```
 
-Options : `--config PATH`, `--listen 127.0.0.1:37892`, `--version`.
+Options: `--config PATH`, `--listen 127.0.0.1:37892`, `--version`.
 
-Le fichier de configuration par défaut est `<UserConfigDir>/LumiBoot/Network Proxy/config.json`. Les variables `LUMIBOOT_PROXY_*` peuvent surcharger ses champs ; la liste complète est dans [`../apps/network-proxy/README.md`](../apps/network-proxy/README.md).
+Config: `<UserConfigDir>/LumiBoot/Network Proxy/config.json` (absent on first launch), overridden by `LUMIBOOT_PROXY_*`; list in [`../apps/network-proxy/README.md`](../apps/network-proxy/README.md).
 
-## Sécurité
+## Security
 
-- écoute loopback obligatoire sauf `allowNonLoopback: true` explicite ;
-- origine exacte et token liés ;
-- token aléatoire stocké sous SHA-256, TTL 24 h par défaut ;
-- réseaux privés, loopback, multicast et métadonnées cloud bloqués après DNS ;
-- connexion établie vers l'IP validée pour éviter le rebinding ;
-- 64 connexions globales et 16 par session par défaut ;
-- UDP, écoute entrante et ICMP non pris en charge.
+- loopback mandatory unless `allowNonLoopback: true`;
+- exact origin and token bound together;
+- random token hashed with SHA-256, 24 h TTL (10 min pairing);
+- private networks, loopback, multicast, link-local and cloud metadata blocked after DNS resolution;
+- connection to the validated IP (anti-rebinding);
+- 64 global connections, 16 per session;
+- no UDP, no inbound listening, no ICMP.
 
-`allowPrivateNetworks` n'autorise jamais les endpoints de métadonnées cloud. Le token figure dans l'URL en raison des limites du client v86 : éviter de journaliser les query strings et révoquer les sessions inutilisées.
+`allowPrivateNetworks` never allows cloud metadata. Token in the query string (v86 client limitation): do not log query strings, revoke unused sessions.
 
 ## Console
 
-Commandes : `help`, `list`, `status`, `approve <id|code>`, `deny <id|code>`, `revoke <id|all>`, `quit`.
+`help`, `list`/`status`, `approve <id|code>`, `deny <id|code>` (alias `refuse`), `revoke <id|all>`, `quit`/`exit`.
 
 ## Validation
 
@@ -48,4 +48,4 @@ go vet ./...
 gofmt -l .
 ```
 
-Le contrat HTTP/WISP exact est dans [`proxy-contract.md`](proxy-contract.md).
+HTTP/WISP contract: [`proxy-contract.md`](proxy-contract.md).

@@ -4,9 +4,9 @@ import type { OSDefinition } from '@lumiboot/contracts';
 import { useCatalogStore } from './catalog.store';
 
 /**
- * Systèmes affichés dans la grille : on filtre d'abord le catalogue PLAT (pour
- * que la recherche matche aussi les variantes enfants), puis on replie chaque
- * résultat vers sa mère en dédupliquant. Résultat : une seule carte par groupe.
+ * Systems shown in the grid: the FLAT catalogue is filtered first (so search also
+ * matches child variants), then each result is folded back to its parent with
+ * de-duplication. Result: a single card per group.
  */
 export function useVisibleSystems(): OSDefinition[] {
   const systems = useCatalogStore((state) => state.systems);

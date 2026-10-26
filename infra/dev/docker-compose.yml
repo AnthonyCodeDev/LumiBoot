@@ -1,10 +1,5 @@
-# Docker Compose de développement — LumiBoot
-#
-# Lot 0 : seul le service `web` est pertinent. Les services `api` et `db`
-# appartiennent à des lots futurs et sont laissés en commentaire
-# car aucun backend n'est requis pour exécuter un Debian local via v86.
-#
-# Usage : docker compose -f infra/dev/docker-compose.yml up web
+# `web` service only: no backend is needed to run local Debian through v86.
+# Usage: docker compose -f infra/dev/docker-compose.yml up web
 
 services:
   web:

@@ -1,8 +1,8 @@
 name: Hygiene
 
-# Garde-fous de propreté, en UN job pour limiter le nombre de checks :
-# formatage Prettier, intégrité des binaires v86 (SHA-256 épinglés) et absence
-# de médias/fichiers volumineux versionnés. Complète `ci.yml` sans le dupliquer.
+# Hygiene guardrails, in a SINGLE job to limit the number of checks:
+# Prettier formatting, v86 binary integrity (pinned SHA-256) and absence
+# of committed media/large files. Complements `ci.yml` without duplicating it.
 on:
   push:
     branches: [main]
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   hygiene:
-    name: Propreté
+    name: Hygiene
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -25,22 +25,22 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - name: Installation
+      - name: Install
         run: pnpm install --frozen-lockfile
-      - name: Formatage (Prettier)
+      - name: Formatting (Prettier)
         run: pnpm format:check
-      - name: Intégrité binaires v86 (SHA-256)
+      - name: v86 binary integrity (SHA-256)
         run: |
           pnpm assets:prepare
           pnpm assets:check
-      - name: Médias/archives versionnés (interdits)
+      - name: Committed media/archives (forbidden)
         run: |
           set -euo pipefail
           if git ls-files | grep -Ei '\.(img|iso|qcow2?|vhd|vhdx|vmdk|vdi|ext[234])$'; then
-            echo "::error::Des images disque/média sont versionnées ; elles doivent rester hors Git."
+            echo "::error::Disk/media images are committed; they must stay out of Git."
             exit 1
           fi
-      - name: Gros fichiers versionnés (> 25 Mio, hors downloads publiés)
+      - name: Large committed files (> 25 MiB, excluding published downloads)
         run: |
           set -euo pipefail
           offenders=""
@@ -56,7 +56,7 @@ jobs:
           done < <(git ls-files)
           if [ -n "$offenders" ]; then
             printf '%b\n' "$offenders"
-            echo "::error::Fichiers volumineux versionnés détectés."
+            echo "::error::Large committed files detected."
             exit 1
           fi
-          echo "Aucun fichier versionné au-delà de 25 Mio (hors downloads publiés)."
+          echo "No committed file exceeds 25 MiB (excluding published downloads)."

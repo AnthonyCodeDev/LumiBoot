@@ -5,31 +5,29 @@ import type {
 } from '@lumiboot/contracts';
 
 /**
- * Détection de la preuve de démarrage invité.
+ * Detection of the guest boot proof.
  *
- * Deux modes, tous deux adossés au contrat `readiness` du PROFIL (catalogue) :
+ * Two modes, both backed by the `readiness` contract of the PROFILE (catalog):
  *
- * - `guest-marker` : la balise est écrite par le système réellement démarré
- *   (unité systemd `lumiboot-ready.service`, `ttyS0` par défaut). Elle ne doit
- *   JAMAIS être produite côté JavaScript : c'est l'UNIQUE preuve d'un OS
- *   opérationnel. Son absence dans le délai n'est jamais un `running` : c'est un
- *   échec non vérifié (voir `V86Instance`).
- * - `disk-boot` : aucun marqueur n'existe (média importé/BIOS). La preuve est une
- *   lecture réelle du disque dur (`hda`). Elle est PLUS FAIBLE : elle atteste une
- *   activité d'amorçage, pas un OS opérationnel. Elle ne doit jamais être
- *   présentée comme un marqueur invité.
+ * - `guest-marker`: the tag is written by the system that actually booted
+ *   (systemd unit `lumiboot-ready.service`, `ttyS0` by default). It must NEVER be
+ *   produced by JavaScript: it is the ONLY proof of an operational OS. Its
+ *   absence within the delay is never a `running`: it is an unverified failure
+ *   (see `V86Instance`).
+ * - `disk-boot`: no marker exists (imported media/BIOS). The proof is a real read
+ *   of the hard disk (`hda`). It is WEAKER: it attests boot activity, not an
+ *   operational OS. It must never be presented as a guest marker.
  *
- * Correctif audit #20 : le marqueur, le canal et le délai proviennent du contrat
- * `readiness` et ne sont plus codés en dur. Le flux est lu octet par octet : le
- * marqueur peut être réparti sur plusieurs notifications, on conserve donc un
- * tampon borné, dimensionné sur la longueur du marqueur DE L'INSTANCE (pas d'une
- * constante globale).
+ * Audit fix #20: the marker, channel and delay come from the `readiness`
+ * contract and are no longer hard-coded. The stream is read byte by byte: the
+ * marker can be split across several notifications, so a bounded buffer is kept,
+ * sized on the marker length OF THE INSTANCE (not on a global constant).
  */
 const DEFAULT_CHANNEL: GuestReadinessChannel = 'serial';
 const DEFAULT_MODE: GuestReadinessMode = 'guest-marker';
 const DEFAULT_TIMEOUT_MS = 120_000;
 
-/** Marge du tampon au-delà du marqueur, pour absorber le bruit du reste du flux. */
+/** Buffer margin beyond the marker, to absorb noise from the rest of the stream. */
 const EXTRA_TAIL_LENGTH = 64;
 
 export class GuestReadyDetector {
@@ -43,7 +41,7 @@ export class GuestReadyDetector {
 
   constructor(readiness: GuestReadiness) {
     if (readiness.marker.length === 0) {
-      throw new Error('Le marqueur de disponibilité invité ne peut pas être vide.');
+      throw new Error('The guest readiness marker cannot be empty.');
     }
     this.#marker = readiness.marker;
     this.#tailLength = readiness.marker.length + EXTRA_TAIL_LENGTH;
@@ -52,46 +50,46 @@ export class GuestReadyDetector {
     this.#timeoutMs = readiness.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
-  /** Marqueur attendu par cette instance. */
+  /** Marker expected by this instance. */
   get marker(): string {
     return this.#marker;
   }
 
-  /** Canal surveillé (`serial` ou `vga`). */
+  /** Watched channel (`serial` or `vga`). */
   get channel(): GuestReadinessChannel {
     return this.#channel;
   }
 
-  /** Mode de preuve (`guest-marker` par défaut, `disk-boot` pour un média importé). */
+  /** Proof mode (`guest-marker` by default, `disk-boot` for an imported media). */
   get mode(): GuestReadinessMode {
     return this.#mode;
   }
 
-  /** Délai maximal d'attente de la preuve, en millisecondes. */
+  /** Maximum wait for the proof, in milliseconds. */
   get timeoutMs(): number {
     return this.#timeoutMs;
   }
 
   /**
-   * Description factuelle de la preuve attendue par cette instance. Sert aux
-   * messages d'échec : un profil `disk-boot` est étiqueté comme tel (lecture
-   * disque) et n'est jamais présenté comme un marqueur invité.
+   * Factual description of the proof expected by this instance. Used in failure
+   * messages: a `disk-boot` profile is labeled as such (disk read) and is never
+   * presented as a guest marker.
    */
   describeExpectedProof(): string {
     if (this.#mode === 'disk-boot') {
-      return 'la première lecture du disque dur (hda)';
+      return 'the first read of the hard disk (hda)';
     }
-    const channel = this.#channel === 'vga' ? 'VGA' : 'série';
-    return `le marqueur « ${this.#marker} » sur le canal ${channel}`;
+    const channel = this.#channel === 'vga' ? 'VGA' : 'serial';
+    return `the marker "${this.#marker}" on the ${channel} channel`;
   }
 
   /**
-   * Consomme un octet du flux (série ou VGA). Retourne `true` une seule fois, au
-   * moment exact où le marqueur complet devient présent dans le tampon.
+   * Consumes one byte from the stream (serial or VGA). Returns `true` only once,
+   * at the exact moment the complete marker becomes present in the buffer.
    */
   pushByte(byte: number): boolean {
     if (this.#detected) return false;
-    // Le marqueur est ASCII : aucun problème de frontière UTF-8 ici.
+    // The marker is ASCII: no UTF-8 boundary issue here.
     this.#tail = (this.#tail + String.fromCharCode(byte & 0xff)).slice(-this.#tailLength);
     if (!this.#tail.includes(this.#marker)) return false;
     this.#detected = true;
@@ -99,9 +97,9 @@ export class GuestReadyDetector {
   }
 
   /**
-   * Mode `disk-boot` : la preuve est une lecture réelle du disque dur, pas un
-   * marqueur invité. Retourne `true` une seule fois, au premier accès disque
-   * observé. Cette preuve reste plus faible qu'un marqueur (voir doc de classe).
+   * `disk-boot` mode: the proof is a real hard disk read, not a guest marker.
+   * Returns `true` only once, on the first observed disk access. This proof stays
+   * weaker than a marker (see class doc).
    */
   markDiskBoot(): boolean {
     if (this.#detected) return false;

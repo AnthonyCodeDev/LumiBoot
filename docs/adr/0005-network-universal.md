@@ -1,25 +1,28 @@
-# ADR 0005 — Réseau commun
+# ADR 0005 — Shared network layer
 
-- Statut : accepté
-- Date : 2026-10-14
+- Status: accepted
+- Date: 2026-10-14
 
-## Décision
+## Context
 
-`@lumiboot/vm-network` décrit les profils, capacités, diagnostics et cycles de vie réseau indépendamment du moteur. `provider-v86` traduit ensuite le profil en `net_device`.
+Network modes to translate into `net_device` without leaking the abstraction.
 
-| Mode | État | Transport |
-|---|---|---|
-| `offline` | disponible | aucune NIC |
-| `browser-fetch` | disponible | backend Fetch de v86 ; HTTP 80, CORS, pas de HTTPS |
-| `local-proxy` | disponible | WISP V1 vers le proxy local loopback |
-| `user-relay` | disponible | relais WISP fourni par l'utilisateur |
-| `local-network` | prévu | réseau virtuel entre invités, non implémenté |
+## Decision
 
-Trois niveaux ne doivent pas être confondus : profil configuré, capacité théorique, connectivité vérifiée par une sonde réelle. `fullInternet` reste donc `false` par défaut pour tous les modes.
+`@lumiboot/vm-network` describes profiles, capabilities, diagnostics and lifecycle independently of the engine; `provider-v86` translates the profile into `net_device`.
 
-## Conséquences
+| Mode | Transport |
+|---|---|
+| `offline` | no NIC |
+| `browser-fetch` | v86 Fetch; HTTP 80, CORS, no HTTPS |
+| `local-proxy` | WISP V1 to the local loopback proxy |
+| `user-relay` | user-provided WISP relay |
 
-- Le profil est fixé avant le démarrage ; tout changement recrée la session.
-- Aucun relais public n'est fourni.
-- Les compteurs de trafic ne prouvent pas la connectivité.
-- Les limites et la configuration sont détaillées dans [`../network.md`](../network.md).
+Configured profile, theoretical capability and probe-verified connectivity stay distinct; `fullInternet` defaults to `false`.
+
+## Consequences
+
+- Profile fixed before start; any change recreates the session.
+- No public relay provided.
+- Traffic counters do not prove connectivity.
+- Details: [`../network.md`](../network.md).

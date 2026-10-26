@@ -17,7 +17,7 @@ type approveCall struct {
 	approve bool
 }
 
-// fakeController est un Controller en mémoire pour les tests.
+// fakeController is an in-memory Controller for tests.
 type fakeController struct {
 	mu       sync.Mutex
 	pending  []auth.Pairing
@@ -106,7 +106,7 @@ func TestParseCommand(t *testing.T) {
 	for _, tc := range cases {
 		gotCmd, gotArg := parseCommand(tc.in)
 		if gotCmd != tc.wantCmd || gotArg != tc.wantArg {
-			t.Errorf("parseCommand(%q) = (%q,%q), attendu (%q,%q)", tc.in, gotCmd, gotArg, tc.wantCmd, tc.wantArg)
+			t.Errorf("parseCommand(%q) = (%q,%q), want (%q,%q)", tc.in, gotCmd, gotArg, tc.wantCmd, tc.wantArg)
 		}
 	}
 }
@@ -114,12 +114,12 @@ func TestParseCommand(t *testing.T) {
 func TestIsAffirmative(t *testing.T) {
 	for _, s := range []string{"y", "Y", "yes", "YES", "o", "O", "oui", "Oui", "  oui "} {
 		if !isAffirmative(s) {
-			t.Errorf("%q devrait être affirmatif", s)
+			t.Errorf("%q should be affirmative", s)
 		}
 	}
-	for _, s := range []string{"n", "no", "non", "", "peut-être", "yesx", "approve"} {
+	for _, s := range []string{"n", "no", "non", "", "maybe", "yesx", "approve"} {
 		if isAffirmative(s) {
-			t.Errorf("%q ne devrait pas être affirmatif", s)
+			t.Errorf("%q should not be affirmative", s)
 		}
 	}
 }
@@ -138,10 +138,10 @@ func TestRunApprovesPairingOnYes(t *testing.T) {
 
 	calls := fc.approvals()
 	if len(calls) != 1 || calls[0].id != "pair-1" || !calls[0].approve {
-		t.Fatalf("approbations: %+v", calls)
+		t.Fatalf("approvals: %+v", calls)
 	}
-	if !strings.Contains(out.String(), "Nouvelle demande d'appairage") {
-		t.Fatalf("annonce absente: %q", out.String())
+	if !strings.Contains(out.String(), "New pairing request") {
+		t.Fatalf("missing announcement: %q", out.String())
 	}
 }
 
@@ -159,7 +159,7 @@ func TestRunDeniesPairingOnOtherInput(t *testing.T) {
 
 	calls := fc.approvals()
 	if len(calls) != 1 || calls[0].id != "pair-1" || calls[0].approve {
-		t.Fatalf("refus attendu: %+v", calls)
+		t.Fatalf("denial expected: %+v", calls)
 	}
 }
 
@@ -182,8 +182,8 @@ func TestRunQuit(t *testing.T) {
 	if err := c.Run(ctx); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if !strings.Contains(out.String(), "Arrêt demandé") {
-		t.Fatalf("arrêt non signalé: %q", out.String())
+	if !strings.Contains(out.String(), "Shutdown requested") {
+		t.Fatalf("shutdown not reported: %q", out.String())
 	}
 }
 
@@ -201,7 +201,7 @@ func TestCommandApproveByCodeAndRevoke(t *testing.T) {
 
 	c.handleCommand("approve 123456")
 	if calls := fc.approvals(); len(calls) != 1 || calls[0].id != "pair-1" || !calls[0].approve {
-		t.Fatalf("approve par code: %+v", calls)
+		t.Fatalf("approve by code: %+v", calls)
 	}
 
 	c.handleCommand("revoke deadbeef")
@@ -210,8 +210,8 @@ func TestCommandApproveByCodeAndRevoke(t *testing.T) {
 	}
 
 	c.handleCommand("list")
-	if !strings.Contains(out.String(), "Sessions actives : 1") {
-		t.Fatalf("list sans sessions: %q", out.String())
+	if !strings.Contains(out.String(), "Active sessions: 1") {
+		t.Fatalf("list without sessions: %q", out.String())
 	}
 }
 
@@ -219,12 +219,12 @@ func TestHandleCommandUnknown(t *testing.T) {
 	var out bytes.Buffer
 	c := New(&fakeController{}, strings.NewReader(""), &out)
 	if quit := c.handleCommand("frobnicate"); quit {
-		t.Fatal("commande inconnue ne doit pas quitter")
+		t.Fatal("unknown command must not quit")
 	}
-	if !strings.Contains(out.String(), "Commande inconnue") {
-		t.Fatalf("message attendu: %q", out.String())
+	if !strings.Contains(out.String(), "Unknown command") {
+		t.Fatalf("expected message: %q", out.String())
 	}
 	if quit := c.handleCommand("exit"); !quit {
-		t.Fatal("exit doit quitter")
+		t.Fatal("exit must quit")
 	}
 }

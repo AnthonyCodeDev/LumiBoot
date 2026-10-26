@@ -1,18 +1,18 @@
 #!/bin/sh
-# ~/.xinitrc — session graphique LumiBoot (XFCE).
+# ~/.xinitrc — LumiBoot graphical session (XFCE).
 #
-# Lancée par startx sur le canvas VGA (tty1) après l'autologin de « lumiboot ».
-# Cette session est RÉELLE : elle n'est jamais simulée côté React/JavaScript.
-# Le marqueur LUMIBOOT_DESKTOP_READY n'est émis que lorsque X répond et que la
-# session XFCE tourne (voir /usr/local/bin/lumiboot-desktop-ready).
+# Started by startx on the VGA canvas (tty1) after the autologin of "lumiboot".
+# This session is REAL: it is never simulated on the React/JavaScript side.
+# The LUMIBOOT_DESKTOP_READY marker is only emitted when X answers and the XFCE
+# session runs (see /usr/local/bin/lumiboot-desktop-ready).
 
-# Bus D-Bus de session (requis par de nombreux clients X et par XFCE).
+# Session D-Bus bus (required by many X clients and by XFCE).
 if command -v dbus-launch >/dev/null 2>&1 && [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
   eval "$(dbus-launch --sh-syntax --exit-with-session)"
 fi
 
-# Clavier français au niveau du serveur X.
+# French keyboard at the X server level.
 setxkbmap fr 2>/dev/null || true
 
-# Session XFCE : startxfce4 remplace le shell (fin de session = fin de session X).
+# XFCE session: startxfce4 replaces the shell (end of session = end of X session).
 exec startxfce4

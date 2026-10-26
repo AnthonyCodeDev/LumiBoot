@@ -1,45 +1,38 @@
-# Streaming HTTP Range des disques locaux
+# HTTP Range streaming of local disks
 
-Ce pipeline sert un disque RAW sans le copier dans `public/` ni le charger entièrement en mémoire.
+Pipeline serving a RAW disk without copying it into `public/` or loading it into memory.
 
-## Composants
+## Components
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `scripts/prepare-windows7-asset.mjs` | manifeste, provenance et SHA-256 streaming |
-| `scripts/lib/disk-asset-dev.mjs` | découverte des manifestes et middleware Vite |
-| `scripts/lib/range-server.mjs` | implémentation HTTP Range partagée |
-| `scripts/serve-windows7-asset.mjs` | serveur autonome loopback avec token |
-| `packages/vm-assets/src/local-disk.ts` | validation du manifeste |
+| `scripts/prepare-windows7-asset.mjs` | manifest, provenance and streaming SHA-256 |
+| `scripts/lib/disk-asset-dev.mjs` | manifest discovery and Vite middleware |
+| `scripts/lib/range-server.mjs` | shared HTTP Range implementation |
+| `scripts/serve-windows7-asset.mjs` | standalone loopback server with token |
+| `packages/vm-assets/src/local-disk.ts` | manifest validation |
 
-## Contrat HTTP
+## HTTP contract
 
-v86 sonde avec `Range: bytes=0-0` puis lit le disque par plages. Le serveur doit renvoyer :
+v86 probes the size with `Range: bytes=0-0` then reads by ranges. The server returns `206` with exact `Content-Range`, `Content-Length` and `Accept-Ranges: bytes`, `416` and `Content-Range: bytes */<size>` for an unsatisfiable range, never `Content-Encoding`. A `200` response to a Range request is rejected by the v86 async reader; multiple ranges are merged into `multipart/byteranges` (32 maximum).
 
-- `206 Partial Content` pour une plage valide ;
-- `Content-Range`, `Content-Length` et `Accept-Ranges: bytes` exacts ;
-- `416` avec `Content-Range: bytes */<taille>` pour une plage invalide ;
-- aucune compression sur le contenu binaire.
-
-Une réponse `200` à une requête Range n'est pas compatible avec le lecteur asynchrone de v86.
-
-## Serveur autonome
+## Standalone server
 
 ```bash
 pnpm assets:windows7:serve
-# ou
+# or
 node scripts/serve-windows7-asset.mjs \
   --manifest images/windows-7-x86/manifest.json \
   --port 37893
 ```
 
-Par défaut il écoute sur `127.0.0.1` et génère un token accepté en query string ou via `X-Lumiboot-Token`. Une adresse non-loopback exige `--expose` et rend potentiellement le disque téléchargeable : ne pas l'utiliser en production sans contrôle d'accès adapté.
+Defaults: `images/windows-7-pro-sp1-x86/manifest.json`, `127.0.0.1:37893`, random 24-byte token (hex) accepted as `?token=` or `X-Lumiboot-Token`, applied to the disk, manifest and v86 binary URLs. `--no-token`, `--token <value>` (8 characters minimum), `--source <file>`, `--expose` (non-loopback, downloadable disk).
 
-## Vérification
+## Verification
 
 ```bash
 pnpm assets:windows7:check
-pnpm test -- --run tests/prepare-windows7-asset.test.ts tests/range-server.test.ts
+pnpm exec vitest run tests/prepare-windows7-asset.test.ts tests/range-server.test.ts
 ```
 
-COOP/COEP n'est pas requis par v86 0.5.471. Il reste activable avec `LUMIBOOT_COOP_COEP=1` pour de futurs moteurs.
+COOP/COEP is not required by v86 0.5.471; `LUMIBOOT_COOP_COEP=1` enables them on the dev server and the preview (`apps/web/vite.config.ts:12,19-27`).

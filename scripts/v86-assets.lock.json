@@ -1,5 +1,5 @@
 {
-  "$comment": "Verrou des binaires du moteur v86. Généré à partir de la version npm v86 réellement installée et des BIOS du dépôt officiel copy/v86 au commit correspondant. Toute divergence de SHA-256 ou de taille fait échouer scripts/prepare-v86-assets.mjs.",
+  "$comment": "Lock file for the v86 engine binaries. Generated from the npm v86 version actually installed and from the BIOS files of the official copy/v86 repository at the matching commit. Any divergence in SHA-256 or size makes scripts/prepare-v86-assets.mjs fail.",
   "v86Version": "0.5.471",
   "v86Commit": "94faf3d",
   "assets": {

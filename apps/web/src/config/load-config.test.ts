@@ -10,7 +10,7 @@ interface FakeResponseInit {
   contentType?: string | null;
 }
 
-/** Réponse minimale n'exposant que ce que `loadConfig` consomme. */
+/** Minimal response exposing only what `loadConfig` consumes. */
 function makeResponse(body: string, init: FakeResponseInit = {}): Response {
   const contentType = init.contentType === undefined ? 'application/json' : init.contentType;
   return {
@@ -39,7 +39,7 @@ async function loadAndCatch(fetchImpl: FetchLike): Promise<ConfigLoadError> {
     if (error instanceof ConfigLoadError) return error;
     throw error;
   }
-  throw new Error('ConfigLoadError attendue mais aucune erreur levée.');
+  throw new Error('Expected ConfigLoadError but no error was thrown.');
 }
 
 const VALID_CONFIG = {
@@ -51,7 +51,7 @@ const VALID_CONFIG = {
 };
 
 describe('loadConfig', () => {
-  it('charge et normalise une configuration valide', async () => {
+  it('loads and normalizes a valid configuration', async () => {
     const config = await loadConfig(fetchReturningJson(VALID_CONFIG));
     expect(config.version).toBe(1);
     expect(config.network.defaultProfile).toEqual({ mode: 'browser-fetch' });
@@ -60,7 +60,7 @@ describe('loadConfig', () => {
     expect(config.proxy.url).toContain('127.0.0.1:37892');
   });
 
-  it('applique les défauts proxy réseau local en l’absence de section dédiée', async () => {
+  it('applies the local network proxy defaults when the section is absent', async () => {
     const config = await loadConfig(fetchReturningJson(VALID_CONFIG));
     expect(config.proxy).toEqual({
       enabled: true,
@@ -68,7 +68,7 @@ describe('loadConfig', () => {
     });
   });
 
-  it('rejette une proxy.url non loopback', async () => {
+  it('rejects a non-loopback proxy.url', async () => {
     const error = await loadAndCatch(
       fetchReturningJson({
         ...VALID_CONFIG,
@@ -78,17 +78,17 @@ describe('loadConfig', () => {
     expect(error.code).toBe('CONFIG_INVALID_PROXY_URL');
   });
 
-  it('rejette une proxy.url mal formée', async () => {
+  it('rejects a malformed proxy.url', async () => {
     const error = await loadAndCatch(
       fetchReturningJson({
         ...VALID_CONFIG,
-        proxy: { url: 'pas-une-url' },
+        proxy: { url: 'not-a-url' },
       }),
     );
     expect(error.code).toBe('CONFIG_INVALID_PROXY_URL');
   });
 
-  it('rejette tout proxyToken persisté dans le fichier public', async () => {
+  it('rejects any proxyToken persisted in the public file', async () => {
     const error = await loadAndCatch(
       fetchReturningJson({
         version: 1,
@@ -100,7 +100,7 @@ describe('loadConfig', () => {
     expect(error.code).toBe('CONFIG_FORBIDDEN_TOKEN');
   });
 
-  it('rejette un proxyToken niché dans la section proxy', async () => {
+  it('rejects a proxyToken nested in the proxy section', async () => {
     const error = await loadAndCatch(
       fetchReturningJson({
         ...VALID_CONFIG,
@@ -110,7 +110,7 @@ describe('loadConfig', () => {
     expect(error.code).toBe('CONFIG_FORBIDDEN_TOKEN');
   });
 
-  it('cible bien le fichier public avec cache désactivé', async () => {
+  it('targets the public file with caching disabled', async () => {
     let seenUrl: string | undefined;
     let seenInit: RequestInit | undefined;
     const fetchImpl: FetchLike = async (url, init) => {
@@ -123,17 +123,17 @@ describe('loadConfig', () => {
     expect(seenInit?.cache).toBe('no-store');
   });
 
-  it('rejette un corps JSON invalide', async () => {
-    const error = await loadAndCatch(fetchReturning(makeResponse('{ pas du json')));
+  it('rejects an invalid JSON body', async () => {
+    const error = await loadAndCatch(fetchReturning(makeResponse('{ not json')));
     expect(error.code).toBe('CONFIG_INVALID_JSON');
   });
 
-  it('rejette une version de configuration incompatible', async () => {
+  it('rejects an incompatible config version', async () => {
     const error = await loadAndCatch(fetchReturningJson({ ...VALID_CONFIG, version: 2 }));
     expect(error.code).toBe('CONFIG_VERSION_UNSUPPORTED');
   });
 
-  it('rejette un mode réseau inconnu', async () => {
+  it('rejects an unknown network mode', async () => {
     const error = await loadAndCatch(
       fetchReturningJson({
         version: 1,
@@ -143,7 +143,7 @@ describe('loadConfig', () => {
     expect(error.code).toBe('CONFIG_INVALID_MODE');
   });
 
-  it('rejette une adresse de relais WISP invalide (ws://)', async () => {
+  it('rejects an invalid WISP relay address (ws://)', async () => {
     const error = await loadAndCatch(
       fetchReturningJson({
         version: 1,
@@ -155,7 +155,7 @@ describe('loadConfig', () => {
     expect(error.code).toBe('CONFIG_INVALID_RELAY');
   });
 
-  it('accepte une adresse de relais wss:// valide', async () => {
+  it('accepts a valid wss:// relay address', async () => {
     const config = await loadConfig(
       fetchReturningJson({
         version: 1,
@@ -168,7 +168,7 @@ describe('loadConfig', () => {
     expect(config.network.defaultProfile.relayUrl).toContain('wss://relay.example:4000');
   });
 
-  it("rejette l'absence de configuration (404)", async () => {
+  it('rejects a missing configuration (404)', async () => {
     const error = await loadAndCatch(
       fetchReturning(
         makeResponse('Not Found', { ok: false, status: 404, statusText: 'Not Found' }),
@@ -177,7 +177,7 @@ describe('loadConfig', () => {
     expect(error.code).toBe('CONFIG_NOT_FOUND');
   });
 
-  it('rejette le repli SPA (page HTML servie à la place du JSON)', async () => {
+  it('rejects the SPA fallback (HTML page served instead of JSON)', async () => {
     const error = await loadAndCatch(
       fetchReturning(
         makeResponse('<!doctype html><html><body>app</body></html>', {
@@ -188,7 +188,7 @@ describe('loadConfig', () => {
     expect(error.code).toBe('CONFIG_INVALID');
   });
 
-  it('rejette un corps commençant par « < » même sans en-tête HTML', async () => {
+  it('rejects a body starting with "<" even without an HTML header', async () => {
     const error = await loadAndCatch(
       fetchReturning(makeResponse('  <html></html>', { contentType: 'application/json' })),
     );
@@ -197,7 +197,7 @@ describe('loadConfig', () => {
 });
 
 describe('resolveNetworkProfile', () => {
-  it('priorise le profil spécifique au système sur le profil par défaut', async () => {
+  it('prioritizes the system-specific profile over the default profile', async () => {
     const config = await loadConfig(
       fetchReturningJson({
         version: 1,
@@ -210,17 +210,17 @@ describe('resolveNetworkProfile', () => {
     setRuntimeConfig(config);
 
     expect(resolveNetworkProfile('debian-12-i386')).toEqual({ mode: 'browser-fetch' });
-    expect(resolveNetworkProfile('inconnu')).toEqual({ mode: 'offline' });
+    expect(resolveNetworkProfile('unknown')).toEqual({ mode: 'offline' });
   });
 
-  it('applique le profil par défaut quand aucun système ne correspond', () => {
+  it('applies the default profile when no system matches', () => {
     const config: LumibootConfig = {
       version: 1,
       network: { defaultProfile: { mode: 'user-relay', relayUrl: 'wss://relay.example:4000' } },
       proxy: { enabled: true, url: 'http://127.0.0.1:37892/' },
     };
     setRuntimeConfig(config);
-    expect(resolveNetworkProfile('autre')).toEqual({
+    expect(resolveNetworkProfile('other')).toEqual({
       mode: 'user-relay',
       relayUrl: 'wss://relay.example:4000',
     });

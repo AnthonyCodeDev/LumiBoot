@@ -13,10 +13,10 @@ export function SystemGrid() {
     return (
       <div className="empty-state" id="empty-state">
         <div className="empty-icon">⌕</div>
-        <strong>Aucun système trouvé</strong>
-        <p>Modifiez votre recherche ou sélectionnez une autre catégorie.</p>
+        <strong>No systems found</strong>
+        <p>Change your search or pick another category.</p>
         <Button variant="outline" type="button" onClick={resetFilters}>
-          Réinitialiser les filtres
+          Reset filters
         </Button>
       </div>
     );
@@ -33,7 +33,7 @@ export function SystemGrid() {
             <SystemCard
               key={system.id}
               system={system}
-              // La carte ouvre la mère/base : la variante se choisit sur la fiche.
+              // The card opens the base system: the variant is picked on its page.
               onOpen={(target) => navigate(`/systems/${target.slug}`)}
             />
           ))}

@@ -1,8 +1,8 @@
-// Binaire lumiboot-network : « LumiBoot Network Proxy » local.
+// Command lumiboot-network is the local "LumiBoot Network Proxy" binary.
 //
-// Ce programme démarre le serveur WebSocket WISP local (pont réseau vers
-// Internet pour l'OS virtualisé) et une console interactive d'administration
-// (appairage, sessions). Il n'exécute AUCUNE machine virtuelle.
+// This program starts the local WISP WebSocket server (network bridge to the
+// Internet for the virtualized OS) and an interactive administration console
+// (pairing, sessions). It does NOT run any virtual machine.
 package main
 
 import (
@@ -29,9 +29,9 @@ func main() {
 
 func run() error {
 	var (
-		configPath = flag.String("config", "", "chemin du fichier config JSON (défaut : dossier config de l'OS)")
-		listen     = flag.String("listen", "", "surcharge de l'adresse d'écoute (doit rester loopback)")
-		showVer    = flag.Bool("version", false, "affiche la version et quitte")
+		configPath = flag.String("config", "", "path to the JSON config file (default: OS config folder)")
+		listen     = flag.String("listen", "", "override the listen address (must stay loopback)")
+		showVer    = flag.Bool("version", false, "print the version and exit")
 	)
 	flag.Parse()
 
@@ -44,7 +44,7 @@ func run() error {
 	if path == "" {
 		p, err := platform.ConfigFilePath()
 		if err != nil {
-			return fmt.Errorf("chemin de config introuvable: %w", err)
+			return fmt.Errorf("config path not found: %w", err)
 		}
 		path = p
 	}
@@ -71,8 +71,8 @@ func run() error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Serveur HTTP/WS et console interactive en parallèle : dès que l'un
-	// s'arrête, on annule le contexte et on laisse l'autre se terminer.
+	// HTTP/WS server and interactive console run in parallel: as soon as one
+	// stops, the context is cancelled and the other is allowed to finish.
 	errCh := make(chan error, 2)
 	go func() { errCh <- srv.Run(ctx) }()
 	go func() { errCh <- console.New(srv.Authenticator(), os.Stdin, os.Stdout).Run(ctx) }()
@@ -98,20 +98,20 @@ func run() error {
 	if firstErr != nil {
 		return firstErr
 	}
-	fmt.Println("Arrêt du proxy réseau local : au revoir.")
+	fmt.Println("Local network proxy stopped. Goodbye.")
 	return nil
 }
 
-// printBanner affiche la bannière de démarrage (sobre, alignée).
+// printBanner prints the startup banner (plain, aligned).
 func printBanner(listenAddr string) {
 	rule := strings.Repeat("─", 60)
 	fmt.Println(rule)
 	fmt.Printf(" LumiBoot Network Proxy — v%s\n", server.Version)
 	fmt.Println(rule)
-	fmt.Printf(" Endpoint WISP local : ws://%s/wisp/\n", listenAddr)
-	fmt.Printf(" Écoute              : %s (loopback uniquement)\n", listenAddr)
-	fmt.Println(" Sécurité            : réseaux privés / loopback / métadonnées bloqués")
-	fmt.Println(" Autorisation        : automatique côté LumiBoot ; à approuver ci-dessous")
+	fmt.Printf(" Local WISP endpoint : ws://%s/wisp/\n", listenAddr)
+	fmt.Printf(" Listening           : %s (loopback only)\n", listenAddr)
+	fmt.Println(" Security            : private networks / loopback / metadata blocked")
+	fmt.Println(" Authorization       : automatic on the LumiBoot side; approve below")
 	fmt.Println(rule)
-	fmt.Println(" Tapez « help » pour les commandes — Ctrl+C pour arrêter.")
+	fmt.Println(` Type "help" for commands — Ctrl+C to stop.`)
 }

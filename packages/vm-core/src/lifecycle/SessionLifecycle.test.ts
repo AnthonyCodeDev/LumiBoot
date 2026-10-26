@@ -95,7 +95,7 @@ class ControlledEngine implements VMEngine {
   }
 }
 
-/** Instance qui rejoue un scénario fixe d'événements dès l'abonnement. */
+/** Instance that replays a fixed event script as soon as it is subscribed. */
 class ScriptedInstance implements VMInstance {
   readonly id = 'scripted-instance';
   readonly providerId = 'scripted';
@@ -138,7 +138,7 @@ class ScriptedEngine implements VMEngine {
   }
 }
 
-/** Échoue au premier démarrage, réussit ensuite. */
+/** Fails on the first start, succeeds afterwards. */
 class FlakyEngine implements VMEngine {
   readonly id = 'flaky';
   readonly instances: ControlledInstance[] = [];
@@ -162,8 +162,8 @@ class FlakyEngine implements VMEngine {
 }
 
 /**
- * Instance dont le `subscribe` renvoie un désabonnement inopérant : simule un
- * moteur fautif qui continue d'émettre après sa libération.
+ * Instance whose `subscribe` returns an ineffective unsubscribe: simulates a
+ * faulty engine that keeps emitting after its release.
  */
 class LeakyInstance implements VMInstance {
   readonly id = 'leaky-instance';
@@ -203,10 +203,9 @@ class FixedEngine implements VMEngine {
 }
 
 /**
- * Instance pilotable : `subscribe` rejoue un état initial (`booting` ou
- * `running`) puis laisse le test émettre n'importe quel événement. `leaky`
- * simule un moteur fautif dont le désabonnement est inopérant (événements
- * tardifs reçus après libération).
+ * Controllable instance: `subscribe` replays an initial state (`booting` or
+ * `running`) then lets the test emit any event. `leaky` simulates a faulty
+ * engine whose unsubscribe is ineffective (late events received after release).
  */
 class ManualInstance implements VMInstance {
   readonly id = 'manual-instance';
@@ -259,7 +258,7 @@ class ManualEngine implements VMEngine {
   }
 }
 
-/** Instance dont `stop()` et `dispose()` rejettent (échec de destroy). */
+/** Instance whose `stop()` and `dispose()` reject (destroy failure). */
 class FailingCleanupInstance implements VMInstance {
   readonly id = 'failing-cleanup';
   readonly providerId = 'failing';
@@ -286,7 +285,7 @@ class FailingCleanupInstance implements VMInstance {
 }
 
 describe('SessionLifecycle', () => {
-  it('passe de idle a preparing puis running et peut redemarrer apres stop', async () => {
+  it('goes from idle to preparing then running and can restart after stop', async () => {
     const engine = new ControlledEngine();
     const registry = new VMRegistry([engine]);
     const lifecycle = new SessionLifecycle(makeOS(), registry, 's1');
@@ -310,7 +309,7 @@ describe('SessionLifecycle', () => {
     expect(engine.startCalls).toHaveLength(2);
   });
 
-  it('annule proprement un demarrage concurrent et nettoie l instance creee', async () => {
+  it('cleanly cancels a concurrent start and cleans up the created instance', async () => {
     const engine = new ControlledEngine();
     const registry = new VMRegistry([engine]);
     const lifecycle = new SessionLifecycle(makeOS(), registry, 's2');
@@ -327,7 +326,7 @@ describe('SessionLifecycle', () => {
     expect(engine.instances[0]?.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('libere les ressources meme si le moteur echoue', async () => {
+  it('releases resources even if the engine fails', async () => {
     const failingEngine: VMEngine = {
       id: 'failing',
       capabilities(): VMCapabilities {
@@ -348,7 +347,7 @@ describe('SessionLifecycle', () => {
     expect(lifecycle.snapshot.error?.code).toBe('START_FAILED');
   });
 
-  it('atteint running même si le moteur ne signale pas la phase booting', async () => {
+  it('reaches running even if the engine does not report the booting phase', async () => {
     const instance: VMInstance = {
       id: 'instance-only-running',
       providerId: 'only-running',
@@ -379,7 +378,7 @@ describe('SessionLifecycle', () => {
     expect(lifecycle.snapshot.state).toBe('running');
   });
 
-  it('recopie loadedBytes/totalBytes des événements progress dans le snapshot', async () => {
+  it('copies loadedBytes/totalBytes from progress events into the snapshot', async () => {
     const engine = new ControlledEngine();
     const registry = new VMRegistry([engine]);
     const lifecycle = new SessionLifecycle(makeOS(), registry, 's-bytes');
@@ -405,7 +404,7 @@ describe('SessionLifecycle', () => {
     expect(lifecycle.snapshot.totalBytes).toBeUndefined();
   });
 
-  it('recopie les diagnostics réseau et ne change pas l’état', async () => {
+  it('copies network diagnostics and does not change the state', async () => {
     const engine = new ControlledEngine();
     const registry = new VMRegistry([engine]);
     const lifecycle = new SessionLifecycle(makeOS(), registry, 's-network');
@@ -444,7 +443,7 @@ describe('SessionLifecycle', () => {
     expect(lifecycle.snapshot.network).toBeUndefined();
   });
 
-  it('signale les erreurs de nettoyage via le callback fourni', async () => {
+  it('reports cleanup errors through the provided callback', async () => {
     const instance: VMInstance = {
       id: 'instance-flaky',
       providerId: 'flaky',
@@ -486,10 +485,10 @@ describe('SessionLifecycle', () => {
     expect(errors).toContain('dispose');
   });
 
-  it('libère l’instance après une erreur de téléchargement pendant le boot', async () => {
+  it('releases the instance after a download error during boot', async () => {
     const engine = new ScriptedEngine([
       { type: 'progress', phase: 'downloading', loadedBytes: 1, totalBytes: 10 },
-      { type: 'error', code: 'DOWNLOAD_FAILED', message: 'téléchargement interrompu' },
+      { type: 'error', code: 'DOWNLOAD_FAILED', message: 'download interrupted' },
     ]);
     const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-download');
 
@@ -501,10 +500,10 @@ describe('SessionLifecycle', () => {
     expect(engine.instances[0]?.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('libère l’instance après un échec de emulator.run()', async () => {
+  it('releases the instance after an emulator.run() failure', async () => {
     const engine = new ScriptedEngine([
       { type: 'progress', phase: 'booting', loadedBytes: 1, totalBytes: 10 },
-      { type: 'error', code: 'RUN_FAILED', message: 'échec du moteur' },
+      { type: 'error', code: 'RUN_FAILED', message: 'engine failure' },
     ]);
     const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-run');
 
@@ -515,7 +514,7 @@ describe('SessionLifecycle', () => {
     expect(engine.instances[0]?.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('stop() pendant un démarrage : aucun running tardif, instance libérée', async () => {
+  it('stop() during a start: no late running, instance released', async () => {
     const engine = new ControlledEngine();
     const registry = new VMRegistry([engine]);
     const lifecycle = new SessionLifecycle(makeOS(), registry, 's-stop-race');
@@ -532,7 +531,7 @@ describe('SessionLifecycle', () => {
     expect(engine.instances[0]?.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('dispose() pendant une requête réseau : libération unique', async () => {
+  it('dispose() during a network request: single release', async () => {
     const engine = new ControlledEngine();
     const registry = new VMRegistry([engine]);
     const lifecycle = new SessionLifecycle(makeOS(), registry, 's-dispose-race');
@@ -547,7 +546,7 @@ describe('SessionLifecycle', () => {
     expect(engine.instances[0]?.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('redémarre après une erreur en créant une nouvelle instance', async () => {
+  it('restarts after an error by creating a new instance', async () => {
     const engine = new FlakyEngine();
     const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-restart');
 
@@ -560,7 +559,7 @@ describe('SessionLifecycle', () => {
     expect(engine.instances).toHaveLength(1);
   });
 
-  it('ignore un événement tardif après dispose()', async () => {
+  it('ignores a late event after dispose()', async () => {
     const instance = new LeakyInstance();
     const lifecycle = new SessionLifecycle(
       makeOS(),
@@ -575,13 +574,13 @@ describe('SessionLifecycle', () => {
     expect(lifecycle.snapshot.state).toBe('stopped');
 
     instance.emit({ type: 'state', state: 'preparing' });
-    instance.emit({ type: 'error', code: 'LATE', message: 'tardif' });
+    instance.emit({ type: 'error', code: 'LATE', message: 'late' });
 
     expect(lifecycle.snapshot.state).toBe('stopped');
     expect(lifecycle.snapshot.error).toBeUndefined();
   });
 
-  it('arrêt spontané depuis running : traverse stopping, libère et permet un redémarrage', async () => {
+  it('spontaneous stop from running: traverses stopping, releases and allows a restart', async () => {
     const engine = new ManualEngine('running');
     const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-spont-running');
     const states: VMState[] = [];
@@ -591,11 +590,11 @@ describe('SessionLifecycle', () => {
     expect(lifecycle.snapshot.state).toBe('running');
 
     const instance = engine.instances[0]!;
-    // Autant le signal direct `stopped` que la séquence `stopping` -> `stopped`
-    // émise par le provider v86 doivent être réconciliés.
+    // Both the direct `stopped` signal and the `stopping` -> `stopped` sequence
+    // emitted by the v86 provider must be reconciled.
     instance.emit({ type: 'state', state: 'stopping' });
     instance.emit({ type: 'state', state: 'stopped' });
-    // `stop()` terminal attend le nettoyage en vol (stop puis dispose).
+    // The terminal `stop()` waits for the cleanup in flight (stop then dispose).
     await lifecycle.stop();
 
     expect(lifecycle.snapshot.state).toBe('stopped');
@@ -603,13 +602,13 @@ describe('SessionLifecycle', () => {
     expect(instance.stop).toHaveBeenCalledTimes(1);
     expect(instance.dispose).toHaveBeenCalledTimes(1);
 
-    // Aucune VM zombie : l'instance libérée n'empêche plus un redémarrage.
+    // No zombie VM: the released instance no longer prevents a restart.
     await lifecycle.start(document.createElement('div'));
     expect(lifecycle.snapshot.state).toBe('running');
     expect(engine.instances).toHaveLength(2);
   });
 
-  it('arrêt spontané depuis running (stopped direct) : atteint stopped sans ignore', async () => {
+  it('spontaneous stop from running (direct stopped): reaches stopped without ignore', async () => {
     const engine = new ManualEngine('running');
     const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-spont-direct');
 
@@ -623,7 +622,7 @@ describe('SessionLifecycle', () => {
     expect(engine.instances[0]!.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('arrêt spontané depuis booting : atteint stopped sans jamais running', async () => {
+  it('spontaneous stop from booting: reaches stopped without ever running', async () => {
     const engine = new ManualEngine('booting');
     const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-spont-booting');
     const states: VMState[] = [];
@@ -640,7 +639,7 @@ describe('SessionLifecycle', () => {
     expect(engine.instances[0]!.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('arrêt spontané idempotent : un seul nettoyage et aucun événement tardif', async () => {
+  it('idempotent spontaneous stop: a single cleanup and no late event', async () => {
     const engine = new ManualEngine('running', true);
     const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-spont-idem');
 
@@ -648,11 +647,11 @@ describe('SessionLifecycle', () => {
     const instance = engine.instances[0]!;
 
     instance.emit({ type: 'state', state: 'stopped' });
-    // Événements tardifs d'un moteur fautif (désabonnement inopérant) : ignorés.
+    // Late events from a faulty engine (ineffective unsubscribe): ignored.
     instance.emit({ type: 'state', state: 'stopped' });
     instance.emit({ type: 'state', state: 'running' });
     instance.emit({ type: 'progress', phase: 'booting', loadedBytes: 5, totalBytes: 10 });
-    instance.emit({ type: 'error', code: 'LATE', message: 'tardif' });
+    instance.emit({ type: 'error', code: 'LATE', message: 'late' });
     await lifecycle.stop();
 
     expect(lifecycle.snapshot.state).toBe('stopped');
@@ -663,7 +662,7 @@ describe('SessionLifecycle', () => {
     expect(instance.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('arrêt spontané : un échec de destroy est rapporté sans rejeter', async () => {
+  it('spontaneous stop: a destroy failure is reported without rejecting', async () => {
     const errors: string[] = [];
     const instance = new FailingCleanupInstance();
     const lifecycle = new SessionLifecycle(
@@ -677,8 +676,8 @@ describe('SessionLifecycle', () => {
     expect(lifecycle.snapshot.state).toBe('running');
 
     instance.emit({ type: 'state', state: 'stopped' });
-    // `stop()` terminal attend le nettoyage en vol pour ne rendre la main
-    // qu'une fois la libération terminée (même si elle échoue).
+    // The terminal `stop()` waits for the cleanup in flight so it only hands
+    // back control once the release is over (even if it fails).
     await lifecycle.stop();
 
     expect(lifecycle.snapshot.state).toBe('stopped');

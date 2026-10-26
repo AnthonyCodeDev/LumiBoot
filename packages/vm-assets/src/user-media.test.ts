@@ -11,7 +11,7 @@ const HASH = 'a'.repeat(64);
 
 const input: UserMediaInput = {
   ref: 'windows-7-x86',
-  displayName: 'Windows 7 x86 (média local)',
+  displayName: 'Windows 7 x86 (local media)',
   fileName: 'windows-7.img',
   format: 'raw',
   licenseAcknowledged: true,
@@ -20,7 +20,7 @@ const input: UserMediaInput = {
 const blobOf = (size: number): Blob => new Blob([new Uint8Array(size)]);
 
 describe('parseUserMediaManifest', () => {
-  it('accepte un manifeste utilisateur valide', () => {
+  it('accepts a valid user manifest', () => {
     const manifest = parseUserMediaManifest({
       version: 1,
       ref: 'windows-7-x86',
@@ -29,14 +29,14 @@ describe('parseUserMediaManifest', () => {
       architecture: 'i386',
       sha256: HASH,
       sizeBytes: 1024,
-      license: 'Licence retail détenue par l’utilisateur',
-      provenance: 'Disque personnel',
+      license: 'Retail license held by the user',
+      provenance: 'Personal disk',
     });
     expect(manifest.ref).toBe('windows-7-x86');
     expect(manifest.sha256).toBe(HASH);
   });
 
-  it('rejette une référence invalide', () => {
+  it('rejects an invalid reference', () => {
     expect(() =>
       parseUserMediaManifest({
         version: 1,
@@ -50,7 +50,7 @@ describe('parseUserMediaManifest', () => {
     ).toThrow(AssetError);
   });
 
-  it('rejette une empreinte non hexadécimale', () => {
+  it('rejects a non-hexadecimal checksum', () => {
     expect(() =>
       parseUserMediaManifest({
         version: 1,
@@ -67,14 +67,14 @@ describe('parseUserMediaManifest', () => {
 });
 
 describe('importUserMedia', () => {
-  it('refuse l’import sans attestation de licence', async () => {
+  it('rejects the import without a license acknowledgement', async () => {
     const store = createMemoryUserMediaStore();
     await expect(
       importUserMedia(store, { ...input, licenseAcknowledged: false }, blobOf(16)),
     ).rejects.toMatchObject({ code: 'ASSET_IMPORT_REJECTED' });
   });
 
-  it('marque un média sans empreinte de référence comme « unverified »', async () => {
+  it('marks a media without a reference checksum as "unverified"', async () => {
     const store = createMemoryUserMediaStore();
     const descriptor = await importUserMedia(store, input, blobOf(32));
     expect(descriptor.integrity).toBe('unverified');
@@ -82,7 +82,7 @@ describe('importUserMedia', () => {
     expect(await store.get('windows-7-x86')).toEqual(descriptor);
   });
 
-  it('vérifie l’empreinte fournie et marque le média « verified »', async () => {
+  it('verifies the provided checksum and marks the media "verified"', async () => {
     const store = createMemoryUserMediaStore();
     const descriptor = await importUserMedia(store, input, blobOf(64), {
       expectedSha256: HASH,
@@ -92,7 +92,7 @@ describe('importUserMedia', () => {
     expect(descriptor.sha256).toBe(HASH.toLowerCase());
   });
 
-  it('rejette une empreinte non conforme', async () => {
+  it('rejects a mismatching checksum', async () => {
     const store = createMemoryUserMediaStore();
     await expect(
       importUserMedia(store, input, blobOf(64), {
@@ -102,14 +102,14 @@ describe('importUserMedia', () => {
     ).rejects.toMatchObject({ code: 'ASSET_CHECKSUM_MISMATCH' });
   });
 
-  it('rejette une taille non conforme', async () => {
+  it('rejects a mismatching size', async () => {
     const store = createMemoryUserMediaStore();
     await expect(
       importUserMedia(store, input, blobOf(64), { expectedSize: 128 }),
     ).rejects.toMatchObject({ code: 'ASSET_SIZE_MISMATCH' });
   });
 
-  it('ne hache pas au-delà du cap et reste « unverified »', async () => {
+  it('does not hash beyond the cap and stays "unverified"', async () => {
     const store = createMemoryUserMediaStore();
     let hashed = false;
     const descriptor = await importUserMedia(store, input, blobOf(1024), {
@@ -124,7 +124,7 @@ describe('importUserMedia', () => {
     expect(descriptor.integrity).toBe('unverified');
   });
 
-  it('conserve les octets et sait les relire / les supprimer', async () => {
+  it('keeps the bytes and can read them back / delete them', async () => {
     const store = createMemoryUserMediaStore();
     await importUserMedia(store, input, blobOf(128));
     const bytes = await store.getBytes('windows-7-x86');

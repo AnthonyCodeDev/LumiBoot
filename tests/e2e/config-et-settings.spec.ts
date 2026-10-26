@@ -1,29 +1,29 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Intégration de la configuration globale et retrait de la page Settings.
+ * Integration of the global configuration and removal of the Settings page.
  *
- * Ces tests vérifient trois faits observables dans l'application servie :
- *  1. `/settings` n'existe plus : aucune page réseau n'est rendue, l'état
- *     « introuvable » s'affiche à la place.
- *  2. La disponibilité du catalogue reste DÉRIVÉE : Debian (boot réel prouvé)
- *     porte le badge « Disponible ».
- *  3. `public/lumiboot.config.json` est bien déployé et servi en JSON (jamais
- *     le repli SPA HTML), avec la version 1 et un profil réseau par défaut.
+ * These tests verify three facts observable in the served application:
+ *  1. `/settings` no longer exists: no network page is rendered, the
+ *     "not found" state is displayed instead.
+ *  2. Catalog availability stays DERIVED: Debian (proven real boot) carries
+ *     the "Available" badge.
+ *  3. `public/lumiboot.config.json` is deployed and served as JSON (never the
+ *     HTML SPA fallback), with version 1 and a default network profile.
  */
-test.describe('Configuration globale et retrait de Settings', () => {
-  test("n'expose plus de page Settings (état introuvable)", async ({ page }) => {
+test.describe('Global configuration and removal of Settings', () => {
+  test('no longer exposes a Settings page (not found state)', async ({ page }) => {
     await page.goto('/settings');
 
-    // La route inconnue est captée par `path: '*'` : page introuvable visible.
-    await expect(page.getByRole('heading', { name: 'Page introuvable' })).toBeVisible();
+    // The unknown route is caught by `path: '*'`: not-found page visible.
+    await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
 
-    // Aucun panneau réseau ni libellé de l'ancienne page Settings ne subsiste.
-    await expect(page.getByText('Paramètres réseau')).toHaveCount(0);
+    // Neither the network panel nor any label of the former Settings page remains.
+    await expect(page.getByText('Network settings')).toHaveCount(0);
     await expect(page.locator('.network-panel')).toHaveCount(0);
   });
 
-  test('affiche Debian comme disponible dans la bibliothèque', async ({ page }) => {
+  test('shows Debian as available in the library', async ({ page }) => {
     await page.goto('/');
 
     const debianCard = page.locator('.os-card[data-id="debian-12-i386"]');
@@ -31,10 +31,10 @@ test.describe('Configuration globale et retrait de Settings', () => {
 
     const badge = debianCard.locator('.card-status');
     await expect(badge).toHaveAttribute('data-state', 'ready');
-    await expect(badge).toHaveText('Disponible');
+    await expect(badge).toHaveText('Available');
   });
 
-  test('sert lumiboot.config.json en JSON (version 1 + profil réseau par défaut)', async ({
+  test('serves lumiboot.config.json as JSON (version 1 + default network profile)', async ({
     page,
   }) => {
     const response = await page.request.get('/lumiboot.config.json');
@@ -44,7 +44,7 @@ test.describe('Configuration globale et retrait de Settings', () => {
     expect(contentType).toContain('json');
 
     const text = await response.text();
-    // Jamais le repli SPA : le fichier doit contenir du JSON, pas du HTML.
+    // Never the SPA fallback: the file must contain JSON, not HTML.
     expect(text.trimStart().startsWith('<')).toBe(false);
 
     const config = JSON.parse(text) as {

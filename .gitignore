@@ -1,8 +1,3 @@
-
-# ==========================================
-# LumiBoot - Git Ignore
-# ==========================================
-
 # Dependencies
 node_modules/
 .pnpm-store/
@@ -11,8 +6,7 @@ node_modules/
 .yarn/unplugged/
 .yarn/build-state.yml
 .yarn/install-state.gz
-
-# Build outputs
+# Build output
 dist/
 build/
 out/
@@ -23,7 +17,6 @@ out/
 .angular/
 storybook-static/
 *.tsbuildinfo
-
 # Caches
 .cache/
 .turbo/
@@ -36,8 +29,11 @@ storybook-static/
 .tmp/
 tmp/
 temp/
-
-# Test results and coverage
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+# Tests and coverage
 coverage/
 .nyc_output/
 .vitest/
@@ -45,7 +41,6 @@ playwright-report/
 test-results/
 blob-report/
 junit.xml
-
 # Logs
 *.log
 *.log.*
@@ -54,8 +49,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
-# Disk images and virtual machines
+# VM disks and images
 *.img
 *.iso
 *.qcow
@@ -67,24 +61,18 @@ lerna-debug.log*
 *.ext2
 *.ext3
 *.ext4
-
-# Large generated binary artifacts
+# Binary artifacts
 *.dump
 *.core
 *.pid
 *.part
-
-# Images : la CONFIG est versionnée, les BINAIRES ne le sont pas.
-# - manifestes génériques (aucun chemin absolu), README et scripts d'image : versionnés ;
-# - disques et médias (*.img/*.iso, cf. plus haut), sorties de build et
-#   provenance.txt (taille/mtime/SHA-256 propres à la machine) : jamais versionnés.
+# Images: manifests and scripts are tracked, binaries are not
 /images/*/disk.img
 */images/*/disk.img
 /images/*/build*/
 /images/*/provenance.txt
 /media/
-
-# IDE and editors
+# IDE
 .idea/
 .vscode/*
 !.vscode/extensions.json
@@ -92,37 +80,26 @@ lerna-debug.log*
 *.swp
 *.swo
 *~
-
-# Operating system
+# System
 .DS_Store
 Thumbs.db
 desktop.ini
 ehthumbs.db
 $RECYCLE.BIN/
-
-# Deployment artifacts
+# Deployment
 .vercel/
 .netlify/
-
-# Generated project reports
+# Generated reports and local archives
 architecture.txt
 architecture-clean.txt
-
-# Local archives and backups
 LumiBoot-source.zip
 *.bak
 *.backup
 *.old
 *.orig
-
-# Keep placeholder files
+# Keep files
 !*.keep
-
-# ==========================================
-# Environment files
-# Ignorer tous les secrets, y compris dans les sous-dossiers.
-# Seuls les exemples sont versionnés.
-# ==========================================
+# Secrets: only examples are tracked, including nested ones
 .env
 .env.*
 **/.env
@@ -131,22 +108,11 @@ LumiBoot-source.zip
 !**/.env.example
 !.env.*.example
 !**/.env.*.example
-
-# ==========================================
-# Config locale des agents IA (jamais publiée)
-# AGENTS.md et opencode.jsonc contiennent les prompts, agents et modèles
-# locaux : propres à la machine, ils restent sur le disque et ne sont
-# jamais versionnés ni publiés sur GitHub.
-# ==========================================
+# Local AI agent config
 /AGENTS.md
 /opencode.jsonc
 /opencode.json
 /.opencode/
-
-# ==========================================
-# v86 engine binaries and system disk images
-# Prepared by scripts/prepare-v86-assets.mjs and images/*/build.sh.
-# Served at runtime, obtained from approved storage in CI/CD — never committed.
-# ==========================================
+# v86 binaries and disks prepared outside the repo
 /apps/web/public/v86/
 /apps/web/public/images/

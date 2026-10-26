@@ -2,8 +2,8 @@ import type { OSDefinition } from '@lumiboot/contracts';
 import { isEngineIntegrated } from './engines';
 
 /**
- * Capacités de l'environnement d'exécution. Centralisées ici pour qu'aucun
- * composant d'interface ne décide de la compatibilité « au nom » d'un système.
+ * Runtime environment capabilities. Centralized here so that no UI component
+ * decides compatibility "on behalf" of a system.
  */
 export interface BrowserCapabilities {
   webAssembly: boolean;
@@ -35,21 +35,21 @@ export function getCompatibility(os: OSDefinition, caps: BrowserCapabilities): C
   const reasons: string[] = [];
 
   if (os.availability === 'unavailable') {
-    reasons.push('Système marqué comme indisponible dans le catalogue.');
+    reasons.push('System marked as unavailable in the catalog.');
   }
 
   if (
     os.launchProfiles.some((profile) => profile.executionMode === 'browser') &&
     !caps.webAssembly
   ) {
-    reasons.push('Ce navigateur ne fournit pas WebAssembly.');
+    reasons.push('This browser does not provide WebAssembly.');
   }
 
   const integratedProfiles = os.launchProfiles.filter((profile) =>
     isEngineIntegrated(profile.engineId),
   );
   if (integratedProfiles.length === 0) {
-    reasons.push('Aucun moteur de lancement compatible n’est intégré.');
+    reasons.push('No compatible launch engine is integrated.');
   }
 
   return { supported: reasons.length === 0, reasons };

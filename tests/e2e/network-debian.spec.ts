@@ -1,46 +1,46 @@
 import { expect, test, type Locator } from '@playwright/test';
 
 /**
- * Réseau invité **réel** de Debian 12 i386 (v86), mode `browser-fetch`.
+ * **Real** guest network of Debian 12 i386 (v86), `browser-fetch` mode.
  *
- * Ce fichier n'est activé que lorsque l'image Debian est réellement publiée
- * (`rootfs.img`, `vmlinuz-686`, `initrd.img`, `manifest.json`) :
+ * This file is only enabled when the Debian image is really published
+ * (`rootfs.img`, `vmlinuz-686`, `initrd.img`, `manifest.json`):
  *
  *   $env:VM_E2E_ASSETS='1'; pnpm test:e2e
  *
- * Sans cette variable, les tests sont **ignorés** (pas « réussis ») : aucune
- * image, donc aucune preuve possible.
+ * Without that variable, the tests are **skipped** (not "passed"): no image, so
+ * no possible proof.
  *
- * Ce que ces tests documentent, volontairement, ce sont les **limites
- * effectives** de `v86@0.5.471` et non un « Internet complet » :
+ * What these tests deliberately document are the **effective limits** of
+ * `v86@0.5.471`, not a "full Internet":
  *
- *  - le backend `fetch` de v86 n'enregistre le TCP que pour le **port 80** :
- *    HTTP peut aboutir, **HTTPS (443) échoue** ;
- *  - toute requête reste **soumise à CORS** : un hôte sans en-tête
- *    `Access-Control-Allow-Origin` est refusé par le navigateur, donc
- *    `apt-get update` échoue.
+ *  - v86's `fetch` backend only registers TCP for **port 80**: HTTP can
+ *    succeed, **HTTPS (443) fails**;
+ *  - every request stays **subject to CORS**: a host without an
+ *    `Access-Control-Allow-Origin` header is refused by the browser, so
+ *    `apt-get update` fails.
  *
- * Aucun proxy CORS, aucune désactivation de la sécurité navigateur n'est
- * utilisée : ces échecs sont le comportement **attendu** en `browser-fetch`.
+ * No CORS proxy and no browser security disabling is used: these failures are
+ * the **expected** behavior in `browser-fetch`.
  */
 const assetsPresent = process.env.VM_E2E_ASSETS === '1';
 
 /**
- * Exécute une commande sur la console série et renvoie sa sortie.
+ * Runs a command on the serial console and returns its output.
  *
- * La console série de v86 recopie dans la *valeur* du `<textarea>` tout ce que
- * l'invité émet, **y compris l'écho du tty**. Un marqueur placé sur la même
- * ligne que la commande peut donc être coupé par un retour à la ligne du tty
- * (terminal 80 colonnes) et n'apparaître qu'une fois. On encadre donc la
- * commande par **deux lignes de marqueurs dédiées et courtes** :
+ * v86's serial console copies into the *value* of the `<textarea>` everything
+ * the guest emits, **including the tty echo**. A marker placed on the same line
+ * as the command can therefore be split by a tty line wrap (80-column terminal)
+ * and only appear once. The command is thus framed by **two dedicated, short
+ * marker lines**:
  *
  *     echo <begin>
  *     <command>; echo <end>
  *
- * Chaque marqueur imprimé occupe sa **propre ligne** (`\n<marker>\n`), ce qui
- * le distingue de l'écho de la ligne tapée (`… echo <marker>`) et permet de
- * délimiter la sortie sans ambiguïté. Les deux étapes sont tapées séparément :
- * envoyer les lignes d'un seul bloc sature le tty émulé et désordonne l'écho.
+ * Each printed marker occupies its **own line** (`\n<marker>\n`), which
+ * distinguishes it from the echo of the typed line (`... echo <marker>`) and
+ * delimits the output unambiguously. Both steps are typed separately: sending
+ * the lines in one block saturates the emulated tty and scrambles the echo.
  */
 async function probe(
   serial: Locator,
@@ -66,23 +66,23 @@ async function probe(
   return value.slice(start, endLine);
 }
 
-/** Parcours commun : bibliothèque -> Debian -> session -> logs -> invite. */
+/** Shared path: library -> Debian -> session -> logs -> prompt. */
 async function bootDebianAndWaitForPrompt(
   page: import('@playwright/test').Page,
   runningTimeout = 180_000,
 ): Promise<Locator> {
   await page.goto('/');
-  await page.getByLabel('Rechercher un système').fill('debian');
+  await page.getByLabel('Search for a system').fill('debian');
   await page.locator('.os-card').first().click();
   await expect(page).toHaveURL(/\/systems\//);
-  await page.getByRole('button', { name: 'Lancer une session' }).click();
+  await page.getByRole('button', { name: 'Start session' }).click();
   await expect(page).toHaveURL(/\/session\//);
   await expect(page.locator('.session-console')).toBeVisible();
 
   await page.getByRole('button', { name: 'Logs' }).click();
 
   const state = page.locator('.session-toolbar');
-  // `running` n'est émis que sur preuve du marqueur invité sur ttyS0.
+  // `running` is only emitted on proof of the guest marker on ttyS0.
   await expect(state).toHaveAttribute('data-state', 'running', { timeout: runningTimeout });
 
   const serial = page.locator('.v86-serial');
@@ -90,21 +90,21 @@ async function bootDebianAndWaitForPrompt(
   return serial;
 }
 
-test.describe('Réseau invité Debian (browser-fetch, boot réel)', () => {
-  test.skip(!assetsPresent, 'Artefacts Debian absents : définir VM_E2E_ASSETS=1.');
+test.describe('Debian guest network (browser-fetch, real boot)', () => {
+  test.skip(!assetsPresent, 'Debian artifacts missing: set VM_E2E_ASSETS=1.');
 
-  // Deux boots réels par fichier : on les exécute l'un après l'autre pour ne
-  // pas saturer la machine hôte avec plusieurs VM émulées simultanées.
+  // Two real boots per file: they run one after the other so the host machine
+  // is not saturated with several emulated VMs at once.
   test.describe.configure({ mode: 'serial' });
 
-  test('DHCP/DNS OK, HTTP OK, HTTPS et apt en échec (limites v86/CORS)', async ({ page }) => {
-    // Boot + sondes réseau + échecs bornés : budget mural explicite.
+  test('DHCP/DNS OK, HTTP OK, HTTPS and apt failing (v86/CORS limits)', async ({ page }) => {
+    // Boot + network probes + bounded failures: explicit wall-clock budget.
     test.setTimeout(900_000);
 
     const serial = await bootDebianAndWaitForPrompt(page);
 
-    // NIC virtio de Debian : l'interface `enp0s10` est UP et porte une adresse
-    // RFC1918 (`192.168.x.y`) attribuée par DHCP.
+    // Debian virtio NIC: the `enp0s10` interface is UP and carries an RFC1918
+    // address (`192.168.x.y`) assigned by DHCP.
     const addr = await probe(serial, 'ip -br addr', 'NET_ADDR', 30_000);
     expect(addr).toMatch(/enp0s10\s+UP/);
     expect(addr).toMatch(/192\.168\.\d+\.\d+/);
@@ -112,14 +112,15 @@ test.describe('Réseau invité Debian (browser-fetch, boot réel)', () => {
     const route = await probe(serial, 'ip route', 'NET_ROUTE', 30_000);
     expect(route).toMatch(/192\.168\.\d+\.\d+/);
 
-    // DNS : le nom doit se résoudre via systemd-resolved, sans requête Internet.
+    // DNS: the name must resolve through systemd-resolved, without any Internet
+    // request.
     const dns = await probe(serial, 'getent hosts deb.debian.org', 'NET_DNS', 30_000);
     expect(dns).toMatch(/\d+\.\d+\.\d+\.\d+/);
 
-    // HTTP (port 80) : c'est le SEUL port que le backend `fetch` de v86
-    // transporte. `httpbin.org` renvoie `Access-Control-Allow-Origin: *`, donc
-    // la requête aboutit réellement. On exige une réponse httpbin valide et
-    // aucune erreur curl.
+    // HTTP (port 80): the ONLY port carried by v86's `fetch` backend.
+    // `httpbin.org` sends `Access-Control-Allow-Origin: *`, so the request
+    // really succeeds. A valid httpbin response is required and no curl error
+    // is allowed.
     const http = await probe(
       serial,
       'curl -sS --max-time 20 http://httpbin.org/get',
@@ -129,9 +130,9 @@ test.describe('Réseau invité Debian (browser-fetch, boot réel)', () => {
     expect(http).toMatch(/"url"/);
     expect(http).not.toMatch(/curl: \(\d+\)/);
 
-    // HTTPS (443) : aucune connexion TCP n'est enregistrée pour 443 par v86
-    // 0.5.471, donc curl échoue (code `000` et/ou erreur `curl: (...)`).
-    // On refuse explicitement tout code 2xx/3xx : un succès serait un mensonge.
+    // HTTPS (443): no TCP connection is registered for 443 by v86 0.5.471, so
+    // curl fails (`000` code and/or `curl: (...)` error). Any 2xx/3xx code is
+    // explicitly refused: a success would be a lie.
     const https = await probe(
       serial,
       "curl -sS --max-time 15 -o /dev/null -w '%{http_code}' https://deb.debian.org/",
@@ -141,28 +142,29 @@ test.describe('Réseau invité Debian (browser-fetch, boot réel)', () => {
     expect(https).toMatch(/curl: \(\d+\)|000/);
     expect(https).not.toMatch(/\b(200|204|301|302|304)\b/);
 
-    // `apt-get update` interroge les dépôts : le transport HTTP échoue car les
-    // hôtes concernés n'envoient pas d'en-tête CORS. Échec attendu, pas un bug.
+    // `apt-get update` queries the repositories: the HTTP transport fails
+    // because the hosts involved send no CORS header. Expected failure, not a
+    // bug.
     const apt = await probe(serial, 'sudo apt-get update', 'NET_APT', 240_000);
     expect(apt).toMatch(/Err:|E: /);
 
-    // Arrêt propre : la session doit atteindre `stopped` sans rester bloquée.
-    await page.getByRole('button', { name: 'Arrêter' }).click();
+    // Clean stop: the session must reach `stopped` without hanging.
+    await page.getByRole('button', { name: 'Stop' }).click();
     await expect(page.locator('.session-toolbar')).toHaveAttribute('data-state', 'stopped', {
       timeout: 60_000,
     });
   });
 
-  test('un relais injoignable ne bloque pas le cycle de vie (démarrage, Arrêter, Redémarrer)', async ({
+  test('an unreachable relay does not block the lifecycle (start, Stop, Restart)', async ({
     page,
   }) => {
     test.setTimeout(900_000);
 
-    // On force un mode `user-relay` pointant vers un relais **volontairement
-    // injoignable** (`127.0.0.1:9`, port discard). v86 ouvre la WebSocket en
-    // asynchrone : son échec ne doit pas empêcher l'émulateur de démarrer.
-    // La config est interceptée au niveau du réseau Playwright : le fichier
-    // public n'est PAS modifié (isolé des autres specs exécutées en parallèle).
+    // A `user-relay` mode pointing to a **deliberately unreachable** relay
+    // (`127.0.0.1:9`, discard port) is forced. v86 opens the WebSocket
+    // asynchronously: its failure must not prevent the emulator from booting.
+    // The config is intercepted at the Playwright network level: the public file
+    // is NOT modified (isolated from the other specs running in parallel).
     await page.route('**/lumiboot.config.json', (route) =>
       route.fulfill({
         status: 200,
@@ -177,19 +179,19 @@ test.describe('Réseau invité Debian (browser-fetch, boot réel)', () => {
       }),
     );
 
-    // DHCP/network-online peuvent expirer plus lentement sans relais : budget
-    // de démarrage plus large que pour `browser-fetch`.
+    // DHCP/network-online may time out more slowly without a relay: boot budget
+    // wider than for `browser-fetch`.
     const serial = await bootDebianAndWaitForPrompt(page, 300_000);
     await expect(serial).toHaveValue(/lumiboot@lumiboot/);
 
     const state = page.locator('.session-toolbar');
 
-    // Arrêter puis redémarrer : le cycle de vie reste fonctionnel malgré le
-    // relais injoignable (aucun blocage, aucune ressource bloquante).
-    await page.getByRole('button', { name: 'Arrêter' }).click();
+    // Stop then restart: the lifecycle stays functional despite the unreachable
+    // relay (no hang, no blocking resource).
+    await page.getByRole('button', { name: 'Stop' }).click();
     await expect(state).toHaveAttribute('data-state', 'stopped', { timeout: 60_000 });
 
-    await page.getByRole('button', { name: 'Redémarrer' }).click();
+    await page.getByRole('button', { name: 'Restart' }).click();
     await expect(page).toHaveURL(/\/session\//);
     await expect(state).toHaveAttribute('data-state', 'running', { timeout: 300_000 });
   });

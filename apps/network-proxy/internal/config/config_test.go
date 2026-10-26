@@ -9,20 +9,20 @@ import (
 func TestDefaultValid(t *testing.T) {
 	cfg := Default()
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("config par défaut invalide: %v", err)
+		t.Fatalf("default config invalid: %v", err)
 	}
 	if cfg.ListenAddr != "127.0.0.1:37892" {
-		t.Fatalf("listenAddr par défaut inattendu: %s", cfg.ListenAddr)
+		t.Fatalf("unexpected default listenAddr: %s", cfg.ListenAddr)
 	}
 	if cfg.AllowNonLoopback || cfg.AllowPrivateNetworks {
-		t.Fatal("les permissions sensibles doivent être refusées par défaut")
+		t.Fatal("sensitive permissions must be denied by default")
 	}
 	if cfg.Environment != EnvProduction {
-		t.Fatalf("environnement par défaut: %q", cfg.Environment)
+		t.Fatalf("default environment: %q", cfg.Environment)
 	}
 	for _, origin := range cfg.AllowedOrigins {
 		if isLoopbackOrigin(origin) {
-			t.Fatalf("origine loopback %q interdite par défaut en production", origin)
+			t.Fatalf("loopback origin %q forbidden by default in production", origin)
 		}
 	}
 }
@@ -30,14 +30,14 @@ func TestDefaultValid(t *testing.T) {
 func TestDefaultOriginsAreProductionOnly(t *testing.T) {
 	for _, origin := range ProdOrigins() {
 		if isLoopbackOrigin(origin) {
-			t.Fatalf("ProdOrigins contient une origine locale: %q", origin)
+			t.Fatalf("ProdOrigins contains a local origin: %q", origin)
 		}
 	}
 	if len(DevOrigins()) <= len(ProdOrigins()) {
-		t.Fatal("DevOrigins doit élargir ProdOrigins aux boucles locales")
+		t.Fatal("DevOrigins must extend ProdOrigins with local loops")
 	}
 	if got := DefaultOrigins(); len(got) != len(ProdOrigins()) {
-		t.Fatalf("DefaultOrigins doit rester l'allowlist de production: %v", got)
+		t.Fatalf("DefaultOrigins must remain the production allowlist: %v", got)
 	}
 }
 
@@ -45,10 +45,10 @@ func TestDevelopmentEnvironmentExpandsOrigins(t *testing.T) {
 	t.Setenv("LUMIBOOT_PROXY_ENV", "development")
 	cfg, err := Load("")
 	if err != nil {
-		t.Fatalf("chargement en développement: %v", err)
+		t.Fatalf("load in development: %v", err)
 	}
 	if cfg.Environment != EnvDevelopment {
-		t.Fatalf("environnement: %q", cfg.Environment)
+		t.Fatalf("environment: %q", cfg.Environment)
 	}
 	found := false
 	for _, origin := range cfg.AllowedOrigins {
@@ -57,7 +57,7 @@ func TestDevelopmentEnvironmentExpandsOrigins(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("allowlist de développement attendue, obtenu: %v", cfg.AllowedOrigins)
+		t.Fatalf("development allowlist expected, got: %v", cfg.AllowedOrigins)
 	}
 }
 
@@ -65,11 +65,11 @@ func TestProductionRejectsLocalhostOriginWithoutOptIn(t *testing.T) {
 	cfg := Default()
 	cfg.AllowedOrigins = append(cfg.AllowedOrigins, "http://localhost:5173")
 	if err := cfg.Validate(); err == nil {
-		t.Fatal("origine locale acceptée en production sans allowLocalOrigins")
+		t.Fatal("local origin accepted in production without allowLocalOrigins")
 	}
 	cfg.AllowLocalOrigins = true
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("appairage local explicite refusé: %v", err)
+		t.Fatalf("explicit local pairing refused: %v", err)
 	}
 }
 
@@ -77,18 +77,18 @@ func TestDevelopmentAllowsLocalhostOrigin(t *testing.T) {
 	cfg := DefaultFor(EnvDevelopment)
 	cfg.AllowedOrigins = []string{"http://localhost:5173"}
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("origine locale de développement refusée: %v", err)
+		t.Fatalf("development local origin refused: %v", err)
 	}
 }
 
 func TestEnvironmentEnvInvalidIsProduction(t *testing.T) {
-	t.Setenv("LUMIBOOT_PROXY_ENV", "staging-nawak")
+	t.Setenv("LUMIBOOT_PROXY_ENV", "staging-invalid")
 	cfg, err := Load("")
 	if err != nil {
-		t.Fatalf("chargement: %v", err)
+		t.Fatalf("load: %v", err)
 	}
 	if cfg.Environment != EnvProduction {
-		t.Fatalf("environnement inconnu doit retomber sur production: %q", cfg.Environment)
+		t.Fatalf("unknown environment must fall back to production: %q", cfg.Environment)
 	}
 }
 
@@ -103,10 +103,10 @@ func TestLoadJSONEnvironmentDevelopment(t *testing.T) {
 	}
 	cfg, err := Load(path)
 	if err != nil {
-		t.Fatalf("chargement JSON développement: %v", err)
+		t.Fatalf("load development JSON: %v", err)
 	}
 	if cfg.Environment != EnvDevelopment {
-		t.Fatalf("environnement JSON: %q", cfg.Environment)
+		t.Fatalf("JSON environment: %q", cfg.Environment)
 	}
 }
 
@@ -117,17 +117,17 @@ func TestProductionJSONRejectsLocalhostOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := Load(path); err == nil {
-		t.Fatal("origine locale en production acceptée sans allowLocalOrigins")
+		t.Fatal("local origin in production accepted without allowLocalOrigins")
 	}
 }
 
 func TestLoadMissingFile(t *testing.T) {
 	cfg, err := Load(filepath.Join(t.TempDir(), "absent.json"))
 	if err != nil {
-		t.Fatalf("fichier absent devrait donner les défauts: %v", err)
+		t.Fatalf("a missing file should yield defaults: %v", err)
 	}
 	if cfg.ListenAddr != Default().ListenAddr {
-		t.Fatalf("défauts non appliqués: %+v", cfg)
+		t.Fatalf("defaults not applied: %+v", cfg)
 	}
 }
 
@@ -145,7 +145,7 @@ func TestLoadJSONFile(t *testing.T) {
 	}
 	cfg, err := Load(path)
 	if err != nil {
-		t.Fatalf("chargement: %v", err)
+		t.Fatalf("load: %v", err)
 	}
 	if cfg.ListenAddr != "127.0.0.1:39999" {
 		t.Fatalf("listenAddr: %s", cfg.ListenAddr)
@@ -154,20 +154,20 @@ func TestLoadJSONFile(t *testing.T) {
 		t.Fatalf("connectTimeout: %v", cfg.ConnectTimeout.Std())
 	}
 	if cfg.IdleTimeout.Std().Seconds() != 120 {
-		t.Fatalf("idleTimeout (secondes numériques): %v", cfg.IdleTimeout.Std())
+		t.Fatalf("idleTimeout (numeric seconds): %v", cfg.IdleTimeout.Std())
 	}
 	if cfg.MaxConnections != 10 || !cfg.AllowPrivateNetworks {
-		t.Fatalf("champs: %+v", cfg)
+		t.Fatalf("fields: %+v", cfg)
 	}
 }
 
 func TestLoadInvalidJSON(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte("{invalide"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("{invalid"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Load(path); err == nil {
-		t.Fatal("JSON invalide accepté")
+		t.Fatal("invalid JSON accepted")
 	}
 }
 
@@ -181,10 +181,10 @@ func TestEnvOverride(t *testing.T) {
 		t.Fatalf("env: %v", err)
 	}
 	if cfg.ListenAddr != "127.0.0.1:37777" || cfg.MaxConnections != 8 {
-		t.Fatalf("surcharge env ignorée: %+v", cfg)
+		t.Fatalf("env override ignored: %+v", cfg)
 	}
 	if !cfg.AllowPrivateNetworks || cfg.ConnectTimeout.Std().Seconds() != 3 {
-		t.Fatalf("surcharge env ignorée: %+v", cfg)
+		t.Fatalf("env override ignored: %+v", cfg)
 	}
 }
 
@@ -193,7 +193,7 @@ func TestRefuseNonLoopback(t *testing.T) {
 		cfg := Default()
 		cfg.ListenAddr = addr
 		if err := cfg.Validate(); err == nil {
-			t.Fatalf("écoute %q acceptée sans permission", addr)
+			t.Fatalf("listen %q accepted without permission", addr)
 		}
 	}
 }
@@ -203,7 +203,7 @@ func TestAllowNonLoopbackExplicit(t *testing.T) {
 	cfg.ListenAddr = "0.0.0.0:37892"
 	cfg.AllowNonLoopback = true
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("écoute explicite refusée: %v", err)
+		t.Fatalf("explicit listen refused: %v", err)
 	}
 }
 
@@ -212,7 +212,7 @@ func TestLoopbackFormsAccepted(t *testing.T) {
 		cfg := Default()
 		cfg.ListenAddr = addr
 		if err := cfg.Validate(); err != nil {
-			t.Fatalf("écoute loopback %q refusée: %v", addr, err)
+			t.Fatalf("loopback listen %q refused: %v", addr, err)
 		}
 	}
 }
@@ -224,21 +224,21 @@ func TestValidationRejects(t *testing.T) {
 		return cfg
 	}
 	cases := map[string]Config{
-		"port zéro":               mutate(func(c *Config) { c.ListenAddr = "127.0.0.1:0" }),
-		"adresse malformée":       mutate(func(c *Config) { c.ListenAddr = "nawak" }),
-		"origines vides":          mutate(func(c *Config) { c.AllowedOrigins = nil }),
-		"maxConnections zéro":     mutate(func(c *Config) { c.MaxConnections = 0 }),
-		"quota session zéro":      mutate(func(c *Config) { c.MaxConnectionsPerSession = 0 }),
-		"timeout zéro":            mutate(func(c *Config) { c.ConnectTimeout = 0 }),
-		"buffer zéro":             mutate(func(c *Config) { c.InitialBufferPackets = 0 }),
-		"chunk trop grand":        mutate(func(c *Config) { c.MaxDataChunk = 8 * 1024 * 1024 }),
-		"bande passante négative": mutate(func(c *Config) { c.BandwidthLimitBytesPerSecond = -1 }),
-		"pairingTTL zéro":         mutate(func(c *Config) { c.PairingTTL = 0 }),
+		"zero port":          mutate(func(c *Config) { c.ListenAddr = "127.0.0.1:0" }),
+		"malformed address":  mutate(func(c *Config) { c.ListenAddr = "invalid" }),
+		"empty origins":      mutate(func(c *Config) { c.AllowedOrigins = nil }),
+		"zero maxConns":      mutate(func(c *Config) { c.MaxConnections = 0 }),
+		"zero session quota": mutate(func(c *Config) { c.MaxConnectionsPerSession = 0 }),
+		"zero timeout":       mutate(func(c *Config) { c.ConnectTimeout = 0 }),
+		"zero buffer":        mutate(func(c *Config) { c.InitialBufferPackets = 0 }),
+		"chunk too large":    mutate(func(c *Config) { c.MaxDataChunk = 8 * 1024 * 1024 }),
+		"negative bandwidth": mutate(func(c *Config) { c.BandwidthLimitBytesPerSecond = -1 }),
+		"zero pairingTTL":    mutate(func(c *Config) { c.PairingTTL = 0 }),
 	}
 	for name, cfg := range cases {
 		t.Run(name, func(t *testing.T) {
 			if err := cfg.Validate(); err == nil {
-				t.Fatal("config invalide acceptée")
+				t.Fatal("invalid config accepted")
 			}
 		})
 	}

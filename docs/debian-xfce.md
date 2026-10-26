@@ -1,21 +1,22 @@
 # Debian 12 XFCE
 
-La variante `debian-12-i386-xfce` ajoute une session XFCE complète au même socle Debian/Xorg. Elle est construite, publiée localement et déclarée `validated: true`.
+`debian-12-i386-xfce`: Debian/Xorg base + full XFCE session. Published locally, `validated: true`.
 
-## Profil
+## Profile
 
-| Élément | Valeur |
+| Element | Value |
 |---|---|
-| Image | `debian-12-i386-xfce` |
-| RAM / VGA | 1024 Mio / 16 Mio |
-| Disque | ext4 RAW, 4 Gio |
-| Session | autologin `lumiboot` → `startx` → `startxfce4` |
-| Vidéo | configuration X partagée avec Openbox |
+| RAM / VGA | 1024 MiB / 16 MiB |
+| Disk | ext4 RAW, 4 GiB |
+| Session | `lumiboot` autologin → `startx` → `startxfce4` |
+| Video | X configuration shared with Openbox, `vga=0x318` |
 | Readiness | `LUMIBOOT_DESKTOP_READY:debian-12-i386-xfce` |
 
-Le marqueur desktop exige un serveur X répondant et `xfce4-session` ou `xfwm4` actif. Le délai du profil est de 240 s car XFCE est plus lourd sous émulation logicielle.
+Marker emitted once the X socket, `xdpyinfo` and `xfce4-session` or `xfwm4` are running, otherwise `LUMIBOOT_DESKTOP_START_FAILED`; guest script 300 s, profile 240 s.
 
-## Construire et publier
+## Build and publish
+
+Linux/WSL2 + root, prerequisites identical to the `desktop` flavor.
 
 ```bash
 sudo FLAVOR=xfce ./images/debian-12-i386/build.sh
@@ -24,14 +25,14 @@ cp images/debian-12-i386/build-xfce/{rootfs.img,vmlinuz-686,initrd.img,manifest.
   apps/web/public/images/debian-12-i386-xfce/
 ```
 
-Build Linux/WSL2 uniquement.
+`build-xfce/` also contains `packages.tsv` and `provenance.txt`; overrides `SNAPSHOT`, `DISK_SIZE`, `LUMIBOOT_BUILD_DIR`.
 
 ## Validation
 
-Après toute reconstruction, exécuter [`../images/debian-12-i386/tests/xfce-smoke-test.md`](../images/debian-12-i386/tests/xfce-smoke-test.md) et l'E2E réel :
+[`xfce-smoke-test.md`](../images/debian-12-i386/tests/xfce-smoke-test.md) after a rebuild, then:
 
 ```bash
 VM_E2E_ASSETS=1 pnpm test:e2e --grep "XFCE"
 ```
 
-Les assets restent ignorés par Git. Ne conserver `validated: true` que si le manifeste publié et le boot réel restent valides.
+Assets ignored by Git; `validated: true` only if the published manifest and a real boot are valid.

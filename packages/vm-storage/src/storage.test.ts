@@ -4,7 +4,7 @@ import { StorageError } from './errors';
 import { VmDiskStorage, VmMetadataStorage, VmStorage } from './storage';
 
 describe('VmStorage', () => {
-  it('persiste des enregistrements et exporte un snapshot', () => {
+  it('persists records and exports a snapshot', () => {
     const storage = new VmMetadataStorage({
       backend: new MemoryStorageBackend(),
       namespace: 'test',
@@ -19,13 +19,13 @@ describe('VmStorage', () => {
     expect(snapshot.records[0]?.key).toBe('session-1');
   });
 
-  it('applique une quota et rejette les écritures trop volumineuses', () => {
+  it('applies a quota and rejects writes that are too large', () => {
     const storage = new VmDiskStorage({ backend: new MemoryStorageBackend(), quotaBytes: 128 });
     expect(() => storage.write('small', '1234')).not.toThrow();
     expect(() => storage.write('large', 'x'.repeat(1024))).toThrow(StorageError);
   });
 
-  it('importe un snapshot compatible de manière transactionnelle', () => {
+  it('imports a compatible snapshot transactionally', () => {
     const backend = new MemoryStorageBackend();
     const storage = new VmStorage({ backend, namespace: 'test', kind: 'metadata' });
     storage.importSnapshot({
@@ -47,7 +47,7 @@ describe('VmStorage', () => {
     expect(storage.read('session-2')).toContain('stopped');
   });
 
-  it('restaure le contenu en cas d importation interrompue', () => {
+  it('restores the content when an import is interrupted', () => {
     class FlakyBackend extends MemoryStorageBackend {
       override setItem(key: string, value: string): void {
         if (key.endsWith(':restored')) {

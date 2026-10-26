@@ -3,17 +3,17 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
 
 /**
- * Garde-fou build/CI du webroot public (P2 sécurité).
+ * Build/CI guardrail for the public webroot (P2 security).
  *
- * Le webroot publié (`apps/web/public/` puis `apps/web/dist/`) ne doit JAMAIS
- * contenir d'image système propriétaire (Windows…) ni de média utilisateur. Les
- * disques de distributions libres (Debian) restent autorisés : ce garde-fou ne
- * doit pas casser les images Linux libres.
+ * The published webroot (`apps/web/public/` then `apps/web/dist/`) must NEVER
+ * contain a proprietary system image (Windows...) nor user media. Free
+ * distribution disks (Debian) stay allowed: this guardrail must not break free
+ * Linux images.
  */
 
 const repoRoot = process.cwd();
 
-/** Références d'images libres autorisées dans le webroot public. */
+/** Free image references allowed in the public webroot. */
 const ALLOWED_IMAGE_REFS = [/^debian-/i];
 
 const DISK_SUFFIXES = new Set([
@@ -28,7 +28,7 @@ const DISK_SUFFIXES = new Set([
   '.raw',
 ]);
 
-/** Médias utilisateur : jamais publiables dans le webroot statique. */
+/** User media: never publishable in the static webroot. */
 const USER_MEDIA_SUFFIXES = new Set(['.mp4', '.mkv', '.avi', '.mov', '.webm', '.vob', '.m4v']);
 
 const PROPRIETARY_MEDIA = /windows|winxp|winvista|win(?:7|8|10|11)/i;
@@ -39,9 +39,8 @@ export interface WebrootViolation {
 }
 
 /**
- * Détecte, dans une liste de chemins relatifs à un dossier `images/`, les
- * médias interdits : noms de systèmes propriétaires, médias utilisateur, ou
- * disques non libres.
+ * Detects forbidden media in a list of paths relative to an `images/` folder:
+ * proprietary system names, user media, or non-free disks.
  */
 export function findForbiddenWebrootMedia(relativePaths: string[]): WebrootViolation[] {
   const violations: WebrootViolation[] = [];
@@ -49,18 +48,18 @@ export function findForbiddenWebrootMedia(relativePaths: string[]): WebrootViola
     const path = rawPath.replace(/\\/g, '/');
     const suffix = extname(path).toLowerCase();
     if (PROPRIETARY_MEDIA.test(path)) {
-      violations.push({ path, reason: 'média de système propriétaire' });
+      violations.push({ path, reason: 'proprietary system media' });
       continue;
     }
     if (USER_MEDIA_SUFFIXES.has(suffix)) {
-      violations.push({ path, reason: `média utilisateur « ${suffix} » interdit` });
+      violations.push({ path, reason: `forbidden user media "${suffix}"` });
       continue;
     }
     if (!DISK_SUFFIXES.has(suffix)) continue;
     const segments = path.split('/').filter(Boolean);
     const reference = (segments[0] ?? '').toLowerCase();
     if (!ALLOWED_IMAGE_REFS.some((pattern) => pattern.test(reference))) {
-      violations.push({ path, reason: `disque non libre « ${suffix} » sous « ${reference} »` });
+      violations.push({ path, reason: `non-free disk "${suffix}" under "${reference}"` });
     }
   }
   return violations;
@@ -80,8 +79,8 @@ function listRelativeFiles(root: string): string[] {
   return files;
 }
 
-describe('garde-fou webroot public', () => {
-  it('signale un disque Windows et autorise un disque Debian', () => {
+describe('public webroot guardrail', () => {
+  it('flags a Windows disk and allows a Debian disk', () => {
     const violations = findForbiddenWebrootMedia([
       'windows-7-pro-sp1-x86/disk.img',
       'debian-12-i386/rootfs.img',
@@ -92,21 +91,21 @@ describe('garde-fou webroot public', () => {
     expect(violations[0]?.path).toBe('windows-7-pro-sp1-x86/disk.img');
   });
 
-  it('signale un disque non libre sous une référence inconnue', () => {
+  it('flags a non-free disk under an unknown reference', () => {
     const violations = findForbiddenWebrootMedia(['msdos/disk.qcow2']);
     expect(violations).toHaveLength(1);
     expect(violations[0]?.reason).toContain('.qcow2');
   });
 
-  it('signale un média utilisateur dans le webroot', () => {
+  it('flags user media inside the webroot', () => {
     const violations = findForbiddenWebrootMedia([
-      'debian-12-i386/mon-film.mp4',
+      'debian-12-i386/our-film.mp4',
       'upload/video.mkv',
     ]);
     expect(violations).toHaveLength(2);
   });
 
-  it('webroot public/dist réel : aucun média propriétaire, Debian autorisé', () => {
+  it('real public/dist webroot: no proprietary media, Debian allowed', () => {
     const roots = [
       join(repoRoot, 'apps', 'web', 'public', 'images'),
       join(repoRoot, 'apps', 'web', 'dist', 'images'),

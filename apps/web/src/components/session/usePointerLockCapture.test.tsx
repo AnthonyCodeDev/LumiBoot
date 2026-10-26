@@ -4,8 +4,8 @@ import { usePointerLockCapture } from './usePointerLockCapture';
 import { POINTER_LOCKED_CLASS } from './pointer-lock';
 
 /**
- * Mock Pointer Lock minimal pour jsdom : verrouille réellement l'élément
- * demandé, reflète `document.pointerLockElement` et émet `pointerlockchange`.
+ * Minimal Pointer Lock mock for jsdom: really locks the requested element,
+ * reflects `document.pointerLockElement` and emits `pointerlockchange`.
  */
 function installPointerLock(): { restore: () => void; exitCalls: number } {
   const doc = document as Document & { pointerLockElement: Element | null };
@@ -63,7 +63,7 @@ function makeFixture(): Fixture {
   const container = document.createElement('div');
   container.className = 'session-console';
   const screen = document.createElement('div');
-  // Écran factice conforme au contrat d'affichage (aucune classe `.v86-screen`).
+  // Fake screen matching the display contract (no `.v86-screen` class).
   screen.setAttribute('data-vm-display', 'screen');
   const canvas = document.createElement('canvas');
   screen.append(canvas);
@@ -85,7 +85,7 @@ describe('usePointerLockCapture', () => {
     document.body.innerHTML = '';
   });
 
-  it('capture dès l’appui quand la session est active et reflète l’état', () => {
+  it('captures on press when the session is active and reflects the state', () => {
     const { ref, screen, canvas } = makeFixture();
     const { result } = renderHook(() => usePointerLockCapture(ref, true));
 
@@ -100,7 +100,7 @@ describe('usePointerLockCapture', () => {
     expect(screen.classList.contains(POINTER_LOCKED_CLASS)).toBe(true);
   });
 
-  it('ne capture pas quand la session n’est pas active', () => {
+  it('does not capture when the session is not active', () => {
     const { ref, canvas } = makeFixture();
     const { result } = renderHook(() => usePointerLockCapture(ref, false));
 
@@ -111,7 +111,7 @@ describe('usePointerLockCapture', () => {
     expect(result.current.captured).toBe(false);
   });
 
-  it('libère le verrou et l’état quand la session devient inactive', () => {
+  it('releases the lock and the state when the session becomes inactive', () => {
     const { ref, screen, canvas } = makeFixture();
     const { result, rerender } = renderHook(
       ({ enabled }: { enabled: boolean }) => usePointerLockCapture(ref, enabled),
@@ -130,7 +130,7 @@ describe('usePointerLockCapture', () => {
     expect(mock?.exitCalls).toBeGreaterThan(0);
   });
 
-  it('libère le verrou au démontage (aucune ressource orpheline)', () => {
+  it('releases the lock on unmount (no orphaned resource)', () => {
     const { ref, canvas } = makeFixture();
     const { result, unmount } = renderHook(() => usePointerLockCapture(ref, true));
 

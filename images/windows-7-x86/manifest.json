@@ -1,12 +1,12 @@
 {
   "version": 1,
   "ref": "windows-7-x86",
-  "displayName": "Windows 7 x86 (disque local)",
+  "displayName": "Windows 7 x86 (local disk)",
   "architecture": "i386",
   "memoryMiB": 1024,
   "vgaMemoryMiB": 16,
-  "license": "Disque RAW local de la codebase (non distribué)",
-  "provenance": "images/windows-7-x86/disk.img (disque local de la codebase)",
+  "license": "Local RAW disk from the codebase (not distributed)",
+  "provenance": "images/windows-7-x86/disk.img (local disk from the codebase)",
   "source": {
     "path": "images/windows-7-x86/disk.img",
     "size": 17179869184,
@@ -47,7 +47,7 @@
     "size": 17179869184
   },
   "notes": [
-    "Disque local de la codebase (images/windows-7-x86/disk.img) : ignoré par Git, jamais committé ni distribué.",
-    "Démarré par BIOS sous v86 via HTTP Range (hda.async = true), jamais en cdrom."
+    "Local codebase disk (images/windows-7-x86/disk.img): git-ignored, never committed nor distributed.",
+    "Booted by the BIOS under v86 over HTTP Range (hda.async = true), never as a cdrom."
   ]
 }

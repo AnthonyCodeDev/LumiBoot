@@ -8,11 +8,11 @@ export function HomePage() {
     <main className="content">
       <section className="hero">
         <h1>
-          Tous vos systèmes.
+          All your systems.
           <br />
-          <span>Un seul navigateur.</span>
+          <span>One browser.</span>
         </h1>
-        <p>Explorez votre bibliothèque et lancez un système directement depuis l&apos;onglet.</p>
+        <p>Browse your library and launch a system straight from the tab.</p>
       </section>
 
       <section className="catalogue" id="catalogue" aria-labelledby="catalogue-heading">

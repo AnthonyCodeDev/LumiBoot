@@ -13,22 +13,22 @@ import { createDiskAssetMiddleware, toPublicDiskManifest } from '../scripts/lib/
 import { parseArgs, toPublicServedManifest } from '../scripts/serve-windows7-asset.mjs';
 
 /**
- * P1 : un manifeste disque diffusé par HTTP ne doit JAMAIS exposer `source`
- * (chemin réel de la machine) ni `provenance` (interne). Ces tests couvrent la
- * sérialisation publique des deux serveurs locaux et vérifient, sur un vrai
- * serveur HTTP, qu'aucun chemin source ne sort du middleware de développement.
+ * P1: a disk manifest served over HTTP must NEVER expose `source` (the real
+ * machine path) nor `provenance` (internal). These tests cover the public
+ * serialization of both local servers and check, against a real HTTP server,
+ * that no source path leaks out of the development middleware.
  */
 
 function privateDiskManifest(ref: string, diskPath: string, size: number) {
   return {
     version: 1,
     ref,
-    displayName: `${ref} (média local)`,
+    displayName: `${ref} (local media)`,
     architecture: 'i386',
     memoryMiB: 1024,
     vgaMemoryMiB: 16,
-    license: 'Licence utilisateur',
-    provenance: `disque local ${diskPath}`,
+    license: 'User license',
+    provenance: `local disk ${diskPath}`,
     source: { path: diskPath, size, mtimeMs: 1 },
     disk: {
       fileName: 'disk.img',
@@ -83,8 +83,8 @@ function rawRequest(
   });
 }
 
-describe('toPublicDiskManifest (middleware de dev)', () => {
-  it('retire source et provenance, conserve les champs publics', () => {
+describe('toPublicDiskManifest (dev middleware)', () => {
+  it('strips source and provenance, keeps the public fields', () => {
     const manifest = privateDiskManifest('windows-7-x86', 'C:/secret/disk.img', 100);
     const publicManifest = toPublicDiskManifest(manifest) as Record<string, unknown>;
 
@@ -98,7 +98,7 @@ describe('toPublicDiskManifest (middleware de dev)', () => {
 });
 
 describe('toPublicServedManifest (serve-windows7-asset)', () => {
-  it('retire les champs internes et greffe le jeton sur toutes les URL', () => {
+  it('strips the internal fields and appends the token to every URL', () => {
     const manifest = privateDiskManifest('windows-7-x86', 'C:/secret/disk.img', 100);
     const served = toPublicServedManifest(manifest, { suffix: '?token=abc' }) as {
       disk: { url: string };
@@ -114,14 +114,14 @@ describe('toPublicServedManifest (serve-windows7-asset)', () => {
     expect(JSON.stringify(served)).not.toContain('C:/secret/disk.img');
   });
 
-  it('parseArgs reste importable sans exécuter le serveur (aide statique)', () => {
+  it('parseArgs stays importable without running the server (static help)', () => {
     const options = parseArgs(['--port', '1234', '--no-token']);
     expect(options.port).toBe(1234);
     expect(options.noToken).toBe(true);
   });
 });
 
-describe('createDiskAssetMiddleware — manifeste public sur HTTP réel', () => {
+describe('createDiskAssetMiddleware - public manifest over real HTTP', () => {
   let tempDir = '';
   let server: Server | null = null;
   let port = 0;
@@ -150,7 +150,7 @@ describe('createDiskAssetMiddleware — manifeste public sur HTTP réel', () => 
     server = createServer((req, res) => {
       middleware(req, res, () => {
         res.statusCode = 404;
-        res.end('pas trouvé');
+        res.end('not found');
       });
     });
     await new Promise<void>((resolve) => server?.listen(0, '127.0.0.1', () => resolve()));
@@ -166,7 +166,7 @@ describe('createDiskAssetMiddleware — manifeste public sur HTTP réel', () => 
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('sert le manifeste SANS source ni provenance et sans chemin absolu', async () => {
+  it('serves the manifest WITHOUT source or provenance and without an absolute path', async () => {
     const res = await rawRequest(port, '/images/demo-disk/manifest.json');
     expect(res.status).toBe(200);
     expect(String(res.headers['content-type'])).toContain('application/json');
@@ -175,12 +175,12 @@ describe('createDiskAssetMiddleware — manifeste public sur HTTP réel', () => 
     expect(manifest.ref).toBe('demo-disk');
     expect(manifest).not.toHaveProperty('source');
     expect(manifest).not.toHaveProperty('provenance');
-    // Le chemin réel de la machine ne doit apparaître nulle part.
+    // The real machine path must not appear anywhere.
     expect(body).not.toContain(diskPath);
     expect(body.toLowerCase()).not.toContain('provenance');
   });
 
-  it('sert le disque en HTTP Range (206)', async () => {
+  it('serves the disk over HTTP Range (206)', async () => {
     const res = await rawRequest(port, '/images/demo-disk/disk.img', {
       Range: 'bytes=0-0',
     });

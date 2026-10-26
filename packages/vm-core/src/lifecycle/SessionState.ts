@@ -1,10 +1,10 @@
 import type { VMState } from '@lumiboot/contracts';
 
 /**
- * Transitions autorisées de la machine à états d'une session.
+ * Allowed transitions of a session state machine.
  *
- * INVARIANT : une seule transition `booting -> running`, déclenchée par la
- * preuve que le système invité est opérationnel — jamais par un minuteur.
+ * INVARIANT: a single `booting -> running` transition, triggered by proof that
+ * the guest system is operational — never by a timer.
  */
 export const allowedTransitions: Record<VMState, readonly VMState[]> = {
   idle: ['preparing', 'error'],

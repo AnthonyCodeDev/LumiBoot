@@ -1,7 +1,7 @@
-// Package config charge et valide la configuration du proxy réseau local : défauts
-// sécurisés, fichier JSON, surcharge par variables d'environnement
-// LUMIBOOT_PROXY_*, puis validation stricte (dont refus d'écoute
-// non-loopback sauf permission explicite).
+// Package config loads and validates the local network proxy configuration:
+// safe defaults, JSON file, LUMIBOOT_PROXY_* environment overrides, then
+// strict validation (including refusing a non-loopback listen address unless
+// explicitly allowed).
 package config
 
 import (
@@ -16,31 +16,31 @@ import (
 	"time"
 )
 
-// Environment identifie le profil de déploiement qui détermine l'allowlist
-// d'origines par défaut. La valeur par défaut est toujours `production` :
-// l'élargissement aux boucles locales est un choix EXPLICITE.
+// Environment identifies the deployment profile that determines the default
+// origin allowlist. The default value is always `production`: widening it to
+// local loops is an EXPLICIT choice.
 type Environment string
 
 const (
-	// EnvProduction : allowlist stricte, production LumiBoot uniquement.
-	// Aucune origine `localhost` générique n'est acceptée sans opt-in.
+	// EnvProduction: strict allowlist, LumiBoot production only. No generic
+	// `localhost` origin is accepted without opt-in.
 	EnvProduction Environment = "production"
-	// EnvDevelopment : allowlist élargie aux boucles locales du monorepo
+	// EnvDevelopment: allowlist widened to the monorepo local loops
 	// (ports 5173/5200/3000/4173/8080).
 	EnvDevelopment Environment = "development"
 )
 
-// Duration est un time.Duration sérialisable en JSON soit comme chaîne
-// ("10s", "5m"), soit comme nombre (secondes).
+// Duration is a time.Duration serializable to JSON either as a string
+// ("10s", "5m") or as a number (seconds).
 type Duration time.Duration
 
-// UnmarshalJSON accepte une chaîne de durée Go ou un nombre de secondes.
+// UnmarshalJSON accepts a Go duration string or a number of seconds.
 func (d *Duration) UnmarshalJSON(b []byte) error {
 	var s string
 	if err := json.Unmarshal(b, &s); err == nil {
 		v, err := time.ParseDuration(strings.TrimSpace(s))
 		if err != nil {
-			return fmt.Errorf("config: durée invalide %q", s)
+			return fmt.Errorf("config: invalid duration %q", s)
 		}
 		*d = Duration(v)
 		return nil
@@ -50,25 +50,25 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 		*d = Duration(time.Duration(f * float64(time.Second)))
 		return nil
 	}
-	return errors.New("config: durée invalide (chaîne ou secondes attendues)")
+	return errors.New("config: invalid duration (string or seconds expected)")
 }
 
-// MarshalJSON sérialise en chaîne de durée Go.
+// MarshalJSON serializes to a Go duration string.
 func (d Duration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(time.Duration(d).String())
 }
 
-// Std convertit en time.Duration.
+// Std converts to a time.Duration.
 func (d Duration) Std() time.Duration { return time.Duration(d) }
 
-// Config est la configuration du proxy réseau local.
+// Config is the local network proxy configuration.
 type Config struct {
 	ListenAddr string `json:"listenAddr"`
-	// Environment sélectionne l'allowlist par défaut (production stricte ou
-	// développement local). Vide = production.
+	// Environment selects the default allowlist (strict production or local
+	// development). Empty = production.
 	Environment Environment `json:"environment"`
-	// AllowLocalOrigins autorise explicitement des origines loopback en
-	// production, uniquement quand un appairage local est réellement nécessaire.
+	// AllowLocalOrigins explicitly allows loopback origins in production, only
+	// when local pairing is actually needed.
 	AllowLocalOrigins            bool     `json:"allowLocalOrigins"`
 	AllowedOrigins               []string `json:"allowedOrigins"`
 	MaxConnections               int      `json:"maxConnections"`
@@ -85,12 +85,12 @@ type Config struct {
 	SessionTokenTTL              Duration `json:"sessionTokenTTL"`
 }
 
-// ErrNonLoopback signale un refus d'écoute sur une adresse non-loopback.
-var ErrNonLoopback = errors.New("config: écoute non-loopback refusée sans allowNonLoopback explicite")
+// ErrNonLoopback reports a refused listen on a non-loopback address.
+var ErrNonLoopback = errors.New("config: non-loopback listen refused without explicit allowNonLoopback")
 
-// ProdOrigins liste les origines de PRODUCTION LumiBoot. Aucune boucle locale
-// générique n'y figure : un déploiement local (UI servie depuis le poste) doit
-// ajouter explicitement son origine ou activer `allowLocalOrigins`.
+// ProdOrigins lists the LumiBoot PRODUCTION origins. No generic local loop is
+// included: a local deployment (UI served from the machine) must explicitly add
+// its origin or enable `allowLocalOrigins`.
 func ProdOrigins() []string {
 	return []string{
 		"https://lumiboot.app",
@@ -98,9 +98,9 @@ func ProdOrigins() []string {
 	}
 }
 
-// DevOrigins liste les origines de DÉVELOPPEMENT : production + boucles locales
-// courantes du monorepo (port de dev 5173, port E2E 5200, divers ports de
-// prévisualisation). Jamais utilisé en production.
+// DevOrigins lists the DEVELOPMENT origins: production plus the usual monorepo
+// local loops (dev port 5173, E2E port 5200, various preview ports). Never used
+// in production.
 func DevOrigins() []string {
 	return append(ProdOrigins(),
 		"http://127.0.0.1:5173",
@@ -116,7 +116,7 @@ func DevOrigins() []string {
 	)
 }
 
-// OriginsForEnvironment renvoie l'allowlist par défaut pour un environnement.
+// OriginsForEnvironment returns the default allowlist for an environment.
 func OriginsForEnvironment(env Environment) []string {
 	if env == EnvDevelopment {
 		return DevOrigins()
@@ -124,18 +124,18 @@ func OriginsForEnvironment(env Environment) []string {
 	return ProdOrigins()
 }
 
-// DefaultOrigins est l'alias historique de production : allowlist stricte.
-// Conservé pour compatibilité ; préférer {@link ProdOrigins}.
+// DefaultOrigins is the historical production alias: strict allowlist. Kept for
+// compatibility; prefer {@link ProdOrigins}.
 func DefaultOrigins() []string {
 	return ProdOrigins()
 }
 
-// Default renvoie la configuration par défaut (sécurisée, production).
+// Default returns the default configuration (secure, production).
 func Default() Config {
 	return DefaultFor(EnvProduction)
 }
 
-// DefaultFor renvoie la configuration par défaut pour un environnement donné.
+// DefaultFor returns the default configuration for a given environment.
 func DefaultFor(env Environment) Config {
 	return Config{
 		ListenAddr:                   "127.0.0.1:37892",
@@ -151,14 +151,14 @@ func DefaultFor(env Environment) Config {
 		MaxDataChunk:                 128 * 1024,
 		AllowPrivateNetworks:         false,
 		AllowNonLoopback:             false,
-		BandwidthLimitBytesPerSecond: 0, // 0 = illimité
+		BandwidthLimitBytesPerSecond: 0, // 0 = unlimited
 		PairingTTL:                   Duration(10 * time.Minute),
 		SessionTokenTTL:              Duration(24 * time.Hour),
 	}
 }
 
-// environmentFromEnv lit LUMIBOOT_PROXY_ENV. Toute valeur autre que
-// « development »/« dev » (ou absence) est traitée comme production.
+// environmentFromEnv reads LUMIBOOT_PROXY_ENV. Any value other than
+// "development"/"dev" (or absence) is treated as production.
 func environmentFromEnv() Environment {
 	v, ok := lookupEnv("LUMIBOOT_PROXY_ENV")
 	if !ok {
@@ -172,21 +172,20 @@ func environmentFromEnv() Environment {
 	}
 }
 
-// Load charge la configuration : défauts (allowlist selon l'environnement),
-// puis fichier JSON (si path non vide), puis variables d'environnement
-// LUMIBOOT_PROXY_*, puis validation.
-// Un fichier inexistant n'est pas une erreur (premier lancement) ; un JSON
-// invalide en est une.
+// Load loads the configuration: defaults (allowlist by environment), then JSON
+// file (if path is not empty), then LUMIBOOT_PROXY_* environment variables, then
+// validation.
+// A missing file is not an error (first launch); invalid JSON is.
 func Load(path string) (Config, error) {
 	cfg := DefaultFor(environmentFromEnv())
 	if path != "" {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			if !os.IsNotExist(err) {
-				return Config{}, fmt.Errorf("config: lecture de %s: %w", path, err)
+				return Config{}, fmt.Errorf("config: reading %s: %w", path, err)
 			}
 		} else if err := json.Unmarshal(data, &cfg); err != nil {
-			return Config{}, fmt.Errorf("config: JSON invalide dans %s: %w", path, err)
+			return Config{}, fmt.Errorf("config: invalid JSON in %s: %w", path, err)
 		}
 	}
 	cfg.ApplyEnv()
@@ -196,7 +195,7 @@ func Load(path string) (Config, error) {
 	return cfg, nil
 }
 
-// ApplyEnv surcharge la configuration depuis l'environnement.
+// ApplyEnv overrides the configuration from the environment.
 func (c *Config) ApplyEnv() {
 	if v, ok := lookupEnv("LUMIBOOT_PROXY_LISTEN_ADDR"); ok {
 		c.ListenAddr = v
@@ -254,70 +253,70 @@ func (c *Config) ApplyEnv() {
 	}
 }
 
-// Validate contrôle strictement la configuration.
+// Validate strictly checks the configuration.
 func (c *Config) Validate() error {
 	host, portStr, err := net.SplitHostPort(c.ListenAddr)
 	if err != nil {
-		return fmt.Errorf("config: listenAddr invalide %q: %w", c.ListenAddr, err)
+		return fmt.Errorf("config: invalid listenAddr %q: %w", c.ListenAddr, err)
 	}
 	port, err := strconv.Atoi(portStr)
 	if err != nil || port < 1 || port > 65535 {
-		return fmt.Errorf("config: port d'écoute invalide %q", portStr)
+		return fmt.Errorf("config: invalid listen port %q", portStr)
 	}
 	if !c.AllowNonLoopback && !isLoopbackHost(host) {
 		return fmt.Errorf("%w: %q", ErrNonLoopback, c.ListenAddr)
 	}
 	if len(c.AllowedOrigins) == 0 {
-		return errors.New("config: allowedOrigins ne doit pas être vide")
+		return errors.New("config: allowedOrigins must not be empty")
 	}
-	// Ségrégation DEV/PROD : en production, une origine loopback générique
-	// n'est acceptée que si un appairage local est explicitement nécessaire
-	// (`allowLocalOrigins`) ou si l'environnement est `development`.
+	// DEV/PROD segregation: in production, a generic loopback origin is only
+	// accepted when local pairing is explicitly needed (`allowLocalOrigins`) or
+	// when the environment is `development`.
 	if c.Environment != EnvDevelopment && !c.AllowLocalOrigins {
 		for _, origin := range c.AllowedOrigins {
 			if isLoopbackOrigin(origin) {
 				return fmt.Errorf(
-					"config: origine locale %q refusée en production : activez allowLocalOrigins (appairage local explicite) ou LUMIBOOT_PROXY_ENV=development",
+					"config: local origin %q refused in production: enable allowLocalOrigins (explicit local pairing) or LUMIBOOT_PROXY_ENV=development",
 					origin,
 				)
 			}
 		}
 	}
 	if c.MaxConnections <= 0 {
-		return errors.New("config: maxConnections doit être > 0")
+		return errors.New("config: maxConnections must be > 0")
 	}
 	if c.MaxConnectionsPerSession <= 0 {
-		return errors.New("config: maxConnectionsPerSession doit être > 0")
+		return errors.New("config: maxConnectionsPerSession must be > 0")
 	}
 	if c.ConnectTimeout.Std() <= 0 {
-		return errors.New("config: connectTimeout doit être > 0")
+		return errors.New("config: connectTimeout must be > 0")
 	}
 	if c.IdleTimeout.Std() <= 0 {
-		return errors.New("config: idleTimeout doit être > 0")
+		return errors.New("config: idleTimeout must be > 0")
 	}
 	if c.DataTimeout.Std() <= 0 {
-		return errors.New("config: dataTimeout doit être > 0")
+		return errors.New("config: dataTimeout must be > 0")
 	}
 	if c.InitialBufferPackets <= 0 {
-		return errors.New("config: initialBufferPackets doit être > 0")
+		return errors.New("config: initialBufferPackets must be > 0")
 	}
 	if c.MaxDataChunk <= 0 || c.MaxDataChunk > 4*1024*1024 {
-		return errors.New("config: maxDataChunk doit être dans (0, 4 MiB]")
+		return errors.New("config: maxDataChunk must be in (0, 4 MiB]")
 	}
 	if c.BandwidthLimitBytesPerSecond < 0 {
-		return errors.New("config: bandwidthLimitBytesPerSecond doit être >= 0")
+		return errors.New("config: bandwidthLimitBytesPerSecond must be >= 0")
 	}
 	if c.PairingTTL.Std() <= 0 {
-		return errors.New("config: pairingTTL doit être > 0")
+		return errors.New("config: pairingTTL must be > 0")
 	}
 	if c.SessionTokenTTL.Std() <= 0 {
-		return errors.New("config: sessionTokenTTL doit être > 0")
+		return errors.New("config: sessionTokenTTL must be > 0")
 	}
 	return nil
 }
 
-// isLoopbackHost indique si un hôte d'écoute est strictement local.
-// Un hôte vide (":port", toutes interfaces) n'est PAS loopback.
+// isLoopbackHost reports whether a listen host is strictly local.
+// An empty host (":port", all interfaces) is NOT loopback.
 func isLoopbackHost(host string) bool {
 	if host == "" {
 		return false
@@ -332,10 +331,10 @@ func isLoopbackHost(host string) bool {
 	return ip.IsLoopback()
 }
 
-// isLoopbackOrigin indique si une origine HTTP(S) cible une adresse loopback
-// (`http://localhost:5173`, `http://127.0.0.1:5200`, `https://[::1]:8443`…).
-// Une origine illisible n'est pas considérée comme loopback (échec sûr côté
-// validation : elle est laissée au filtrage exact côté authentification).
+// isLoopbackOrigin reports whether an HTTP(S) origin targets a loopback address
+// (`http://localhost:5173`, `http://127.0.0.1:5200`, `https://[::1]:8443`...).
+// An unparsable origin is not considered loopback (fail safe in validation: it
+// is left to exact matching during authentication).
 func isLoopbackOrigin(origin string) bool {
 	parsed, err := url.Parse(origin)
 	if err != nil {

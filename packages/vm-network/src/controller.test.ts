@@ -3,7 +3,7 @@ import { createNetworkController } from './controller';
 import { NetworkError, isNetworkError } from './errors';
 
 describe('createNetworkController', () => {
-  it('offline : start passe en offline sans transport', async () => {
+  it('offline: start switches to offline without a transport', async () => {
     const controller = createNetworkController({ profile: { mode: 'offline' } });
     await controller.start();
     const diagnostics = controller.snapshot();
@@ -13,7 +13,7 @@ describe('createNetworkController', () => {
     expect(controller.capabilities.fullInternet).toBe(false);
   });
 
-  it('browser-fetch : start configure le transport sans prétendre connecté', async () => {
+  it('browser-fetch: start configures the transport without claiming it is connected', async () => {
     const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
     await controller.start();
     const diagnostics = controller.snapshot();
@@ -22,14 +22,14 @@ describe('createNetworkController', () => {
     expect(diagnostics.verified).toBe(false);
   });
 
-  it('user-relay : start rejette sans relais valide', async () => {
+  it('user-relay: start rejects without a valid relay', async () => {
     const controller = createNetworkController({ profile: { mode: 'user-relay' } });
     await expect(controller.start()).rejects.toMatchObject({ code: 'NETWORK_INVALID_RELAY_URL' });
     expect(controller.snapshot().status).toBe('error');
     expect(controller.snapshot().lastError?.code).toBe('NETWORK_INVALID_RELAY_URL');
   });
 
-  it('user-relay : une URL valide ne fait que configurer, pas connecter', async () => {
+  it('user-relay: a valid URL only configures, it does not connect', async () => {
     const controller = createNetworkController({
       profile: { mode: 'user-relay', relayUrl: 'wss://relay.example' },
     });
@@ -40,7 +40,7 @@ describe('createNetworkController', () => {
     expect(diagnostics.verified).toBe(false);
   });
 
-  it('local-proxy : start configure le transport avec proxyUrl par défaut', async () => {
+  it('local-proxy: start configures the transport with the default proxyUrl', async () => {
     const controller = createNetworkController({ profile: { mode: 'local-proxy' } });
     await controller.start();
     const diagnostics = controller.snapshot();
@@ -49,7 +49,7 @@ describe('createNetworkController', () => {
     expect(diagnostics.verified).toBe(false);
   });
 
-  it('local-proxy : proxyUrl invalide rejette NETWORK_INVALID_PROXY_URL', async () => {
+  it('local-proxy: an invalid proxyUrl rejects with NETWORK_INVALID_PROXY_URL', async () => {
     const controller = createNetworkController({
       profile: { mode: 'local-proxy', proxyUrl: 'https://relay.example' },
     });
@@ -60,12 +60,12 @@ describe('createNetworkController', () => {
     expect(controller.snapshot().lastError?.code).toBe('NETWORK_INVALID_PROXY_URL');
   });
 
-  it('local-network : start rejette NETWORK_UNSUPPORTED_MODE', async () => {
+  it('local-network: start rejects with NETWORK_UNSUPPORTED_MODE', async () => {
     const controller = createNetworkController({ profile: { mode: 'local-network' } });
     await expect(controller.start()).rejects.toMatchObject({ code: 'NETWORK_UNSUPPORTED_MODE' });
   });
 
-  it('setStatus est le seul chemin vers connected/online mais ne prouve rien', () => {
+  it('setStatus is the only path to connected/online but proves nothing', () => {
     const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
     expect(controller.snapshot().status).toBe('idle');
     controller.setStatus('connected');
@@ -73,12 +73,12 @@ describe('createNetworkController', () => {
     expect(controller.snapshot().verified).toBe(false);
     controller.setStatus('online');
     expect(controller.snapshot().status).toBe('online');
-    // `online` est une déclaration de transport : sans sonde tcp/https réussie,
-    // `verified` reste faux (jamais déduit du statut ni du mode).
+    // `online` is a transport statement: without a successful tcp/https probe,
+    // `verified` stays false (never inferred from the status or the mode).
     expect(controller.snapshot().verified).toBe(false);
   });
 
-  it('recordProbe expose les sondes et ne prouve verified que via tcp/https', () => {
+  it('recordProbe exposes the probes and only proves verified through tcp/https', () => {
     const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
     expect(controller.snapshot().probes).toBeUndefined();
 
@@ -95,7 +95,7 @@ describe('createNetworkController', () => {
     expect(controller.snapshot().probes?.tcp).toEqual({ ok: true, at: 1003 });
   });
 
-  it('recordProbe recalcule verified à la baisse et notifie', () => {
+  it('recordProbe recomputes verified downwards and notifies', () => {
     const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
     const listener = vi.fn();
     controller.subscribe(listener);
@@ -109,7 +109,7 @@ describe('createNetworkController', () => {
     expect(controller.snapshot().probes?.tcp?.at).toBe(2);
   });
 
-  it('recordProbe est un no-op après dispose', async () => {
+  it('recordProbe is a no-op after dispose', async () => {
     const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
     controller.recordProbe('tcp', { ok: true, at: 1 });
     await controller.dispose();
@@ -121,14 +121,14 @@ describe('createNetworkController', () => {
     expect(after.verified).toBe(false);
   });
 
-  it('start respecte un AbortSignal déjà avorté', async () => {
+  it('start honors an already aborted AbortSignal', async () => {
     const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
     const abort = new AbortController();
     abort.abort();
     await expect(controller.start(abort.signal)).rejects.toMatchObject({ code: 'NETWORK_ABORTED' });
   });
 
-  it('stop et dispose sont idempotents', async () => {
+  it('stop and dispose are idempotent', async () => {
     const controller = createNetworkController({ profile: { mode: 'offline' } });
     await controller.start();
     await controller.stop();
@@ -139,7 +139,7 @@ describe('createNetworkController', () => {
     expect(controller.snapshot().status).toBe('stopped');
   });
 
-  it('subscribe renvoie un unsubscribe et dispose retire les auditeurs', async () => {
+  it('subscribe returns an unsubscribe and dispose removes the listeners', async () => {
     const controller = createNetworkController({ profile: { mode: 'offline' } });
     const listener = vi.fn();
     const unsubscribe = controller.subscribe(listener);
@@ -159,7 +159,7 @@ describe('createNetworkController', () => {
     expect(lateListener).not.toHaveBeenCalled();
   });
 
-  it('après dispose, les mutations deviennent des no-op silencieux', async () => {
+  it('after dispose, mutations become silent no-ops', async () => {
     const controller = createNetworkController({ profile: { mode: 'browser-fetch' } });
     await controller.start();
     await controller.dispose();
@@ -179,7 +179,7 @@ describe('createNetworkController', () => {
     expect(after.lastError).toBeUndefined();
   });
 
-  it('reportTx/reportRx cumulent et bornent les valeurs', () => {
+  it('reportTx/reportRx accumulate and clamp the values', () => {
     const controller = createNetworkController({ profile: { mode: 'offline' } });
     controller.reportTx(100);
     controller.reportTx(50);
@@ -197,7 +197,7 @@ describe('createNetworkController', () => {
     expect(controller.snapshot().rxBytes).toBe(Number.MAX_SAFE_INTEGER);
   });
 
-  it('reportError tronque le message et expose lastError', () => {
+  it('reportError truncates the message and exposes lastError', () => {
     const controller = createNetworkController({ profile: { mode: 'offline' } });
     controller.reportError('NETWORK_TRANSPORT_FAILED', 'x'.repeat(400));
     const diagnostics = controller.snapshot();
@@ -207,7 +207,7 @@ describe('createNetworkController', () => {
     expect(diagnostics.verified).toBe(false);
   });
 
-  it('deux contrôleurs sont indépendants', () => {
+  it('two controllers are independent', () => {
     const first = createNetworkController({ profile: { mode: 'offline' } });
     const second = createNetworkController({ profile: { mode: 'offline' } });
     first.reportTx(10);
@@ -218,11 +218,11 @@ describe('createNetworkController', () => {
     expect(second.snapshot().status).toBe('idle');
   });
 
-  it('les échecs de start sont des NetworkError', async () => {
+  it('start failures are NetworkErrors', async () => {
     const controller = createNetworkController({ profile: { mode: 'local-network' } });
     try {
       await controller.start();
-      throw new Error('devrait rejeter');
+      throw new Error('should reject');
     } catch (error) {
       expect(isNetworkError(error)).toBe(true);
       expect(error).toBeInstanceOf(NetworkError);

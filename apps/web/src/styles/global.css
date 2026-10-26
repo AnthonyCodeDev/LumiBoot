@@ -174,12 +174,12 @@
   }
 }
 
-/* Écran résultat (VGA) en plein écran : seul l'écran remplit la page (Échap pour sortir). */
+/* VGA output screen in fullscreen: only the screen fills the page (Escape to exit). */
 .v86-screen:fullscreen {
   width: 100%;
   height: 100%;
   background: #000;
-  display: flex; /* cohérent avec la mise en page normale (plus de grid) */
+  display: flex; /* consistent with the normal layout (no more grid) */
   overflow: hidden;
   cursor: default;
 }

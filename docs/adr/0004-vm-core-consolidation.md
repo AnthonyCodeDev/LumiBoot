@@ -1,22 +1,26 @@
-# ADR 0004 — Cœur `vm-core`
+# ADR 0004 — `vm-core` core
 
-- Statut : accepté
-- Date : 2026-10-14
+- Status: accepted
+- Date: 2026-10-14
 
-## Décision
+## Context
 
-`@lumiboot/vm-core` sépare cinq responsabilités :
+Shared responsibilities: lifecycle, engine resolution, errors.
 
-- `contracts/` : `VMEngine`, `VMInstance`, configuration, capacités et événements ;
-- `lifecycle/` : états et transitions d'une session ;
-- `registry/` : résolution du moteur ;
-- `compatibility/` : validation moteur × système × navigateur ;
-- `errors/` et `providers/` : erreurs normalisées et moteur indisponible.
+## Decision
 
-`SessionLifecycle` garantit une seule instance, un arrêt idempotent et l'appel de `dispose()` après arrêt ou échec partiel. `tests/architecture.test.ts` interdit les dépendances React/Zustand dans les packages métier.
+`@lumiboot/vm-core` separates five responsibilities:
 
-## Conséquences
+- `contracts/`: `VMEngine`, `VMInstance`, configuration, capabilities and events;
+- `lifecycle/`: states and transitions;
+- `registry/`: engine resolution;
+- `compatibility/`: engine ↔ system ↔ browser;
+- `errors/` and `providers/`: normalized errors, unavailable engine.
 
-- L'ajout d'un système passe par le catalogue, pas par des conditions dans l'UI.
-- Les contrats et schémas Zod sont centralisés dans `@lumiboot/contracts`.
-- `vm-assets`, `vm-storage` et `vm-network` restent indépendants du frontend.
+`SessionLifecycle` guarantees a single instance, idempotent stop and `dispose()` after a stop or a partial failure; `tests/architecture.test.ts` forbids React/Zustand outside the UI.
+
+## Consequences
+
+- New system through the catalogue, never through UI conditions.
+- Contracts and Zod schemas in `@lumiboot/contracts`.
+- `vm-assets`, `vm-storage` and `vm-network` independent of the frontend.

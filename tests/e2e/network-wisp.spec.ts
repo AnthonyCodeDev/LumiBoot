@@ -1,31 +1,31 @@
 import { expect, test, type Locator } from '@playwright/test';
 
 /**
- * Réseau invité réel via un **relais WISP** personnel (mode `user-relay`).
+ * Real guest network through a personal **WISP relay** (`user-relay` mode).
  *
- * Ce test est **opt-in** : il n'est jamais exécuté, ni présenté comme réussi,
- * sans un vrai relais WISP compatible v86 fourni par l'utilisateur. L'adresse
- * du relais n'est **jamais** codée en dur (ni dans les sources, ni en CI) : elle
- * provient uniquement de la variable d'environnement `LUMIBOOT_WISP_RELAY_URL`.
+ * This test is **opt-in**: it is never run, nor reported as passed, without a
+ * real v86-compatible WISP relay provided by the user. The relay address is
+ * **never** hard-coded (neither in the sources nor in CI): it only comes from
+ * the `LUMIBOOT_WISP_RELAY_URL` environment variable.
  *
- * Activation :
+ * Enabling it:
  *
  *   $env:LUMIBOOT_WISP_RELAY_URL='wss://relay.example.org/wisp'
  *   $env:VM_E2E_ASSETS='1'
  *   pnpm test:e2e --grep "WISP"
  *
- * Sans ces deux variables, tous les cas sont **ignorés** (skipped).
+ * Without both variables, every case is **skipped**.
  *
- * Le profil `user-relay` est injecté par **interception de requête Playwright**
- * (`page.route` sur `lumiboot.config.json`), comme le fait déjà
- * `network-debian.spec.ts` pour le relais injoignable. Le fichier public
- * `apps/web/public/lumiboot.config.json` n'est **jamais** modifié : aucune
- * exécution parallèle ni interruption ne peut laisser le dépôt altéré.
+ * The `user-relay` profile is injected through **Playwright request
+ * interception** (`page.route` on `lumiboot.config.json`), as
+ * `network-debian.spec.ts` already does for the unreachable relay. The public
+ * `apps/web/public/lumiboot.config.json` file is **never** modified: no parallel
+ * run or interruption can leave the repository altered.
  */
 const relay = process.env.LUMIBOOT_WISP_RELAY_URL;
 const assetsPresent = process.env.VM_E2E_ASSETS === '1';
 
-/** Identique au helper de `network-debian.spec.ts` (sortie isolée par marqueurs). */
+/** Same helper as `network-debian.spec.ts` (output isolated by markers). */
 async function probe(
   serial: Locator,
   command: string,
@@ -50,22 +50,22 @@ async function probe(
   return value.slice(start, endLine);
 }
 
-test.describe('Réseau WISP (user-relay, opt-in)', () => {
+test.describe('WISP network (user-relay, opt-in)', () => {
   test.skip(
     !relay || !assetsPresent,
-    'Relais WISP de test (LUMIBOOT_WISP_RELAY_URL) + artefacts (VM_E2E_ASSETS=1) requis.',
+    'Test WISP relay (LUMIBOOT_WISP_RELAY_URL) + artifacts (VM_E2E_ASSETS=1) required.',
   );
 
-  test('le relais WISP transporte HTTPS et rend apt-get update fonctionnel', async ({ page }) => {
+  test('the WISP relay carries HTTPS and makes apt-get update work', async ({ page }) => {
     test.setTimeout(1_200_000);
 
-    // Le relais doit être un vrai relais WISP TLS ; une adresse brute invalide
-    // ferait de toute façon échouer la validation du profil.
+    // The relay must be a real TLS WISP relay; a raw invalid address would fail
+    // the profile validation anyway.
     const relayUrl = relay ?? '';
     expect(relayUrl).toMatch(/^wss:\/\//);
 
-    // Injection du profil `user-relay` au niveau du réseau Playwright : le
-    // fichier public n'est PAS modifié (isolé des autres specs parallèles).
+    // Injection of the `user-relay` profile at the Playwright network level: the
+    // public file is NOT modified (isolated from the other parallel specs).
     await page.route('**/lumiboot.config.json', (route) =>
       route.fulfill({
         status: 200,
@@ -79,9 +79,9 @@ test.describe('Réseau WISP (user-relay, opt-in)', () => {
     );
 
     await page.goto('/');
-    await page.getByLabel('Rechercher un système').fill('debian');
+    await page.getByLabel('Search for a system').fill('debian');
     await page.locator('.os-card').first().click();
-    await page.getByRole('button', { name: 'Lancer une session' }).click();
+    await page.getByRole('button', { name: 'Start session' }).click();
     await expect(page).toHaveURL(/\/session\//);
     await expect(page.locator('.session-console')).toBeVisible();
 
@@ -93,7 +93,7 @@ test.describe('Réseau WISP (user-relay, opt-in)', () => {
     const serial = page.locator('.v86-serial');
     await expect(serial).toHaveValue(/lumiboot@lumiboot/, { timeout: 90_000 });
 
-    // DHCP/DNS via le relais.
+    // DHCP/DNS through the relay.
     const addr = await probe(serial, 'ip -br addr', 'WISP_ADDR', 30_000);
     expect(addr).toMatch(/enp0s10\s+UP/);
     expect(addr).toMatch(/192\.168\.\d+\.\d+/);
@@ -101,13 +101,13 @@ test.describe('Réseau WISP (user-relay, opt-in)', () => {
     const dns = await probe(serial, 'getent hosts deb.debian.org', 'WISP_DNS', 30_000);
     expect(dns).toMatch(/\d+\.\d+\.\d+\.\d+/);
 
-    // HTTPS (443) À TRAVERS le relais : un vrai relais WISP transporte le TCP
-    // arbitraire, donc curl doit obtenir une réponse HTTP 2xx/3xx.
+    // HTTPS (443) THROUGH the relay: a real WISP relay carries arbitrary TCP, so
+    // curl must get a 2xx/3xx HTTP response.
     const https = await probe(serial, 'curl -I https://deb.debian.org/', 'WISP_HTTPS', 90_000);
     expect(https).toMatch(/HTTP\/1\.[01] [23]\d\d/);
 
-    // `apt-get update` de bout en bout : aucune erreur `Err:`/`E:` ne doit
-    // apparaître, et apt doit réellement lister/lire les dépôts.
+    // End-to-end `apt-get update`: no `Err:`/`E:` error may show up, and apt must
+    // really list/read the repositories.
     const apt = await probe(serial, 'sudo apt-get update', 'WISP_APT', 300_000);
     expect(apt).not.toMatch(/Err:/);
     expect(apt).not.toMatch(/E: /);

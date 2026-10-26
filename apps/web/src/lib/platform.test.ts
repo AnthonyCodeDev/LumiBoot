@@ -6,28 +6,28 @@ function nav(userAgent: string): HostNavigator {
 }
 
 describe('detectHostPlatform', () => {
-  it('Windows x64 explicite', () => {
+  it('explicit Windows x64', () => {
     const platform = detectHostPlatform(
       nav('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'),
     );
     expect(platform).toEqual({ os: 'windows', arch: 'x64', key: 'windows-x64' });
   });
 
-  it('Windows ARM explicite', () => {
+  it('explicit Windows ARM', () => {
     const platform = detectHostPlatform(
       nav('Mozilla/5.0 (Windows NT 10.0; ARM64) AppleWebKit/537.36 Chrome/120 Safari/537.36'),
     );
     expect(platform).toEqual({ os: 'windows', arch: 'arm64', key: 'windows-arm64' });
   });
 
-  it('Windows sans indice d’architecture : arch inconnue, pas de clé', () => {
+  it('Windows without an architecture hint: unknown arch, no key', () => {
     const platform = detectHostPlatform(nav('Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36'));
     expect(platform.os).toBe('windows');
     expect(platform.arch).toBe('unknown');
     expect(platform.key).toBeNull();
   });
 
-  it('Mac Intel (UA « Intel ») : arch inconnue car les Mac ARM envoient aussi « Intel »', () => {
+  it('Intel Mac ("Intel" UA): unknown arch because ARM Macs also send "Intel"', () => {
     const platform = detectHostPlatform(
       nav(
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120 Safari/537.36',
@@ -38,7 +38,7 @@ describe('detectHostPlatform', () => {
     expect(platform.key).toBe('macos');
   });
 
-  it('Mac ARM (même UA « Intel » pour compatibilité) : arch inconnue, clé macos', () => {
+  it('ARM Mac (same "Intel" UA for compatibility): unknown arch, macos key', () => {
     const platform = detectHostPlatform(
       nav(
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15',
@@ -61,14 +61,14 @@ describe('detectHostPlatform', () => {
     expect(platform).toEqual({ os: 'linux', arch: 'arm64', key: 'linux-arm64' });
   });
 
-  it('navigateur inconnu : tout unknown, clé nulle', () => {
+  it('unknown browser: everything unknown, null key', () => {
     const platform = detectHostPlatform(nav('Mozilla/5.0 (compatible; Bot/1.0)'));
     expect(platform).toEqual({ os: 'unknown', arch: 'unknown', key: null });
   });
 });
 
 describe('detectHostPlatformAsync', () => {
-  it('utilise userAgentData quand disponible (macOS ARM)', async () => {
+  it('uses userAgentData when available (macOS ARM)', async () => {
     const fake: HostNavigator = {
       userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
       userAgentData: {
@@ -79,7 +79,7 @@ describe('detectHostPlatformAsync', () => {
     expect(platform).toEqual({ os: 'macos', arch: 'arm64', key: 'macos' });
   });
 
-  it('Windows x86 via userAgentData', async () => {
+  it('Windows x86 through userAgentData', async () => {
     const fake: HostNavigator = {
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
       userAgentData: {
@@ -90,12 +90,12 @@ describe('detectHostPlatformAsync', () => {
     expect(platform).toEqual({ os: 'windows', arch: 'x64', key: 'windows-x64' });
   });
 
-  it('repli synchrone si getHighEntropyValues échoue', async () => {
+  it('synchronous fallback when getHighEntropyValues fails', async () => {
     const fake: HostNavigator = {
       userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
       userAgentData: {
         getHighEntropyValues: async () => {
-          throw new Error('refusé');
+          throw new Error('refused');
         },
       },
     };

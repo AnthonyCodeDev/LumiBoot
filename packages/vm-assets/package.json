@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Gestion des manifestes, téléchargements, cache et intégrité des assets VM",
+  "description": "Manifest, download, cache and integrity handling for VM assets",
   "exports": {
     ".": {
       "types": "./src/index.ts",

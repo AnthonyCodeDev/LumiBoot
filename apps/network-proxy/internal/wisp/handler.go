@@ -1,25 +1,25 @@
-// Gestion de session WISP V1 au-dessus d'une connexion WebSocket.
+// WISP V1 session handling over a WebSocket connection.
 //
-// Protocole implémenté :
-//   - envoi immédiat du CONTINUE de stream 0 (taille de buffer initiale),
-//     SANS lequel le client v86 bloque tout envoi ;
-//   - CONNECT TCP uniquement (le client v86@0.5.471 ne parle QUE TCP) : l'UDP et
-//     l'ICMP ne sont pas universels et sont refusés par CLOSE 0x41. Aucune autre
-//     promesse n'est faite (pas de promesse UDP/ICMP) ;
-//   - dial de l'IP validée par la politique (jamais du hostname) ;
-//   - un seul écrivain WebSocket (gorilla interdit les écritures concurrentes) ;
-//   - INFO (V2) et types inconnus ignorés.
+// Implemented protocol:
+//   - immediate send of the stream 0 CONTINUE (initial buffer size), WITHOUT
+//     which the v86 client blocks every send;
+//   - CONNECT over TCP only (the v86@0.5.471 client speaks ONLY TCP): UDP and
+//     ICMP are not universal and are refused with CLOSE 0x41. Nothing else is
+//     promised;
+//   - dial the IP validated by the policy (never the hostname);
+//   - a single WebSocket writer (gorilla forbids concurrent writes);
+//   - INFO (V2) and unknown types are ignored.
 //
-// Concurrence et arrêt :
-//   - un contexte de session unique (h.ctx) est annulable par la révocation ou
-//     par l'arrêt du serveur (via Close) ;
-//   - chaque goroutine est supervisée par compteur (wgProducers/wgWriter) ;
-//   - l'arrêt est ordonné et idempotent : arrêt de l'acceptation des trames →
-//     annulation des dials/flux → fermeture des sockets → attente des
-//     producteurs → arrêt de l'écrivain → fermeture du WebSocket ;
-//   - le canal d'envoi n'est fermé que par shutdown, une fois TOUS les
-//     producteurs terminés : aucun « send on closed channel » possible ;
-//   - une erreur d'écriture WebSocket annule toute la session.
+// Concurrency and shutdown:
+//   - a single session context (h.ctx) cancellable by revocation or server
+//     shutdown (via Close);
+//   - every goroutine is supervised by a counter (wgProducers/wgWriter);
+//   - shutdown is ordered and idempotent: stop accepting frames -> cancel
+//     dials/streams -> close sockets -> wait for producers -> stop the writer ->
+//     close the WebSocket;
+//   - the send channel is only closed by shutdown, once ALL producers are done:
+//     no "send on closed channel" is possible;
+//   - a WebSocket write error cancels the whole session.
 package wisp
 
 import (
@@ -39,32 +39,32 @@ import (
 	"github.com/lumiboot/network-proxy/internal/security"
 )
 
-// DialFunc compose une connexion TCP vers addr ("ip:port").
+// DialFunc dials a TCP connection to addr ("ip:port").
 type DialFunc func(ctx context.Context, network, address string) (net.Conn, error)
 
-// HandlerConfig paramètre une session WISP.
+// HandlerConfig configures a WISP session.
 type HandlerConfig struct {
-	// InitialBufferPackets est la fenêtre annoncée (défaut 32).
+	// InitialBufferPackets is the advertised window (default 32).
 	InitialBufferPackets int
-	// MaxDataChunk borne un payload DATA (défaut 128 Kio).
+	// MaxDataChunk bounds a DATA payload (default 128 KiB).
 	MaxDataChunk int
-	// ConnectTimeout borne l'établissement TCP (défaut 10 s).
+	// ConnectTimeout bounds TCP establishment (default 10 s).
 	ConnectTimeout time.Duration
-	// IdleTimeout ferme un flux sans activité (défaut 60 s).
+	// IdleTimeout closes a stream without activity (default 60 s).
 	IdleTimeout time.Duration
-	// DataTimeout borne chaque lecture/écriture de transfert (défaut 30 s).
+	// DataTimeout bounds every transfer read/write (default 30 s).
 	DataTimeout time.Duration
-	// AllowPrivateNetworks autorise privé/loopback (jamais les métadonnées).
+	// AllowPrivateNetworks allows private/loopback (never metadata).
 	AllowPrivateNetworks bool
-	// Manager suit les flux (créé par défaut si nil).
+	// Manager tracks streams (created by default if nil).
 	Manager *connections.Manager
-	// Stats reçoit les compteurs (créé par défaut si nil).
+	// Stats receives the counters (created by default if nil).
 	Stats *diagnostics.Counters
-	// Dial surcharge la composition (tests). Nil = composeur TCP standard.
+	// Dial overrides dialing (tests). Nil = standard TCP dialer.
 	Dial DialFunc
-	// Resolve surcharge la résolution DNS (tests). Nil = résolveur système.
+	// Resolve overrides DNS resolution (tests). Nil = system resolver.
 	Resolve security.LookupFunc
-	// SessionID identifie la session WISP pour le quota par session.
+	// SessionID identifies the WISP session for the per-session quota.
 	SessionID string
 }
 
@@ -96,18 +96,18 @@ func (c HandlerConfig) withDefaults() HandlerConfig {
 	return c
 }
 
-// streamState est l'état d'un flux TCP (client <-> réseau).
+// streamState is the state of a TCP stream (client <-> network).
 type streamState struct {
 	mu   sync.Mutex
-	conn net.Conn // renseigné une fois le dial réussi
+	conn net.Conn // set once the dial succeeded
 
-	// send transporte les payloads DATA à écrire côté upstream. Il n'est jamais
-	// fermé : les producteurs (boucle de lecture) s'arrêtent via closed/ctx.
+	// send carries the DATA payloads to write upstream. It is never closed:
+	// producers (read loop) stop via closed/ctx.
 	send   chan []byte
 	closed chan struct{}
 	one    sync.Once
 
-	// recvSinceContinue n'est accédé que par la goroutine d'écriture du flux.
+	// recvSinceContinue is only accessed by the stream's write goroutine.
 	recvSinceContinue int
 }
 
@@ -138,7 +138,7 @@ func (s *streamState) closeConn() {
 	}
 }
 
-// Handler exécute une session WISP sur conn. Créer via NewHandler puis Run.
+// Handler runs a WISP session on conn. Create with NewHandler then Run.
 type Handler struct {
 	conn *websocket.Conn
 	cfg  HandlerConfig
@@ -146,10 +146,10 @@ type Handler struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	send chan []byte // producteurs -> écrivain unique (fermé uniquement par shutdown)
+	send chan []byte // producers -> single writer (only closed by shutdown)
 
-	wgProducers sync.WaitGroup // watchdog, dials, pumps, écrivains de flux
-	wgWriter    sync.WaitGroup // écrivain WebSocket
+	wgProducers sync.WaitGroup // watchdog, dials, pumps, stream writers
+	wgWriter    sync.WaitGroup // WebSocket writer
 
 	mu      sync.Mutex
 	streams map[uint32]*streamState
@@ -160,15 +160,15 @@ type Handler struct {
 	firstErr error
 }
 
-// writeTimeout borne chaque écriture WebSocket.
+// writeTimeout bounds every WebSocket write.
 const writeTimeout = 10 * time.Second
 
-// streamQueueFactor donne une marge au-delà de la fenêtre annoncée : un client
-// qui respecte le contrôle de flux ne remplit jamais la file (un débordement
-// signale un client qui ignore la fenêtre et entraîne la fermeture du flux).
+// streamQueueFactor adds slack beyond the advertised window: a client that
+// honors flow control never fills the queue (an overflow signals a client
+// ignoring the window and closes the stream).
 const streamQueueFactor = 8
 
-// NewHandler construit un handler de session.
+// NewHandler builds a session handler.
 func NewHandler(conn *websocket.Conn, cfg HandlerConfig) *Handler {
 	h := &Handler{
 		conn:    conn,
@@ -176,15 +176,15 @@ func NewHandler(conn *websocket.Conn, cfg HandlerConfig) *Handler {
 		send:    make(chan []byte, 128),
 		streams: make(map[uint32]*streamState),
 	}
-	// Contexte de session dès la construction : Close() reste sûr même si la
-	// révocation survient avant Run (le callback peut être enregistré avant).
+	// Session context from construction: Close() stays safe even if revocation
+	// happens before Run (the callback can be registered earlier).
 	h.ctx, h.cancel = context.WithCancel(context.Background())
 	return h
 }
 
-// Close annule la session et ferme immédiatement le WebSocket ainsi que tous
-// les net.Conn TCP associés. Idempotent, sûr depuis n'importe quelle goroutine.
-// C'est le point d'entrée utilisé par le registre de révocation.
+// Close cancels the session and immediately closes the WebSocket as well as all
+// associated TCP net.Conns. Idempotent, safe from any goroutine.
+// This is the entry point used by the revocation registry.
 func (h *Handler) Close() {
 	h.cancel()
 	h.mu.Lock()
@@ -199,10 +199,10 @@ func (h *Handler) Close() {
 	_ = h.conn.Close()
 }
 
-// Run exécute la session jusqu'à annulation du parent, erreur WebSocket ou
-// fermeture du client. Il envoie d'abord le CONTINUE initial de stream 0.
+// Run runs the session until the parent is cancelled, a WebSocket error occurs
+// or the client closes. It first sends the initial stream 0 CONTINUE.
 func (h *Handler) Run(parent context.Context) error {
-	// Relie l'annulation du parent (requête HTTP) à la session.
+	// Binds the parent cancellation (HTTP request) to the session.
 	stop := context.AfterFunc(parent, h.Close)
 	defer stop()
 
@@ -212,7 +212,7 @@ func (h *Handler) Run(parent context.Context) error {
 	h.wgWriter.Add(1)
 	go h.writeLoop()
 
-	// CONTINUE initial obligatoire : initialise la congestion du client v86.
+	// Mandatory initial CONTINUE: initializes the v86 client congestion state.
 	h.emit(h.ctx, BuildContinue(0, uint32(h.cfg.InitialBufferPackets)))
 
 	err := h.readLoop()
@@ -223,15 +223,15 @@ func (h *Handler) Run(parent context.Context) error {
 	return err
 }
 
-// watchdog débloque ReadMessage dès que la session est annulée.
+// watchdog unblocks ReadMessage as soon as the session is cancelled.
 func (h *Handler) watchdog() {
 	defer h.wgProducers.Done()
 	<-h.ctx.Done()
 	_ = h.conn.Close()
 }
 
-// readLoop décode les trames WISP entrantes et les répartit. Il ne réalise
-// AUCUNE opération réseau bloquante : dial/DNS sont délégués à des goroutines.
+// readLoop decodes incoming WISP frames and dispatches them. It performs NO
+// blocking network operation: dial/DNS are delegated to goroutines.
 func (h *Handler) readLoop() error {
 	h.conn.SetReadLimit(int64(h.cfg.MaxDataChunk) + HeaderLen + 1024)
 	for {
@@ -254,7 +254,7 @@ func (h *Handler) readLoop() error {
 	}
 }
 
-// dispatch route une trame décodée. Non bloquant.
+// dispatch routes a decoded frame. Non-blocking.
 func (h *Handler) dispatch(f Frame) {
 	if h.ctx.Err() != nil {
 		return
@@ -265,8 +265,8 @@ func (h *Handler) dispatch(f Frame) {
 	case TypeData:
 		h.handleData(f.StreamID, f.Payload)
 	case TypeContinue:
-		// Fenêtre annoncée par le client : on la valide sans la gater (le
-		// contrôle de flux est assuré par notre propre fenêtre d'envoi).
+		// Window advertised by the client: validated without gating (flow control
+		// is provided by our own send window).
 		if _, err := ParseContinue(f.Payload); err != nil {
 			h.cfg.Stats.IncErrors()
 		}
@@ -278,14 +278,14 @@ func (h *Handler) dispatch(f Frame) {
 		}
 		h.closeStream(f.StreamID, reason, false)
 	case TypeInfo:
-		// WISP V2 : ignoré.
+		// WISP V2: ignored.
 	default:
-		// Type inconnu : ignoré (robustesse).
+		// Unknown type: ignored (robustness).
 	}
 }
 
-// handleConnect réserve le flux puis lance la résolution DNS + le dial dans une
-// goroutine supervisée : la boucle de lecture reste réactive.
+// handleConnect reserves the stream then starts DNS resolution + dial in a
+// supervised goroutine: the read loop stays responsive.
 func (h *Handler) handleConnect(streamID uint32, payload []byte) {
 	fail := func(reason byte) { h.emit(h.ctx, BuildClose(streamID, reason)) }
 
@@ -301,12 +301,12 @@ func (h *Handler) handleConnect(streamID uint32, payload []byte) {
 		return
 	}
 	if req.StreamType != StreamTypeTCP {
-		// UDP/ICMP non supportés : le client v86 actuel est TCP-only. On refuse
-		// explicitement via CLOSE 0x41 et on ne promet rien d'autre.
+		// UDP/ICMP unsupported: the current v86 client is TCP-only. Refused
+		// explicitly with CLOSE 0x41 and nothing else is promised.
 		fail(CloseInvalidInfo)
 		return
 	}
-	// Réservation atomique du quota AVANT toute opération réseau.
+	// Atomic quota reservation BEFORE any network operation.
 	if err := h.cfg.Manager.Add(h.cfg.SessionID, streamID, req.Host, req.Port, "", nil); err != nil {
 		if errors.Is(err, connections.ErrGlobalLimit) || errors.Is(err, connections.ErrSessionLimit) {
 			fail(connections.CloseThrottled)
@@ -333,8 +333,8 @@ func (h *Handler) handleConnect(streamID uint32, payload []byte) {
 	go h.serveStream(streamID, st, req)
 }
 
-// serveStream résout, compose, puis relaie WS -> TCP ; il démarre aussi le
-// relais TCP -> WS (pump). Toute la durée de vie du flux est supervisée.
+// serveStream resolves, dials, then relays WS -> TCP; it also starts the
+// TCP -> WS relay (pump). The whole stream lifetime is supervised.
 func (h *Handler) serveStream(streamID uint32, st *streamState, req ConnectRequest) {
 	defer h.wgProducers.Done()
 
@@ -388,15 +388,15 @@ func (h *Handler) serveStream(streamID uint32, st *streamState, req ConnectReque
 	h.writeToUpstream(streamID, st, upstream)
 }
 
-// writeToUpstream relaie les DATA reçues du client vers le flux TCP, en
-// respectant la fenêtre d'envoi par flux : un CONTINUE est émis tous les
-// InitialBufferPackets paquets traités. Un flux lent ne bloque donc pas la
-// boucle de lecture ni les autres flux (traitement par goroutine dédiée).
+// writeToUpstream relays the DATA received from the client to the TCP stream,
+// honoring the per-stream send window: a CONTINUE is emitted every
+// InitialBufferPackets processed packets. A slow stream therefore does not block
+// the read loop or the other streams (dedicated goroutine handling).
 func (h *Handler) writeToUpstream(streamID uint32, st *streamState, upstream net.Conn) {
 	for {
 		select {
 		case data := <-st.send:
-			// Limitation de bande passante AVANT l'écriture, annulable.
+			// Bandwidth limiting BEFORE the write, cancellable.
 			h.cfg.Manager.Throttle(h.ctx, len(data))
 			if h.ctx.Err() != nil {
 				return
@@ -430,8 +430,8 @@ func (h *Handler) writeToUpstream(streamID uint32, st *streamState, upstream net
 	}
 }
 
-// handleData enfile un DATA client vers le flux (non bloquant). Un débordement
-// de file signale un client ignorant la fenêtre : le flux est fermé.
+// handleData queues a client DATA payload toward the stream (non-blocking). A
+// queue overflow signals a client ignoring the window: the stream is closed.
 func (h *Handler) handleData(streamID uint32, payload []byte) {
 	st := h.getStream(streamID)
 	if st == nil {
@@ -443,7 +443,7 @@ func (h *Handler) handleData(streamID uint32, payload []byte) {
 		h.closeStream(streamID, CloseInvalidInfo, true)
 		return
 	}
-	// payload est déjà une copie privée (DecodeFrame).
+	// payload is already a private copy (DecodeFrame).
 	select {
 	case st.send <- payload:
 	case <-st.closed:
@@ -454,7 +454,7 @@ func (h *Handler) handleData(streamID uint32, payload []byte) {
 	}
 }
 
-// pump relaie TCP -> WebSocket (DATA découpés à MaxDataChunk).
+// pump relays TCP -> WebSocket (DATA split at MaxDataChunk).
 func (h *Handler) pump(streamID uint32, st *streamState, upstream net.Conn) {
 	defer h.wgProducers.Done()
 	buf := make([]byte, h.cfg.MaxDataChunk)
@@ -473,7 +473,7 @@ func (h *Handler) pump(streamID uint32, st *streamState, upstream net.Conn) {
 		if n == 0 {
 			continue
 		}
-		// Limitation de bande passante AVANT l'émission, annulable.
+		// Bandwidth limiting BEFORE emitting, cancellable.
 		h.cfg.Manager.Throttle(h.ctx, n)
 		if h.ctx.Err() != nil {
 			return
@@ -486,15 +486,15 @@ func (h *Handler) pump(streamID uint32, st *streamState, upstream net.Conn) {
 	}
 }
 
-// writeLoop est l'unique écrivain WebSocket. Toute erreur annule la session :
-// le watchdog ferme alors le WebSocket, ce qui débloque ReadMessage, et
-// l'annulation du contexte débloque emit et ferme les sockets en attente.
+// writeLoop is the single WebSocket writer. Any error cancels the session: the
+// watchdog then closes the WebSocket, which unblocks ReadMessage, and the
+// context cancellation unblocks emit and closes pending sockets.
 func (h *Handler) writeLoop() {
 	defer h.wgWriter.Done()
 	failed := false
 	for msg := range h.send {
 		if failed {
-			continue // vidange silencieuse pour ne jamais bloquer les producteurs
+			continue // silent drain so producers are never blocked
 		}
 		_ = h.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
 		if err := h.conn.WriteMessage(websocket.BinaryMessage, msg); err != nil {
@@ -505,8 +505,8 @@ func (h *Handler) writeLoop() {
 	}
 }
 
-// emit enfile un paquet vers l'écrivain unique. Ne panique jamais : le canal
-// n'est fermé qu'après l'arrêt de tous les producteurs (cf. shutdown).
+// emit queues a packet for the single writer. Never panics: the channel is only
+// closed after every producer has stopped (see shutdown).
 func (h *Handler) emit(ctx context.Context, msg []byte) bool {
 	select {
 	case h.send <- msg:
@@ -518,7 +518,7 @@ func (h *Handler) emit(ctx context.Context, msg []byte) bool {
 	}
 }
 
-// streamExists indique si un flux est déjà suivi.
+// streamExists reports whether a stream is already tracked.
 func (h *Handler) streamExists(id uint32) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -532,7 +532,7 @@ func (h *Handler) getStream(id uint32) *streamState {
 	return h.streams[id]
 }
 
-// closeStream ferme un flux ; notify=true envoie aussi un CLOSE au client.
+// closeStream closes a stream; notify=true also sends a CLOSE to the client.
 // Idempotent.
 func (h *Handler) closeStream(id uint32, reason byte, notify bool) {
 	h.mu.Lock()
@@ -549,19 +549,19 @@ func (h *Handler) closeStream(id uint32, reason byte, notify bool) {
 	h.cfg.Manager.Remove(h.cfg.SessionID, id)
 	h.cfg.Stats.DecConnections()
 	if notify {
-		// Contexte borné : ne jamais bloquer la fermeture sur un pair inerte.
+		// Bounded context: never block the close on an inert peer.
 		tmCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		h.emit(tmCtx, BuildClose(id, reason))
 		cancel()
 	}
 }
 
-// shutdown réalise l'arrêt ordonné et idempotent de la session.
+// shutdown performs the ordered and idempotent session shutdown.
 func (h *Handler) shutdown() {
 	h.shutdownOnce.Do(func() {
-		// 1. Stopper l'acceptation des trames et annuler dials/flux.
+		// 1. Stop accepting frames and cancel dials/streams.
 		h.cancel()
-		// 2. Fermer tous les sockets (débloque les pumps bloqués en lecture).
+		// 2. Close every socket (unblocks pumps stuck in reads).
 		h.mu.Lock()
 		ids := make([]uint32, 0, len(h.streams))
 		for id := range h.streams {
@@ -571,18 +571,18 @@ func (h *Handler) shutdown() {
 		for _, id := range ids {
 			h.closeStream(id, 0, false)
 		}
-		// 3. Attendre tous les producteurs : plus personne n'écrit ensuite.
+		// 3. Wait for every producer: nobody writes afterwards.
 		h.wgProducers.Wait()
-		// 4. Arrêter l'écrivain : SEUL propriétaire de la fermeture du canal.
+		// 4. Stop the writer: SOLE owner of the channel close.
 		close(h.send)
 		h.wgWriter.Wait()
-		// 5. Fermer le WebSocket.
+		// 5. Close the WebSocket.
 		_ = h.conn.Close()
 	})
 }
 
-// writeFull écrit data en entier (Write peut être partiel) et renvoie le nombre
-// d'octets réellement écrits. Chaque Write est borné par timeout.
+// writeFull writes data entirely (Write may be partial) and returns the number
+// of bytes actually written. Every Write is bounded by timeout.
 func writeFull(conn net.Conn, data []byte, timeout time.Duration) (int, error) {
 	written := 0
 	for written < len(data) {

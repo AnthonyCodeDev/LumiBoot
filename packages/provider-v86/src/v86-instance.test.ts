@@ -16,7 +16,7 @@ type Listener = (arg: unknown) => void;
 
 class FakeV86 {
   readonly calls = { run: 0, stop: 0, destroy: 0 };
-  /** Événements passés à `remove_listener` (vérifie le détachement). */
+  /** Events passed to `remove_listener` (checks the detach). */
   readonly removed: string[] = [];
   destroyError: Error | null = null;
   runError: Error | null = null;
@@ -86,7 +86,7 @@ function emitMarker(emulator: FakeV86): void {
 }
 
 describe('V86Instance', () => {
-  it('sur emulator-ready émet emulator-ready puis booting et lance run, sans passer running', () => {
+  it('on emulator-ready emits emulator-ready then booting and starts run, without reaching running', () => {
     const emulator = new FakeV86();
     const instance = createInstance(emulator);
     const events: SessionEvent[] = [];
@@ -95,7 +95,7 @@ describe('V86Instance', () => {
     emulator.emit('emulator-ready', undefined);
 
     expect(emulator.calls.run).toBe(1);
-    // WASM prêt (emulator-ready) est distinct du démarrage du noyau (booting).
+    // WASM ready (emulator-ready) is distinct from kernel boot (booting).
     expect(events).toEqual([
       { type: 'progress', phase: 'emulator-ready' },
       { type: 'progress', phase: 'booting' },
@@ -104,7 +104,7 @@ describe('V86Instance', () => {
     expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(false);
   });
 
-  it('détecte le marqueur fragmenté et n’émet running qu’une seule fois', () => {
+  it('detects a fragmented marker and emits running only once', () => {
     const emulator = new FakeV86();
     const instance = createInstance(emulator);
     const events: SessionEvent[] = [];
@@ -114,12 +114,12 @@ describe('V86Instance', () => {
 
     const running = events.filter((event) => event.type === 'state' && event.state === 'running');
     expect(running).toHaveLength(1);
-    // La transition est explicitement étiquetée « guest-ready » (preuve forte).
+    // The transition is explicitly labeled "guest-ready" (strong proof).
     expect(events).toContainEqual({ type: 'progress', phase: 'guest-ready' });
     expect(instance.readiness).toBe('guest-ready');
   });
 
-  it('lit la preuve sur le canal VGA quand readiness.channel = vga', () => {
+  it('reads the proof on the VGA channel when readiness.channel = vga', () => {
     const emulator = new FakeV86();
     const instance = new V86Instance({
       providerId: 'v86',
@@ -132,7 +132,7 @@ describe('V86Instance', () => {
     const events: SessionEvent[] = [];
     instance.subscribe((event) => events.push(event));
 
-    // Le canal série n'est PAS branché : seul le texte écran est surveillé.
+    // The serial channel is NOT wired: only the screen text is watched.
     expect(emulator.listenerCount('serial0-output-byte')).toBe(0);
     expect(emulator.listenerCount('screen-put-char')).toBe(1);
 
@@ -144,7 +144,7 @@ describe('V86Instance', () => {
     expect(running).toHaveLength(1);
   });
 
-  it('mode disk-boot : running seulement après une lecture réelle du disque hda', () => {
+  it('disk-boot mode: running only after a real read of the hda disk', () => {
     const emulator = new FakeV86();
     const instance = new V86Instance({
       providerId: 'v86',
@@ -161,12 +161,12 @@ describe('V86Instance', () => {
     const events: SessionEvent[] = [];
     instance.subscribe((event) => events.push(event));
 
-    // Ni série ni VGA : la preuve vient du disque dur.
+    // Neither serial nor VGA: the proof comes from the hard disk.
     expect(emulator.listenerCount('serial0-output-byte')).toBe(0);
     expect(emulator.listenerCount('screen-put-char')).toBe(0);
     expect(emulator.listenerCount('ide-read-end')).toBe(1);
 
-    // Lecture du CD (canal 1) ou lecture nulle : aucune preuve de démarrage.
+    // CD read (channel 1) or zero-length read: no boot proof.
     emulator.emit('ide-read-end', [1, 512, 1]);
     emulator.emit('ide-read-end', [0, 0, 0]);
     expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(false);
@@ -176,13 +176,13 @@ describe('V86Instance', () => {
     expect(
       events.filter((event) => event.type === 'state' && event.state === 'running'),
     ).toHaveLength(1);
-    // La preuve disque est étiquetée `disk-boot`, jamais présentée comme un
-    // marqueur invité (`guest-ready`).
+    // The disk proof is labeled `disk-boot`, never presented as a guest marker
+    // (`guest-ready`).
     expect(events).toContainEqual({ type: 'progress', phase: 'disk-boot' });
     expect(events).not.toContainEqual({ type: 'progress', phase: 'guest-ready' });
   });
 
-  it('timeout sans marqueur : BOOT_TIMEOUT, jamais running, console préservée', async () => {
+  it('timeout without marker: BOOT_TIMEOUT, never running, console preserved', async () => {
     vi.useFakeTimers();
     try {
       const emulator = new FakeV86();
@@ -208,7 +208,7 @@ describe('V86Instance', () => {
       emulator.emit('emulator-ready', undefined);
       await vi.advanceTimersByTimeAsync(1000);
 
-      // Aucun `running` simulé : l'échec est explicite et l'état non vérifié.
+      // No simulated `running`: the failure is explicit and the state unverified.
       expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(
         false,
       );
@@ -220,13 +220,13 @@ describe('V86Instance', () => {
       );
       expect(instance.readiness).toBe('unverified');
 
-      // L'écran (console) et l'émulateur restent vivants : aucun nettoyage.
+      // The screen (console) and the emulator stay alive: no cleanup.
       expect(detach).not.toHaveBeenCalled();
       expect(emulator.calls.stop).toBe(0);
       expect(emulator.calls.destroy).toBe(0);
       expect(emulator.listenerCount('serial0-output-byte')).toBe(1);
 
-      // Une preuve TARDIVE ne doit jamais produire de `running`.
+      // A LATE proof must never produce a `running`.
       emitMarker(emulator);
       await vi.advanceTimersByTimeAsync(5000);
       expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(
@@ -237,7 +237,7 @@ describe('V86Instance', () => {
     }
   });
 
-  it('disk-boot : timeout sans lecture disque => BOOT_TIMEOUT étiqueté disque', async () => {
+  it('disk-boot: timeout without a disk read => BOOT_TIMEOUT labeled disk', async () => {
     vi.useFakeTimers();
     try {
       const emulator = new FakeV86();
@@ -262,8 +262,8 @@ describe('V86Instance', () => {
 
       const error = events.find((event) => event.type === 'error');
       expect(error).toMatchObject({ code: 'BOOT_TIMEOUT' });
-      // Le message décrit la preuve réelle (lecture disque), pas un marqueur invité.
-      expect(error && error.type === 'error' ? error.message : '').toMatch(/disque/i);
+      // The message describes the real proof (disk read), not a guest marker.
+      expect(error && error.type === 'error' ? error.message : '').toMatch(/disk/i);
       expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(
         false,
       );
@@ -272,7 +272,7 @@ describe('V86Instance', () => {
     }
   });
 
-  it('n’émet pas BOOT_TIMEOUT si le marqueur arrive avant le délai', async () => {
+  it('does not emit BOOT_TIMEOUT if the marker arrives before the delay', async () => {
     vi.useFakeTimers();
     try {
       const emulator = new FakeV86();
@@ -300,7 +300,7 @@ describe('V86Instance', () => {
     }
   });
 
-  it('n’émet aucun running après BOOT_TIMEOUT, même si le marqueur arrive', async () => {
+  it('emits no running after BOOT_TIMEOUT, even if the marker arrives', async () => {
     vi.useFakeTimers();
     try {
       const emulator = new FakeV86();
@@ -316,9 +316,9 @@ describe('V86Instance', () => {
       instance.subscribe((event) => events.push(event));
 
       emulator.emit('emulator-ready', undefined);
-      // Échec à l'échéance : état non vérifié…
+      // Failure at expiry: unverified state…
       await vi.advanceTimersByTimeAsync(1000);
-      // …puis le marqueur arrive tardivement : jamais de `running`.
+      // …then the marker arrives late: never a `running`.
       emitMarker(emulator);
       await vi.advanceTimersByTimeAsync(2000);
 
@@ -332,7 +332,7 @@ describe('V86Instance', () => {
     }
   });
 
-  it('rejoue les événements émis avant le premier abonné', () => {
+  it('replays events emitted before the first subscriber', () => {
     const emulator = new FakeV86();
     const instance = createInstance(emulator);
     emulator.emit('download-progress', { loaded: 10, total: 100, lengthComputable: true });
@@ -349,7 +349,7 @@ describe('V86Instance', () => {
     });
   });
 
-  it('stop et dispose sont idempotents même si destroy échoue', async () => {
+  it('stop and dispose are idempotent even if destroy fails', async () => {
     const emulator = new FakeV86();
     emulator.destroyError = new Error('boom');
     const cleanupErrors: unknown[] = [];
@@ -365,7 +365,7 @@ describe('V86Instance', () => {
     expect(emulator.listenerCount('serial0-output-byte')).toBe(0);
   });
 
-  it('n’émet aucun running tardif après stop', async () => {
+  it('emits no late running after stop', async () => {
     const emulator = new FakeV86();
     const instance = createInstance(emulator);
     const events: SessionEvent[] = [];
@@ -377,7 +377,7 @@ describe('V86Instance', () => {
     expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(false);
   });
 
-  it('arrêt spontané : publie stopped, nettoie idempotemment et ne se répète pas', async () => {
+  it('spontaneous stop: publishes stopped, cleans up idempotently and never repeats', async () => {
     const emulator = new FakeV86();
     const detach = vi.fn();
     const instance = new V86Instance({
@@ -398,11 +398,11 @@ describe('V86Instance', () => {
     const events: SessionEvent[] = [];
     instance.subscribe((event) => events.push(event));
 
-    // Arrêt spontané de l'émulateur (extinction/crash invité).
+    // Spontaneous stop of the emulator (guest shutdown/crash).
     emulator.emit('emulator-stopped', undefined);
     await flushMicrotasks();
 
-    // `stopping` puis `stopped` : le cycle de vie peut réconcilier la transition.
+    // `stopping` then `stopped`: the lifecycle can reconcile the transition.
     expect(events).toEqual(
       expect.arrayContaining([
         { type: 'state', state: 'stopping' },
@@ -414,7 +414,7 @@ describe('V86Instance', () => {
     expect(detach).toHaveBeenCalledTimes(1);
     expect(emulator.listenerCount('serial0-output-byte')).toBe(0);
 
-    // Un `stop()`/`dispose()` ultérieur de l'hôte est sans effet supplémentaire.
+    // A later `stop()`/`dispose()` from the host has no additional effect.
     await instance.stop();
     await instance.dispose();
     expect(emulator.calls.stop).toBe(1);
@@ -427,7 +427,7 @@ describe('V86Instance', () => {
     ).toHaveLength(1);
   });
 
-  it('ignore tout événement tardif après dispose', async () => {
+  it('ignores any late event after dispose', async () => {
     const emulator = new FakeV86();
     const instance = createInstance(emulator);
     const events: SessionEvent[] = [];
@@ -445,7 +445,7 @@ describe('V86Instance', () => {
     expect(events.length).toBe(after);
   });
 
-  it('relaie les diagnostics réseau et détache tout à dispose', async () => {
+  it('relays network diagnostics and detaches everything on dispose', async () => {
     const emulator = new FakeV86();
     const controller = createNetworkController({ profile: defaultNetworkProfile });
     await controller.start();
@@ -462,7 +462,7 @@ describe('V86Instance', () => {
     const events: SessionEvent[] = [];
     instance.subscribe((event) => events.push(event));
 
-    // L'état initial est rejoué au premier abonné (statut offline).
+    // The initial state is replayed to the first subscriber (offline status).
     expect(events.some((event) => event.type === 'network')).toBe(true);
 
     emulator.emit('net0-send', new Uint8Array(64));
@@ -482,15 +482,15 @@ describe('V86Instance', () => {
     expect(emulator.listenerCount('net0-send')).toBe(0);
     expect(emulator.listenerCount('eth-transmit-end')).toBe(0);
     expect(emulator.listenerCount('eth-receive-end')).toBe(0);
-    // `remove_listener` a bien été appelé pour les trois événements réseau.
+    // `remove_listener` was indeed called for the three network events.
     expect(emulator.removed).toEqual(
       expect.arrayContaining(['eth-transmit-end', 'eth-receive-end', 'net0-send']),
     );
   });
 
-  it('échec de run() : émet une erreur et libère le contrôleur réseau', async () => {
+  it('run() failure: emits an error and releases the network controller', async () => {
     const emulator = new FakeV86();
-    emulator.runError = new Error('wasm cassé');
+    emulator.runError = new Error('wasm broken');
     const controller = createNetworkController({ profile: defaultNetworkProfile });
     await controller.start();
     const disposeSpy = vi.spyOn(controller, 'dispose');
@@ -524,7 +524,7 @@ describe('V86Instance', () => {
     );
   });
 
-  it('erreur de téléchargement : émet une erreur et libère le contrôleur réseau', async () => {
+  it('download error: emits an error and releases the network controller', async () => {
     const emulator = new FakeV86();
     const controller = createNetworkController({ profile: defaultNetworkProfile });
     await controller.start();

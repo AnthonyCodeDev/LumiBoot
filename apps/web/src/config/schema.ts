@@ -2,11 +2,11 @@ import { z } from 'zod';
 import { networkProfileSchema, type NetworkProfile } from '@lumiboot/vm-network';
 
 /**
- * Schéma de configuration globale LumiBoot (`public/lumiboot.config.json`).
+ * LumiBoot global config schema (`public/lumiboot.config.json`).
  *
- * Réutilise `networkProfileSchema` de `@lumiboot/vm-network` : les modes et la
- * forme des profils réseau restent définis à un seul endroit. Tous les objets
- * sont `.strict()` : aucune clé inconnue n'est tolérée silencieusement.
+ * Reuses `networkProfileSchema` from `@lumiboot/vm-network`: network modes and
+ * profile shape stay defined in a single place. Every object is `.strict()`: no
+ * unknown key is silently tolerated.
  */
 export const networkConfigSchema = z
   .object({
@@ -31,25 +31,25 @@ export const lumibootConfigSchema = z
   })
   .strict();
 
-/** Sortie brute du schéma (avant nettoyage / normalisation). */
+/** Raw schema output (before cleanup / normalization). */
 export type ParsedLumibootConfig = z.infer<typeof lumibootConfigSchema>;
 export type ParsedNetworkConfig = z.infer<typeof networkConfigSchema>;
 export type ParsedProxyFileConfig = z.infer<typeof proxyFileSchema>;
 
-/** Configuration réseau normalisée (profils nettoyés, relayUrl cohérent). */
+/** Normalized network config (clean profiles, consistent relayUrl). */
 export interface NetworkConfig {
   defaultProfile: NetworkProfile;
   systems?: Record<string, NetworkProfile>;
 }
 
-/** Configuration proxy réseau local normalisée (valeurs par défaut appliquées). */
+/** Normalized local network proxy config (defaults applied). */
 export interface ProxyConfig {
   enabled: boolean;
   url: string;
   downloadManifestUrl?: string;
 }
 
-/** Configuration runtime immuable consommée par l'application. */
+/** Immutable runtime config consumed by the application. */
 export interface LumibootConfig {
   version: 1;
   network: NetworkConfig;

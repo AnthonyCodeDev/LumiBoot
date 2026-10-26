@@ -11,10 +11,10 @@ import {
 import { getUserMediaStore } from './user-media.storage';
 
 /**
- * Tests du store des médias utilisateur : validation (extension, format, taille,
- * quota, attestation de licence), messages d'échec clairs et stockage local.
- * `getUserMediaStore` est remplacé par un store mémoire réel de `vm-assets` :
- * la logique d'import testée est celle du store front, pas IndexedDB.
+ * User media store tests: validation (extension, format, size, quota, license
+ * confirmation), clear failure messages and local storage. `getUserMediaStore` is
+ * replaced by a real in-memory `vm-assets` store: the import logic under test is
+ * the front store one, not IndexedDB.
  */
 
 vi.mock('./user-media.storage', () => ({
@@ -23,7 +23,7 @@ vi.mock('./user-media.storage', () => ({
 
 const getStoreMock = vi.mocked(getUserMediaStore);
 const system = getSystemById('windows-11-x64');
-if (!system) throw new Error('système de test introuvable');
+if (!system) throw new Error('test system not found');
 
 function makeFile(name: string, size: number): File {
   return new File([new Uint8Array(size)], name, { type: 'application/octet-stream' });
@@ -44,8 +44,8 @@ afterEach(() => {
   else delete (navigator as unknown as Record<string, unknown>)['storage'];
 });
 
-describe('détection de format', () => {
-  it('déduit le format des extensions reconnues', () => {
+describe('format detection', () => {
+  it('infers the format from recognized extensions', () => {
     expect(detectMediaFormat('windows.ISO')).toBe('iso');
     expect(detectMediaFormat('debian.img')).toBe('raw');
     expect(mediaFormatForFile('debian.iso')).toBe('iso');
@@ -56,29 +56,29 @@ describe('détection de format', () => {
 });
 
 describe('validateUserMediaFile', () => {
-  it('accepte un fichier sous le plafond', () => {
+  it('accepts a file under the cap', () => {
     expect(validateUserMediaFile({ name: 'image.img', size: 2048 })).toEqual({ format: 'raw' });
   });
 
-  it('rejette une extension inconnue', () => {
+  it('rejects an unknown extension', () => {
     expect(() => validateUserMediaFile({ name: 'archive.zip', size: 2048 })).toThrow(
-      /Extensions acceptées/,
+      /Accepted extensions/,
     );
   });
 
-  it('rejette un fichier vide', () => {
-    expect(() => validateUserMediaFile({ name: 'vide.img', size: 0 })).toThrow(/vide/);
+  it('rejects an empty file', () => {
+    expect(() => validateUserMediaFile({ name: 'empty.img', size: 0 })).toThrow(/empty/);
   });
 
-  it('rejette un fichier au-dessus du plafond', () => {
+  it('rejects a file above the cap', () => {
     expect(() =>
-      validateUserMediaFile({ name: 'enorme.img', size: MAX_USER_MEDIA_BYTES + 1 }),
-    ).toThrow(/maximale/);
+      validateUserMediaFile({ name: 'huge.img', size: MAX_USER_MEDIA_BYTES + 1 }),
+    ).toThrow(/maximum allowed size/);
   });
 });
 
 describe('useUserMediaStore.importFor', () => {
-  it('importe un média valide et le persiste localement', async () => {
+  it('imports a valid media and persists it locally', async () => {
     const store = createMemoryUserMediaStore();
     getStoreMock.mockResolvedValue(store);
 
@@ -92,17 +92,17 @@ describe('useUserMediaStore.importFor', () => {
     expect(useUserMediaStore.getState().error).toBeUndefined();
   });
 
-  it('refuse l’import sans attestation de licence, sans toucher au stockage', async () => {
+  it('refuses the import without a license confirmation, without touching storage', async () => {
     await expect(
       useUserMediaStore.getState().importFor(system, makeFile('windows10.iso', 4096), false),
     ).rejects.toMatchObject({ code: 'ASSET_IMPORT_REJECTED' });
 
-    expect(useUserMediaStore.getState().error).toMatch(/licence/i);
+    expect(useUserMediaStore.getState().error).toMatch(/license/i);
     expect(useUserMediaStore.getState().importing).toBe(false);
     expect(getStoreMock).not.toHaveBeenCalled();
   });
 
-  it('refuse une extension inconnue avec un message actionnable', async () => {
+  it('refuses an unknown extension with an actionable message', async () => {
     await expect(
       useUserMediaStore.getState().importFor(system, makeFile('archive.zip', 4096), true),
     ).rejects.toMatchObject({ code: 'ASSET_IMPORT_REJECTED' });
@@ -111,18 +111,18 @@ describe('useUserMediaStore.importFor', () => {
     expect(getStoreMock).not.toHaveBeenCalled();
   });
 
-  it('refuse un média trop volumineux sans lire les octets', async () => {
+  it('refuses an oversized media without reading the bytes', async () => {
     await expect(
       useUserMediaStore
         .getState()
-        .importFor(system, fileLike('enorme.img', MAX_USER_MEDIA_BYTES + 1), true),
+        .importFor(system, fileLike('huge.img', MAX_USER_MEDIA_BYTES + 1), true),
     ).rejects.toMatchObject({ code: 'ASSET_IMPORT_REJECTED' });
 
-    expect(useUserMediaStore.getState().error).toMatch(/maximale/);
+    expect(useUserMediaStore.getState().error).toMatch(/maximum allowed size/);
     expect(getStoreMock).not.toHaveBeenCalled();
   });
 
-  it('refuse l’import quand le quota local est insuffisant', async () => {
+  it('refuses the import when the local quota is insufficient', async () => {
     Object.defineProperty(navigator, 'storage', {
       configurable: true,
       value: { estimate: vi.fn(async () => ({ quota: 1000, usage: 900 })) },
@@ -132,31 +132,31 @@ describe('useUserMediaStore.importFor', () => {
       useUserMediaStore.getState().importFor(system, makeFile('windows10.img', 4096), true),
     ).rejects.toMatchObject({ code: 'ASSET_CACHE_QUOTA_EXCEEDED' });
 
-    expect(useUserMediaStore.getState().error).toMatch(/insuffisant/i);
+    expect(useUserMediaStore.getState().error).toMatch(/Not enough storage/i);
     expect(getStoreMock).not.toHaveBeenCalled();
   });
 
-  it('signale un manifeste JSON illisible', async () => {
+  it('reports an unreadable JSON manifest', async () => {
     const manifest = {
       name: 'manifest.json',
-      text: async () => '{ ceci n’est pas du JSON',
+      text: async () => '{ this is not JSON',
     } as unknown as File;
     await expect(
       useUserMediaStore
         .getState()
         .importFor(system, makeFile('windows10.img', 4096), true, manifest),
     ).rejects.toMatchObject({ code: 'ASSET_INVALID_MANIFEST' });
-    expect(useUserMediaStore.getState().error).toMatch(/JSON invalide/);
+    expect(useUserMediaStore.getState().error).toMatch(/invalid JSON/);
   });
 
-  it('rejette un manifeste dont la référence ne correspond pas au système', async () => {
+  it('rejects a manifest whose reference does not match the system', async () => {
     const manifest = {
       name: 'manifest.json',
       text: async () =>
         JSON.stringify({
           version: 1,
-          ref: 'autre-systeme',
-          displayName: 'Autre',
+          ref: 'other-system',
+          displayName: 'Other',
           format: 'raw',
           architecture: 'i386',
           license: 'x',
@@ -168,12 +168,12 @@ describe('useUserMediaStore.importFor', () => {
         .getState()
         .importFor(system, makeFile('windows10.img', 4096), true, manifest),
     ).rejects.toMatchObject({ code: 'ASSET_INVALID_MANIFEST' });
-    expect(useUserMediaStore.getState().error).toMatch(/référence/i);
+    expect(useUserMediaStore.getState().error).toMatch(/reference/i);
   });
 });
 
 describe('useUserMediaStore.remove', () => {
-  it('supprime le média du stockage local et de l’état', async () => {
+  it('removes the media from local storage and from the state', async () => {
     const store = createMemoryUserMediaStore();
     getStoreMock.mockResolvedValue(store);
     await useUserMediaStore.getState().importFor(system, makeFile('windows10.iso', 2048), true);

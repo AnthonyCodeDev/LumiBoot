@@ -56,17 +56,17 @@ class RecordingEngine implements VMEngine {
 }
 
 describe('VMRegistry', () => {
-  it('utilise le repli honnête sans moteur correspondant', () => {
+  it('uses the honest fallback when no engine matches', () => {
     const registry = new VMRegistry();
     expect(registry.resolve(makeOS()).id).toBe('unavailable');
   });
 
-  it('sélectionne le premier moteur dont canRun est vrai', () => {
+  it('selects the first engine whose canRun is true', () => {
     const registry = new VMRegistry([new RecordingEngine()]);
     expect(registry.resolve(makeOS()).id).toBe('recording');
   });
 
-  it('le repli signale le moteur non intégré au premier abonné', async () => {
+  it('the fallback reports the non-integrated engine to the first subscriber', async () => {
     const registry = new VMRegistry();
     const instance = await registry.start(makeOS(), document.createElement('div'));
     const events: SessionEvent[] = [];
@@ -74,14 +74,14 @@ describe('VMRegistry', () => {
     expect(events[0]).toMatchObject({ type: 'error', code: 'ENGINE_NOT_INTEGRATED' });
   });
 
-  it('ignore un moteur déjà enregistré', () => {
+  it('ignores an already registered engine', () => {
     const registry = new VMRegistry([new RecordingEngine()]);
     registry.register(new RecordingEngine());
     expect(registry.engines).toHaveLength(1);
   });
 });
 
-/** Moteur dont on choisit les capacités d'architecture et `canRun`. */
+/** Engine whose architecture capabilities and `canRun` are chosen by the test. */
 function makeEngine(options: {
   id: string;
   architectures?: readonly Architecture[];
@@ -109,10 +109,10 @@ function makeEngine(options: {
   };
 }
 
-describe('VMRegistry — compatibilité architecture/CPU et navigateur', () => {
+describe('VMRegistry — architecture/CPU and browser compatibility', () => {
   const ENV = { webAssembly: true, crossOriginIsolated: true };
 
-  it('accepte v86 pour i386 et rejette x86_64/arm64 sans preuve de support', () => {
+  it('accepts v86 for i386 and rejects x86_64/arm64 without proof of support', () => {
     const v86 = makeEngine({ id: 'v86', architectures: ['i386'] });
     const registry = new VMRegistry([v86], undefined, ENV);
 
@@ -126,7 +126,7 @@ describe('VMRegistry — compatibilité architecture/CPU et navigateur', () => {
     expect(result.reasons.join(' ')).toContain('i386');
   });
 
-  it('accepte un moteur qui déclare réellement l’architecture demandée', () => {
+  it('accepts an engine that actually declares the requested architecture', () => {
     const engine = makeEngine({ id: 'arm-engine', architectures: ['arm64'] });
     const registry = new VMRegistry([engine], undefined, ENV);
 
@@ -134,7 +134,7 @@ describe('VMRegistry — compatibilité architecture/CPU et navigateur', () => {
     expect(registry.resolve(makeOS({ architecture: 'i386' })).id).toBe('unavailable');
   });
 
-  it('impose le prérequis navigateur WebAssembly', () => {
+  it('enforces the WebAssembly browser prerequisite', () => {
     const engine = makeEngine({ id: 'v86', architectures: ['i386'] });
     const registry = new VMRegistry([engine], undefined, {
       webAssembly: false,
@@ -147,12 +147,12 @@ describe('VMRegistry — compatibilité architecture/CPU et navigateur', () => {
     expect(result.reasons.join(' ')).toContain('WebAssembly');
   });
 
-  it('ne contredit pas un moteur qui ne déclare aucune architecture', () => {
+  it('does not contradict an engine that declares no architecture', () => {
     const registry = new VMRegistry([new RecordingEngine()], undefined, ENV);
     expect(registry.resolve(makeOS({ architecture: 'arm64' })).id).toBe('recording');
   });
 
-  it('start() respecte la compatibilité : aucun lancement incompatible', async () => {
+  it('start() enforces compatibility: no incompatible launch', async () => {
     const engine = makeEngine({ id: 'v86', architectures: ['i386'] });
     const registry = new VMRegistry([engine], undefined, ENV);
 

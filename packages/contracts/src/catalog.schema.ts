@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
 /**
- * Catalogue d'OS — schémas de validation et types inférés.
+ * OS catalog — validation schemas and inferred types.
  *
- * Ces schémas sont la source de vérité partagée entre le catalogue local
- * (`@lumiboot/catalog`) et l'interface Web.
+ * These schemas are the shared source of truth between the local catalog
+ * (`@lumiboot/catalog`) and the Web interface.
  */
 
 export const osFamilySchema = z.enum(['linux', 'windows', 'macos']);
@@ -22,9 +22,9 @@ export const availabilitySchema = z.enum([
   'experimental',
   'ready',
   'unavailable',
-  // Le moteur et le profil sont intégrés, mais le média système (souvent
-  // propriétaire) doit être fourni par l'utilisateur : aucune ressource n'est
-  // distribuée avec LumiBoot. État honnête tant que le média n'est pas importé.
+  // The engine and the profile are integrated, but the system media (often
+  // proprietary) must be supplied by the user: no resource is distributed with
+  // LumiBoot. Honest state as long as the media has not been imported.
   'resource-required',
 ]);
 export const architectureSchema = z.enum([
@@ -38,22 +38,22 @@ export const architectureSchema = z.enum([
 ]);
 
 /**
- * Stratégie de fourniture du média système d'une image.
+ * Strategy for supplying an image's system media.
  *
- * - `bundled` : l'image est construite/publiée et servie par LumiBoot ;
- * - `user-import` : aucune image n'est distribuée (licence/propriété) ; le média
- *   est **fourni localement par l'utilisateur** depuis un fichier qu'il détient
- *   légalement (voir docs/windows-7.md). L'état catalogue reste honnête
- *   (`resource-required`) tant que ce média n'a pas été importé.
+ * - `bundled`: the image is built/published and served by LumiBoot;
+ * - `user-import`: no image is distributed (license/property); the media is
+ *   **supplied locally by the user** from a file they legally hold (see
+ *   docs/windows-7.md). The catalog state stays honest (`resource-required`)
+ *   as long as that media has not been imported.
  */
 export const mediaStrategySchema = z.enum(['bundled', 'user-import']);
 
-/** Format de média disque accepté pour un import utilisateur. */
+/** Disk media format accepted for a user import. */
 export const vmMediaFormatSchema = z.enum(['raw', 'iso']);
 
 /**
- * Média disque fourni à l'exécution pour un démarrage BIOS (sans noyau Linux).
- * `url` est une URL locale de blob créée par le navigateur, jamais distante.
+ * Disk media supplied at runtime for a BIOS boot (without a Linux kernel).
+ * `url` is a local blob URL created by the browser, never a remote one.
  */
 export const vmMediaSchema = z.object({
   kind: z.literal('disk'),
@@ -71,33 +71,31 @@ export const vmConfigurationSchema = z.object({
   vgaMemoryMiB: z.number().int().positive().optional(),
   bootDevice: z.string().min(1).optional(),
   /**
-   * Média disque importé (démarrage BIOS) ; absent pour un démarrage par noyau
-   * (`bzimage`/`initrd`) adossé à un manifeste d'image publié.
+   * Imported disk media (BIOS boot); absent for a kernel boot
+   * (`bzimage`/`initrd`) backed by a published image manifest.
    */
   media: vmMediaSchema.optional(),
   extra: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
-/** Carte réseau émulée fournie au système invité (`none` = aucune carte). */
+/** Emulated network card provided to the guest system (`none` = no card). */
 export const hardwareNetworkSchema = z.enum(['virtio', 'ne2k', 'none']);
 
 /**
- * Profil matériel émulé, **indépendant du moteur d'exécution**.
+ * Emulated hardware profile, **independent of the execution engine**.
  *
- * Il décrit ce que le système invité voit, pas comment un émulateur donné
- * l'implémente : le provider se contente de TRADUIRE ce contrat vers les
- * options de son moteur (v86 `net_device.type`, etc.) sans décider à la place
- * du catalogue.
+ * It describes what the guest system sees, not how a given emulator implements
+ * it: the provider simply TRANSLATES this contract into its engine options
+ * (v86 `net_device.type`, etc.) without deciding on behalf of the catalog.
  *
- * Valeurs par défaut documentées (appliquées par le provider quand un champ est
- * omis), choisies pour rester factuelles vis-à-vis de ce qu'un PC émulé par v86
- * expose réellement :
- * - `network` : `'virtio'` (réseau moderne ; v86 accepte aussi `'ne2k'`/`'none'`) ;
- * - `machine?` : `'pc'` (v86 n'émule qu'un PC à chipset standard) ;
- * - `video?` : `'vga'` (v86 utilise un BIOS VGA) ;
- * - `input?` : `'ps2'` (v86 câble clavier/souris sur un contrôleur PS/2) ;
- * - `disk?` : `'ide'` (v86 expose le disque en ATA/IDE via `hda`) ;
- * - `audio?` : `false` (v86 n'émule pas de carte son dans cette version).
+ * Documented defaults (applied by the provider when a field is omitted), chosen
+ * to stay factual about what a PC emulated by v86 really exposes:
+ * - `network`: `'virtio'` (modern network; v86 also accepts `'ne2k'`/`'none'`);
+ * - `machine?`: `'pc'` (v86 only emulates a PC with a standard chipset);
+ * - `video?`: `'vga'` (v86 uses a VGA BIOS);
+ * - `input?`: `'ps2'` (v86 wires keyboard/mouse to a PS/2 controller);
+ * - `disk?`: `'ide'` (v86 exposes the disk as ATA/IDE through `hda`);
+ * - `audio?`: `false` (v86 does not emulate a sound card in this version).
  */
 export const hardwareProfileSchema = z.object({
   network: hardwareNetworkSchema,
@@ -107,41 +105,42 @@ export const hardwareProfileSchema = z.object({
   disk: z.enum(['ide', 'virtio']).optional(),
   audio: z.boolean().optional(),
   /**
-   * Active l'ACPI émulée. Requis par les invités NT modernes (Windows Vista et
-   * suivants), documenté par v86 (`docs/windows-nt.md`). Optionnel ; le provider
-   * retombe sur `false` si absent.
+   * Enables emulated ACPI. Required by modern NT guests (Windows Vista and
+   * later), documented by v86 (`docs/windows-nt.md`). Optional; the provider
+   * falls back to `false` when absent.
    */
   acpi: z.boolean().optional(),
 });
 
-/** Canal où le système invité prouve son démarrage : série (défaut) ou VGA. */
+/** Channel where the guest system proves its boot: serial (default) or VGA. */
 export const guestReadinessChannelSchema = z.enum(['serial', 'vga']);
 
 /**
- * Mode de preuve de démarrage.
+ * Boot proof mode.
  *
- * - `guest-marker` (défaut) : un marqueur exact émis par le système invité
- *   (unité `lumiboot-ready.service` sur `ttyS0`). Preuve forte : l'OS est
- *   opérationnel.
- * - `disk-boot` : pour un média importé (ex. Windows) qui n'émet AUCUN marqueur
- *   LumiBoot. La preuve est une **lecture réelle du disque dur** après le
- *   démarrage de l'émulateur (le BIOS/l'amorce exécute l'image fournie). C'est
- *   un signal d'exécution invité authentique, mais plus faible qu'un marqueur :
- *   il ne prouve pas que l'OS est pleinement opérationnel. Jamais simulé.
+ * - `guest-marker` (default): an exact marker emitted by the guest system
+ *   (`lumiboot-ready.service` unit on `ttyS0`). Strong proof: the OS is
+ *   operational.
+ * - `disk-boot`: for an imported media (e.g. Windows) that emits NO LumiBoot
+ *   marker. The proof is a **real read of the hard disk** after the emulator
+ *   starts (the BIOS/boot loader executes the supplied image). It is an
+ *   authentic guest runtime signal, but weaker than a marker: it does not prove
+ *   the OS is fully operational. Never simulated.
  */
 export const guestReadinessModeSchema = z.enum(['guest-marker', 'disk-boot']);
 
 /**
- * Preuve de démarrage attendue du système invité.
+ * Expected boot proof from the guest system.
  *
- * `marker` est la chaîne exacte écrite par l'invité réellement démarré : elle
- * ne doit jamais être produite côté JavaScript. Valeurs par défaut documentées :
- * `mode` = `'guest-marker'`, `channel` = `'serial'` (ttyS0), `timeoutMs` = 120 000 ms.
- * En mode `disk-boot`, `marker` sert d'identifiant documentaire (jamais scanné).
+ * `marker` is the exact string written by the really booted guest: it must
+ * never be produced on the JavaScript side. Documented defaults:
+ * `mode` = `'guest-marker'`, `channel` = `'serial'` (ttyS0), `timeoutMs` =
+ * 120 000 ms. In `disk-boot` mode, `marker` serves as a documentation
+ * identifier (never scanned).
  *
- * `timeoutMs` est un **seuil de repli**, pas un délai d'échec : le marqueur
- * reste le chemin rapide (transition plus tôt vers `running`) ; s'il n'arrive
- * pas avant l'échéance, la session est tout de même considérée démarrée (repli).
+ * `timeoutMs` is a **fallback threshold**, not a failure delay: the marker
+ * remains the fast path (earlier transition to `running`); if it does not show
+ * up before the deadline, the session is still considered started (fallback).
  */
 export const guestReadinessSchema = z.object({
   marker: z.string().min(1),
@@ -158,28 +157,28 @@ export const launchProfileSchema = z.object({
   featured: z.boolean().optional(),
   configuration: vmConfigurationSchema.optional(),
   /**
-   * Matériel émulé de ce profil. Optionnel pour ne pas casser les entrées
-   * existantes ; le provider retombe sur `network: 'virtio'` si absent.
+   * Emulated hardware of this profile. Optional so existing entries keep
+   * working; the provider falls back to `network: 'virtio'` when absent.
    */
   hardwareProfile: hardwareProfileSchema.optional(),
   /**
-   * Preuve de démarrage invité de ce profil. Optionnel ; le provider retombe
-   * sur `marker: 'LUMIBOOT_GUEST_READY'`, canal `'serial'`, 120 000 ms.
+   * Guest boot proof of this profile. Optional; the provider falls back to
+   * `marker: 'LUMIBOOT_GUEST_READY'`, channel `'serial'`, 120 000 ms.
    */
   readiness: guestReadinessSchema.optional(),
 });
 
 /**
- * Un `accentRgb` est stocké sous la forme "236,66,100" afin d'alimenter
- * `rgba(var(--accent-rgb), x)` en CSS sans conversion supplémentaire.
+ * An `accentRgb` is stored as "236,66,100" so it can feed
+ * `rgba(var(--accent-rgb), x)` in CSS without extra conversion.
  */
 export const accentRgbSchema = z
   .string()
-  .regex(/^\d{1,3},\d{1,3},\d{1,3}$/, 'Format attendu : « r,g,b » (ex. "236,66,100")');
+  .regex(/^\d{1,3},\d{1,3},\d{1,3}$/, 'Expected format: "r,g,b" (e.g. "236,66,100")');
 
 export const osDefinitionSchema = z.object({
   id: z.string().min(1),
-  slug: z.string().regex(/^[a-z0-9-]+$/, 'slug : minuscules, chiffres et tirets uniquement'),
+  slug: z.string().regex(/^[a-z0-9-]+$/, 'slug: lowercase letters, digits and dashes only'),
   family: osFamilySchema,
   displayName: z.string().min(1),
   versionLabel: z.string().min(1),
@@ -190,9 +189,9 @@ export const osDefinitionSchema = z.object({
   minMemoryMiB: z.number().int().positive().optional(),
   imageRef: z.string().min(1).optional(),
   /**
-   * Origine du média système. Optionnel : `'bundled'` par défaut. Les systèmes
-   * à `'user-import'` ne déclarent AUCUN `imageRef` tant que l'utilisateur n'a
-   * pas importé son propre média local.
+   * Origin of the system media. Optional: `'bundled'` by default. Systems with
+   * `'user-import'` declare NO `imageRef` as long as the user has not imported
+   * their own local media.
    */
   mediaStrategy: mediaStrategySchema.optional(),
   launchProfiles: z.array(launchProfileSchema).min(1),
@@ -203,16 +202,16 @@ export const osDefinitionSchema = z.object({
   featured: z.boolean().optional(),
   integrationNote: z.string().min(1),
   /**
-   * Id du système « mère » de ce variant (absent = ce système EST la mère
-   * ou un système autonome).
+   * Id of the parent system of this variant (absent = this system IS the parent
+   * or a standalone system).
    */
   variantGroupId: z.string().min(1).optional(),
-  /** Libellé court du variant (affiché dans un sélecteur côté fiche). */
+  /** Short label of the variant (shown in a selector on the system page). */
   variantName: z.string().min(1).optional(),
   /**
-   * Ordre d'affichage de la variante dans son groupe (croissant). La plus
-   * petite valeur = meilleure variante = sélection par défaut. Absent = après
-   * les variantes ordonnées (ordre du catalogue).
+   * Display order of the variant within its group (ascending). The smallest
+   * value = best variant = default selection. Absent = after the ordered
+   * variants (catalog order).
    */
   variantOrder: z.number().int().optional(),
 });
@@ -237,9 +236,9 @@ export type LaunchProfile = z.infer<typeof launchProfileSchema>;
 export type OSDefinition = z.infer<typeof osDefinitionSchema>;
 
 /**
- * Valeurs par défaut documentées du matériel émulé (voir
- * {@link hardwareProfileSchema}). Utilisées par les providers lorsqu'un profil
- * de lancement omet `hardwareProfile`.
+ * Documented defaults of the emulated hardware (see
+ * {@link hardwareProfileSchema}). Used by providers when a launch profile omits
+ * `hardwareProfile`.
  */
 export const DEFAULT_HARDWARE_PROFILE: HardwareProfile = {
   network: 'virtio',
@@ -251,10 +250,9 @@ export const DEFAULT_HARDWARE_PROFILE: HardwareProfile = {
 };
 
 /**
- * Valeurs par défaut documentées de la preuve de démarrage (voir
- * {@link guestReadinessSchema}). Utilisées lorsqu'un profil omet `readiness`.
- * `timeoutMs` est un seuil de repli : au-delà sans marqueur, la session est
- * considérée démarrée, sans erreur.
+ * Documented defaults of the boot proof (see {@link guestReadinessSchema}).
+ * Used when a profile omits `readiness`. `timeoutMs` is a fallback threshold:
+ * past it without a marker, the session is considered started, without error.
  */
 export const DEFAULT_GUEST_READINESS: GuestReadiness = {
   marker: 'LUMIBOOT_GUEST_READY',

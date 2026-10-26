@@ -1,32 +1,29 @@
-# Réseau
+# Network
 
-`@lumiboot/vm-network` centralise les modes, profils, capacités, diagnostics et cycles de vie. `provider-v86` convertit le profil retenu en configuration `net_device`.
+`@lumiboot/vm-network`: modes, profiles, capabilities, diagnostics and lifecycle; `provider-v86` translates the selected profile into `net_device`.
 
 ## Modes
 
-| Mode | Transport | Limites |
+| Mode | Transport | Limits |
 |---|---|---|
-| `offline` | aucun | aucune NIC |
-| `browser-fetch` | Fetch de v86 | HTTP 80, CORS, pas de HTTPS/UDP/ICMP |
-| `local-proxy` | WISP V1 vers `127.0.0.1:37892` | appairage requis, TCP sortant uniquement |
-| `user-relay` | WISP en `wss://` | relais fourni et administré par l'utilisateur |
-| `local-network` | aucun | prévu, non implémenté |
+| `offline` | none | no NIC |
+| `browser-fetch` | v86 Fetch | HTTP 80 only, CORS, no HTTPS, UDP or ICMP |
+| `local-proxy` | WISP V1 to `127.0.0.1:37892` | pairing required, outbound TCP only |
+| `user-relay` | WISP over `wss://` | relay provided and administered by the user |
 
-`local-network` désigne un réseau virtuel entre invités, pas le LAN physique de l'hôte.
+Adapter imposed by the catalogue profile: Windows 7 `ne2k` (RTL8029, driver to install in the image, [`windows-7.md`](windows-7.md)); Windows 10 x86 `virtio-net` (PCI `0x1AF4:0x1041`, VirtIO NetKVM driver required, guest connectivity not tested, [`windows-10.md`](windows-10.md)); Debian `virtio-net` (6.x kernel).
 
-Sous v86, la carte réseau est choisie par le profil catalogue : **Windows 7** utilise `ne2k` (RTL8029), pour lequel Windows ne fournit aucun pilote « inbox » — le pilote NE2000/RTL8029 doit donc être installé dans l'image ([`windows-7.md`](windows-7.md)). **Windows 10 x86** utilise `virtio-net` (device PCI `0x1AF4:0x1041`), qui correspond au pilote **VirtIO NetKVM x86** présent dans l'image fournie ; sa connectivité invitée n'est pas encore vérifiée par un test ([`windows-10.md`](windows-10.md)).
+## Evidence level
 
-## Niveau de preuve
+- Configured: valid profile, selected.
+- Supported: `capabilitiesForMode()` declares a theoretical capability.
+- Verified: probe run inside the guest and successful.
 
-- Configuré : le profil est valide et sélectionné.
-- Supporté : `capabilitiesForMode()` déclare une capacité théorique.
-- Vérifié : une sonde exécutée dans l'invité a réussi.
-
-Une WebSocket ouverte ou des compteurs `txBytes`/`rxBytes` non nuls ne prouvent pas Internet. `fullInternet` reste `false` par défaut.
+An open WebSocket and non-zero `txBytes`/`rxBytes` counters do not prove Internet access; `fullInternet` stays `false` by default.
 
 ## Configuration
 
-Le fichier public `apps/web/public/lumiboot.config.json` est chargé au démarrage. Un profil par système remplace le profil par défaut :
+`apps/web/public/lumiboot.config.json`, loaded at startup; one profile per system overrides the default:
 
 ```json
 {
@@ -41,24 +38,21 @@ Le fichier public `apps/web/public/lumiboot.config.json` est chargé au démarra
 }
 ```
 
-Ne placer aucun secret dans ce fichier. Le profil est appliqué avant la création de v86 ; changer de mode impose une nouvelle session.
+No secrets. The profile is applied before v86 is created; changing the mode requires a new session.
 
-### Relais WISP utilisateur
+### User WISP relay
 
 ```json
-{
-  "mode": "user-relay",
-  "relayUrl": "wss://relay.example.org/"
-}
+{ "mode": "user-relay", "relayUrl": "wss://relay.example.org/" }
 ```
 
-L'URL doit utiliser `wss://`. `ws://` n'est accepté qu'en développement sur localhost. Un WebSocket ordinaire n'est pas nécessairement un relais WISP.
+`wss://` mandatory; `ws://` tolerated only in development on localhost. A plain WebSocket is not necessarily a WISP relay.
 
-### Proxy local
+### Local proxy
 
-Le frontend détecte le proxy, demande un appairage, vérifie le token puis remplace automatiquement `browser-fetch` par `local-proxy`. Les profils `offline` et `user-relay` restent prioritaires. Voir [`network-proxy.md`](network-proxy.md).
+The frontend detects the proxy, requests pairing, verifies the token (`GET /api/session/verify`), then substitutes `local-proxy` for any base mode except `offline` and `user-relay` (`selectEffectiveNetworkProfile`, `packages/vm-network/src/proxy.ts:142-159`); a `local-proxy` without a proxy falls back to `browser-fetch`. See [`network-proxy.md`](network-proxy.md).
 
-## Vérification depuis Debian
+## Verification from Debian
 
 ```bash
 ip -br addr
@@ -67,10 +61,10 @@ curl -I http://deb.debian.org/
 curl -I https://deb.debian.org/
 ```
 
-Avec `browser-fetch`, seul HTTP peut réussir et reste soumis à CORS. Avec un proxy ou relais WISP valide, HTTPS et le TCP sortant peuvent fonctionner ; UDP et ICMP ne sont pas annoncés.
+`browser-fetch`: HTTP only, subject to CORS. Valid proxy or WISP relay: HTTPS and outbound TCP. UDP and ICMP are not advertised.
 
-## Cycle de vie
+## Lifecycle
 
-Chaque session possède son contrôleur. `start()` accepte un `AbortSignal`; `stop()` et `dispose()` sont idempotents. La destruction retire les listeners v86 et ferme le transport associé.
+One session, one controller: `start(signal?: AbortSignal)`, `stop()`, `dispose()` (idempotent). Disposal removes v86 listeners and closes the transport.
 
-Décisions : [`adr/0005-network-universal.md`](adr/0005-network-universal.md), [`adr/0007-network-proxy.md`](adr/0007-network-proxy.md). Direct Sockets reste une proposition : [`adr/0006-direct-sockets-iwa.md`](adr/0006-direct-sockets-iwa.md).
+Decisions: [`adr/0005-network-universal.md`](adr/0005-network-universal.md), [`adr/0007-network-proxy.md`](adr/0007-network-proxy.md).

@@ -1,23 +1,22 @@
 # Debian 12 X11/Openbox
 
-La variante `debian-12-i386-desktop` ajoute Xorg, Openbox et xterm au socle Debian CLI. Elle est construite, publiée localement et déclarée `validated: true`.
+`debian-12-i386-desktop`: Debian CLI base + Xorg, Openbox, xterm. Published locally, `validated: true`.
 
-## Profil
+## Profile
 
-| Élément | Valeur |
+| Element | Value |
 |---|---|
-| Image | `debian-12-i386-desktop` |
-| RAM / VGA | 1024 Mio / 16 Mio |
-| Disque | ext4 RAW, 3 Gio |
-| Session | autologin `lumiboot` → `startx` → Openbox + xterm |
-| Vidéo | `fbdev`, repli `modesetting`, noyau `vga=0x318` |
+| RAM / VGA | 1024 MiB / 16 MiB |
+| Disk | ext4 RAW, 3 GiB |
+| Session | `lumiboot` autologin → `startx` → Openbox + xterm |
+| Video | `vga=0x318`, `fbdev` (`modesetting` fallback) on `/dev/fb0` |
 | Readiness | `LUMIBOOT_DESKTOP_READY:debian-12-i386-desktop` |
 
-Le marqueur desktop n'est émis qu'après réponse de `xdpyinfo` et détection d'Openbox. `LUMIBOOT_GUEST_READY` indique seulement que l'OS a atteint `multi-user.target`.
+Marker emitted once the X socket, `xdpyinfo` and `openbox` are alive, otherwise `LUMIBOOT_DESKTOP_START_FAILED`; `LUMIBOOT_GUEST_READY` only attests `multi-user.target`. Xorg runs under setuid `Xorg.wrap` (`needs_root_rights=yes`), unprivileged session; guest script 300 s, profile 240 s.
 
-## Construire et publier
+## Build and publish
 
-Prérequis Linux/WSL2 : `debootstrap`, `e2fsprogs`, `util-linux`, `node`.
+Linux/WSL2 + root (never native Windows): `debootstrap`, `e2fsprogs`, `util-linux`, `node`.
 
 ```bash
 sudo FLAVOR=desktop ./images/debian-12-i386/build.sh
@@ -26,14 +25,14 @@ cp images/debian-12-i386/build-desktop/{rootfs.img,vmlinuz-686,initrd.img,manife
   apps/web/public/images/debian-12-i386-desktop/
 ```
 
-Ne pas exécuter le build sous Windows natif : il utilise `debootstrap`, `chroot` et le montage ext4.
+`build-desktop/` also contains `packages.tsv` and `provenance.txt`; overrides `SNAPSHOT`, `DISK_SIZE`, `LUMIBOOT_BUILD_DIR`.
 
 ## Validation
 
-Après toute reconstruction, exécuter [`../images/debian-12-i386/tests/desktop-smoke-test.md`](../images/debian-12-i386/tests/desktop-smoke-test.md) et l'E2E réel :
+[`desktop-smoke-test.md`](../images/debian-12-i386/tests/desktop-smoke-test.md) after a rebuild, then:
 
 ```bash
-VM_E2E_ASSETS=1 pnpm test:e2e --grep "Bureau"
+VM_E2E_ASSETS=1 pnpm test:e2e --grep "Desktop"
 ```
 
-Les assets restent ignorés par Git. `imageRef` et `validated: true` ne doivent être conservés que tant que le manifeste publié et le boot réel sont valides.
+Assets ignored by Git; `validated: true` only if the published manifest and a real boot are valid.

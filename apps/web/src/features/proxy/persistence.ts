@@ -7,16 +7,17 @@ export interface PersistedProxySession {
 }
 
 /**
- * Stockage de session du bearer d'appairage.
+ * Session storage for the pairing bearer.
  *
- * Choix P2 sécurité : `sessionStorage` (et non `localStorage`). Le jeton ne
- * survit plus à la fermeture de l'onglet et reste cloisonné à l'onglet courant,
- * ce qui réduit fortement la fenêtre d'exposition en cas de XSS ou d'accès
- * physique ultérieur. La persistance dans l'onglet (F5 compris) est conservée :
- * l'UX de reconnexion n'est pas dégradée.
+ * P2 security choice: `sessionStorage` (not `localStorage`). The token no longer
+ * survives closing the tab and stays scoped to the current tab, which strongly
+ * reduces the exposure window in case of XSS or later physical access.
+ * Persistence within the tab (F5 included) is preserved: the reconnection UX is
+ * not degraded.
  *
- * Aucun secret n'est écrit ailleurs. L'ancienne clé `localStorage` d'une version
- * antérieure est purgée à la première interaction (voir {@link purgeLegacyStorage}).
+ * No secret is written anywhere else. The former `localStorage` key from an
+ * earlier version is purged on first interaction (see
+ * {@link purgeLegacyStorage}).
  */
 function storage(): Storage | null {
   try {
@@ -27,9 +28,9 @@ function storage(): Storage | null {
 }
 
 /**
- * Supprime l'ancienne entrée `localStorage` (bearer longue durée des versions
- * précédentes). Aucune migration : l'exposition d'un bearer persistant est
- * précisément ce que cette évolution corrige. Ne lève jamais.
+ * Removes the legacy `localStorage` entry (long-lived bearer of previous
+ * versions). No migration: exposing a persistent bearer is exactly what this
+ * change fixes. Never throws.
  */
 function purgeLegacyStorage(): void {
   try {
@@ -37,11 +38,11 @@ function purgeLegacyStorage(): void {
       localStorage.removeItem(STORAGE_KEY);
     }
   } catch {
-    // Accès refusé au stockage : rien à purger.
+    // Storage access refused: nothing to purge.
   }
 }
 
-/** Persiste la session d'appairage ; ne lève jamais (quota, accès refusé…). */
+/** Persists the pairing session; never throws (quota, denied access…). */
 export function saveProxySession(session: PersistedProxySession): void {
   purgeLegacyStorage();
   const store = storage();
@@ -49,21 +50,21 @@ export function saveProxySession(session: PersistedProxySession): void {
   try {
     store.setItem(STORAGE_KEY, JSON.stringify(session));
   } catch {
-    // Environnement sans stockage, quota dépassé ou écriture refusée : ignoré.
+    // Environment without storage, exceeded quota or denied write: ignored.
   }
 }
 
 /**
- * Relit la session persistée pour l'URL de proxy réseau local donnée.
+ * Re-reads the persisted session for the given local network proxy URL.
  *
- * Renvoie `null` (et nettoie le stockage) si :
- * - le stockage est indisponible ou vide ;
- * - le JSON est corrompu ou le format invalide ;
- * - l'`proxyUrl` stocké diffère de celui attendu ;
- * - `expiresAt` est absent, illisible ou déjà dépassé.
+ * Returns `null` (and cleans the storage) when:
+ * - storage is unavailable or empty;
+ * - the JSON is corrupted or the format invalid;
+ * - the stored `proxyUrl` differs from the expected one;
+ * - `expiresAt` is missing, unreadable or already past.
  */
 export function loadProxySession(proxyUrl: string): PersistedProxySession | null {
-  // Purge opportuniste de l'ancien bearer persistant avant toute relecture.
+  // Opportunistic purge of the legacy persistent bearer before any re-read.
   purgeLegacyStorage();
   const store = storage();
   if (store === null) return null;
@@ -104,7 +105,7 @@ export function loadProxySession(proxyUrl: string): PersistedProxySession | null
   return session;
 }
 
-/** Supprime la session persistée ; ne lève jamais. */
+/** Removes the persisted session; never throws. */
 export function clearProxySession(): void {
   purgeLegacyStorage();
   const store = storage();
@@ -112,6 +113,6 @@ export function clearProxySession(): void {
   try {
     store.removeItem(STORAGE_KEY);
   } catch {
-    // Accès au stockage refusé : ignoré.
+    // Storage access refused: ignored.
   }
 }

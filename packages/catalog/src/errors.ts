@@ -3,14 +3,14 @@ export interface CatalogIssue {
   message: string;
 }
 
-/** Levée lorsqu'un manifeste de catalogue est invalide ou incohérent. */
+/** Thrown when a catalog manifest is invalid or inconsistent. */
 export class CatalogValidationError extends Error {
   readonly issues: readonly CatalogIssue[];
 
   constructor(issues: readonly CatalogIssue[]) {
     super(
-      `Catalogue invalide (${issues.length} problème(s)) : ` +
-        issues.map((issue) => `${issue.path || '<racine>'} — ${issue.message}`).join(' ; '),
+      `Invalid catalog (${issues.length} issue(s)): ` +
+        issues.map((issue) => `${issue.path || '<root>'} — ${issue.message}`).join('; '),
     );
     this.name = 'CatalogValidationError';
     this.issues = issues;

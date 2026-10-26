@@ -1,6 +1,6 @@
-// Test d'intégration : session WISP V1 complète contre un vrai serveur TCP
-// d'écho local, en passant par tout le cycle HTTP (appairage -> approbation
-// console -> échange -> WebSocket authentifié).
+// Integration test: a complete WISP V1 session against a real local TCP echo
+// server, going through the whole HTTP cycle (pairing -> console approval ->
+// exchange -> authenticated WebSocket).
 package proxy_test
 
 import (
@@ -23,12 +23,12 @@ import (
 
 const itOrigin = "http://localhost:5200"
 
-// echoServer démarre un serveur TCP d'écho sur loopback.
+// echoServer starts a TCP echo server on loopback.
 func echoServer(t *testing.T) (host string, port int) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("écho: %v", err)
+		t.Fatalf("echo: %v", err)
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 	go func() {
@@ -47,27 +47,27 @@ func echoServer(t *testing.T) (host string, port int) {
 	return "127.0.0.1", addr.Port
 }
 
-// proxyFixture monte le proxy réseau local derrière httptest.
+// proxyFixture mounts the local network proxy behind httptest.
 func proxyFixture(t *testing.T, mutate func(*config.Config)) (*server.Server, *httptest.Server) {
 	t.Helper()
 	cfg := config.Default()
 	cfg.AllowedOrigins = []string{itOrigin}
-	// Tests sur loopback : appairage local explicitement autorisé.
+	// Tests on loopback: local pairing explicitly allowed.
 	cfg.AllowLocalOrigins = true
-	cfg.AllowPrivateNetworks = true // pour joindre l'écho local ; métadonnées toujours bloquées
+	cfg.AllowPrivateNetworks = true // to reach the local echo; metadata always blocked
 	if mutate != nil {
 		mutate(&cfg)
 	}
 	srv, err := server.New(cfg)
 	if err != nil {
-		t.Fatalf("serveur: %v", err)
+		t.Fatalf("server: %v", err)
 	}
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 	return srv, ts
 }
 
-// pairEffectue le cycle complet et renvoie le token de session.
+// pair runs the full cycle and returns the session token.
 func pair(t *testing.T, srv *server.Server, ts *httptest.Server) string {
 	t.Helper()
 	client := ts.Client()
@@ -90,7 +90,7 @@ func pair(t *testing.T, srv *server.Server, ts *httptest.Server) string {
 		t.Fatalf("pair/request: %d", resp.StatusCode)
 	}
 
-	// Approbation depuis la console (appel direct à l'authentificateur).
+	// Approval from the console (direct call to the authenticator).
 	if err := srv.Authenticator().Approve(created.PairingID, true); err != nil {
 		t.Fatalf("pair/approve: %v", err)
 	}
@@ -112,7 +112,7 @@ func pair(t *testing.T, srv *server.Server, ts *httptest.Server) string {
 	}
 	_ = resp.Body.Close()
 	if exchanged.Token == "" {
-		t.Fatal("token vide")
+		t.Fatal("empty token")
 	}
 	return exchanged.Token
 }
@@ -129,7 +129,7 @@ func dialWISP(t *testing.T, ts *httptest.Server, token, origin string) *websocke
 		if resp != nil {
 			_ = resp.Body.Close()
 		}
-		t.Fatalf("dial WISP: %v", err)
+		t.Fatalf("WISP dial: %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	return conn
@@ -140,11 +140,11 @@ func readWISP(t *testing.T, conn *websocket.Conn) wisp.Frame {
 	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
-		t.Fatalf("lecture WISP: %v", err)
+		t.Fatalf("WISP read: %v", err)
 	}
 	f, err := wisp.DecodeFrame(msg, 4*1024*1024)
 	if err != nil {
-		t.Fatalf("décodage: %v", err)
+		t.Fatalf("decoding: %v", err)
 	}
 	return f
 }
@@ -153,7 +153,7 @@ func sendWISP(t *testing.T, conn *websocket.Conn, f wisp.Frame) {
 	t.Helper()
 	_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	if err := conn.WriteMessage(websocket.BinaryMessage, f.Encode()); err != nil {
-		t.Fatalf("écriture WISP: %v", err)
+		t.Fatalf("WISP write: %v", err)
 	}
 }
 
@@ -164,29 +164,29 @@ func TestFullSession(t *testing.T) {
 
 	conn := dialWISP(t, ts, token, itOrigin)
 
-	// 1. CONTINUE initial de stream 0 (obligatoire pour v86).
+	// 1. Initial stream 0 CONTINUE (mandatory for v86).
 	first := readWISP(t, conn)
 	if first.Type != wisp.TypeContinue || first.StreamID != 0 {
-		t.Fatalf("CONTINUE initial attendu, obtenu type=%#x flux=%d", first.Type, first.StreamID)
+		t.Fatalf("initial CONTINUE expected, got type=%#x stream=%d", first.Type, first.StreamID)
 	}
 	if n, _ := wisp.ParseContinue(first.Payload); n == 0 {
-		t.Fatal("fenêtre initiale nulle")
+		t.Fatal("zero initial window")
 	}
 
-	// 2. CONNECT -> DATA -> CLOSE aller-retour contre l'écho local.
+	// 2. CONNECT -> DATA -> CLOSE round trip against the local echo.
 	connect := wisp.Frame{
 		Type:     wisp.TypeConnect,
 		StreamID: 1,
 		Payload:  wisp.BuildConnectPayload(wisp.StreamTypeTCP, uint16(echoPort), echoHost),
 	}
 	sendWISP(t, conn, connect)
-	sendWISP(t, conn, wisp.Frame{Type: wisp.TypeData, StreamID: 1, Payload: []byte("bonjour-echo")})
+	sendWISP(t, conn, wisp.Frame{Type: wisp.TypeData, StreamID: 1, Payload: []byte("hello-echo")})
 	echo := readWISP(t, conn)
-	if echo.Type != wisp.TypeData || echo.StreamID != 1 || string(echo.Payload) != "bonjour-echo" {
-		t.Fatalf("écho inattendu: %+v", echo)
+	if echo.Type != wisp.TypeData || echo.StreamID != 1 || string(echo.Payload) != "hello-echo" {
+		t.Fatalf("unexpected echo: %+v", echo)
 	}
 
-	// 3. Destination bloquée (métadonnées) -> CLOSE 0x48.
+	// 3. Blocked destination (metadata) -> CLOSE 0x48.
 	sendWISP(t, conn, wisp.Frame{
 		Type:     wisp.TypeConnect,
 		StreamID: 2,
@@ -194,13 +194,13 @@ func TestFullSession(t *testing.T) {
 	})
 	blocked := readWISP(t, conn)
 	if blocked.Type != wisp.TypeClose || blocked.StreamID != 2 {
-		t.Fatalf("CLOSE attendu, obtenu: %+v", blocked)
+		t.Fatalf("CLOSE expected, got: %+v", blocked)
 	}
 	if reason, _ := wisp.ParseClose(blocked.Payload); reason != 0x48 {
-		t.Fatalf("raison attendue 0x48, obtenue %#x", reason)
+		t.Fatalf("expected reason 0x48, got %#x", reason)
 	}
 
-	// 4. Fermeture propre du flux 1.
+	// 4. Clean close of stream 1.
 	sendWISP(t, conn, wisp.Frame{Type: wisp.TypeClose, StreamID: 1, Payload: []byte{wisp.CloseClientDone}})
 }
 
@@ -209,43 +209,43 @@ func TestWispRejectsBadOriginAndMissingToken(t *testing.T) {
 	token := pair(t, srv, ts)
 	wsBase := "ws://" + strings.TrimPrefix(ts.URL, "http://") + "/wisp/?token="
 
-	// Origine non autorisée.
+	// Disallowed origin.
 	header := http.Header{"Origin": []string{"http://evil.com"}}
 	if c, resp, err := websocket.DefaultDialer.Dial(wsBase+token, header); err == nil {
 		_ = c.Close()
-		t.Fatal("origine hostile acceptée")
+		t.Fatal("hostile origin accepted")
 	} else if resp != nil {
 		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusForbidden {
-			t.Fatalf("statut origine hostile: %d", resp.StatusCode)
+			t.Fatalf("hostile origin status: %d", resp.StatusCode)
 		}
 	}
 
-	// Token manquant.
+	// Missing token.
 	header = http.Header{"Origin": []string{itOrigin}}
 	if c, resp, err := websocket.DefaultDialer.Dial(wsBase, header); err == nil {
 		_ = c.Close()
-		t.Fatal("token manquant accepté")
+		t.Fatal("missing token accepted")
 	} else if resp != nil {
 		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusForbidden {
-			t.Fatalf("statut token manquant: %d", resp.StatusCode)
+			t.Fatalf("missing token status: %d", resp.StatusCode)
 		}
 	}
 
-	// Compteur d'auth rejetée incrémenté.
+	// Rejected-auth counter incremented.
 	if got := srv.Stats().Snapshot().RejectedAuth; got < 2 {
-		t.Fatalf("rejectedAuth=%d, attendu >= 2", got)
+		t.Fatalf("rejectedAuth=%d, expected >= 2", got)
 	}
 }
 
-// trackedEchoServer démarre un écho TCP et signale la fermeture de chaque
-// connexion acceptée : permet de vérifier que le proxy coupe bien le TCP.
+// trackedEchoServer starts a TCP echo server and reports the close of every
+// accepted connection: it verifies that the proxy really cuts the TCP side.
 func trackedEchoServer(t *testing.T) (host string, port int, closed <-chan struct{}) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("écho: %v", err)
+		t.Fatalf("echo: %v", err)
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 	closedCh := make(chan struct{}, 16)
@@ -268,25 +268,25 @@ func trackedEchoServer(t *testing.T) (host string, port int, closed <-chan struc
 	return "127.0.0.1", addr.Port, closedCh
 }
 
-// expectTransportClosed vérifie que le WebSocket ET le TCP se ferment.
+// expectTransportClosed verifies that both the WebSocket AND the TCP close.
 func expectTransportClosed(t *testing.T, conn *websocket.Conn, closed <-chan struct{}, label string) {
 	t.Helper()
 	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	if _, _, err := conn.ReadMessage(); err == nil {
-		t.Fatalf("%s: WebSocket toujours ouvert", label)
+		t.Fatalf("%s: WebSocket still open", label)
 	}
 	select {
 	case <-closed:
 	case <-time.After(5 * time.Second):
-		t.Fatalf("%s: connexion TCP toujours ouverte", label)
+		t.Fatalf("%s: TCP connection still open", label)
 	}
 }
 
-// openEchoStream ouvre la session WISP, monte un flux TCP vers l'écho local et
-// confirme l'établissement par un aller-retour DATA.
+// openEchoStream opens the WISP session, sets up a TCP stream to the local echo
+// and confirms establishment with a DATA round trip.
 func openEchoStream(t *testing.T, conn *websocket.Conn, echoPort int) {
 	t.Helper()
-	_ = readWISP(t, conn) // CONTINUE initial
+	_ = readWISP(t, conn) // initial CONTINUE
 	sendWISP(t, conn, wisp.Frame{
 		Type:     wisp.TypeConnect,
 		StreamID: 1,
@@ -295,7 +295,7 @@ func openEchoStream(t *testing.T, conn *websocket.Conn, echoPort int) {
 	sendWISP(t, conn, wisp.Frame{Type: wisp.TypeData, StreamID: 1, Payload: []byte("ping")})
 	echo := readWISP(t, conn)
 	if echo.Type != wisp.TypeData || echo.StreamID != 1 || string(echo.Payload) != "ping" {
-		t.Fatalf("établissement du flux: %+v", echo)
+		t.Fatalf("stream establishment: %+v", echo)
 	}
 }
 
@@ -308,14 +308,14 @@ func TestRevocationClosesWebSocketAndTCP(t *testing.T) {
 	openEchoStream(t, conn, echoPort)
 
 	if !srv.Authenticator().Revoke(token) {
-		t.Fatal("révocation échouée")
+		t.Fatal("revocation failed")
 	}
-	expectTransportClosed(t, conn, closed, "révocation")
+	expectTransportClosed(t, conn, closed, "revocation")
 }
 
-// TestRevocationClosesMultipleWebSocketsSameToken : régression P0 — deux
-// WebSocket partageant le même token ne s'écrasent plus ; la révocation ferme
-// les 2/2 (WebSocket et TCP associés).
+// TestRevocationClosesMultipleWebSocketsSameToken: P0 regression — two
+// WebSockets sharing the same token no longer overwrite each other; revocation
+// closes 2/2 (WebSocket and associated TCP).
 func TestRevocationClosesMultipleWebSocketsSameToken(t *testing.T) {
 	srv, ts := proxyFixture(t, nil)
 	token := pair(t, srv, ts)
@@ -328,10 +328,10 @@ func TestRevocationClosesMultipleWebSocketsSameToken(t *testing.T) {
 	openEchoStream(t, connB, echoPortB)
 
 	if !srv.Authenticator().Revoke(token) {
-		t.Fatal("révocation échouée")
+		t.Fatal("revocation failed")
 	}
-	expectTransportClosed(t, connA, closedA, "révocation A")
-	expectTransportClosed(t, connB, closedB, "révocation B")
+	expectTransportClosed(t, connA, closedA, "revocation A")
+	expectTransportClosed(t, connB, closedB, "revocation B")
 }
 
 func TestExpirationClosesTransport(t *testing.T) {
@@ -344,7 +344,7 @@ func TestExpirationClosesTransport(t *testing.T) {
 	conn := dialWISP(t, ts, token, itOrigin)
 	openEchoStream(t, conn, echoPort)
 
-	time.Sleep(1200 * time.Millisecond) // dépasse SessionTokenTTL
+	time.Sleep(1200 * time.Millisecond) // exceeds SessionTokenTTL
 	srv.Authenticator().CleanupExpired()
 
 	expectTransportClosed(t, conn, closed, "expiration")
@@ -362,7 +362,7 @@ func TestShutdownClosesWebSockets(t *testing.T) {
 	defer cancel()
 	srv.Shutdown(ctx)
 
-	expectTransportClosed(t, conn, closed, "arrêt du serveur")
+	expectTransportClosed(t, conn, closed, "server shutdown")
 }
 
 func TestConnectionLimit(t *testing.T) {
@@ -372,7 +372,7 @@ func TestConnectionLimit(t *testing.T) {
 	token := pair(t, srv, ts)
 	echoHost, echoPort := echoServer(t)
 	conn := dialWISP(t, ts, token, itOrigin)
-	_ = readWISP(t, conn) // CONTINUE initial
+	_ = readWISP(t, conn) // initial CONTINUE
 
 	mkConnect := func(id uint32) wisp.Frame {
 		return wisp.Frame{
@@ -385,15 +385,15 @@ func TestConnectionLimit(t *testing.T) {
 	sendWISP(t, conn, mkConnect(2))
 	limited := readWISP(t, conn)
 	if limited.Type != wisp.TypeClose || limited.StreamID != 2 {
-		t.Fatalf("CLOSE 0x49 attendu sur flux 2, obtenu: %+v", limited)
+		t.Fatalf("CLOSE 0x49 expected on stream 2, got: %+v", limited)
 	}
 	if reason, _ := wisp.ParseClose(limited.Payload); reason != 0x49 {
-		t.Fatalf("raison attendue 0x49, obtenue %#x", reason)
+		t.Fatalf("expected reason 0x49, got %#x", reason)
 	}
-	// Le premier flux reste fonctionnel.
-	sendWISP(t, conn, wisp.Frame{Type: wisp.TypeData, StreamID: 1, Payload: []byte("toujours-la")})
+	// The first stream stays functional.
+	sendWISP(t, conn, wisp.Frame{Type: wisp.TypeData, StreamID: 1, Payload: []byte("still-there")})
 	echo := readWISP(t, conn)
-	if echo.Type != wisp.TypeData || string(echo.Payload) != "toujours-la" {
-		t.Fatalf("flux 1 cassé: %+v", echo)
+	if echo.Type != wisp.TypeData || string(echo.Payload) != "still-there" {
+		t.Fatalf("stream 1 broken: %+v", echo)
 	}
 }

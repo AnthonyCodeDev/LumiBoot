@@ -5,19 +5,19 @@
   "architecture": "i386",
   "memoryMiB": 2048,
   "vgaMemoryMiB": 16,
-  "license": "Disque RAW local de la codebase (non distribué)",
-  "provenance": "images/windows-10-x86/disk.img (disque local servi in-place)",
+  "license": "Local RAW disk from the codebase (not distributed)",
+  "provenance": "images/windows-10-x86/disk.img (local disk served in place)",
   "source": {
     "path": "images/windows-10-x86/disk.img",
     "size": 42949672960,
-    "mtimeMs": 1792273192903
+    "mtimeMs": 1792277378909
   },
   "disk": {
     "fileName": "disk.img",
     "format": "raw",
     "url": "/images/windows-10-x86/disk.img",
     "size": 42949672960,
-    "mtimeMs": 1792273192903
+    "mtimeMs": 1792277378909
   },
   "engine": {
     "id": "v86",
@@ -46,7 +46,7 @@
     "size": 42949672960
   },
   "notes": [
-    "Disque RAW x86 de l’opérateur (Windows 10, déjà installé), servi in-place (images/windows-10-x86/disk.img) : jamais copié, ignoré par Git, ni distribué.",
-    "Démarré par BIOS sous v86 via HTTP Range (hda.async = true), jamais en cdrom."
+    "Operator-provided x86 RAW disk (Windows 10, already installed), served in place (images/windows-10-x86/disk.img): never copied, git-ignored, never distributed.",
+    "Booted by the BIOS under v86 over HTTP Range (hda.async = true), never as a cdrom."
   ]
 }

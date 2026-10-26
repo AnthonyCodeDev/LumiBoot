@@ -3,7 +3,7 @@ import type { PlatformKey } from '../lib/platform';
 import { resolveProxyConfig } from './runtime';
 import type { FetchLike } from './load-config';
 
-/** Emplacement public par défaut du manifeste de téléchargement. */
+/** Default public location of the downloads manifest. */
 export const DOWNLOADS_MANIFEST_URL = '/downloads/manifest.json';
 
 const downloadEntrySchema = z
@@ -44,11 +44,11 @@ export class DownloadsManifestError extends Error {
 }
 
 /**
- * Charge le manifeste de téléchargement du proxy réseau local.
+ * Loads the downloads manifest of the local network proxy.
  *
- * Source : `proxy.downloadManifestUrl` (config) si défini, sinon
- * `/downloads/manifest.json`. Aucune URL de téléchargement n'est construite
- * en dur ailleurs : tout passe par ce manifeste.
+ * Source: `proxy.downloadManifestUrl` (config) when set, otherwise
+ * `/downloads/manifest.json`. No download URL is built anywhere else: everything
+ * goes through this manifest.
  */
 export async function loadDownloadsManifest(
   fetchImpl: FetchLike = fetch,
@@ -58,30 +58,28 @@ export async function loadDownloadsManifest(
   try {
     response = await fetchImpl(url, { cache: 'no-store' });
   } catch (cause) {
-    throw new DownloadsManifestError(
-      `Manifeste de téléchargement introuvable : impossible de charger « ${url} ».`,
-      { cause },
-    );
+    throw new DownloadsManifestError(`Downloads manifest not found: cannot load "${url}".`, {
+      cause,
+    });
   }
   if (!response.ok) {
     throw new DownloadsManifestError(
-      `Manifeste de téléchargement introuvable : « ${url} » a répondu ${response.status}.`,
+      `Downloads manifest not found: "${url}" responded ${response.status}.`,
     );
   }
   let raw: unknown;
   try {
     raw = await response.json();
   } catch (cause) {
-    throw new DownloadsManifestError(
-      `Manifeste de téléchargement illisible : « ${url} » n'est pas un JSON valide.`,
-      { cause },
-    );
+    throw new DownloadsManifestError(`Downloads manifest unreadable: "${url}" is not valid JSON.`, {
+      cause,
+    });
   }
   const result = downloadsManifestSchema.safeParse(raw);
   if (!result.success) {
     const first = result.error.issues[0];
     throw new DownloadsManifestError(
-      `Manifeste de téléchargement invalide : ${first?.message ?? 'structure inattendue'}.`,
+      `Invalid downloads manifest: ${first?.message ?? 'unexpected structure'}.`,
       { cause: result.error },
     );
   }
@@ -89,10 +87,10 @@ export async function loadDownloadsManifest(
 }
 
 /**
- * Résout le lien de téléchargement d'une plateforme.
+ * Resolves the download link for a platform.
  *
- * Une entrée n'est téléchargeable que si `published === true` ET `url` non
- * nul ; sinon `null` (l'UI affiche alors « Bientôt disponible »).
+ * An entry is downloadable only when `published === true` AND `url` is not
+ * null; otherwise `null` (the UI then shows "Unavailable").
  */
 export function resolveDownloadUrl(manifest: DownloadsManifest, key: PlatformKey): string | null {
   const entry = manifest.platforms[key];
@@ -101,7 +99,7 @@ export function resolveDownloadUrl(manifest: DownloadsManifest, key: PlatformKey
   return entry.url;
 }
 
-/** Toutes les cibles du manifeste, dans un ordre d'affichage stable. */
+/** Every target in the manifest, in a stable display order. */
 export function listDownloadTargets(manifest: DownloadsManifest): Array<{
   key: PlatformKey;
   entry: DownloadEntry;

@@ -8,14 +8,14 @@ import './styles/components.css';
 import './styles/session-progress.css';
 
 const container = document.getElementById('root');
-if (!container) throw new Error('Élément #root introuvable dans index.html.');
+if (!container) throw new Error('Root element #root not found in index.html.');
 
 const root = createRoot(container);
 
 /**
- * La configuration globale publique est chargée **avant** le rendu React.
- * Un échec affiche un message d'erreur lisible plutôt qu'une application
- * silencieusement cassée.
+ * Global public config is loaded **before** the React render.
+ * A failure shows a readable error message instead of a silently broken
+ * application.
  */
 async function bootstrap(): Promise<void> {
   try {
@@ -23,7 +23,7 @@ async function bootstrap(): Promise<void> {
     setRuntimeConfig(config);
     root.render(<App />);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Erreur inconnue.';
+    const message = error instanceof Error ? error.message : 'Unknown error.';
     root.render(
       <main
         role="alert"
@@ -34,7 +34,7 @@ async function bootstrap(): Promise<void> {
           fontFamily: 'system-ui, sans-serif',
         }}
       >
-        <h1 style={{ fontSize: 22, margin: '0 0 12px' }}>LumiBoot n'a pas pu démarrer</h1>
+        <h1 style={{ fontSize: 22, margin: '0 0 12px' }}>LumiBoot could not start</h1>
         <p style={{ color: '#b3261e', lineHeight: 1.6, margin: 0 }}>{message}</p>
       </main>,
     );

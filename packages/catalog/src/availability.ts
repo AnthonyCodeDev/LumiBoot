@@ -1,40 +1,40 @@
 import type { Availability } from '@lumiboot/contracts';
 
 /**
- * Faits objectifs servant au calcul de la disponibilité effective d'un système.
+ * Objective facts used to compute the effective availability of a system.
  *
- * Aucun de ces faits n'est un statut « déclaré » par une image ou un profil :
- * la disponibilité est toujours DÉRIVÉE de ces quatre conditions.
+ * None of these facts is a status "declared" by an image or a profile:
+ * availability is always DERIVED from these four conditions.
  */
 export interface SystemAvailabilityFacts {
-  /** Une image est réellement présente/référencée (`imageRef` renseigné). */
+  /** An image is really present/referenced (`imageRef` set). */
   readonly hasImage: boolean;
-  /** Au moins un profil de lancement compatible (mode navigateur) existe. */
+  /** At least one compatible launch profile (browser mode) exists. */
   readonly hasCompatibleProfile: boolean;
-  /** Le moteur du profil est réellement intégré au dépôt. */
+  /** The profile's engine is really integrated in the repository. */
   readonly engineIntegrated: boolean;
-  /** Le fonctionnement a été validé par un boot réel prouvé. */
+  /** Operation was validated by a proven real boot. */
   readonly validated: boolean;
   /**
-   * Le média système doit être fourni par l'utilisateur (aucune ressource
-   * distribuée). Facteur d'honnêteté : tant que `hasImage` est faux, l'état
-   * effectif devient `resource-required` au lieu d'un `planned` indifférencié.
+   * The system media must be supplied by the user (no resource distributed).
+   * Honesty factor: as long as `hasImage` is false, the effective state becomes
+   * `resource-required` instead of an undifferentiated `planned`.
    */
   readonly requiresUserMedia?: boolean;
-  /** Statut de repli lorsque les conditions ne sont pas réunies. */
+  /** Fallback status when the conditions are not met. */
   readonly declared?: Availability;
 }
 
 /**
- * RÈGLE UNIQUE DE DISPONIBILITÉ.
+ * SINGLE AVAILABILITY RULE.
  *
- * Un système n'est disponible (`ready`) que si TOUTES ces conditions sont
- * réunies : image présente/référencée, profil compatible, moteur intégré et
- * fonctionnement validé. Un système ne devient donc PAS disponible simplement
- * parce que son image existe.
+ * A system is available (`ready`) only if ALL these conditions are met: image
+ * present/referenced, compatible profile, integrated engine and validated
+ * operation. A system therefore does NOT become available just because its
+ * image exists.
  *
- * En l'absence de preuve, on ne retombe jamais sur `ready` : un statut déclaré
- * `ready` est rétrogradé en `planned`.
+ * Without proof, we never fall back to `ready`: a declared `ready` status is
+ * downgraded to `planned`.
  */
 export function getEffectiveAvailability(facts: SystemAvailabilityFacts): Availability {
   const available =
@@ -42,25 +42,25 @@ export function getEffectiveAvailability(facts: SystemAvailabilityFacts): Availa
   if (available) return 'ready';
 
   const declared = facts.declared ?? 'planned';
-  // Un `ready` déclaré mais non prouvé est toujours rétrogradé.
+  // A declared but unproven `ready` is always downgraded.
   if (declared === 'ready') return 'planned';
-  // Un média utilisateur requis et non encore importé est un état à part
-  // entière : le système est intégré, seul le média manque. On ne le déguise
-  // ni en `ready` (fausse promesse) ni en `planned` (perte d'information).
+  // A required user media that has not been imported yet is a state of its own:
+  // the system is integrated, only the media is missing. It is disguised neither
+  // as `ready` (false promise) nor as `planned` (loss of information).
   if (facts.requiresUserMedia === true && declared === 'planned') return 'resource-required';
   return declared;
 }
 
 /**
- * Agrège la disponibilité de PLUSIEURS candidats — un candidat étant un couple
- * cohérent (image × profil × moteur).
+ * Aggregates the availability of SEVERAL candidates — a candidate being a
+ * consistent triple (image × profile × engine).
  *
- * Correctif audit #19 : la disponibilité d'un système ne doit JAMAIS combiner la
- * validation d'un profil avec le moteur (ou la compatibilité) d'un autre. Un
- * système n'est donc `ready` que si un MÊME candidat réunit les quatre
- * conditions ; des `some()` indépendants pouvaient produire un faux `ready`.
+ * Audit #19 fix: a system's availability must NEVER combine the validation of
+ * one profile with the engine (or compatibility) of another. A system is
+ * therefore `ready` only if the SAME candidate meets all four conditions;
+ * independent `some()` calls could produce a false `ready`.
  *
- * La règle métier reste inchangée : `ready` exige un boot réellement validé.
+ * The business rule is unchanged: `ready` requires a really validated boot.
  */
 export function getAggregatedAvailability(
   candidates: readonly SystemAvailabilityFacts[],
@@ -69,8 +69,8 @@ export function getAggregatedAvailability(
 
   const effective = candidates.map((facts) => getEffectiveAvailability(facts));
   if (effective.includes('ready')) return 'ready';
-  // `resource-required` prime sur `planned` : l'information « média à fournir »
-  // ne doit jamais être masquée par un état plus générique.
+  // `resource-required` wins over `planned`: the "media to supply" information
+  // must never be hidden by a more generic state.
   if (effective.includes('resource-required')) return 'resource-required';
 
   const declared = candidates.find((facts) => facts.declared !== undefined)?.declared;

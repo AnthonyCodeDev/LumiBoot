@@ -7,12 +7,12 @@ export function AppLayout() {
   return (
     <div className="shell">
       <ScrollToTop />
-      <a className="skip-link" href="#contenu-principal">
-        Aller au contenu principal
+      <a className="skip-link" href="#main-content">
+        Skip to main content
       </a>
-      <div className="workarea" id="accueil">
+      <div className="workarea" id="home">
         <Topbar />
-        <div id="contenu-principal">
+        <div id="main-content">
           <Outlet />
         </div>
         <Toast />

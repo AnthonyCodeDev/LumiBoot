@@ -1,13 +1,13 @@
-# Smoke test Debian CLI
+# Debian CLI smoke test
 
-À rejouer après toute modification de l'image, du manifeste ou du provider.
+Rerun after any change to the image, the manifest or the provider.
 
-- [ ] La session atteint `LUMIBOOT_GUEST_READY:debian-12-i386` puis `running` une seule fois.
-- [ ] `uname -a` renvoie un noyau Linux.
-- [ ] `cat /etc/os-release` indique Debian 12 Bookworm.
-- [ ] `echo hello >/tmp/f && cat /tmp/f` renvoie `hello`.
-- [ ] `poweroff` ou l'arrêt UI libère la session ; un second démarrage fonctionne.
-- [ ] Les progrès affichés proviennent du chargement réel, sans minuteur simulé.
-- [ ] Aucun worker v86 ni listener ne reste après plusieurs cycles.
+- [ ] The session reaches `LUMIBOOT_GUEST_READY:debian-12-i386` then `running`, once.
+- [ ] `uname -a` returns a Linux kernel.
+- [ ] `cat /etc/os-release` reports Debian 12 Bookworm.
+- [ ] `echo hello >/tmp/f && cat /tmp/f` returns `hello`.
+- [ ] `poweroff` or the UI stop releases the session; a second boot works.
+- [ ] Displayed progress comes from the real load, with no simulated timer.
+- [ ] No v86 worker or listener is left after several cycles.
 
-À consigner : navigateur, durée jusqu'au marqueur, mémoire maximale et octets transférés.
+Record: browser, time to marker, peak memory, bytes transferred.

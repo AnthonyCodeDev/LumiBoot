@@ -5,13 +5,12 @@ import {
 } from '@lumiboot/vm-assets';
 
 /**
- * Persistance navigateur des médias importés par l'utilisateur.
+ * Browser persistence for media imported by the user.
  *
- * Les métadonnées et le blob du fichier sont conservés dans IndexedDB, dans le
- * navigateur de l'utilisateur uniquement : rien n'est jamais envoyé à un
- * serveur. Si IndexedDB est indisponible (navigation privée restrictive, tests),
- * on retombe proprement sur un store mémoire — la session fonctionne, mais
- * l'import ne survit pas à un rechargement.
+ * File metadata and blob are kept in IndexedDB, in the user's browser only:
+ * nothing is ever sent to a server. When IndexedDB is unavailable (restrictive
+ * private browsing, tests), we cleanly fall back to an in-memory store — the
+ * session works, but the import does not survive a reload.
  */
 
 const DB_NAME = 'lumiboot-user-media';
@@ -30,13 +29,13 @@ function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(BLOBS)) db.createObjectStore(BLOBS);
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('Ouverture IndexedDB impossible.'));
+    request.onerror = () => reject(request.error ?? new Error('Unable to open IndexedDB.'));
   });
 }
 
 /**
- * Exécute une transaction et retourne le résultat de la requête construite par
- * `build` (ou `undefined` pour une écriture). Rejette sur toute erreur.
+ * Runs a transaction and returns the result of the request built by `build`
+ * (or `undefined` for a write). Rejects on any error.
  */
 function runTransaction<T>(
   db: IDBDatabase,
@@ -68,7 +67,7 @@ function runTransaction<T>(
       try {
         tx.abort();
       } catch {
-        /* déjà terminée */
+        /* already finished */
       }
       fail(error);
       return;
@@ -78,7 +77,7 @@ function runTransaction<T>(
       request.onsuccess = () => {
         value = request!.result;
       };
-      request.onerror = () => fail(request!.error ?? new Error('Requête IndexedDB échouée.'));
+      request.onerror = () => fail(request!.error ?? new Error('IndexedDB request failed.'));
     }
 
     tx.oncomplete = () => {
@@ -86,12 +85,12 @@ function runTransaction<T>(
       settled = true;
       resolve(value);
     };
-    tx.onerror = () => fail(tx.error ?? new Error('Transaction IndexedDB échouée.'));
-    tx.onabort = () => fail(tx.error ?? new Error('Transaction IndexedDB annulée.'));
+    tx.onerror = () => fail(tx.error ?? new Error('IndexedDB transaction failed.'));
+    tx.onabort = () => fail(tx.error ?? new Error('IndexedDB transaction aborted.'));
   });
 }
 
-/** Store IndexedDB. Les Blob sont stockés tels quels (support navigateur). */
+/** IndexedDB store. Blobs are stored as-is (browser support). */
 export function createIndexedDbUserMediaStore(db: IDBDatabase): UserMediaStore {
   return {
     async get(ref) {
@@ -141,8 +140,8 @@ export function createIndexedDbUserMediaStore(db: IDBDatabase): UserMediaStore {
 let storePromise: Promise<UserMediaStore> | null = null;
 
 /**
- * Résout le store une seule fois : IndexedDB si réellement disponible, sinon
- * store mémoire (jamais d'échec silencieux présenté comme une persistance).
+ * Resolves the store once: IndexedDB when really available, otherwise the
+ * in-memory store (never a silent failure presented as persistence).
  */
 export function getUserMediaStore(): Promise<UserMediaStore> {
   if (storePromise !== null) return storePromise;
@@ -158,7 +157,7 @@ export function getUserMediaStore(): Promise<UserMediaStore> {
   return storePromise;
 }
 
-/** Réinitialise la résolution du store (tests uniquement). */
+/** Resets the store resolution (tests only). */
 export function resetUserMediaStoreForTests(): void {
   storePromise = null;
 }

@@ -1,17 +1,18 @@
-# ADR 0001 — Exécution locale
+# ADR 0001 — Local execution
 
-- Statut : accepté
-- Date : 2026-10-14
+- Status: accepted
+- Date: 2026-10-14
 
-## Décision
+## Context
 
-Les systèmes sont exécutés dans le navigateur par des moteurs WebAssembly chargés à la demande derrière `VMEngine` et `VMRegistry`.
+32-bit x86 OSes run without a server-side compute host.
 
-LumiBoot n'utilise aucun hôte de calcul, hyperviseur distant, VNC/RDP ou API d'orchestration de VM. Les assets peuvent être téléchargés et un auxiliaire réseau peut tourner sur la machine de l'utilisateur, mais aucune VM ne s'exécute côté serveur.
+## Decision
 
-## Conséquences
+WebAssembly engines loaded on demand in the browser, behind `VMEngine` and `VMRegistry` (`packages/vm-core/src/`). No remote hypervisor, VNC/RDP or orchestration API: downloadable assets and a local network helper are tolerated, never a server VM.
 
-- Le profil de lancement choisit explicitement le moteur et sa configuration.
-- La compatibilité est vérifiée avant le démarrage ; l'UI ne simule jamais une session.
-- Le cycle de vie local doit toujours libérer le moteur, ses workers et ses écouteurs.
-- Les services distants exploités par l'utilisateur, comme un relais WISP, restent optionnels et ne déplacent pas l'exécution de la VM.
+## Consequences
+
+- The profile picks the engine and its configuration; compatibility checked before start, with no simulated session.
+- Mandatory release of the engine, workers and listeners.
+- Optional WISP relay, without moving execution.

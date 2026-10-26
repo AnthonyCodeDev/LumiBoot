@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// Génère un manifeste d'image conforme au schéma strict de @lumiboot/vm-assets
-// (ref, architecture, memoryMiB, vgaMemoryMiB, license, files{disk,bzimage,initrd}).
-// Les tailles et SHA-256 sont TOUJOURS calculés sur les fichiers réels : aucune
-// valeur fictive n'est jamais écrite.
+// Generates an image manifest compliant with the strict @lumiboot/vm-assets
+// schema (ref, architecture, memoryMiB, vgaMemoryMiB, license,
+// files{disk,bzimage,initrd}).
+// Sizes and SHA-256 are ALWAYS computed from the real files: no fictitious value
+// is ever written.
 //
-//   node images/debian-12-i386/write-manifest.mjs <dossier-artefacts>
+//   node images/debian-12-i386/write-manifest.mjs <artifacts-dir>
 //
-// Paramétrable par variables d'environnement (utilisées par build.sh selon le
-// flavor) ; les valeurs par défaut reproduisent EXACTEMENT l'image console
+// Configurable through environment variables (used by build.sh depending on the
+// flavor); the default values reproduce EXACTLY the console image
 // `debian-12-i386` :
 //   IMAGE_REF=debian-12-i386-desktop IMAGE_MEMORY_MIB=1024 node write-manifest.mjs build-desktop
 
@@ -20,11 +21,11 @@ const REF = process.env.IMAGE_REF ?? 'debian-12-i386';
 const ARCH = process.env.IMAGE_ARCH ?? 'i386';
 const MEMORY_MIB = Number(process.env.IMAGE_MEMORY_MIB ?? 512);
 const VGA_MIB = Number(process.env.IMAGE_VGA_MIB ?? 16);
-// Cmdline noyau optionnelle, propre au flavor (le flavor desktop y ajoute
-// « vga=0x318 » pour disposer d'un framebuffer /dev/fb0, repli Xorg fbdev).
-// Vide/absente → aucun champ `boot` : le provider applique son DEFAULT_BOOT_CMDLINE.
+// Optional kernel cmdline, specific to the flavor (the desktop flavor adds
+// "vga=0x318" to get a /dev/fb0 framebuffer, Xorg fbdev fallback).
+// Empty/absent -> no `boot` field: the provider applies its DEFAULT_BOOT_CMDLINE.
 const CMDLINE = (process.env.IMAGE_CMDLINE ?? '').trim();
-const LICENSE = 'Debian GNU/Linux — voir les notices de paquets (Debian Free Software Guidelines)';
+const LICENSE = 'Debian GNU/Linux — see the package notices (Debian Free Software Guidelines)';
 const BASE_URL = `/images/${REF}`;
 
 const FILES = {
@@ -39,10 +40,10 @@ async function describe(fileName) {
   const path = join(artifactsDir, fileName);
   const info = await stat(path).catch(() => null);
   if (!info) {
-    throw new Error(`Artefact manquant : ${path}. Construisez l'image avant de générer le manifeste.`);
+    throw new Error(`Missing artifact: ${path}. Build the image before generating the manifest.`);
   }
-  // Hachage en flux : le disque fait 2 Gio, impossible à charger en mémoire
-  // d'un coup (limite readFile > 2 Gio sur Node).
+  // Streaming hash: the disk is 2 GiB, impossible to load into memory in one
+  // go (readFile limit > 2 GiB on Node).
   const sha256 = await new Promise((resolveHash, reject) => {
     const hash = createHash('sha256');
     const stream = createReadStream(path);
@@ -67,15 +68,15 @@ const manifest = {
   files,
 };
 
-// Champ `boot` optionnel : présent uniquement si une cmdline a été fournie
-// (flavor desktop). Le schéma @lumiboot/vm-assets valide `boot.cmdline`.
+// Optional `boot` field: present only when a cmdline was provided (desktop
+// flavor). The @lumiboot/vm-assets schema validates `boot.cmdline`.
 if (CMDLINE) {
   manifest.boot = { cmdline: CMDLINE };
 }
 
 const outPath = join(artifactsDir, 'manifest.json');
 await writeFile(outPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
-console.log(`Manifeste écrit : ${outPath}`);
+console.log(`Manifest written: ${outPath}`);
 for (const [name, file] of Object.entries(files)) {
-  console.log(`  ${name.padEnd(8)} ${String(file.size).padStart(12)} octets  sha256=${file.sha256}`);
+  console.log(`  ${name.padEnd(8)} ${String(file.size).padStart(12)} bytes  sha256=${file.sha256}`);
 }

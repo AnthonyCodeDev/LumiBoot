@@ -25,21 +25,20 @@ export function SessionPage() {
   const sessionId = session?.id;
 
   useEffect(() => {
-    // Le composant est monté dès que l'effet s'exécute ; seul le nettoyage le
-    // marque démonté. On positionne donc le drapeau AVANT tout retour anticipé :
-    // pendant un redémarrage, la session disparaît transitoirement du store,
-    // l'effet se relance avec `system === null` puis le composant se re-rend
-    // pour la nouvelle session. Ce n'est PAS un démontage, et le redémarrage ne
-    // doit pas être abandonné à tort (sinon la page resterait bloquée sur
-    // « Session expirée »).
+    // The component is mounted when the effect runs; only cleanup marks it
+    // unmounted. The flag is therefore set BEFORE any early return: during a
+    // restart, the session temporarily disappears from the store, the effect reruns
+    // with `system === null`, then the component re-renders for the new session.
+    // This is NOT an unmount, and the restart must not be abandoned wrongly
+    // (otherwise the page would stay stuck on "Session expired").
     mountedRef.current = true;
     const element = consoleRef.current;
     if (sessionId && system && element) {
       activeIdRef.current = sessionId;
-      // Tout rejet asynchrone du boot est capturé côté UI : jamais de promesse
-      // non gérée. Une erreur de démarrage est par ailleurs normalisée en statut
-      // de session par le store ; ce `catch` n'écrase une éventuelle nouvelle
-      // session que si celle-ci est toujours la session active.
+      // Every asynchronous boot rejection is captured on the UI side: never an
+      // unhandled promise. A start error is also normalized into a session status
+      // by the store; this `catch` only overwrites a possible new session when it
+      // is still the active one.
       boot(sessionId, element).catch((error) => {
         if (!mountedRef.current || activeIdRef.current !== sessionId) return;
         setActionError(toUserMessage(error));
@@ -49,15 +48,15 @@ export function SessionPage() {
     return () => {
       mountedRef.current = false;
       if (!sessionId) return;
-      // React StrictMode démonte puis remonte de façon synchrone. On repousse
-      // la libération dans une macrotâche : si la même session est réactivée
-      // immédiatement (montage double), on l'annule ; sinon (navigation ou
-      // démontage réel) on libère la session pour ne laisser aucun orphelin.
+      // React StrictMode unmounts then remounts synchronously. Release is pushed
+      // to a macrotask: when the same session is reactivated immediately (double
+      // mount) it is cancelled; otherwise (navigation or real unmount) the session
+      // is released so no orphan is left behind.
       window.setTimeout(() => {
         const superseded = activeIdRef.current === sessionId && mountedRef.current;
         if (superseded) return;
         dispose(sessionId).catch(() => {
-          /* la libération best-effort ne doit jamais remonter à l'UI */
+          /* the best-effort release must never surface in the UI */
         });
       }, 0);
     };
@@ -66,13 +65,13 @@ export function SessionPage() {
   if (!session || !system) {
     return (
       <main className="not-found">
-        <h1>Session expirée</h1>
+        <h1>Session expired</h1>
         <p>
-          Cette session n'est plus accessible (rechargement de la page ou session fermée). Recréez
-          une session pour continuer.
+          This session is no longer reachable (page reload or closed session). Create a new session
+          to keep going.
         </p>
         <Button variant="primary" type="button" onClick={() => navigate('/')}>
-          Retour à la bibliothèque
+          Back to the library
         </Button>
       </main>
     );
@@ -84,11 +83,11 @@ export function SessionPage() {
     setRestarting(true);
     setActionError(null);
     try {
-      // Arrêter ET libérer l'ancienne session avant d'en créer une nouvelle.
+      // Stop AND release the previous session before creating a new one.
       await stop(restartingId);
       await dispose(restartingId);
-      // Si l'utilisateur a quitté ou changé de session pendant l'arrêt, une
-      // navigation tardive écraserait la nouvelle session : on s'abstient.
+      // If the user left or switched session during the stop, a late navigation
+      // would overwrite the new session: abstain.
       if (!mountedRef.current || activeIdRef.current !== restartingId) return;
       const nextId = createSession(system.id);
       navigate(`/session/${nextId}`, { replace: true });

@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { getDeclaredReadiness, getSystemById, systems } from './systems';
 
 /**
- * La disponibilité du catalogue est une readiness DÉCLARÉE : elle ne présume
- * jamais que le média est réellement servable au runtime. `getDeclaredReadiness`
- * rend cette séparation explicite et expose la source média à vérifier.
+ * Catalog availability is a DECLARED readiness: it never assumes the media is
+ * really servable at runtime. `getDeclaredReadiness` makes that separation
+ * explicit and exposes the media source to check.
  */
-describe('getDeclaredReadiness — séparation déclaré / runtime', () => {
-  it('un système bundled validé est déclaré ready, média « bundled-image »', () => {
+describe('getDeclaredReadiness — declared / runtime separation', () => {
+  it('a validated bundled system is declared ready, media "bundled-image"', () => {
     const debian = getSystemById('debian-12-i386')!;
     expect(getDeclaredReadiness(debian)).toEqual({
       availability: 'ready',
@@ -15,17 +15,17 @@ describe('getDeclaredReadiness — séparation déclaré / runtime', () => {
     });
   });
 
-  it('Windows 7 (disque local) est déclaré ready mais média « local-disk » à vérifier au runtime', () => {
+  it('Windows 7 (local disk) is declared ready but media "local-disk" must be checked at runtime', () => {
     const windows = getSystemById('windows-7-pro-sp1-x86')!;
     expect(getDeclaredReadiness(windows)).toEqual({
       availability: 'ready',
       mediaSource: 'local-disk',
     });
-    // Le disque local reste référencé : la vérification runtime saura quoi sonder.
+    // The local disk stays referenced: the runtime check knows what to probe.
     expect(windows.imageRef).toBeDefined();
   });
 
-  it('un système user-import sans média reste « resource-required » et média « user-import »', () => {
+  it('a user-import system without media stays "resource-required" with media "user-import"', () => {
     const windows = getSystemById('windows-11-x64')!;
     expect(getDeclaredReadiness(windows)).toEqual({
       availability: 'resource-required',
@@ -33,23 +33,23 @@ describe('getDeclaredReadiness — séparation déclaré / runtime', () => {
     });
   });
 
-  it('tout média « local-disk » déclaré référence bien une image', () => {
+  it('every declared "local-disk" media references an image', () => {
     for (const system of systems) {
       const declared = getDeclaredReadiness(system);
       if (declared.mediaSource === 'local-disk') {
-        expect(system.imageRef, `${system.id} doit référencer un disque local`).toBeDefined();
+        expect(system.imageRef, `${system.id} must reference a local disk`).toBeDefined();
       }
     }
   });
 });
 
 /**
- * Windows 10 x86 réutilise le pipeline disque RAW local de Windows 7 sous v86.
- * Le pipeline étant validé comme Windows 7, la disponibilité dérivée passe à
- * `ready` : `validated` reflète un démarrage réel, sans maquillage.
+ * Windows 10 x86 reuses the Windows 7 local RAW disk pipeline under v86. Since
+ * that pipeline is validated like Windows 7, the derived availability becomes
+ * `ready`: `validated` reflects a real boot, with no window dressing.
  */
-describe('Windows 10 x86 — pipeline disque local sous v86', () => {
-  it('expose le disque local RAW installé et le média « bundled » par défaut', () => {
+describe('Windows 10 x86 — local disk pipeline under v86', () => {
+  it('exposes the installed local RAW disk and the default "bundled" media', () => {
     const system = getSystemById('windows-10-x86')!;
     expect(system.architecture).toBe('i386');
     expect(system.imageRef).toBe('windows-10-x86');
@@ -60,7 +60,7 @@ describe('Windows 10 x86 — pipeline disque local sous v86', () => {
     });
   });
 
-  it('utilise v86, virtio + ACPI, 2048 Mio et le démarrage disque', () => {
+  it('uses v86, virtio + ACPI, 2048 MiB and the disk boot', () => {
     const profile = getSystemById('windows-10-x86')!.launchProfiles[0]!;
     expect(profile.engineId).toBe('v86');
     expect(profile.executionMode).toBe('browser');
@@ -73,7 +73,7 @@ describe('Windows 10 x86 — pipeline disque local sous v86', () => {
     expect(profile.readiness?.marker).toBe('LUMIBOOT_DISK_BOOT:windows-10-x86');
   });
 
-  it('est `ready` : pipeline disque local validé', () => {
+  it('is `ready`: validated local disk pipeline', () => {
     const system = getSystemById('windows-10-x86')!;
     expect(system.availability).toBe('ready');
   });

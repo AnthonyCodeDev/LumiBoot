@@ -1,50 +1,50 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
- * Boot RÉEL du groupe Windows 7 dans v86, depuis les disques RAW locaux
- * (`images/windows-7-x86/disk.img` 16 Gio et
- * `images/windows-7-pro-sp1-x86/disk.img` 32 Gio, hors `public/`).
+ * REAL boot of the Windows 7 group in v86, from the local RAW disks
+ * (`images/windows-7-x86/disk.img`, 16 GiB, and
+ * `images/windows-7-pro-sp1-x86/disk.img`, 32 GiB, outside `public/`).
  *
- * Ce fichier n'est activé que lorsque les disques sont réellement présents et
- * servis en HTTP Range :
+ * This file is only enabled when the disks are really present and served over
+ * HTTP Range:
  *
  *   $env:VM_E2E_ASSETS='1'; pnpm exec playwright test tests/e2e/windows7-desktop.spec.ts
  *
- * Sans cette variable, les tests sont **ignorés** (pas « réussis ») : sans
- * disque, aucune preuve possible.
+ * Without that variable, the tests are **skipped** (not "passed"): without a
+ * disk, no proof is possible.
  *
- * Contrairement à Debian, Windows n'émet AUCUN marqueur LumiBoot. La preuve de
- * « bureau » est donc **visuelle** : le canvas VGA 2D de v86 (le vrai écran de
- * la machine émulée, jamais un faux bureau React) doit montrer une image
- * colorée et stable (et non un écran noir de POST / un simple curseur texte).
+ * Unlike Debian, Windows emits NO LumiBoot marker. The "desktop" proof is
+ * therefore **visual**: v86's 2D VGA canvas (the real screen of the emulated
+ * machine, never a fake React desktop) must show a colored and stable image (not
+ * a black POST screen / a plain text cursor).
  *
- * Le parcours est factorisé dans `bootWindowsDesktop` (navigation, sélection de
- * variante, lancement, attente, preuve visuelle, mesures) et paramétré par le
- * libellé de variante et le fragment d'URL du disque attendu.
+ * The path is factored into `bootWindowsDesktop` (navigation, variant selection,
+ * launch, wait, visual proof, measurements) and parameterized by the variant
+ * label and the URL fragment of the expected disk.
  */
 
 const assetsPresent = process.env.VM_E2E_ASSETS === '1';
 
-/** Émulation logicielle (sans accélération) : budget mural très large. */
+/** Software emulation (no acceleration): very wide wall-clock budget. */
 const RUNNING_TIMEOUT_MS = 900_000;
 const DESKTOP_TIMEOUT_MS = 600_000;
 const STOP_TIMEOUT_MS = 60_000;
 
 /**
- * Un « bureau » est retenu quand, sur **3 polls consécutifs**, le canvas est
- * visible, majoritairement non noir (`nonBlackRatio > 0.5`) et suffisamment
- * coloré (`distinctColors > 64`, couleurs quantifiées en 3 bits/canal).
+ * A "desktop" is accepted when, on **3 consecutive polls**, the canvas is
+ * visible, mostly non-black (`nonBlackRatio > 0.5`) and colorful enough
+ * (`distinctColors > 64`, colors quantized to 3 bits/channel).
  *
- * Le compteur de polls vit sur `window` car `waitForFunction` réévalue la
- * fonction à chaque poll sans conserver d'état de closure.
+ * The poll counter lives on `window` because `waitForFunction` re-evaluates the
+ * function on every poll without keeping closure state.
  */
 export interface DesktopMetrics {
-  /** Vrai si le bureau a été prouvé sur `consecutive` polls. */
+  /** True when the desktop was proven over `consecutive` polls. */
   readonly proven: boolean;
-  /** Mesures du dernier poll concluant (null si non prouvé). */
+  /** Measurements of the last conclusive poll (null when not proven). */
   readonly nonBlackRatio: number | null;
   readonly distinctColors: number | null;
-  /** Résolution native du canvas au moment de la preuve. */
+  /** Native canvas resolution at the time of the proof. */
   readonly canvasWidth: number | null;
   readonly canvasHeight: number | null;
 }
@@ -54,7 +54,7 @@ async function waitForDesktopProof(page: Page): Promise<DesktopMetrics> {
     const handle = await page.waitForFunction(
       ({ minNonBlackRatio, minDistinctColors, consecutive, stride }) => {
         const state = window as unknown as { __lumibootWin7Polls?: number };
-        // `null` = « pas encore » : on continue de poller.
+        // `null` = "not yet": keep polling.
         const reset = (): null => {
           state.__lumibootWin7Polls = 0;
           return null;
@@ -88,7 +88,7 @@ async function waitForDesktopProof(page: Page): Promise<DesktopMetrics> {
           const b = data[i + 2]!;
           total += 1;
           if (r + g + b > 30) nonBlack += 1;
-          // Quantification 3 bits/canal (les 3 bits de poids faible sont fusionnés).
+          // 3-bit/channel quantization (the 3 least significant bits are merged).
           colors.add(((r >> 5) << 10) | ((g >> 5) << 5) | (b >> 5));
         }
         if (total === 0) return reset();
@@ -100,9 +100,9 @@ async function waitForDesktopProof(page: Page): Promise<DesktopMetrics> {
         } else {
           state.__lumibootWin7Polls = 0;
         }
-        // Un bureau n'est retenu qu'après `consecutive` polls positifs d'affilée.
+        // A desktop is only accepted after `consecutive` positive polls in a row.
         if (state.__lumibootWin7Polls >= consecutive) {
-          // Mesures du poll concluant (mêmes seuils, aucune relaxation).
+          // Measurements of the conclusive poll (same thresholds, no relaxation).
           return {
             nonBlackRatio,
             distinctColors,
@@ -134,13 +134,13 @@ async function waitForDesktopProof(page: Page): Promise<DesktopMetrics> {
 }
 
 /**
- * Compteur des octets disque réellement servis par HTTP Range pour le disque
- * attendu (`diskUrlFragment`).
+ * Counter of the disk bytes really served over HTTP Range for the expected disk
+ * (`diskUrlFragment`).
  *
- * `performance.transferSize` SOUS-COMPTE fortement les XHR par plages de v86
- * (constaté : ~97 Kio rapportés pour ~193 Mio réellement servis). On compte donc
- * les vraies réponses HTTP (`page.on('response')`) et la somme de leur
- * `Content-Length`, ce qui reflète le trafic Range effectif.
+ * `performance.transferSize` heavily UNDER-COUNTS the range XHRs of v86
+ * (observed: ~97 KiB reported for ~193 MiB actually served). The real HTTP
+ * responses (`page.on('response')`) are therefore counted, with the sum of their
+ * `Content-Length`, which reflects the effective Range traffic.
  */
 function createDiskByteCounter(
   page: Page,
@@ -157,7 +157,7 @@ function createDiskByteCounter(
   return () => ({ bytes, requests });
 }
 
-/** Octets JS réellement utilisés (non standard, best-effort). */
+/** JS bytes really used (non-standard, best-effort). */
 async function heapUsedBytes(page: Page): Promise<number | null> {
   return page.evaluate(() => {
     const perf = performance as Performance & {
@@ -167,7 +167,7 @@ async function heapUsedBytes(page: Page): Promise<number | null> {
   });
 }
 
-/** Attache les diagnostic bruts en cas d'échec (jamais de signal simulé). */
+/** Attaches the raw diagnostics on failure (never a simulated signal). */
 async function attachDiagnostics(page: Page, consoleLogs: string[]): Promise<void> {
   const info = test.info();
 
@@ -179,7 +179,7 @@ async function attachDiagnostics(page: Page, consoleLogs: string[]): Promise<voi
   await info.attach('v86-serial', { body: serial, contentType: 'text/plain' });
 
   await info.attach('console', {
-    body: consoleLogs.join('\n') || '(aucun message console)',
+    body: consoleLogs.join('\n') || '(no console message)',
     contentType: 'text/plain',
   });
 
@@ -187,7 +187,7 @@ async function attachDiagnostics(page: Page, consoleLogs: string[]): Promise<voi
     (await page
       .locator('.session-toolbar')
       .getAttribute('data-state')
-      .catch(() => null)) ?? 'inconnu';
+      .catch(() => null)) ?? 'unknown';
   await info.attach('session-state', {
     body: `data-state=${sessionState}`,
     contentType: 'text/plain',
@@ -201,15 +201,15 @@ async function attachDiagnostics(page: Page, consoleLogs: string[]): Promise<voi
 }
 
 export interface WindowsBootOptions {
-  /** Libellé exact de la variante à sélectionner (absent = variante par défaut). */
+  /** Exact label of the variant to select (absent = default variant). */
   readonly variantLabel?: string;
-  /** Fragment d'URL du disque attendu pour ce boot. */
+  /** URL fragment of the disk expected for this boot. */
   readonly diskUrlFragment: string;
-  /** Nom du screenshot VGA attaché (preuve visuelle). */
+  /** Name of the attached VGA screenshot (visual proof). */
   readonly screenshotName: string;
-  /** Titre imprimé dans les mesures. */
+  /** Title printed in the measurements. */
   readonly title: string;
-  /** RAM invitée demandée au moteur (cf. profil catalogue). */
+  /** Guest RAM requested from the engine (see the catalog profile). */
   readonly guestRamMiB: number;
 }
 
@@ -221,11 +221,11 @@ export interface WindowsBootResult {
 }
 
 /**
- * Parcours complet et prouvé d'une variante Windows 7 : bibliothèque →
- * recherche « windows » → carte de la mère `windows-7-x86` → sélection
- * éventuelle de variante → lancement → `running` → preuve visuelle du bureau
- * (canvas VGA 2D réel) → mesures (temps, octets disque via réponses HTTP,
- * mémoire). En cas d'échec, les diagnostics bruts sont attachés.
+ * Complete and proven path of a Windows 7 variant: library -> "windows" search
+ * -> `windows-7-x86` mother card -> optional variant selection -> launch ->
+ * `running` -> visual desktop proof (real 2D VGA canvas) -> measurements (time,
+ * disk bytes through HTTP responses, memory). On failure, the raw diagnostics
+ * are attached.
  */
 async function bootWindowsDesktop(
   page: Page,
@@ -234,77 +234,76 @@ async function bootWindowsDesktop(
   const consoleLogs: string[] = [];
   page.on('console', (message) => consoleLogs.push(`[${message.type()}] ${message.text()}`));
   page.on('pageerror', (error) => consoleLogs.push(`[pageerror] ${error.message}`));
-  // Enregistré AVANT le clic de lancement pour compter tous les Range du disque.
+  // Registered BEFORE the launch click to count every disk Range.
   const diskBytes = createDiskByteCounter(page, options.diskUrlFragment);
 
   try {
-    // 1. Parcours : bibliothèque → recherche « windows » → carte de la mère.
+    // 1. Path: library -> "windows" search -> mother card.
     await page.goto('/');
-    await page.getByLabel('Rechercher un système').fill('windows');
+    await page.getByLabel('Search for a system').fill('windows');
     await page.locator('.os-card[data-id="windows-7-x86"]').click();
     await expect(page).toHaveURL(/\/systems\/windows-7-x86$/);
 
-    // 2. Sélection éventuelle de la variante via le dropdown custom : elle ne
-    //    navigue PAS (on reste sur la fiche de la mère).
+    // 2. Optional variant selection through the custom dropdown: it does NOT
+    //    navigate (the mother page stays displayed).
     if (options.variantLabel) {
-      await page.getByRole('button', { name: 'Choisir la variante' }).click();
+      await page.getByRole('button', { name: 'Choose variant' }).click();
       await page.getByRole('button', { name: options.variantLabel, exact: true }).click();
       await expect(page).toHaveURL(/\/systems\/windows-7-x86$/);
     }
 
-    // 3. Lancement : aucune import de média, disque bundled de la codebase.
-    const launchButton = page.getByRole('button', { name: 'Lancer une session' });
+    // 3. Launch: no media import, bundled disk of the codebase.
+    const launchButton = page.getByRole('button', { name: 'Start session' });
     await expect(launchButton).toBeEnabled();
     const bootStartedAt = Date.now();
     await launchButton.click();
     await expect(page).toHaveURL(/\/session\//);
     await expect(page.locator('.session-console')).toBeVisible();
 
-    // 4. `running` n'est émis qu'après une lecture disque réelle (ide-read-end),
-    //    jamais simulé par un timer React.
+    // 4. `running` is only emitted after a real disk read (ide-read-end), never
+    //    simulated by a React timer.
     const state = page.locator('.session-toolbar');
     await expect(state).toHaveAttribute('data-state', 'running', {
       timeout: RUNNING_TIMEOUT_MS,
     });
 
-    // 5. Preuve visuelle : le canvas VGA 2D montre un bureau coloré et stable.
+    // 5. Visual proof: the 2D VGA canvas shows a colored and stable desktop.
     const proof = await waitForDesktopProof(page);
     const bootMs = Date.now() - bootStartedAt;
-    // En cas d'échec, le `catch` ci-dessous joint les diagnostics bruts.
+    // On failure, the `catch` below attaches the raw diagnostics.
     expect(
       proof.proven,
-      `Aucun bureau VGA prouvé pour « ${options.title} » : le canvas ` +
-        `.v86-screen-canvas n'a pas atteint nonBlackRatio > 0.5 / distinctColors > 64 ` +
-        `sur 3 polls consécutifs (temps écoulé : ${bootMs} ms).`,
+      `No VGA desktop proven for "${options.title}": the canvas ` +
+        `.v86-screen-canvas did not reach nonBlackRatio > 0.5 / distinctColors > 64 ` +
+        `over 3 consecutive polls (elapsed: ${bootMs} ms).`,
     ).toBe(true);
 
-    // Screenshot du vrai écran v86 (canvas 2D), jamais un faux bureau React.
+    // Screenshot of the real v86 screen (2D canvas), never a fake React desktop.
     await test.info().attach(options.screenshotName, {
       body: await page.locator('.v86-screen').screenshot(),
       contentType: 'image/png',
     });
 
-    // 6. Mesures : temps de boot, octets disque réellement servis, mémoire.
+    // 6. Measurements: boot time, disk bytes really served, memory.
     const disk = diskBytes();
     const heap = await heapUsedBytes(page);
-    // Le disque attendu DOIT avoir été réellement servi en HTTP Range.
+    // The expected disk MUST have been really served over HTTP Range.
     expect(
       disk.requests,
-      `Aucune requête HTTP Range pour « ${options.diskUrlFragment} » ` +
-        `(disque attendu non servi).`,
+      `No HTTP Range request for "${options.diskUrlFragment}" ` + `(expected disk not served).`,
     ).toBeGreaterThan(0);
     console.log(
       `\n=== ${options.title} ===\n` +
-        `  disque attendu                : ${options.diskUrlFragment}\n` +
-        `  temps de boot (clic → bureau) : ${(bootMs / 1000).toFixed(1)} s\n` +
-        `  bureau VGA (canvas 2D)        : ${proof.canvasWidth}x${proof.canvasHeight}px, ` +
+        `  expected disk          : ${options.diskUrlFragment}\n` +
+        `  boot time (click -> desktop): ${(bootMs / 1000).toFixed(1)} s\n` +
+        `  VGA desktop (2D canvas): ${proof.canvasWidth}x${proof.canvasHeight}px, ` +
         `nonBlackRatio=${proof.nonBlackRatio?.toFixed(3)} distinctColors=${proof.distinctColors} ` +
-        `(seuils > 0.5 / > 64 sur 3 polls)\n` +
-        `  disque servi (Range)          : ${disk.bytes} octets ` +
-        `(${(disk.bytes / 1048576).toFixed(2)} Mio) en ${disk.requests} requêtes\n` +
-        `  tas JS utilisé               : ${heap === null ? 'indisponible' : `${heap} octets`}\n` +
-        `  RAM invitée                  : ${options.guestRamMiB} Mio\n` +
-        `=== fin mesures ===\n`,
+        `(thresholds > 0.5 / > 64 over 3 polls)\n` +
+        `  served disk (Range)    : ${disk.bytes} bytes ` +
+        `(${(disk.bytes / 1048576).toFixed(2)} MiB) over ${disk.requests} requests\n` +
+        `  JS heap used           : ${heap === null ? 'unavailable' : `${heap} bytes`}\n` +
+        `  guest RAM              : ${options.guestRamMiB} MiB\n` +
+        `=== end measurements ===\n`,
     );
 
     return { bootMs, disk, heap, state };
@@ -315,15 +314,15 @@ async function bootWindowsDesktop(
 }
 
 /**
- * Étapes post-boot communes : entrées réelles (souris/clavier atteignent
- * l'écran émulé), capture Pointer Lock (un seul curseur : celui de l'invité),
- * plein écran disponible, puis arrêt propre.
+ * Common post-boot steps: real inputs (mouse/keyboard reach the emulated
+ * screen), Pointer Lock capture (a single cursor: the guest one), fullscreen
+ * available, then a clean stop.
  */
 async function exerciseAndStop(page: Page, state: Locator): Promise<void> {
   const screen = page.locator('.v86-screen');
 
-  // Un clic explicite dans l'écran capture le pointeur : le navigateur masque
-  // le curseur hôte et v86 reçoit les mouvements RELATIFS (même aux bords).
+  // An explicit click inside the screen captures the pointer: the browser hides
+  // the host cursor and v86 receives RELATIVE movements (even at the edges).
   await screen.click();
   await expect
     .poll(() =>
@@ -331,46 +330,46 @@ async function exerciseAndStop(page: Page, state: Locator): Promise<void> {
     )
     .toBe(true);
 
-  // Échap est géré nativement par le navigateur ; en Chromium headless il n'est
-  // pas intercepté, on libère donc explicitement (même chemin `pointerlockchange`
-  // que celui déclenché par Échap en session réelle).
+  // Escape is handled natively by the browser; in headless Chromium it is not
+  // intercepted, so the lock is released explicitly (same `pointerlockchange`
+  // path as the one triggered by Escape in a real session).
   await page.evaluate(() => document.exitPointerLock());
   await expect.poll(() => page.evaluate(() => document.pointerLockElement === null)).toBe(true);
 
   await page.keyboard.press('ArrowUp');
   await page.keyboard.press('Enter');
 
-  await expect(page.getByRole('button', { name: 'Plein écran' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Fullscreen' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Arrêter' }).click();
+  await page.getByRole('button', { name: 'Stop' }).click();
   await expect(state).toHaveAttribute('data-state', 'stopped', { timeout: STOP_TIMEOUT_MS });
 }
 
-test.describe('Session Windows 7 (v86, boot réel)', () => {
-  test.skip(!assetsPresent, 'Disques Windows 7 absents : définir VM_E2E_ASSETS=1.');
+test.describe('Windows 7 session (v86, real boot)', () => {
+  test.skip(!assetsPresent, 'Windows 7 disks missing: set VM_E2E_ASSETS=1.');
 
-  test('démarre la variante par défaut (Professionnel) depuis le disque RAW 32 Gio et s’arrête', async ({
+  test('boots the default variant (Professional) from the 32 GiB RAW disk and stops', async ({
     page,
   }) => {
-    // Boot Windows complet sous émulation logicielle : budget mural explicite.
+    // Complete Windows boot under software emulation: explicit wall-clock budget.
     test.setTimeout(1_800_000);
 
-    // Aucune variante sélectionnée : la mère ouvre la meilleure variante
-    // (Professionnel, `variantOrder: 1`).
+    // No variant selected: the mother opens the best variant (Professional,
+    // `variantOrder: 1`).
     const { state } = await bootWindowsDesktop(page, {
       diskUrlFragment: '/images/windows-7-pro-sp1-x86/disk.img',
       screenshotName: 'windows7-professionnel-desktop',
-      title: 'Windows 7 Professionnel SP1 x86',
+      title: 'Windows 7 Professional SP1 x86',
       guestRamMiB: 1536,
     });
 
     await exerciseAndStop(page, state);
   });
 
-  test('bascule sur la variante Lite et démarre le disque RAW 16 Gio', async ({ page }) => {
+  test('switches to the Lite variant and boots the 16 GiB RAW disk', async ({ page }) => {
     test.setTimeout(1_800_000);
 
-    // On sélectionne explicitement « Lite » dans le dropdown, puis on lance.
+    // "Lite" is explicitly selected in the dropdown, then launched.
     const { state } = await bootWindowsDesktop(page, {
       variantLabel: 'Windows 7 Lite',
       diskUrlFragment: '/images/windows-7-x86/disk.img',

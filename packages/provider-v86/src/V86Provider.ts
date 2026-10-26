@@ -32,7 +32,7 @@ export const V86_PROVIDER_ID = 'v86';
 
 const MiB = 1024 * 1024;
 
-/** Emplacements statiques des binaires du moteur, préparés hors dépôt. */
+/** Static locations of the engine binaries, prepared outside the repository. */
 export const V86_ASSET_PATHS = {
   wasm: '/v86/v86.wasm',
   bios: '/v86/seabios.bin',
@@ -40,59 +40,59 @@ export const V86_ASSET_PATHS = {
 } as const;
 
 /**
- * Ligne de commande du noyau : console série 115200 pour la console
- * interactive, `root=/dev/sda` correspond au disque `hda` transmis à v86.
+ * Kernel command line: 115200 serial console for the interactive console,
+ * `root=/dev/sda` maps to the `hda` disk passed to v86.
  */
 export const DEFAULT_BOOT_CMDLINE = 'console=tty0 console=ttyS0,115200 root=/dev/sda rw';
 
 /**
- * Valeurs de `BootOrder` (v86) dont on a besoin, dupliquées en nombre pour ne
- * JAMAIS importer `v86` au chargement du provider (le moteur reste chargé
- * paresseusement par `browser-v86`). `CD_HARDDISK_FLOPPY = 0x123` démarre le
- * CD-ROM en premier, puis le disque dur.
+ * `BootOrder` values (v86) we need, duplicated as numbers so we NEVER import
+ * `v86` while loading the provider (the engine stays lazily loaded by
+ * `browser-v86`). `CD_HARDDISK_FLOPPY = 0x123` boots the CD-ROM first, then the
+ * hard disk.
  */
 const BOOT_ORDER_CD_HARDDISK_FLOPPY = 0x123 as BootOrder;
 
 /**
- * Capacités RÉELLES du moteur. `VMInstance` n'expose aucun point d'entrée de
- * snapshot (RAM ou disque) : le provider ne doit donc jamais annoncer
- * `ramSnapshots`/`diskSnapshots`, même si la classe `V86` possède un
- * `save_state`/`restore_state` interne non câblé au contrat. Annoncer une
- * capacité absente de `VMInstance` ferait promettre à l'UI une fonction qui
- * n'existe pas.
+ * ACTUAL capabilities of the engine. `VMInstance` exposes no snapshot entry
+ * point (RAM or disk): the provider must therefore never advertise
+ * `ramSnapshots`/`diskSnapshots`, even if the `V86` class has an internal
+ * `save_state`/`restore_state` not wired to the contract. Advertising a
+ * capability missing from `VMInstance` would make the UI promise a feature that
+ * does not exist.
  */
 const V86_CAPABILITIES: VMCapabilities = {
   runtime: 'browser',
   architectures: ['i386'],
   ramSnapshots: false,
   diskSnapshots: false,
-  // v86 lit le disque par requêtes HTTP Range (`hda.async`).
+  // v86 reads the disk through HTTP Range requests (`hda.async`).
   partialDownload: true,
   resumable: false,
   configurableMemory: true,
 };
 
 export interface V86ProviderOptions {
-  /** Factory d'instance v86 (réelle par défaut, injectable en test). */
+  /** v86 instance factory (real by default, injectable in tests). */
   createEngine?: V86Factory;
-  /** Résolution du manifeste d'image (`ensureImageManifest` par défaut). */
+  /** Image manifest resolution (`ensureImageManifest` by default). */
   resolveManifest?: (ref: string, signal?: AbortSignal) => Promise<ImageManifest>;
   /**
-   * Résolution du manifeste d'un disque local démarré par BIOS
-   * (`ensureLocalDiskManifest` par défaut).
+   * Manifest resolution of a local disk booted by BIOS
+   * (`ensureLocalDiskManifest` by default).
    */
   resolveDiskManifest?: (ref: string, signal?: AbortSignal) => Promise<LocalDiskManifest>;
-  /** Fabrique d'adaptateur de console (VGA + série), injectable en test. */
+  /** Console adapter factory (VGA + serial), injectable in tests. */
   createConsole?: () => V86ConsoleAdapter;
 }
 
 /**
- * Moteur navigateur x86 32 bits adossé à v86.
+ * 32-bit x86 browser engine backed by v86.
  *
- * Toute la connaissance de v86 reste confinée ici : l'UI ne voit qu'un
- * `VMInstance`. L'instance n'est créée qu'au lancement d'une session, et le
- * noyau invité n'est jamais considéré opérationnel avant l'émission du
- * marqueur `LUMIBOOT_GUEST_READY` sur `ttyS0`.
+ * All v86 knowledge stays confined here: the UI only sees a `VMInstance`. The
+ * instance is only created when a session starts, and the guest kernel is never
+ * considered operational before the `LUMIBOOT_GUEST_READY` marker is emitted on
+ * `ttyS0`.
  */
 export class V86Provider implements VMEngine {
   readonly id = V86_PROVIDER_ID;
@@ -126,7 +126,7 @@ export class V86Provider implements VMEngine {
     configuration?: VMConfiguration,
   ): Promise<VMInstance> {
     if (typeof HTMLElement === 'undefined' || !(mountTarget instanceof HTMLElement)) {
-      throw new VMError('START_FAILED', 'Cible de montage invalide pour la console v86.', {
+      throw new VMError('START_FAILED', 'Invalid mount target for the v86 console.', {
         systemId: os.id,
       });
     }
@@ -135,33 +135,31 @@ export class V86Provider implements VMEngine {
       (profile) => profile.engineId === 'v86' && profile.executionMode === 'browser',
     );
     if (!launchProfile) {
-      throw new VMError(
-        'ENGINE_NOT_INTEGRATED',
-        `Le moteur « v86 » n'est pas intégré pour « ${os.id} ».`,
-        { systemId: os.id },
-      );
-    }
-
-    const signal = configuration?.signal;
-    if (signal?.aborted) {
-      throw new VMError('START_FAILED', `Démarrage annulé pour « ${os.id} ».`, {
+      throw new VMError('ENGINE_NOT_INTEGRATED', `Engine "v86" is not integrated for "${os.id}".`, {
         systemId: os.id,
       });
     }
 
-    // Un profil `disk-boot` démarre un disque dur par BIOS (aucun noyau Linux) :
-    // soit un disque RAW de la codebase (ex. Windows 7), soit un média importé
-    // localement. Un profil `guest-marker` démarre une image publiée par noyau.
+    const signal = configuration?.signal;
+    if (signal?.aborted) {
+      throw new VMError('START_FAILED', `Start canceled for "${os.id}".`, {
+        systemId: os.id,
+      });
+    }
+
+    // A `disk-boot` profile boots a hard disk through BIOS (no Linux kernel):
+    // either a RAW disk from the codebase (e.g. Windows 7) or a locally imported
+    // media. A `guest-marker` profile boots a published image through the kernel.
     const isDiskBoot = launchProfile.readiness?.mode === 'disk-boot';
 
-    // Média importé par l'utilisateur : démarrage BIOS direct. LumiBoot ne
-    // distribue AUCUN média propriétaire : il doit avoir été fourni localement.
+    // Media imported by the user: direct BIOS boot. LumiBoot distributes NO
+    // proprietary media: it must have been provided locally.
     const media = configuration?.media;
     if (os.mediaStrategy === 'user-import' && media === undefined) {
       throw new VMError(
         'MEDIA_REQUIRED',
-        `« ${os.displayName} » nécessite un média disque fourni par l'utilisateur. ` +
-          'Importez une image que vous détenez légalement pour démarrer la session.',
+        `"${os.displayName}" requires a disk media provided by the user. ` +
+          'Import an image you legally own to start the session.',
         { systemId: os.id },
       );
     }
@@ -170,12 +168,12 @@ export class V86Provider implements VMEngine {
     let diskManifest: LocalDiskManifest | null = null;
     if (media === undefined) {
       if (!os.imageRef) {
-        throw new VMError('IMAGE_MISSING', `Aucune image n'est associée à « ${os.id} ».`, {
+        throw new VMError('IMAGE_MISSING', `No image is associated with "${os.id}".`, {
           systemId: os.id,
         });
       }
       if (isDiskBoot) {
-        // Disque RAW local de la codebase : démarré par BIOS via HTTP Range.
+        // Local RAW disk from the codebase: booted by BIOS via HTTP Range.
         diskManifest = await this.#loadDiskManifest(os, signal);
       } else {
         manifest = await this.#loadManifest(os, signal);
@@ -185,7 +183,7 @@ export class V86Provider implements VMEngine {
         if (!disk || !bzimage || !initrd) {
           throw new VMError(
             'IMAGE_MISSING',
-            `Le manifeste « ${manifest.ref} » ne contient pas les fichiers disk/bzimage/initrd requis.`,
+            `Manifest "${manifest.ref}" does not contain the required disk/bzimage/initrd files.`,
             { systemId: os.id },
           );
         }
@@ -205,13 +203,13 @@ export class V86Provider implements VMEngine {
       diskManifest?.vgaMemoryMiB ??
       8;
 
-    // Réseau fixé AVANT la construction de l'émulateur : changer d'interface
-    // réseau exige un redémarrage complet de v86. Chaque session possède son
-    // propre contrôleur (jamais partagé entre sessions).
+    // Network fixed BEFORE building the emulator: changing the network interface
+    // requires a full v86 restart. Each session owns its own controller (never
+    // shared between sessions).
     //
-    // La carte émulée vient du PROFIL MATÉRIEL du catalogue : le provider ne
-    // fait que traduire ce contrat (`network` -> `net_device.type`), jamais de
-    // décision par système.
+    // The emulated card comes from the HARDWARE PROFILE of the catalog: the
+    // provider only translates that contract (`network` -> `net_device.type`),
+    // never a per-system decision.
     const networkProfile = configuration?.network ?? defaultNetworkProfile;
     const networkController = createNetworkController({ profile: networkProfile });
     let netDevice: V86NetworkDevice | undefined;
@@ -232,31 +230,29 @@ export class V86Provider implements VMEngine {
     try {
       mounted = consoleAdapter.attach(mountTarget);
     } catch (error) {
-      // Le montage de console peut défaillir (DOM inattendu) : le contrôleur
-      // réseau ne doit jamais survivre à un échec de démarrage.
+      // Mounting the console can fail (unexpected DOM): the network controller
+      // must never survive a start failure.
       await networkController.dispose().catch(() => undefined);
-      throw new VMError(
-        'START_FAILED',
-        `La console v86 n'a pas pu être montée pour « ${os.id} ».`,
-        { systemId: os.id, cause: error },
-      );
+      throw new VMError('START_FAILED', `The v86 console could not be mounted for "${os.id}".`, {
+        systemId: os.id,
+        cause: error,
+      });
     }
 
     const bootOptions = manifest?.boot ?? {};
     const kernelDisk = manifest?.files['disk'];
     const bzimage = manifest?.files['bzimage'];
     const initrd = manifest?.files['initrd'];
-    // Plans de démarrage réels :
-    // - média importé RAW -> BIOS + disque (`hda`), aucun noyau Linux ;
-    // - média importé ISO -> BIOS + CD-ROM (`cdrom`) + ordre de boot CD d'abord ;
-    // - disque RAW local -> BIOS + disque (`hda`), aucun noyau Linux ;
-    // - image publiée -> boot direct du noyau (`bzimage`/`initrd` + `hda`).
+    // Real boot plans:
+    // - imported RAW media -> BIOS + disk (`hda`), no Linux kernel;
+    // - imported ISO media -> BIOS + CD-ROM (`cdrom`) + CD-first boot order;
+    // - local RAW disk -> BIOS + disk (`hda`), no Linux kernel;
+    // - published image -> direct kernel boot (`bzimage`/`initrd` + `hda`).
     //
-    // Un disque RAW est lu en lecture seule via des requêtes Range (`async`) : la
-    // base n'est jamais réécrite, les écritures invitées restent dans le tampon
-    // mémoire et disparaissent à l'arrêt (aucune persistance revendiquée, voir
-    // docs/windows-7.md). Une ISO est un média optique : elle n'est JAMAIS montée
-    // comme disque dur.
+    // A RAW disk is read-only through Range requests (`async`): the base is
+    // never rewritten, guest writes stay in the memory buffer and disappear on
+    // stop (no persistence claimed, see docs/windows-7.md). An ISO is an optical
+    // media: it is NEVER mounted as a hard disk.
     const bootMedia: V86Options = media
       ? resolveMediaBootOptions(media, launchProfile, configuration, os.id)
       : diskManifest
@@ -283,8 +279,8 @@ export class V86Provider implements VMEngine {
       serial_console: { type: 'textarea', container: mounted.serialTextarea },
       autostart: false,
       ...bootMedia,
-      // ACPI vient du profil matériel (requis par les invités NT modernes).
-      // Une session à média importé OU à disque local en a besoin.
+      // ACPI comes from the hardware profile (required by modern NT guests).
+      // A session with imported media OR a local disk needs it.
       ...(media === undefined && diskManifest === null
         ? {}
         : { acpi: launchProfile.hardwareProfile?.acpi ?? false }),
@@ -297,25 +293,21 @@ export class V86Provider implements VMEngine {
     } catch (error) {
       consoleAdapter.detach();
       await networkController.dispose().catch(() => undefined);
-      throw new VMError(
-        'START_FAILED',
-        `Le moteur v86 n'a pas pu s'initialiser pour « ${os.id} ».`,
-        {
-          systemId: os.id,
-          cause: error,
-        },
-      );
+      throw new VMError('START_FAILED', `The v86 engine could not initialize for "${os.id}".`, {
+        systemId: os.id,
+        cause: error,
+      });
     }
 
     if (signal?.aborted) {
       try {
         await emulator.destroy();
       } catch {
-        /* nettoyage best-effort */
+        /* best-effort cleanup */
       }
       consoleAdapter.detach();
       await networkController.dispose().catch(() => undefined);
-      throw new VMError('START_FAILED', `Démarrage annulé pour « ${os.id} ».`, {
+      throw new VMError('START_FAILED', `Start canceled for "${os.id}".`, {
         systemId: os.id,
       });
     }
@@ -332,20 +324,19 @@ export class V86Provider implements VMEngine {
       });
       instance.wire();
     } catch (error) {
-      // Dernier filet : si le câblage échoue, on détruit l'émulateur et on
-      // libère le contrôleur réseau pour ne laisser aucune ressource orpheline.
+      // Last safety net: if wiring fails, destroy the emulator and release the
+      // network controller so no orphaned resource is left behind.
       try {
         await emulator.destroy();
       } catch {
-        /* nettoyage best-effort */
+        /* best-effort cleanup */
       }
       consoleAdapter.detach();
       await networkController.dispose().catch(() => undefined);
-      throw new VMError(
-        'START_FAILED',
-        `La session v86 n'a pas pu être câblée pour « ${os.id} ».`,
-        { systemId: os.id, cause: error },
-      );
+      throw new VMError('START_FAILED', `The v86 session could not be wired for "${os.id}".`, {
+        systemId: os.id,
+        cause: error,
+      });
     }
     return instance;
   }
@@ -353,7 +344,7 @@ export class V86Provider implements VMEngine {
   async #loadManifest(os: OSDefinition, signal: AbortSignal | undefined): Promise<ImageManifest> {
     const ref = os.imageRef;
     if (!ref) {
-      throw new VMError('IMAGE_MISSING', `Aucune image n'est associée à « ${os.id} ».`, {
+      throw new VMError('IMAGE_MISSING', `No image is associated with "${os.id}".`, {
         systemId: os.id,
       });
     }
@@ -361,7 +352,7 @@ export class V86Provider implements VMEngine {
       return await this.#resolveManifest(ref, signal);
     } catch (error) {
       if (error instanceof VMError) throw error;
-      throw new VMError('IMAGE_MISSING', `Image « ${ref} » indisponible.`, {
+      throw new VMError('IMAGE_MISSING', `Image "${ref}" is unavailable.`, {
         systemId: os.id,
         cause: error,
       });
@@ -374,7 +365,7 @@ export class V86Provider implements VMEngine {
   ): Promise<LocalDiskManifest> {
     const ref = os.imageRef;
     if (!ref) {
-      throw new VMError('IMAGE_MISSING', `Aucun disque n'est associé à « ${os.id} ».`, {
+      throw new VMError('IMAGE_MISSING', `No disk is associated with "${os.id}".`, {
         systemId: os.id,
       });
     }
@@ -382,7 +373,7 @@ export class V86Provider implements VMEngine {
       return await this.#resolveDiskManifest(ref, signal);
     } catch (error) {
       if (error instanceof VMError) throw error;
-      throw new VMError('IMAGE_MISSING', `Disque « ${ref} » indisponible.`, {
+      throw new VMError('IMAGE_MISSING', `Disk "${ref}" is unavailable.`, {
         systemId: os.id,
         cause: error,
       });
@@ -390,7 +381,7 @@ export class V86Provider implements VMEngine {
   }
 }
 
-/** Mémoire par défaut si aucun niveau ne la fournit. */
+/** Default memory when no layer provides it. */
 const DEFAULT_MEMORY_MIB = 512;
 
 interface MemoryHint {
@@ -411,32 +402,32 @@ function resolveMemoryMiB(
 }
 
 /**
- * Valide la mémoire invitée selon les contraintes RÉELLES de v86 0.5.471.
+ * Validates guest memory against the ACTUAL constraints of v86 0.5.471.
  *
- * `create_memory` reçoit la taille en octets et la ramène à un multiple de
- * 128 Kio. Au-delà de 2 Gio (`0x80000000`), l'entier 32 bits déborde et devient
- * négatif ; v86 ne fait PAS confiance à cette valeur et la clampe à
- * `2^31 - 128 Kio` (≈ 2047,875 Mio). La borne haute utile est donc 2048 Mio
- * (2 Gio), que v86 accepte et ramène lui-même en interne. Une valeur
- * strictement supérieure (ex. 4096) serait silencieusement ramenée à ~2 Gio :
- * on la refuse ici plutôt que de promettre une mémoire non tenue. Une puissance
- * de deux n'est PAS requise : 1536 Mio est valide et accepté.
+ * `create_memory` receives the size in bytes and rounds it down to a multiple of
+ * 128 KiB. Above 2 GiB (`0x80000000`), the 32-bit integer overflows and becomes
+ * negative; v86 does NOT trust that value and clamps it to `2^31 - 128 KiB`
+ * (≈ 2047.875 MiB). The useful upper bound is therefore 2048 MiB (2 GiB), which
+ * v86 accepts and reduces itself internally. A strictly greater value (e.g.
+ * 4096) would be silently reduced to ~2 GiB: we reject it here rather than
+ * promise memory that is not honored. A power of two is NOT required: 1536 MiB
+ * is valid and accepted.
  */
 function assertSupportedMemoryMiB(value: number, label: string, systemId: string): void {
   const supported = Number.isInteger(value) && value > 0 && value * MiB <= 0x80000000;
   if (!supported) {
     throw new VMError(
       'START_FAILED',
-      `« ${label} » doit être un entier de Mio <= 2048 (reçu : ${value} MiB).`,
+      `"${label}" must be an integer number of MiB <= 2048 (received: ${value} MiB).`,
       { systemId },
     );
   }
 }
 
 /**
- * Convertit toute défaillance de la couche réseau en `VMError` de démarrage :
- * un profil invalide (`user-relay` sans URL `wss://`, `local-network`) doit faire
- * échouer la session au démarrage, jamais silencieusement.
+ * Converts any network layer failure into a start `VMError`: an invalid profile
+ * (`user-relay` without a `wss://` URL, `local-network`) must fail the session at
+ * start, never silently.
  */
 function toStartFailure(error: unknown, systemId: string): VMError {
   if (isVMError(error)) return error;
@@ -444,25 +435,24 @@ function toStartFailure(error: unknown, systemId: string): VMError {
     return new VMError('START_FAILED', error.message, { systemId, cause: error });
   }
   const message = error instanceof Error ? error.message : String(error);
-  return new VMError('START_FAILED', `Le réseau n'a pas pu être initialisé : ${message}`, {
+  return new VMError('START_FAILED', `The network could not be initialized: ${message}`, {
     systemId,
     cause: error,
   });
 }
 
 /**
- * Traduit un média importé par l'utilisateur en options v86, selon son format :
+ * Translates a media imported by the user into v86 options, depending on its
+ * format:
  *
- * - `raw` : disque dur (`hda`), lu en lecture seule via requêtes Range (`async`).
- * - `iso` : média optique monté en CD-ROM (`cdrom`) avec un ordre de boot
- *   privilégiant le CD.
+ * - `raw`: hard disk (`hda`), read-only through Range requests (`async`).
+ * - `iso`: optical media mounted as CD-ROM (`cdrom`) with a CD-first boot order.
  *
- * L'installation d'un OS sur un disque vierge n'est PAS supportée : LumiBoot ne
- * fournit aucun disque inscriptible persistant et v86 écrit en mémoire (perdu à
- * l'arrêt). Une ISO destinée à l'installation est donc refusée par une
- * `VMError` explicite (`UNSUPPORTED_ENVIRONMENT`) plutôt que de simuler une
- * persistance. Seule une ISO amorçable « live » (profil non `disk-boot` et
- * `bootDevice: 'cdrom'`) est acceptée.
+ * Installing an OS onto a blank disk is NOT supported: LumiBoot provides no
+ * persistent writable disk and v86 writes to memory (lost on stop). An ISO meant
+ * for installation is therefore rejected by an explicit `VMError`
+ * (`UNSUPPORTED_ENVIRONMENT`) rather than simulating persistence. Only a "live"
+ * bootable ISO (non-`disk-boot` profile and `bootDevice: 'cdrom'`) is accepted.
  */
 function resolveMediaBootOptions(
   media: VMMedia,
@@ -479,9 +469,9 @@ function resolveMediaBootOptions(
   if (installsToDisk) {
     throw new VMError(
       'UNSUPPORTED_ENVIRONMENT',
-      'Installation sur disque vierge non supportée : LumiBoot ne monte aucun disque ' +
-        'inscriptible et ne persiste aucune écriture (v86 écrit en mémoire, perdu à l’arrêt). ' +
-        'Fournissez un disque déjà installé au format RAW au lieu d’une ISO d’installation.',
+      'Installation onto a blank disk is not supported: LumiBoot mounts no writable ' +
+        'disk and persists no write (v86 writes to memory, lost on stop). ' +
+        'Provide an already installed RAW disk instead of an installation ISO.',
       { systemId },
     );
   }

@@ -3,13 +3,13 @@ import { Link } from 'react-router-dom';
 export function NotFoundPage() {
   return (
     <main className="not-found">
-      <h1>Page introuvable</h1>
+      <h1>Page not found</h1>
       <p>
-        Cette adresse ne correspond à aucune page de LumiBoot. Revenez à la bibliothèque pour
-        explorer les systèmes disponibles.
+        This address does not match any LumiBoot page. Go back to the library to browse the
+        available systems.
       </p>
       <Link className="btn btn-primary" to="/">
-        Retour à la bibliothèque
+        Back to the library
       </Link>
     </main>
   );

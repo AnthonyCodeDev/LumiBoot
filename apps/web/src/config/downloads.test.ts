@@ -62,7 +62,7 @@ function fetchJson(body: unknown, ok = true): FetchLike {
 }
 
 describe('loadDownloadsManifest', () => {
-  it('charge un manifeste valide depuis l’URL par défaut', async () => {
+  it('loads a valid manifest from the default URL', async () => {
     let seenUrl = '';
     const fetchImpl: FetchLike = (async (url: string) => {
       seenUrl = url;
@@ -78,25 +78,25 @@ describe('loadDownloadsManifest', () => {
     expect(manifest.platforms['windows-x64'].file).toContain('.exe');
   });
 
-  it('rejette un manifeste invalide', async () => {
+  it('rejects an invalid manifest', async () => {
     await expect(loadDownloadsManifest(fetchJson({ version: 1 }))).rejects.toThrow(
-      /Manifeste de téléchargement invalide/,
+      /Invalid downloads manifest/,
     );
   });
 
-  it('rejette une réponse HTTP en échec', async () => {
-    await expect(loadDownloadsManifest(fetchJson(null, false))).rejects.toThrow(/introuvable/);
+  it('rejects a failing HTTP response', async () => {
+    await expect(loadDownloadsManifest(fetchJson(null, false))).rejects.toThrow(/not found/);
   });
 });
 
 describe('resolveDownloadUrl', () => {
-  it('entrée publiée avec URL → url', () => {
+  it('published entry with URL → url', () => {
     expect(resolveDownloadUrl(VALID_MANIFEST, 'windows-x64')).toBe(
       'https://example.com/win-x64.exe',
     );
   });
 
-  it('entrée non publiée → null même avec URL', () => {
+  it('unpublished entry → null even with a URL', () => {
     const manifest: DownloadsManifest = {
       ...VALID_MANIFEST,
       platforms: {
@@ -113,7 +113,7 @@ describe('resolveDownloadUrl', () => {
     expect(resolveDownloadUrl(manifest, 'linux-x64')).toBeNull();
   });
 
-  it('entrée publiée sans URL → null', () => {
+  it('published entry without URL → null', () => {
     const manifest: DownloadsManifest = {
       ...VALID_MANIFEST,
       platforms: {

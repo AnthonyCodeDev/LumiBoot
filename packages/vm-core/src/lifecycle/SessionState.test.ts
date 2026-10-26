@@ -3,11 +3,11 @@ import { SessionStateMachine } from './SessionStateMachine';
 import { VMError } from '../errors/VMError';
 
 describe('SessionStateMachine', () => {
-  it('démarre à idle', () => {
+  it('starts at idle', () => {
     expect(new SessionStateMachine().state).toBe('idle');
   });
 
-  it('autorise le chemin nominal jusqu’à running', () => {
+  it('allows the nominal path up to running', () => {
     const machine = new SessionStateMachine();
     machine.transition('preparing');
     machine.transition('booting');
@@ -15,13 +15,13 @@ describe('SessionStateMachine', () => {
     expect(machine.state).toBe('running');
   });
 
-  it('refuse une transition invalide', () => {
+  it('rejects an invalid transition', () => {
     const machine = new SessionStateMachine();
     expect(machine.canTransition('running')).toBe(false);
     expect(() => machine.transition('running')).toThrow(VMError);
   });
 
-  it('notifie les abonnés et se désabonne', () => {
+  it('notifies subscribers and unsubscribes', () => {
     const machine = new SessionStateMachine();
     const listener = vi.fn();
     const unsubscribe = machine.subscribe(listener);
@@ -32,7 +32,7 @@ describe('SessionStateMachine', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
-  it('réinitialise à idle', () => {
+  it('resets to idle', () => {
     const machine = new SessionStateMachine();
     machine.transition('preparing');
     machine.reset();

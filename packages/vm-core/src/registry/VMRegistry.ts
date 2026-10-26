@@ -11,20 +11,20 @@ import {
 } from '../compatibility/EngineCompatibility';
 
 /**
- * Source de l'environnement d'exécution. Un objet statique suffit pour les
- * tests ; une fonction permet de réévaluer l'appareil à chaque résolution
- * (ex. capacités modifiées par une isolation d'origine croisée tardive).
+ * Runtime environment source. A static object is enough for the tests; a
+ * function allows re-evaluating the device on every resolution (e.g.
+ * capabilities changed by a late cross-origin isolation).
  */
 export type RuntimeEnvironmentProvider = RuntimeEnvironment | (() => RuntimeEnvironment);
 
 /**
- * Sélection déterministe du moteur pour un système donné.
+ * Deterministic engine selection for a given system.
  *
- * L'UI n'appelle jamais un moteur directement : elle passe par `resolve()`,
- * `explain()` ou `start()`. Un moteur n'est retenu que s'il est RÉELLEMENT
- * compatible (prise en charge du système, architecture/CPU servie et prérequis
- * navigateur satisfaits). En l'absence de moteur compatible, le repli honnête
- * (`UnavailableProvider`) est utilisé et `explain()` donne la raison précise.
+ * The UI never calls an engine directly: it goes through `resolve()`,
+ * `explain()` or `start()`. An engine is only selected if it is ACTUALLY
+ * compatible (system support, served architecture/CPU and browser prerequisites
+ * satisfied). When no engine is compatible, the honest fallback
+ * (`UnavailableProvider`) is used and `explain()` gives the precise reason.
  */
 export class VMRegistry {
   readonly #engines: VMEngine[];
@@ -50,24 +50,24 @@ export class VMRegistry {
     return this.#engines;
   }
 
-  /** @deprecated Utiliser `engines`. */
+  /** @deprecated Use `engines`. */
   get providers(): readonly VMEngine[] {
     return this.#engines;
   }
 
   /**
-   * Retourne le premier moteur compatible (architecture/CPU + prérequis
-   * navigateur), ou le repli honnête si aucun ne convient.
+   * Returns the first compatible engine (architecture/CPU + browser
+   * prerequisites), or the honest fallback if none fits.
    */
   resolve(os: OSDefinition): VMEngine {
     return this.#firstCompatible(os) ?? this.#fallback;
   }
 
   /**
-   * Raison précise de compatibilité, directement exploitable par l'UI : liste
-   * vide si un moteur est compatible, sinon les motifs de rejet de chaque
-   * candidat (architecture/CPU, WebAssembly, `canRun`). Sert à expliquer un
-   * repli sans exposer la mécanique interne du registre.
+   * Precise compatibility reason, directly usable by the UI: empty list if an
+   * engine is compatible, otherwise the rejection reasons of every candidate
+   * (architecture/CPU, WebAssembly, `canRun`). Used to explain a fallback
+   * without exposing the internal mechanics of the registry.
    */
   explain(os: OSDefinition): EngineCompatibilityResult {
     const env = this.#readEnvironment();
@@ -82,7 +82,7 @@ export class VMRegistry {
 
     const reasons = results.flatMap(({ result }) => result.reasons);
     if (reasons.length === 0) {
-      return { compatible: false, reasons: ['Aucun moteur de lancement n’est enregistré.'] };
+      return { compatible: false, reasons: ['No launch engine is registered.'] };
     }
     return { compatible: false, reasons };
   }
@@ -96,8 +96,8 @@ export class VMRegistry {
     mountTarget: unknown,
     configuration?: VMConfiguration,
   ): Promise<VMInstance> {
-    // `resolve()` impose déjà architecture/CPU et prérequis navigateur : un
-    // moteur incompatible n'est jamais lancé, même via cet entrypoint.
+    // `resolve()` already enforces architecture/CPU and browser prerequisites:
+    // an incompatible engine is never launched, even through this entrypoint.
     const engine = this.resolve(os);
     return configuration === undefined
       ? engine.start(os, mountTarget)
