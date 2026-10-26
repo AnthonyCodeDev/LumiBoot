@@ -508,6 +508,15 @@ func (h *Handler) writeLoop() {
 // emit queues a packet for the single writer. Never panics: the channel is only
 // closed after every producer has stopped (see shutdown).
 func (h *Handler) emit(ctx context.Context, msg []byte) bool {
+	// Cancellation is checked before queuing: once the session is torn down the
+	// writer is about to stop and the WebSocket is being closed, so a frame
+	// queued here could be written after (or race against) conn.Close. Without
+	// this guard select would pick randomly between two already-ready cases,
+	// making post-cancellation frames non-deterministic (observed as a stray
+	// CLOSE delivered during revocation).
+	if h.ctx.Err() != nil || ctx.Err() != nil {
+		return false
+	}
 	select {
 	case h.send <- msg:
 		return true
