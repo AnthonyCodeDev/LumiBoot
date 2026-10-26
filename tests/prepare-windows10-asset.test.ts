@@ -97,12 +97,23 @@ describe('prepare-windows10-asset.mjs', () => {
     expect(forced.status).toBe(0);
   });
 
-  it('propage --check (vérifie le manifeste existant sans --source)', () => {
+  it('propage --check (vérifie le manifeste existant avec --source)', () => {
     const outDir = join(tempDir, 'out-check');
     expect(run(['--source', source, '--out', outDir, '--json']).status).toBe(0);
-    const result = run(['--out', outDir, '--check']);
+    const result = run(['--out', outDir, '--check', '--source', source]);
     expect(result.status).toBe(0);
     expect(result.stderr).toContain('conforme');
+  });
+
+  it('explique --check sans --source quand le disque est externe', () => {
+    // Un disque hors dépôt n'enregistre aucun chemin : la vérification ne peut
+    // pas le retrouver seule et doit réclamer --source explicitement.
+    const outDir = join(tempDir, 'out-check-external');
+    expect(run(['--source', source, '--out', outDir, '--json']).status).toBe(0);
+    const result = run(['--out', outDir, '--check']);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('HORS du dépôt');
+    expect(result.stderr).toContain('--source');
   });
 
   it('refuse une ISO seule et n’écrit aucun manifeste', () => {

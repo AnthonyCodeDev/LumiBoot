@@ -21,7 +21,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createAssetServer } from './lib/range-server.mjs';
 
@@ -120,6 +120,32 @@ export function toPublicServedManifest(manifest, options = {}) {
   return publicManifest;
 }
 
+/**
+ * Résout le disque à servir : `--source` (cwd), sinon le chemin enregistré dans
+ * le manifeste — RELATIF à la racine du dépôt (jamais au cwd : Vite tourne dans
+ * `apps/web`) —, sinon `images/<ref>/<fileName>` à la racine du dépôt. Un
+ * manifeste issu d'un disque externe n'enregistre aucun chemin : `--source` est
+ * alors obligatoire.
+ *
+ * @param {{ source?: string, manifest: Record<string, any> }} input
+ * @returns {string} chemin absolu du disque
+ */
+export function resolveDiskPath({ source, manifest }) {
+  if (source !== undefined && source.length > 0) return resolve(source);
+  const recorded = manifest.source?.path;
+  if (typeof recorded === 'string' && recorded.length > 0) {
+    return isAbsolute(recorded) ? recorded : resolve(repoRoot, recorded);
+  }
+  const fileName = manifest.disk?.fileName ?? 'disk.img';
+  if (manifest.source?.external === true) {
+    throw new Error(
+      'Ce manifeste vient d’un disque externe : aucun chemin local n’y est enregistré. ' +
+        'Relancez avec --source "<disque>".',
+    );
+  }
+  return join(repoRoot, 'images', String(manifest.ref), fileName);
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const manifestPath = resolve(options.manifest);
@@ -137,7 +163,7 @@ async function main() {
     throw new Error('Manifeste sans « ref » : impossible de construire les routes.');
   }
 
-  const diskPath = resolve(options.source ?? manifest.source?.path ?? '');
+  const diskPath = resolveDiskPath({ source: options.source, manifest });
   if (!existsSync(diskPath)) {
     throw new Error(`Disque introuvable : ${diskPath} (attend ${manifest.disk?.size} octets).`);
   }

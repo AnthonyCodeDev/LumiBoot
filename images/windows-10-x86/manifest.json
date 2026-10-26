@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "ref": "windows-10-x86",
+  "displayName": "Windows 10 x86",
+  "architecture": "i386",
+  "memoryMiB": 2048,
+  "vgaMemoryMiB": 16,
+  "license": "Disque RAW local de la codebase (non distribué)",
+  "provenance": "images/windows-10-x86/disk.img (disque local servi in-place)",
+  "source": {
+    "path": "images/windows-10-x86/disk.img",
+    "size": 42949672960,
+    "mtimeMs": 1792273192903
+  },
+  "disk": {
+    "fileName": "disk.img",
+    "format": "raw",
+    "url": "/images/windows-10-x86/disk.img",
+    "size": 42949672960,
+    "mtimeMs": 1792273192903
+  },
+  "engine": {
+    "id": "v86",
+    "wasm": {
+      "url": "/v86/v86.wasm",
+      "size": 2007347,
+      "sha256": "2fc5609ae837fcbc77147155de6f1014677ecab5369f5584ebc670e9d56e6510"
+    },
+    "bios": {
+      "seabios": {
+        "url": "/v86/seabios.bin",
+        "size": 131072,
+        "sha256": "73e3f359102e3a9982c35fce98eb7cd08f18303ac7f1ba6ebfbe6cdc1c244d98"
+      },
+      "vgabios": {
+        "url": "/v86/vgabios.bin",
+        "size": 36352,
+        "sha256": "a4bc0d80cc3ca028c73dafa8fee396b8d054ce87ebd8abfbd31b06b437607880"
+      }
+    }
+  },
+  "boot": {
+    "mode": "disk-boot",
+    "url": "/images/windows-10-x86/disk.img",
+    "async": true,
+    "size": 42949672960
+  },
+  "notes": [
+    "Disque RAW x86 de l’opérateur (Windows 10, déjà installé), servi in-place (images/windows-10-x86/disk.img) : jamais copié, ignoré par Git, ni distribué.",
+    "Démarré par BIOS sous v86 via HTTP Range (hda.async = true), jamais en cdrom."
+  ]
+}

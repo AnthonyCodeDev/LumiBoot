@@ -19,8 +19,8 @@ import {
  * lecture par HTTP Range (`hda.async`).
  *
  * Deux formes coexistent, volontairement distinctes :
- * - la forme **privée** (fichier du dépôt) peut documenter `source` (chemin réel
- *   de la machine) et `provenance` ;
+ * - la forme **privée** (fichier du dépôt) peut documenter `source` (chemin
+ *   RELATIF au dépôt, ou marqueur `external` sans chemin) et `provenance` ;
  * - la forme **publique** (diffusée par HTTP) INTERDIT ces champs internes :
  *   aucun chemin absolu source ne doit jamais sortir du poste de l'opérateur.
  *
@@ -76,14 +76,25 @@ export const localDiskFileSchema = z
   })
   .strict();
 
-/** Emplacement du fichier source sur la machine locale (jamais distribué). */
+/**
+ * Emplacement du fichier source (jamais distribué). Deux formes exclusives :
+ * - `path` : chemin RELATIF à la racine du dépôt (ex. `images/<ref>/disk.img`).
+ *   Un chemin absolu local n'a aucune valeur sur une autre machine et ne doit
+ *   jamais être publié ; il reste toléré pour d'anciens manifestes locaux.
+ * - `external: true` : disque hors dépôt, dont AUCUN chemin n'est enregistré
+ *   (taille + mtime suffisent à re-détecter le fichier).
+ */
 export const localDiskSourceSchema = z
   .object({
-    path: z.string().min(1),
+    path: z.string().min(1).optional(),
+    external: z.literal(true).optional(),
     size: z.number().int().positive(),
     mtimeMs: z.number().int().nonnegative(),
   })
-  .strict();
+  .strict()
+  .refine((source) => (source.path === undefined) !== (source.external === undefined), {
+    message: 'source : exactement l’un de « path » (relatif au dépôt) ou « external » est attendu',
+  });
 
 /**
  * Paramètres passés à v86 pour une lecture asynchrone par plages. `async: true`

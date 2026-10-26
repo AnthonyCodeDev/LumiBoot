@@ -61,7 +61,7 @@ export const networkDiagnosticsSchema = z.object({
   txBytes: z.number().nonnegative(),
   rxBytes: z.number().nonnegative(),
   lastError: z.object({ code: z.string().min(1), message: z.string().min(1) }).optional(),
-  probes: z.record(networkProbeKindSchema, networkProbeResultSchema).optional(),
+  probes: z.partialRecord(networkProbeKindSchema, networkProbeResultSchema).optional(),
 });
 
 export const sessionEventSchema = z.discriminatedUnion('type', [

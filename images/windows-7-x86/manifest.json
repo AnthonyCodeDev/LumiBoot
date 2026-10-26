@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "ref": "windows-7-x86",
+  "displayName": "Windows 7 x86 (disque local)",
+  "architecture": "i386",
+  "memoryMiB": 1024,
+  "vgaMemoryMiB": 16,
+  "license": "Disque RAW local de la codebase (non distribué)",
+  "provenance": "images/windows-7-x86/disk.img (disque local de la codebase)",
+  "source": {
+    "path": "images/windows-7-x86/disk.img",
+    "size": 17179869184,
+    "mtimeMs": 1792156315793
+  },
+  "disk": {
+    "fileName": "disk.img",
+    "format": "raw",
+    "url": "/images/windows-7-x86/disk.img",
+    "size": 17179869184,
+    "mtimeMs": 1792156315793,
+    "sha256": "967aae93ac019217d340c1de791b702f4af80ec2443ea1f244c4d68123477bc2"
+  },
+  "engine": {
+    "id": "v86",
+    "wasm": {
+      "url": "/v86/v86.wasm",
+      "size": 2007347,
+      "sha256": "2fc5609ae837fcbc77147155de6f1014677ecab5369f5584ebc670e9d56e6510"
+    },
+    "bios": {
+      "seabios": {
+        "url": "/v86/seabios.bin",
+        "size": 131072,
+        "sha256": "73e3f359102e3a9982c35fce98eb7cd08f18303ac7f1ba6ebfbe6cdc1c244d98"
+      },
+      "vgabios": {
+        "url": "/v86/vgabios.bin",
+        "size": 36352,
+        "sha256": "a4bc0d80cc3ca028c73dafa8fee396b8d054ce87ebd8abfbd31b06b437607880"
+      }
+    }
+  },
+  "boot": {
+    "mode": "disk-boot",
+    "url": "/images/windows-7-x86/disk.img",
+    "async": true,
+    "size": 17179869184
+  },
+  "notes": [
+    "Disque local de la codebase (images/windows-7-x86/disk.img) : ignoré par Git, jamais committé ni distribué.",
+    "Démarré par BIOS sous v86 via HTTP Range (hda.async = true), jamais en cdrom."
+  ]
+}
