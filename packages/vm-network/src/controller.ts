@@ -47,7 +47,7 @@ function accumulate(current: number, delta: number): number {
   return Math.min(total, MAX_COUNTER);
 }
 
-/** Transport backend associated with a mode, purely descriptive. */
+/** Purely descriptive. */
 function transportForMode(mode: NetworkMode): NetworkTransportKind {
   switch (mode) {
     case 'browser-fetch':
@@ -122,12 +122,8 @@ class DefaultNetworkController implements NetworkController {
   }
 
   /**
-   * Accepts the configuration and, at best, **configures** the transport.
-   *
-   * A mode with a transport (browser-fetch, user-relay, local-proxy) ends up in
-   * `configured`: the profile is accepted but **nothing proves the connection is
-   * established**. Only the provider can move the state to `connected`/`online`
-   * through `setStatus`, once the transport is really operational.
+   * Only configures the transport: an accepted profile never proves the
+   * connection is established.
    */
   async start(signal?: AbortSignal): Promise<void> {
     if (this.#disposed) return;
@@ -225,11 +221,7 @@ class DefaultNetworkController implements NetworkController {
     this.#notify();
   }
 
-  /**
-   * Records the result of a **real probe** supplied by the provider.
-   * `verified` is **recomputed**: it only becomes true if a `tcp` or `https`
-   * probe is `ok`, never from the mode. Silent no-op after `dispose`.
-   */
+  /** `verified` becomes true only on a successful `tcp` or `https` probe. */
   recordProbe(kind: NetworkProbeKind, result: NetworkProbeResult): void {
     if (this.#disposed) return;
     const stored: NetworkProbeResult = {
@@ -242,10 +234,6 @@ class DefaultNetworkController implements NetworkController {
     this.#notify();
   }
 
-  /**
-   * `verified` reflects a **real proof**: only a successful `tcp` or `https`
-   * probe. `dns`/`http` and the mode itself are not enough.
-   */
   #recomputeVerified(): void {
     const tcp = this.#probes.tcp;
     const https = this.#probes.https;

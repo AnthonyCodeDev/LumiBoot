@@ -14,20 +14,16 @@ import {
   type VerifyTokenResult,
 } from './pairing';
 
-/** Pairing approval watch interval (auto-connect). */
 export const PAIRING_POLL_INTERVAL_MS = 1500;
 
 export interface ProxyStoreState {
-  /**
-   * Real state: `connected` requires a healthy `/health` **and** a successful
-   * authenticated token check (`verifyToken`).
-   */
+  /** `connected` requires a healthy `/health` and a successful `verifyToken`. */
   state: ProxyState;
-  /** `/health` answered (local network proxy reachable). Necessary, not enough. */
+  /** `/health` answered. Necessary, not sufficient. */
   reachable: boolean;
-  /** The token was really validated by the proxy (authenticated check). */
+  /** Token validated by the proxy. */
   authenticated: boolean;
-  /** Session token in memory (runtime source of truth). */
+  /** Session token held in memory. */
   token: string | null;
   pairingId: string | null;
   userCode: string | null;
@@ -37,7 +33,7 @@ export interface ProxyStoreState {
   connect: (pairingId?: string, fetchImpl?: FetchLike) => Promise<void>;
   revoke: (fetchImpl?: FetchLike) => Promise<void>;
   dismissError: () => void;
-  /** Cancels any in-flight pairing watch (e.g. component unmount). */
+  /** Cancels any in-flight pairing watch. */
   cancelPairing: () => void;
 }
 
@@ -55,24 +51,18 @@ function isAbortError(error: unknown): boolean {
   );
 }
 
-/** Active pairing watch interval (at most one at a time). */
+/** Active pairing watch, at most one at a time. */
 let pairingPollTimer: ReturnType<typeof setInterval> | null = null;
 /** Prevents two status polls from overlapping. */
 let pairingPollInFlight = false;
-/**
- * Watch generation: incremented on every cancel/restart. Any response from an
- * outdated generation is ignored (fewer races).
- */
+/** Incremented on every cancel: responses from an old generation are ignored. */
 let pairingPollGeneration = 0;
-/** `AbortController` of the current poll: aborts the in-flight network request. */
+/** Abort controller of the current poll. */
 let pairingPollAbort: AbortController | null = null;
-/** URL the current poll is for (detects URL changes). */
+/** URL the current poll targets. */
 let pairingPollUrl: string | null = null;
 
-/**
- * Stops the pairing watch when active. Idempotent.
- * Invalidates the current generation: responses already in flight are ignored.
- */
+/** Stops the pairing watch when active. Idempotent. */
 function cancelPairingPolling(): void {
   pairingPollGeneration += 1;
   pairingPollInFlight = false;
@@ -91,11 +81,7 @@ function cancelPairingPolling(): void {
   }
 }
 
-/**
- * Exchanges an approved pairing for a token, then **checks** that token
- * authentically before asserting `connected`. `generation` stops a late
- * connection from overwriting a more recent state (revocation, new try…).
- */
+/** Exchanges an approved pairing for a token and verifies it before `connected`. */
 async function completeConnection(
   url: string,
   pairingId: string,
@@ -104,7 +90,7 @@ async function completeConnection(
 ): Promise<void> {
   const { token, expiresAt } = await exchangeToken(url, pairingId, fetchImpl);
   if (generation !== pairingPollGeneration) return;
-  // `/health` first: the proxy must be reachable…
+  // `/health` must answer before the token is trusted.
   const health = await checkProxy(url, fetchImpl);
   if (generation !== pairingPollGeneration) return;
   if (health.state !== 'connected') {
@@ -117,7 +103,7 @@ async function completeConnection(
     });
     return;
   }
-  // …then the token must be really validated (authenticated check).
+  // Then the token must be validated.
   const verification = await verifyToken(url, token, fetchImpl);
   if (generation !== pairingPollGeneration) return;
   if (!verification.ok) {
@@ -145,12 +131,7 @@ async function completeConnection(
   });
 }
 
-/**
- * Watches `getPairingStatus` until approval. Once the local network proxy
- * approves, exchanges the token, verifies it, then switches to `connected` with
- * no click. Stops on `denied`, error, expiry or 404. Only one active poll at a
- * time: any new attempt cancels the previous one.
- */
+/** Watches `getPairingStatus` until approval, then connects without a click. A new attempt cancels the previous one. */
 function beginPairingPolling(url: string, pairingId: string, fetchImpl: FetchLike): void {
   cancelPairingPolling();
   const generation = pairingPollGeneration;
@@ -165,8 +146,7 @@ function beginPairingPolling(url: string, pairingId: string, fetchImpl: FetchLik
         const status = await getPairingStatus(url, pairingId, fetchImpl, controller.signal);
         if (generation !== pairingPollGeneration) return;
         if (status.status === 'approved') {
-          // Freezes the watch without invalidating the generation: the exchange
-          // that follows must be able to complete.
+          // Freezes the watch without invalidating the generation.
           if (pairingPollTimer !== null) {
             clearInterval(pairingPollTimer);
             pairingPollTimer = null;
@@ -203,26 +183,8 @@ function beginPairingPolling(url: string, pairingId: string, fetchImpl: FetchLik
 }
 
 /**
- * Local network proxy store.
- *
- * Honesty guarantee: `connected` is only declared after a real `/health`
- * response (compatible `wispVersion`) **and** an authenticated token check
- * (`verifyToken` → `{ok:true}`). A healthy `/health` without a valid token yields
- * `pairing-required` (proxy reached but not authenticated); a token that is
- * present but refused (`401`/`403`) is cleared, then `pairing-required`.
- * `reachable` and `authenticated` expose these distinct levels without breaking
- * the existing API.
- *
- * Persistence: the session token is kept in `sessionStorage`
- * (`lumiboot.proxy.session`) so it survives a page reload (F5) **in the same
- * tab**, without persisting past its closure. On restore, it is revalidated by
- * `verifyToken` **before** declaring `connected`. Accepted security trade-off:
- * the token is **loopback only**, **bound to the LumiBoot origin**, **TTL-bound**
- * (expiry checked on re-read) and **revocable**; it is **deleted on revocation
- * (disconnect), on expiry or on an authenticated refusal**. The legacy
- * `localStorage` key from an earlier version is purged with no migration.
- * `getProxyRuntimeCredentials()` keeps reading the in-memory token, never the
- * storage, and only returns it when the state is really authenticated.
+ * Local network proxy store: `connected` requires `/health` and `verifyToken`.
+ * The token lives in `sessionStorage` and is revalidated before restore.
  */
 export const useProxyStore = create<ProxyStoreState>((set, get) => ({
   state: 'not-running',
@@ -276,7 +238,7 @@ export const useProxyStore = create<ProxyStoreState>((set, get) => ({
       return;
     }
     if (!verification.ok) {
-      // Token refused (401/403): forget it and go back to pairing.
+      // Token refused: clear it and go back to pairing.
       clearProxySession();
       set({
         token: null,
@@ -400,11 +362,7 @@ export const useProxyStore = create<ProxyStoreState>((set, get) => ({
   },
 }));
 
-/**
- * Runtime token for the session network profile (read from memory). The token is
- * only returned when the state is **really authenticated** (`connected` + token):
- * a healthy `/health` alone is never enough to auto-select `local-proxy`.
- */
+/** Runtime token for the local-proxy profile; null unless `connected` with a token. */
 export function getProxyRuntimeCredentials(): {
   proxyUrl: string;
   proxyToken: string | null;

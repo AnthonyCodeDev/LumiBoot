@@ -10,7 +10,7 @@ function makeSession(state: SessionSnapshot['state']): SessionSnapshot {
   return { id: 'session-test', systemId: system.id, providerId: 'v86', state };
 }
 
-/** Fake container mimicking `.session-console` (with its `textarea.v86-serial`). */
+/** Fake container with an optional `textarea.v86-serial`. */
 function makeConsoleRef(serialText?: string): { current: HTMLDivElement } {
   const container = document.createElement('div');
   if (serialText !== undefined) {

@@ -10,21 +10,12 @@ import {
   type RuntimeEnvironment,
 } from '../compatibility/EngineCompatibility';
 
-/**
- * Runtime environment source. A static object is enough for the tests; a
- * function allows re-evaluating the device on every resolution (e.g.
- * capabilities changed by a late cross-origin isolation).
- */
+/** A function re-reads the device on every resolution. */
 export type RuntimeEnvironmentProvider = RuntimeEnvironment | (() => RuntimeEnvironment);
 
 /**
- * Deterministic engine selection for a given system.
- *
- * The UI never calls an engine directly: it goes through `resolve()`,
- * `explain()` or `start()`. An engine is only selected if it is ACTUALLY
- * compatible (system support, served architecture/CPU and browser prerequisites
- * satisfied). When no engine is compatible, the honest fallback
- * (`UnavailableProvider`) is used and `explain()` gives the precise reason.
+ * An engine is only selected when it is actually compatible; otherwise the
+ * honest `UnavailableProvider` fallback is returned.
  */
 export class VMRegistry {
   readonly #engines: VMEngine[];
@@ -50,25 +41,12 @@ export class VMRegistry {
     return this.#engines;
   }
 
-  /** @deprecated Use `engines`. */
-  get providers(): readonly VMEngine[] {
-    return this.#engines;
-  }
-
-  /**
-   * Returns the first compatible engine (architecture/CPU + browser
-   * prerequisites), or the honest fallback if none fits.
-   */
+  /** First compatible engine, or the fallback. */
   resolve(os: OSDefinition): VMEngine {
     return this.#firstCompatible(os) ?? this.#fallback;
   }
 
-  /**
-   * Precise compatibility reason, directly usable by the UI: empty list if an
-   * engine is compatible, otherwise the rejection reasons of every candidate
-   * (architecture/CPU, WebAssembly, `canRun`). Used to explain a fallback
-   * without exposing the internal mechanics of the registry.
-   */
+  /** Empty `reasons` when compatible, otherwise the rejection reasons. */
   explain(os: OSDefinition): EngineCompatibilityResult {
     const env = this.#readEnvironment();
     const results = this.#engines.map((engine) => ({
@@ -96,8 +74,7 @@ export class VMRegistry {
     mountTarget: unknown,
     configuration?: VMConfiguration,
   ): Promise<VMInstance> {
-    // `resolve()` already enforces architecture/CPU and browser prerequisites:
-    // an incompatible engine is never launched, even through this entrypoint.
+    // `resolve()` enforces compatibility, so no incompatible engine is launched.
     const engine = this.resolve(os);
     return configuration === undefined
       ? engine.start(os, mountTarget)

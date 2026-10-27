@@ -5,10 +5,7 @@ export interface StatusMessage {
   detail?: string;
 }
 
-/**
- * Plain message for non-boot states (stopping, idle).
- * These states show neither a log nor progress.
- */
+/** Message for non-boot states, which show neither logs nor progress. */
 export function statusMessageForSession(session: SessionSnapshot): StatusMessage {
   switch (session.state) {
     case 'stopping':

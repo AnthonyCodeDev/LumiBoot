@@ -1,22 +1,13 @@
 #!/usr/bin/env node
-// Serves LOCALLY (loopback) the disk of a `prepare-*-asset` manifest over HTTP
-// Range, together with the manifest and the v86 engine binaries, from a single
-// origin. Goal: v86 (`hda.async = true`) reads the disk in ranges without ever
-// downloading the whole 32 GiB, with no copy into public/ and without exposing
-// the image publicly.
+// Serves locally, on loopback, the disk of a prepare-*-asset manifest over HTTP
+// Range, with the manifest and the v86 engine binaries from a single origin.
 //
-//   node scripts/serve-windows7-asset.mjs
-//   node scripts/serve-windows7-asset.mjs --manifest images/windows-7-pro-sp1-x86/manifest.json --port 37893
-//   node scripts/serve-windows7-asset.mjs --no-token     # loopback only
+//   node scripts/serve-windows7-asset.mjs --manifest <json> [--source <img>]
+//   node scripts/serve-windows7-asset.mjs --port 37893 [--token <t> | --no-token]
 //
-// SECURITY: by default the server only listens on 127.0.0.1 and requires a token
-// (`?token=…` or the `X-Lumiboot-Token` header). This is NOT a public server: no
-// license check is possible at the HTTP level, so the image would be
-// downloadable by anyone able to reach the port. `--expose` (a non-loopback
-// host) requires explicit consent and is never recommended.
-//
-// The broadcast manifest is the PUBLIC form of the disk manifest: `source` (real
-// path of the machine) and `provenance` (internal) are NEVER served.
+// SECURITY: listens on 127.0.0.1 and requires a token by default; `--expose`
+// widens it to a non-loopback host. The served manifest drops `source` and
+// `provenance`.
 
 import { readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -38,10 +29,7 @@ const DEFAULTS = {
   expose: false,
 };
 
-/**
- * Parses the command-line arguments. Extracted into a function so importing the
- * module (tests) runs neither the parsing nor the server.
- */
+/** Parses the CLI arguments; importing the module never starts the server. */
 export function parseArgs(args) {
   const options = { ...DEFAULTS };
 
@@ -82,7 +70,7 @@ export function parseArgs(args) {
       case '-h':
         process.stdout.write(
           'Usage: node scripts/serve-windows7-asset.mjs [--manifest <json>] [--source <img>]\n' +
-            '       [--host 127.0.0.1] [--port 37893] [--token <token> | --no-token] [--expose]\n',
+            '       [--host 127.0.0.1] [--port 37893] [--token <token> | --no-token] [--expose] [-h]\n',
         );
         process.exit(0);
         break;
@@ -96,17 +84,7 @@ export function parseArgs(args) {
 
 const isLoopback = (host) => host === '127.0.0.1' || host === '::1' || host === 'localhost';
 
-/**
- * Builds the PUBLIC form of the served manifest: drops `source` and
- * `provenance` (internal), then appends the token (`suffix`) to the disk and
- * engine binary URLs so v86 can read them without configuration.
- *
- * The allowed output is built explicitly: no unknown internal field of the
- * private manifest can leak by accident.
- *
- * @param {Record<string, any>} manifest private manifest read from disk
- * @param {{ suffix?: string }} [options] URL suffix (`?token=…` or empty)
- */
+/** Drops `source` and `provenance`, and appends the token suffix to served URLs. */
 export function toPublicServedManifest(manifest, options = {}) {
   const suffix = options.suffix ?? '';
   const ref = manifest.ref;
@@ -135,16 +113,7 @@ export function toPublicServedManifest(manifest, options = {}) {
   return publicManifest;
 }
 
-/**
- * Resolves the disk to serve: `--source` (cwd), otherwise the path recorded in
- * the manifest — RELATIVE to the repository root (never the cwd: Vite runs in
- * `apps/web`) —, otherwise `images/<ref>/<fileName>` at the repository root. A
- * manifest created from an external disk records no path: `--source` is then
- * mandatory.
- *
- * @param {{ source?: string, manifest: Record<string, any> }} input
- * @returns {string} absolute path of the disk
- */
+/** Disk path from `--source`, the recorded path, or `images/<ref>/`; external disks need `--source`. */
 export function resolveDiskPath({ source, manifest }) {
   if (source !== undefined && source.length > 0) return resolve(source);
   const recorded = manifest.source?.path;
@@ -205,8 +174,7 @@ async function main() {
   const diskRoute = `/images/${ref}/${manifest.disk.fileName ?? 'disk.img'}`;
   const manifestRoute = `/images/${ref}/manifest.json`;
 
-  // Served copy of the manifest: public form (no source/provenance) with URLs
-  // carrying the token so v86 reads the disk and binaries without config.
+  // Served manifest carries the token so v86 reads the disk without configuration.
   const servedManifest = toPublicServedManifest(manifest, { suffix });
 
   const routes = {
@@ -214,7 +182,7 @@ async function main() {
     [manifestRoute]: { json: servedManifest, contentType: 'application/json; charset=utf-8' },
   };
 
-  // v86 engine binaries served from the same origin, when they have been prepared.
+  // v86 engine binaries, served from the same origin when prepared.
   const v86Dir = join(repoRoot, 'apps', 'web', 'public', 'v86');
   for (const [name, contentType] of [
     ['v86.wasm', 'application/wasm'],

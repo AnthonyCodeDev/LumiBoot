@@ -60,7 +60,6 @@ func TestParseConnectInvalid(t *testing.T) {
 }
 
 func TestInitialContinueEncoding(t *testing.T) {
-	// The initial CONTINUE (stream 0) required by v86.
 	raw := BuildContinue(0, 32)
 	f, err := DecodeFrame(raw, 64)
 	if err != nil {

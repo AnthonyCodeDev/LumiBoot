@@ -4,11 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { SystemPage } from './SystemPage';
 
-/**
- * The "Internet via your connection" card triggers network probes (fetch
- * `/health`, downloads manifest) unrelated to this test: it is neutralized to
- * isolate the variant selection.
- */
+/** Neutralized: its network probes are unrelated to variant selection. */
 vi.mock('../components/network/NetworkProxyCard', () => ({
   NetworkProxyCard: () => null,
 }));
@@ -32,17 +28,16 @@ function renderSystemPage(slug: string) {
 describe('SystemPage — variant selector', () => {
   it('shows the parent content (Debian) and opens the best variant (XFCE)', async () => {
     const user = userEvent.setup();
-    // The catalogue card now opens the PARENT: the displayed content is the base
-    // one, and the dropdown selects the variant to launch.
+    // The card opens the parent; the dropdown picks the variant to launch.
     renderSystemPage('debian-12-i386');
 
     const trigger = screen.getByRole('button', { name: 'Choose variant' });
-    // The "Variant" label is not visible: only the name is shown.
+    // Only the name is shown, never a "Variant" label.
     expect(trigger.textContent).toBe('Debian XFCE');
     expect(screen.queryByText('Variant')).toBeNull();
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
 
-    // The hero shows the base, NOT the selected variant.
+    // The hero shows the base, not the selected variant.
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Debian');
     expect(screen.getByRole('heading', { level: 1 }).textContent).not.toContain('XFCE');
 
@@ -50,8 +45,7 @@ describe('SystemPage — variant selector', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
 
     const options = screen.getAllByRole('option').map((option) => option.textContent);
-    // Order driven by `variantOrder`: best variant (XFCE) first.
-    // Labels are "base name + specificity".
+    // Order comes from `variantOrder`: the best variant first.
     expect(options).toEqual(['Debian XFCE', 'Debian X11', 'Debian CLI']);
   });
 
@@ -74,7 +68,7 @@ describe('SystemPage — variant selector', () => {
   it('a direct link to a child preselects its variant without changing the content', async () => {
     renderSystemPage('debian-12-i386-desktop');
 
-    // Wait for the `useEffect` to sync the selection onto the child.
+    // Wait for the effect that syncs the selection onto the child.
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Choose variant' }).textContent).toBe('Debian X11');
     });
@@ -98,8 +92,7 @@ describe('SystemPage — variant selector', () => {
 
   it('shows the Windows 7 parent selector, Professional as the default variant', async () => {
     const user = userEvent.setup();
-    // The Windows 7 catalogue card opens the neutral PARENT; Professional is the
-    // best variant (variantOrder 1), so it is preselected.
+    // Professional is the best variant of the group, so it is preselected.
     renderSystemPage('windows-7-x86');
 
     const trigger = screen.getByRole('button', { name: 'Choose variant' });
@@ -119,7 +112,7 @@ describe('SystemPage — variant selector', () => {
     const user = userEvent.setup();
     renderSystemPage('debian-12-i386');
 
-    // Debian XFCE (default variant): 1024 MiB, virtio, disk boot.
+    // Debian XFCE defaults: 1024 MiB, virtio, disk boot.
     expect(screen.getByText('v86 / WebAssembly')).toBeTruthy();
     expect(screen.getByText('1024 MiB')).toBeTruthy();
     expect(screen.getByText('VirtIO')).toBeTruthy();

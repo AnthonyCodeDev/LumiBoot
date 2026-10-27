@@ -1,7 +1,5 @@
-// Package console provides an interactive console to drive the local network
-// proxy from the terminal: display pairing requests (approve/deny), active
-// sessions and revocation. No HTTP access is needed; the web administration
-// page has been removed.
+// Package console provides a terminal console to approve pairings, list sessions
+// and revoke them.
 package console
 
 import (
@@ -17,8 +15,7 @@ import (
 	"github.com/lumiboot/network-proxy/internal/auth"
 )
 
-// Controller is the minimal abstraction the console needs to drive pairing and
-// sessions. *auth.Authenticator satisfies it directly.
+// Controller is the minimal abstraction the console needs.
 type Controller interface {
 	PendingPairings() []auth.Pairing
 	ListSessions() []auth.SessionInfo
@@ -27,8 +24,6 @@ type Controller interface {
 }
 
 // Console drives pairing from a textual input/output stream.
-// The interactive loop (Run) executes in a single goroutine; writes are
-// protected by a mutex.
 type Console struct {
 	ctrl Controller
 	in   io.Reader
@@ -57,9 +52,7 @@ func New(ctrl Controller, in io.Reader, out io.Writer) *Console {
 	}
 }
 
-// Run executes the interactive loop until `quit`/`exit`, end of input (EOF) or
-// context cancellation. The reader goroutine handles EOF without blocking
-// (non-interactive input / pipe).
+// Run runs the interactive loop until quit, end of input or cancellation.
 func (c *Console) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -89,7 +82,6 @@ func (c *Console) Run(ctx context.Context) error {
 	}
 }
 
-// readLines reads stdin line by line and pushes into lines; closes lines on EOF.
 func (c *Console) readLines(ctx context.Context, lines chan<- string) {
 	defer close(lines)
 	sc := bufio.NewScanner(c.in)
@@ -103,13 +95,11 @@ func (c *Console) readLines(ctx context.Context, lines chan<- string) {
 	}
 }
 
-// poll queries the controller: announces new requests and sessions, then shows
-// the decision prompt for the next request.
+// poll announces new requests and sessions, then prompts for the next one.
 func (c *Console) poll() {
 	pending := c.ctrl.PendingPairings()
 	sessions := c.ctrl.ListSessions()
 
-	// New pairing requests (never announced twice).
 	for _, p := range pending {
 		if _, ok := c.seenPairings[p.ID]; ok {
 			continue
@@ -118,8 +108,7 @@ func (c *Console) poll() {
 		c.queue = append(c.queue, p)
 	}
 
-	// New sessions (sessions already present at startup are remembered without
-	// an individual announcement).
+	// Sessions present at startup are remembered without an announcement.
 	var fresh []auth.SessionInfo
 	if !c.sessionsSeeded {
 		c.sessionsSeeded = true
@@ -141,7 +130,6 @@ func (c *Console) poll() {
 	c.promptNext()
 }
 
-// promptNext shows the decision prompt for the next request.
 func (c *Console) promptNext() {
 	if c.awaiting != nil || len(c.queue) == 0 {
 		return
@@ -153,9 +141,7 @@ func (c *Console) promptNext() {
 	c.write("Approve? [y/N] ")
 }
 
-// handleLine processes an entered line. If a pairing decision is pending, the
-// line is interpreted as the answer (y/yes/o/oui = approve, anything else =
-// deny). Returns true to request shutdown.
+// handleLine answers a pending pairing, then interprets the line as a command.
 func (c *Console) handleLine(line string) (quit bool) {
 	line = strings.TrimSpace(line)
 	if c.awaiting != nil {
@@ -175,7 +161,6 @@ func (c *Console) handleLine(line string) (quit bool) {
 	return c.handleCommand(line)
 }
 
-// handleCommand executes a textual command.
 func (c *Console) handleCommand(line string) (quit bool) {
 	if line == "" {
 		return false
@@ -201,7 +186,6 @@ func (c *Console) handleCommand(line string) (quit bool) {
 	return false
 }
 
-// decide approves or denies a request identified by ID or user code.
 func (c *Console) decide(arg string, approve bool) {
 	if arg == "" {
 		c.write("Usage: approve|deny <id|code>.\n")
@@ -224,7 +208,6 @@ func (c *Console) decide(arg string, approve bool) {
 	}
 }
 
-// revoke revokes a session by ID (or unique prefix), or all of them.
 func (c *Console) revoke(arg string) {
 	if arg == "" {
 		c.write("Usage: revoke <id|all>.\n")
@@ -344,8 +327,7 @@ func (c *Console) printf(format string, args ...any) {
 	c.write(fmt.Sprintf(format, args...))
 }
 
-// parseCommand splits a line into a command (lowercase) and an optional
-// argument.
+// parseCommand splits a line into a lowercase command and its argument.
 func parseCommand(line string) (cmd, arg string) {
 	line = strings.TrimSpace(line)
 	if line == "" {

@@ -2,8 +2,9 @@
   "name": "@lumiboot/vm-core",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
-  "description": "VMProvider contract, engine registry and session state machine",
+  "description": "VMEngine contract, engine registry and session lifecycle",
   "exports": {
     ".": {
       "types": "./src/index.ts",

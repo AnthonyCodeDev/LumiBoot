@@ -33,11 +33,7 @@ export function SessionToolbar({
 }: SessionToolbarProps) {
   const launchProfile = getPrimaryLaunchProfile(system);
   const canStop = STOPPABLE.includes(session.state);
-  // Network mode **actually used when the session booted** (recorded by the
-  // store on `boot`, e.g. `local-proxy` through automatic selection), not the
-  // configured mode. Falls back to the configured mode when the session is not
-  // registered yet, then stays silent outside a loaded runtime (unit tests):
-  // no crash.
+  // Mode recorded at boot, falling back to the configured mode when unknown.
   const effectiveMode = useSessionsStore((s) => s.networkModes[session.id]);
   let networkMode: string | null = null;
   try {

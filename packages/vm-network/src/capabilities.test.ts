@@ -23,7 +23,7 @@ describe('capabilitiesForMode', () => {
   it('browser-fetch: HTTP only (HTTPS unsupported), cors true, udp/icmp false, fullInternet false', () => {
     expect(BROWSER_FETCH_CAPABILITIES.transport.kind).toBe('fetch');
     expect(BROWSER_FETCH_CAPABILITIES.transport.http).toBe(true);
-    // v86 0.5.471 only registers TCP for port 80: HTTPS (443) fails.
+    // The fetch backend only carries HTTP port 80, so HTTPS fails.
     expect(BROWSER_FETCH_CAPABILITIES.transport.https).toBe(false);
     expect(BROWSER_FETCH_CAPABILITIES.transport.cors).toBe(true);
     expect(BROWSER_FETCH_CAPABILITIES.guestStack.dhcp).toBe(true);

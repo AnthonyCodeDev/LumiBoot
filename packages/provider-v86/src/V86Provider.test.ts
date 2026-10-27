@@ -6,9 +6,8 @@ import { V86Provider } from './V86Provider';
 import type { V86ConsoleAdapter } from './console-adapter';
 
 /**
- * Captures the network controllers actually created by the provider and spies on
- * their `dispose()`, without altering behavior (the real controller is called).
- * Used to prove that no failure path leaks a controller.
+ * Captures the controllers created by the provider to prove no failure path
+ * leaks one.
  */
 const { createdControllers } = vi.hoisted(() => ({
   createdControllers: [] as Array<import('@lumiboot/vm-network').NetworkController>,
@@ -312,20 +311,15 @@ describe('V86Provider', () => {
       network: { mode: 'user-relay', relayUrl: 'wss://127.0.0.1:9/' },
     });
 
-    // The translation to v86 stays correct: a real TLS WISP relay is targeted.
+    // A real TLS WISP relay is targeted.
     expect(captured[0]?.net_device).toEqual({ relay_url: 'wisps://127.0.0.1:9/', type: 'virtio' });
 
-    // Unreachability is observed at runtime by v86, never during `start()`: the
-    // controller stays "configured" (never "error"), so a dead relay does not
-    // prevent the emulator from starting.
+    // A dead relay is only observed at runtime, so the controller stays configured.
     const controller = createdControllers[0];
     expect(controller?.snapshot().status).toBe('configured');
     expect(controller?.snapshot().status).not.toBe('error');
 
-    // Stopping then releasing stays possible and idempotent: no blocking
-    // resource survives the unreachable relay. The detach of the v86 listeners
-    // (eth-transmit-end/eth-receive-end/net0-send) is covered by
-    // `v86-instance.test.ts`.
+    // Stopping stays possible and idempotent.
     await instance.stop();
     await instance.dispose();
     await instance.dispose();
@@ -396,8 +390,7 @@ describe('V86Provider', () => {
     expect(controller?.snapshot().verified).toBe(false);
     expect(controller?.snapshot().status).not.toBe('connected');
     expect(controller?.snapshot().status).not.toBe('online');
-    // The provider never calls `setStatus('connected'|'online')`: no fake
-    // "connected" on `emulator-ready`, DHCP or a mere socket open.
+    // The provider never reports a connection without proof.
     expect(controller?.dispose).not.toHaveBeenCalled();
   });
 
@@ -411,8 +404,7 @@ describe('V86Provider', () => {
   it('does not advertise snapshots (absent from VMInstance)', () => {
     const { provider } = setup();
     const capabilities = provider.capabilities();
-    // `VMInstance` exposes no snapshot entry point: never promise RAM/disk to
-    // the UI.
+    // `VMInstance` exposes no snapshot entry point.
     expect(capabilities.ramSnapshots).toBe(false);
     expect(capabilities.diskSnapshots).toBe(false);
     expect(capabilities.partialDownload).toBe(true);
@@ -463,7 +455,7 @@ describe('V86Provider: imported media (Windows 7)', () => {
     expect(options?.bzimage).toBeUndefined();
     expect(options?.initrd).toBeUndefined();
     expect(options?.cmdline).toBeUndefined();
-    // ACPI enabled by the hardware profile (required by the Vista+ family).
+    // ACPI enabled by the hardware profile; required by the Vista+ family.
     expect(options?.acpi).toBe(true);
     expect(options?.memory_size).toBe(1536 * MiB);
   });
@@ -494,7 +486,7 @@ describe('V86Provider: imported media (Windows 7)', () => {
     });
     // An ISO is never mounted as a hard disk.
     expect(options?.hda).toBeUndefined();
-    // Boot order: CD first (CD_HARDDISK_FLOPPY = 0x123).
+    // Boot order: CD first, `0x123`.
     expect(options?.boot_order).toBe(0x123);
   });
 
@@ -560,7 +552,7 @@ describe('V86Provider: bundled local RAW disk (Windows 7)', () => {
     expect(options?.bzimage).toBeUndefined();
     expect(options?.initrd).toBeUndefined();
     expect(options?.cmdline).toBeUndefined();
-    // ACPI enabled by the hardware profile (required by the Vista+ family).
+    // ACPI enabled by the hardware profile; required by the Vista+ family.
     expect(options?.acpi).toBe(true);
     expect(options?.memory_size).toBe(1536 * MiB);
   });
@@ -634,14 +626,14 @@ describe('V86Provider: bundled local RAW disk (Windows 10 x86)', () => {
     await provider.start(makeWin10DiskBootOS(), document.createElement('div'));
 
     const options = captured[0];
-    // RAW disk read through HTTP Range (`async`), 2048 MiB memory.
+    // RAW disk read through HTTP Range, 2048 MiB memory.
     expect(options?.hda).toMatchObject({
       url: '/images/windows-10-x86/disk.img',
       async: true,
       size: 20_000_000_000,
     });
     expect(options?.memory_size).toBe(2048 * MiB);
-    // ACPI enabled by the hardware profile (NT Vista+ guests).
+    // ACPI enabled by the hardware profile for NT guests.
     expect(options?.acpi).toBe(true);
     // BIOS disk boot: no Linux kernel, never a CD-ROM/ISO.
     expect(options?.bzimage).toBeUndefined();

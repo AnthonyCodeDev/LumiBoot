@@ -1,0 +1,46 @@
+name: Feature request
+description: Propose an improvement to LumiBoot
+title: '[Feature]: '
+labels: ['enhancement']
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is missing or painful today, and for whom.
+      placeholder: 'As a user running ..., I cannot ...'
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: The behaviour you expect, described from the user's point of view.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds, other engines or approaches, and why they fall short.
+    validations:
+      required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - UI
+        - Provider v86
+        - Catalog
+        - Network
+        - Documentation
+    validations:
+      required: true
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to open a pull request for this.
+          required: false

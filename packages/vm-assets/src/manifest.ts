@@ -8,10 +8,7 @@ export interface ImageFileRef {
   version?: string;
 }
 
-/**
- * Optional boot parameters specific to an image. They allow varying the engine
- * binary paths and the kernel command line without modifying the provider code.
- */
+/** Varies engine binary paths and the kernel command line per image. */
 export interface ImageBootOptions {
   cmdline?: string;
   wasmPath?: string;

@@ -38,7 +38,7 @@ export const executionLabels: Record<ExecutionMode, string> = {
   browser: 'In the browser',
 };
 
-/** Labels for the emulated boot media (a profile's `bootDevice`). */
+/** Labels for the emulated boot media. */
 export const bootDeviceLabels: Record<string, string> = {
   disk: 'Disk (hda)',
   cdrom: 'CD-ROM',

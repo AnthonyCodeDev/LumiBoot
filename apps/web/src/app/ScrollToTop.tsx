@@ -1,10 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
-/**
- * Scrolls the window back to the top on every route change (client navigation).
- * Forces an instant jump despite the global `scroll-behavior: smooth`.
- */
+/** Scrolls to top on route change, bypassing the global `scroll-behavior: smooth`. */
 export function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => {

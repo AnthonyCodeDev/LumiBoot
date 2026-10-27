@@ -26,7 +26,7 @@ import {
 } from '../lib/labels';
 import { NotFoundPage } from './NotFoundPage';
 
-/** Human-readable size; local mirror of the store formatting (not exported). */
+/** Human-readable size. */
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
@@ -39,11 +39,9 @@ export function SystemPage() {
   const system = slug ? getSystemBySlug(slug) : null;
   const createSession = useSessionsStore((state) => state.create);
   const navigate = useNavigate();
-  // ID of the variant TO LAUNCH (purely local state: it drives neither the URL nor
-  // the displayed content, which always stays the base/parent one).
+  // Variant to launch; the page content stays the base one.
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Imported media (persisted store: browser IndexedDB, in-memory fallback).
   const mediaRecords = useUserMediaStore((state) => state.records);
   const mediaLoading = useUserMediaStore((state) => state.loading);
   const mediaImporting = useUserMediaStore((state) => state.importing);
@@ -56,16 +54,13 @@ export function SystemPage() {
   const [mediaManifest, setMediaManifest] = useState<File | null>(null);
   const [licenseAcknowledged, setLicenseAcknowledged] = useState(false);
 
-  // Runtime availability (manifest + HTTP Range disk) of the variant to launch.
+  // Runtime availability of the variant to launch.
   type RuntimeState =
     { status: 'checking' } | { status: 'available' } | { status: 'unavailable'; reason: string };
   const [runtime, setRuntime] = useState<RuntimeState | null>(null);
 
-  // Sync the selection when the resolved system changes:
-  // - parent (or standalone system) → best variant by default;
-  // - direct link to a child → that child.
-  // `system` comes from the catalogue: its reference is stable as long as the
-  // slug does not change (no render loop).
+  // Sync the selection when the resolved system changes: parent selects its best
+  // variant, a direct link to a child selects that child.
   useEffect(() => {
     if (!system) {
       setSelectedId(null);
@@ -75,18 +70,15 @@ export function SystemPage() {
     setSelectedId(system.id === parent.id ? getDefaultVariant(parent).id : system.id);
   }, [system]);
 
-  // Restore after refresh: reload persisted media once on mount (the store is a
-  // singleton and `load` is stable).
+  // Reload persisted media once on mount.
   useEffect(() => {
     void loadMedia();
   }, [loadMedia]);
 
-  // Displayed content: ALWAYS the parent/base one ("base Debian"), whatever
-  // variant is picked in the dropdown.
+  // Displayed content is always the base variant, whatever is picked.
   const base = system ? getVariantParent(system) : null;
   const variants = base ? getVariantGroup(base) : [];
-  // Variant to launch: the local selection, or the best variant by default
-  // (covers the first render, before the `useEffect` runs).
+  // Falls back to the default variant on the first render, before the effect runs.
   const selected = base
     ? (variants.find((variant) => variant.id === selectedId) ?? getDefaultVariant(base))
     : null;
@@ -95,13 +87,12 @@ export function SystemPage() {
   const userMediaReady = mediaRecord !== undefined;
   const isUserImport = selected?.mediaStrategy === 'user-import';
 
-  // Declared readiness (catalogue, engine, architecture, memory, imported media).
+  // Declared readiness: catalogue, engine, architecture, memory and imported media.
   const declaredReadiness = selected
     ? getLaunchReadiness(selected, { userMediaReady })
     : { canLaunch: false };
 
-  // Checks that the media is really servable (JSON manifest + HTTP Range disk)
-  // whenever the variant changes and the declared conditions are met.
+  // Re-check runtime availability when the variant changes.
   useEffect(() => {
     if (!selected || !declaredReadiness.canLaunch) {
       setRuntime(null);
@@ -140,16 +131,13 @@ export function SystemPage() {
     '--accent': base.accent,
     '--accent-rgb': base.accentRgb,
   } as CSSProperties;
-  // Main profile of the variant TO LAUNCH: the spec table reflects the selection
-  // (memory, network…), not the displayed parent.
+  // Spec table reflects the variant to launch, not the displayed parent.
   const profile = getPrimaryLaunchProfile(selected);
   const memoryMiB = profile.configuration?.memoryMiB ?? selected.minMemoryMiB;
   const bootDevice = profile.configuration?.bootDevice;
   const network = profile.hardwareProfile?.network;
 
-  // The button is only enabled when the catalogue allows the launch AND the media
-  // is really available at runtime. Any unavailability yields an EXPLICIT reason
-  // (404, SPA HTML fallback, missing Range, architecture…).
+  // Launch requires both the declared readiness and a runtime availability check.
   const readiness: LaunchReadiness = !declaredReadiness.canLaunch
     ? declaredReadiness
     : runtime?.status === 'available'
@@ -166,7 +154,7 @@ export function SystemPage() {
       setMediaManifest(null);
       setLicenseAcknowledged(false);
     } catch {
-      // The error is already exposed by the store (`mediaError`): no duplicate.
+      // The store already exposes the error through `mediaError`.
     }
   }
 
@@ -307,15 +295,13 @@ export function SystemPage() {
                 variants={variants.map((variant) => ({
                   id: variant.id,
                   slug: variant.slug,
-                  // Label "base name + specificity" (e.g. "Debian XFCE").
                   name: variant.variantName
                     ? `${base.displayName} ${variant.variantName}`
                     : variant.displayName,
                 }))}
                 value={selected.id}
                 onSelect={(variantSlug) => {
-                  // The dropdown only picks the variant to launch: no navigation,
-                  // the page content stays the base one.
+                  // Only the variant to launch changes; no navigation.
                   const next = variants.find((variant) => variant.slug === variantSlug);
                   if (next) setSelectedId(next.id);
                 }}

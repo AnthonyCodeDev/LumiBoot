@@ -1,34 +1,14 @@
 #!/usr/bin/env node
-// Builds the manifest of a system disk supplied LOCALLY (e.g. Windows 7
-// Professional SP1 x86) so it can be streamed to v86 over HTTP Range, without
-// ever copying it into public/ or committing it.
+// Builds the manifest of a system disk supplied locally so it can be streamed to
+// v86 over HTTP Range.
 //
-//   node scripts/prepare-windows7-asset.mjs
-//   node scripts/prepare-windows7-asset.mjs --source D:\media\winxp.img \
-//       --ref windows-xp-x86 --display-name "Windows XP x86" --architecture i386
-//   node scripts/prepare-windows7-asset.mjs --check
-//   node scripts/prepare-windows7-asset.mjs --skip-hash   # documents method+size+mtime
+//   node scripts/prepare-windows7-asset.mjs --source <disk> [--ref <ref>]
+//   node scripts/prepare-windows7-asset.mjs --check [--source <disk>]
+//   node scripts/prepare-windows7-asset.mjs --source <disk> --skip-hash
 //
-// The disk is served IN PLACE: the manifest records `source.path` RELATIVE to the
-// repository root (e.g. `images/windows-7-x86/disk.img`, `/` separators) and
-// copies NOTHING into the repository. A disk OUTSIDE the repository (e.g.
-// `--source D:\media\x.img`) records NO path: `source` becomes
-// `{ external: true, size, mtimeMs }`. A local absolute path (drive letter plus
-// home directory) is meaningless on another machine and must never be published;
-// `--check` then explicitly requires `--source`.
-//
-// Guarantees:
-//   - the source file is opened READ-ONLY and is NEVER modified, truncated or
-//     overwritten (no write ever targets that path);
-//   - the optional copy (`--copy-to`) is refused when it would target the source
-//     itself or a `public/` directory, and is only written once the streamed
-//     SHA-256 has been verified;
-//   - the SHA-256 is computed in streaming mode (8 MiB per chunk), never by
-//     loading the whole 32 GiB into memory;
-//   - the default output `images/<ref>/` is ignored by Git.
-//
-// The produced manifest is validated by `parseLocalDiskManifest` (tests
-// `packages/vm-assets/src/local-disk.test.ts` and `tests/prepare-windows7-asset.test.ts`).
+// Reads the source disk and scripts/v86-assets.lock.json; writes manifest.json and
+// provenance.txt in the output directory. The source is opened read-only and the
+// disk is served in place, never copied into the repository.
 
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
@@ -50,8 +30,7 @@ const DEFAULTS = {
   ref: 'windows-7-pro-sp1-x86',
   displayName: 'Windows 7 Professionnel SP1 x86',
   architecture: 'i386',
-  // Windows 7 (Vista+) needs at least 512 MiB; 1536 MiB is what the guest
-  // installed under QEMU requires and v86 accepts (rounded up to 128 KiB).
+  // Windows 7 needs 1536 MiB in the installed guest; v86 rounds it to 128 KiB.
   memoryMiB: 1536,
   vgaMiB: 16,
   license: 'Local RAW disk from the codebase (not distributed)',
@@ -82,10 +61,8 @@ function parseArgs(argv) {
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    // Ergonomic tolerance: a lone `--`, injected by `pnpm <script> -- <opts>`,
-    // is skipped like a standard argument parser would (never treated as an
-    // unknown option). It can still be the explicit VALUE of an option that
-    // takes one (e.g. `--note --`) through `value()`; that case is unchanged.
+    // A lone `--` injected by `pnpm <script> -- <opts>` is skipped, never treated
+    // as an unknown option, but still accepted as the value of a `--note`.
     if (arg === '--') continue;
     const [name, inline] =
       arg.startsWith('--') && arg.includes('=')
@@ -161,8 +138,7 @@ function parseArgs(argv) {
         throw new Error(`Unknown option: ${name}`);
     }
   }
-  // `--note` (repeatable) replaces the default notes; without the option, the
-  // Windows 7 notes from `DEFAULTS` are kept (historical behavior unchanged).
+  // `--note` replaces the default notes when provided.
   if (notes !== undefined) options.notes = notes;
   return { options, flags, copyTo, outDir };
 }
@@ -170,14 +146,14 @@ function parseArgs(argv) {
 function usage() {
   return `Usage: node scripts/prepare-windows7-asset.mjs [options]
 
-  --source <path>         Source disk image (default:
+  --source <path>         Source disk image (default: $WINDOWS7_IMG, otherwise
                           images/windows-7-pro-sp1-x86/disk.img at the repository
-                          root, or WINDOWS7_IMG / --source to override it).
+                          root).
                           A relative path is resolved from the current directory;
                           a disk outside the repository records no local path.
   --ref <ref>             Reference (lowercase/hyphens), e.g. windows-7-pro-sp1-x86
   --display-name <name>   Human-readable label
-  --architecture <arch>   i386 (default), x86_64, …
+  --architecture <arch>   i386 (default) | x86 | x86_64 | arm | arm64 | powerpc | m68k
   --memory-mib <n>        Recommended guest memory (default 1536)
   --vga-mib <n>           VGA memory (default 16)
   --license <text>        License reminder
@@ -194,6 +170,7 @@ function usage() {
                           requires --source for an external disk)
   --json                  Print the manifest on stdout (logs on stderr)
   --force                 Allow overwriting the existing manifest
+  -h, --help              Show this help
 
 Recorded paths: the manifest NEVER contains an absolute path. A disk inside the
 repository is recorded relatively (e.g. images/<ref>/disk.img); an external disk
@@ -205,16 +182,7 @@ function log(message) {
   process.stderr.write(`${message}\n`);
 }
 
-/**
- * Converts a path to a path RELATIVE to the repository root, with `/` separators
- * (e.g. `images/windows-7-x86/disk.img`). Returns `null` when the file lives
- * outside the repository: an absolute path tied to the operator's machine must
- * never enter the manifest nor `provenance.txt` (it would be useless elsewhere,
- * and the repository must not publish any local path).
- *
- * @param {string} filePath absolute path, or path relative to the cwd
- * @returns {string | null} path relative to the repository root, or null
- */
+/** Path relative to the repository root with `/` separators, or null when outside it. */
 function toRepoRelativePath(filePath) {
   const absolute = resolve(filePath);
   const rel = relative(repoRoot, absolute);
@@ -222,19 +190,12 @@ function toRepoRelativePath(filePath) {
   return rel.split(sep).join('/');
 }
 
-/**
- * Resolves a path RECORDED in a manifest. A relative path is always relative to
- * the REPOSITORY ROOT (never to the cwd: Vite and pnpm run from `apps/web` or a
- * subdirectory); an absolute path inherited from an older manifest is used as is.
- *
- * @param {string} recordedPath path recorded in `source.path`
- * @returns {string} absolute path
- */
+/** A recorded relative path is always resolved from the repository root, never the cwd. */
 function resolveRecordedPath(recordedPath) {
   return isAbsolute(recordedPath) ? recordedPath : resolve(repoRoot, recordedPath);
 }
 
-/** Rejects any target inside a `public/` directory (Vite bundle). */
+/** Rejects any target inside a `public/` directory. */
 function assertNotPublic(path, label) {
   const normalized = resolve(path).toLowerCase().split('\\').join('/');
   if (normalized.includes('/public/')) {
@@ -252,10 +213,7 @@ function detectFormat(sourcePath, explicit) {
   return format;
 }
 
-/**
- * Computes the SHA-256 in streaming mode. The file is opened read-only.
- * `onProgress(read, total)` is called for every chunk.
- */
+/** Streams the SHA-256 of a read-only file, calling `onProgress` per chunk. */
 async function sha256File(filePath, { onProgress, timeoutMs } = {}) {
   const hash = createHash('sha256');
   const controller = new AbortController();
@@ -355,10 +313,8 @@ async function main() {
   const outputDir = resolve(outDir ?? join(repoRoot, 'images', options.ref));
   const manifestPath = join(outputDir, 'manifest.json');
 
-  // On a check without an explicit --source, follow the path recorded in the
-  // manifest (RELATIVE to the repository root, or absolute when inherited from
-  // an older manifest). A manifest created from an EXTERNAL disk records no
-  // path: --source must then be provided explicitly.
+  // Without an explicit --source, --check follows the path recorded in the manifest;
+  // a disk outside the repository requires --source.
   let sourcePath = resolve(options.source);
   if (flags.check && !flags.sourceProvided) {
     const recorded = await readExistingManifest(outputDir);
@@ -384,7 +340,6 @@ async function main() {
   }
   const format = detectFormat(sourcePath, options.format);
 
-  // ---- Check mode --------------------------------------------------------
   if (flags.check) {
     const existing = await readExistingManifest(outputDir);
     if (!existing) throw new Error(`No manifest to check in ${outputDir}.`);
@@ -421,7 +376,6 @@ async function main() {
     return 0;
   }
 
-  // ---- Generation mode ---------------------------------------------------
   assertNotPublic(outputDir, 'the output directory');
   if (copyTo !== undefined) assertNotPublic(copyTo, 'the disk copy');
 
@@ -468,7 +422,7 @@ async function main() {
     }
   }
 
-  // Optional verified copy (never required for v86: the RAW disk is read directly).
+  // Verified copy of the source; v86 reads the RAW disk directly.
   if (copyTo !== undefined) {
     if (sha256 === undefined) {
       throw new Error('--copy-to requires the SHA-256 (drop --skip-hash) to verify the copy.');
@@ -490,9 +444,7 @@ async function main() {
   const diskUrl = `/images/${options.ref}/${options.servedName}`;
   const diskMtimeMs = Math.trunc(sourceInfo.mtimeMs);
 
-  // No absolute path is ever written: a path relative to the repository root when
-  // the disk lives there, otherwise a plain "external" marker (size + mtime are
-  // enough to re-detect the file without publishing the operator's tree).
+  // Never write an absolute path: an external disk records only size and mtime.
   const sourceRelative = toRepoRelativePath(hashSource);
   const source =
     sourceRelative === null

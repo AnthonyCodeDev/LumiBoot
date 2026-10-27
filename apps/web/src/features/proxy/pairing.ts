@@ -1,19 +1,9 @@
 import type { FetchLike } from '../../config/load-config';
 
 /**
- * Web ↔ local network proxy pairing.
- *
- * Routes actually used (see
- * `apps/network-proxy/internal/server/server.go` + `README.md`):
- * - `POST /api/pair/request` (allowed origin) → `{pairingId, userCode, expiresAt}`;
- * - `GET /api/pair/status?id=…` → `{status: "pending"|"approved"|"denied", expiresAt}`;
- * - `POST /api/pair/exchange` `{pairingId}` (same origin) → `{token, expiresAt}`;
- * - `GET /api/session/verify?token=…` (authenticated origin + token check) →
- *   `200 {"ok":true,"expiresAt":"…"}` / `401`/`403`;
- * - `POST /api/session/revoke` `{token}` → `{revoked: true}`.
- *
- * The approval itself (`approve`/`deny`) happens from the local network proxy
- * console (terminal), never from LumiBoot web.
+ * Web to local network proxy pairing over `POST /api/pair/request`,
+ * `GET /api/pair/status`, `POST /api/pair/exchange`, `GET /api/session/verify`
+ * and `POST /api/session/revoke`. Approval happens in the proxy console only.
  */
 
 export type PairingStatusValue = 'pending' | 'approved' | 'denied';
@@ -35,7 +25,7 @@ export interface PairingExchangeResult {
 }
 
 export interface VerifyTokenResult {
-  /** The proxy confirmed the token is valid (HTTP 200 + `{ok:true}`). */
+  /** The proxy confirmed the token is valid. */
   ok: boolean;
   /** Expiry returned by the proxy, when known. */
   expiresAt?: string;
@@ -118,8 +108,8 @@ async function postJson<T>(
 }
 
 /**
- * Requests a pairing: the browser sends its origin (automatic `Origin` header +
- * explicit `origin` as a fallback, since the server accepts both).
+ * Requests a pairing. Both the automatic `Origin` header and an explicit
+ * `origin` field are sent because the server accepts either.
  */
 export async function requestPairing(
   baseUrl: string,
@@ -153,7 +143,7 @@ export async function requestPairing(
   return { pairingId, userCode, expiresAt };
 }
 
-/** Reads the state of a pairing request (polling cancellable through `signal`). */
+/** Reads the state of a pairing request. */
 export async function getPairingStatus(
   baseUrl: string,
   pairingId: string,
@@ -212,11 +202,7 @@ export async function getPairingStatus(
   return { status: record.status, expiresAt: String(record.expiresAt ?? '') };
 }
 
-/**
- * Exchanges an **approved** pairing for a session token (single use). The raw
- * token is only returned here and is stored hashed on the local network proxy
- * side.
- */
+/** Exchanges an approved pairing for a session token. The token is single use. */
 export async function exchangeToken(
   baseUrl: string,
   pairingId: string,
@@ -256,17 +242,8 @@ export async function exchangeToken(
 }
 
 /**
- * Checks that a session token is **really validated** by the local network proxy
- * through `GET {proxyUrl}/api/session/verify?token=<token>`.
- *
- * The token travels in the **query** (like `/wisp/`) to avoid the preflight of a
- * custom `Authorization` header. The check is authenticated: the proxy verifies
- * the origin and the token, and does not upgrade.
- *
- * - `200 {"ok":true,"expiresAt":"…"}` → `{ok:true, expiresAt}`;
- * - `401`/`403` → `{ok:false}` (missing, invalid or expired token, or refused origin);
- * - network error or unexpected response → `ProxyPairingError`
- *   (`PROXY_UNREACHABLE`), an **uncertain** state: we do not conclude invalidity.
+ * Checks a session token with the proxy. The token travels in the query, like
+ * `/wisp/`, to avoid a preflight. A network error is uncertain, not invalid.
  */
 export async function verifyToken(
   baseUrl: string,

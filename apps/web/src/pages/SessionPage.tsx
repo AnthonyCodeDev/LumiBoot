@@ -25,20 +25,13 @@ export function SessionPage() {
   const sessionId = session?.id;
 
   useEffect(() => {
-    // The component is mounted when the effect runs; only cleanup marks it
-    // unmounted. The flag is therefore set BEFORE any early return: during a
-    // restart, the session temporarily disappears from the store, the effect reruns
-    // with `system === null`, then the component re-renders for the new session.
-    // This is NOT an unmount, and the restart must not be abandoned wrongly
-    // (otherwise the page would stay stuck on "Session expired").
+    // Set before any early return: during a restart the session briefly disappears
+    // from the store, which is not an unmount.
     mountedRef.current = true;
     const element = consoleRef.current;
     if (sessionId && system && element) {
       activeIdRef.current = sessionId;
-      // Every asynchronous boot rejection is captured on the UI side: never an
-      // unhandled promise. A start error is also normalized into a session status
-      // by the store; this `catch` only overwrites a possible new session when it
-      // is still the active one.
+      // Boot rejections are surfaced here, never left unhandled.
       boot(sessionId, element).catch((error) => {
         if (!mountedRef.current || activeIdRef.current !== sessionId) return;
         setActionError(toUserMessage(error));
@@ -48,15 +41,13 @@ export function SessionPage() {
     return () => {
       mountedRef.current = false;
       if (!sessionId) return;
-      // React StrictMode unmounts then remounts synchronously. Release is pushed
-      // to a macrotask: when the same session is reactivated immediately (double
-      // mount) it is cancelled; otherwise (navigation or real unmount) the session
-      // is released so no orphan is left behind.
+      // StrictMode unmounts then remounts synchronously, so release is deferred to
+      // a macrotask and cancelled when the same session is reactivated.
       window.setTimeout(() => {
         const superseded = activeIdRef.current === sessionId && mountedRef.current;
         if (superseded) return;
         dispose(sessionId).catch(() => {
-          /* the best-effort release must never surface in the UI */
+          /* best-effort release */
         });
       }, 0);
     };
@@ -83,11 +74,10 @@ export function SessionPage() {
     setRestarting(true);
     setActionError(null);
     try {
-      // Stop AND release the previous session before creating a new one.
+      // Stop and release the previous session before creating a new one.
       await stop(restartingId);
       await dispose(restartingId);
-      // If the user left or switched session during the stop, a late navigation
-      // would overwrite the new session: abstain.
+      // The user may have left during the stop: do not navigate then.
       if (!mountedRef.current || activeIdRef.current !== restartingId) return;
       const nextId = createSession(system.id);
       navigate(`/session/${nextId}`, { replace: true });

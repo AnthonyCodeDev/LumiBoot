@@ -1,13 +1,9 @@
-// Package wisp implements the WISP V1 binary framing as spoken by the client
-// embedded in v86@0.5.471.
+// Package wisp implements the WISP V1 binary framing spoken by the client embedded
+// in v86.
 //
-// Packet format: [uint8 type][uint32 stream_id little-endian][payload...]
-// Types: CONNECT (0x01), DATA (0x02), CONTINUE (0x03), CLOSE (0x04).
-// INFO (0x05) belongs to WISP V2 and must be ignored.
-//
-// Compatibility reminder: the server MUST send, immediately after the WebSocket
-// handshake, a CONTINUE for stream_id 0 carrying the initial buffer size.
-// Without it, the v86 client blocks every send (congestion not initialized).
+// Packet format: [uint8 type][uint32 stream_id little-endian][payload...]. The
+// server MUST send a CONTINUE for stream 0 right after the handshake, otherwise
+// the v86 client blocks every send.
 package wisp
 
 import (
@@ -16,29 +12,25 @@ import (
 	"fmt"
 )
 
-// WISP V1 packet types.
 const (
 	TypeConnect  byte = 0x01
 	TypeData     byte = 0x02
 	TypeContinue byte = 0x03
 	TypeClose    byte = 0x04
-	// TypeInfo belongs to WISP V2: the local network proxy ignores it.
+	// TypeInfo belongs to WISP V2 and is ignored.
 	TypeInfo byte = 0x05
 )
 
-// Stream types carried by CONNECT.
 const (
 	StreamTypeTCP byte = 0x01
 	StreamTypeUDP byte = 0x02
 )
 
-// Close reasons sent by the client.
 const (
 	CloseClientDone  byte = 0x02 // voluntary close
 	CloseClientError byte = 0x03 // client-side network error
 )
 
-// Close reasons sent by the server.
 const (
 	CloseInvalidInfo        byte = 0x41 // invalid request
 	CloseHostUnreachable    byte = 0x42 // host unreachable
@@ -52,20 +44,15 @@ const (
 // HeaderLen is the fixed size of a WISP packet header.
 const HeaderLen = 5
 
-// MaxHostLen bounds the length of a host name in CONNECT (RFC 1035: 253).
+// MaxHostLen bounds the length of a host name in CONNECT.
 const MaxHostLen = 253
 
 var (
-	// ErrFrameTooShort reports a truncated packet (fewer than 5 bytes).
-	ErrFrameTooShort = errors.New("wisp: truncated packet")
-	// ErrPayloadTooLarge reports a payload exceeding the configured limit.
+	ErrFrameTooShort   = errors.New("wisp: truncated packet")
 	ErrPayloadTooLarge = errors.New("wisp: payload too large")
-	// ErrInvalidConnect reports a malformed CONNECT payload.
-	ErrInvalidConnect = errors.New("wisp: malformed CONNECT")
-	// ErrInvalidContinue reports a malformed CONTINUE payload.
+	ErrInvalidConnect  = errors.New("wisp: malformed CONNECT")
 	ErrInvalidContinue = errors.New("wisp: malformed CONTINUE")
-	// ErrInvalidClose reports a malformed CLOSE payload.
-	ErrInvalidClose = errors.New("wisp: malformed CLOSE")
+	ErrInvalidClose    = errors.New("wisp: malformed CLOSE")
 )
 
 // Frame is a decoded WISP packet.
@@ -84,8 +71,7 @@ func (f Frame) Encode() []byte {
 	return buf
 }
 
-// DecodeFrame decodes a complete binary WebSocket message into a Frame.
-// maxPayload bounds the accepted payload size (memory protection).
+// DecodeFrame decodes a binary message; maxPayload bounds the accepted size.
 func DecodeFrame(buf []byte, maxPayload int) (Frame, error) {
 	if len(buf) < HeaderLen {
 		return Frame{}, ErrFrameTooShort
@@ -104,8 +90,7 @@ func DecodeFrame(buf []byte, maxPayload int) (Frame, error) {
 	}, nil
 }
 
-// BuildContinue builds a CONTINUE packet advertising bufferRemaining packets
-// still accepted on stream streamID.
+// BuildContinue builds a CONTINUE advertising the remaining buffer of a stream.
 func BuildContinue(streamID uint32, bufferRemaining uint32) []byte {
 	payload := make([]byte, 4)
 	binary.LittleEndian.PutUint32(payload, bufferRemaining)
@@ -151,7 +136,7 @@ func ParseConnect(payload []byte) (ConnectRequest, error) {
 	}, nil
 }
 
-// BuildConnectPayload builds a CONNECT payload (useful for tests).
+// BuildConnectPayload builds a CONNECT payload, useful for tests.
 func BuildConnectPayload(streamType byte, port uint16, host string) []byte {
 	payload := make([]byte, 3+len(host))
 	payload[0] = streamType
@@ -160,7 +145,7 @@ func BuildConnectPayload(streamType byte, port uint16, host string) []byte {
 	return payload
 }
 
-// ParseContinue decodes a CONTINUE payload (uint32 LE).
+// ParseContinue decodes a CONTINUE payload into its window size.
 func ParseContinue(payload []byte) (uint32, error) {
 	if len(payload) != 4 {
 		return 0, ErrInvalidContinue
@@ -168,7 +153,7 @@ func ParseContinue(payload []byte) (uint32, error) {
 	return binary.LittleEndian.Uint32(payload), nil
 }
 
-// ParseClose decodes a CLOSE payload (uint8 reason).
+// ParseClose decodes a CLOSE payload into its reason byte.
 func ParseClose(payload []byte) (byte, error) {
 	if len(payload) != 1 {
 		return 0, ErrInvalidClose

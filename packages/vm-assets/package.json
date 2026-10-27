@@ -2,6 +2,7 @@
   "name": "@lumiboot/vm-assets",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "description": "Manifest, download, cache and integrity handling for VM assets",
   "exports": {

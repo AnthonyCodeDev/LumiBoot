@@ -13,7 +13,7 @@ export function Topbar() {
     setOpen(false);
   }, [location.pathname]);
 
-  // Close on outside click + Escape (focus returned to the button).
+  // Close on outside click and Escape, returning focus to the button.
   useEffect(() => {
     if (!open) return;
     function onPointerDown(event: PointerEvent) {

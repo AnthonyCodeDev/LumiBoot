@@ -12,14 +12,7 @@ export interface NetworkProxyCardProps {
   manifest?: DownloadsManifest | undefined;
 }
 
-/**
- * "Internet via your connection" card (minimal rendering): a title, a short
- * description, a "Pair" button (or "Disconnect" once connected) and a discreet
- * note explaining how the local network proxy is used.
- *
- * Reproduces the effects of the former `NetworkProxyStatus`: `refresh()` on mount
- * and `cancelPairing()` on unmount (no orphaned pairing poll).
- */
+/** Pairing card for the local network proxy. */
 export function NetworkProxyCard(props: NetworkProxyCardProps) {
   const state = useProxyStore((s) => s.state);
   const token = useProxyStore((s) => s.token);
@@ -31,8 +24,7 @@ export function NetworkProxyCard(props: NetworkProxyCardProps) {
 
   const { url: proxyUrl } = resolveProxyConfig();
 
-  // "Already paired" detection: a persisted, non-expired session for the
-  // current URL. Lazy initialization avoids a flash on mount.
+  // Lazy init avoids a flash on mount.
   const [hasSession, setHasSession] = useState(() => loadProxySession(proxyUrl) !== null);
   useEffect(() => {
     setHasSession(loadProxySession(proxyUrl) !== null);
@@ -41,9 +33,7 @@ export function NetworkProxyCard(props: NetworkProxyCardProps) {
   const connected = state === 'connected' && token !== null;
   const connecting = state === 'connecting';
 
-  // Neutral message while a session persists but we are not connected
-  // (proxy restarted, etc.). It disappears once a pairing starts. No
-  // message is shown for a failure without a session nor for passive states.
+  // Shown while a session persists but the proxy is not connected.
   const alreadyPairedMessage =
     !connected && !connecting && hasSession
       ? 'You are already paired. Restart the proxy, or click the button above to start a new pairing.'

@@ -79,8 +79,7 @@ describe('SessionScreen — indicateur de capture souris', () => {
       />,
     );
 
-    // The provider injects the screen AFTER mount, inside the console container.
-    // Screen matching the standard display contract, WITHOUT a `.v86-screen` class.
+    // The provider injects the screen after mount; it carries the display contract only.
     const container = consoleRef.current;
     expect(container).not.toBeNull();
     const screen = document.createElement('div');

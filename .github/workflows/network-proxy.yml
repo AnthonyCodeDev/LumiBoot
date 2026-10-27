@@ -220,10 +220,12 @@ jobs:
     # Automatic publication: on every `network-v*` tag or every
     # `workflow_dispatch` (optional forced version; empty = auto-increment from
     # the last `network-v*` tag, or 1.0.0 if there is none), CI creates a
-    # GitHub Release IN THIS REPO
-    # (private) containing a SINGLE ZIP: all binaries + `manifest.json` +
-    # `SHA256SUMS`. The ZIP is ready to be extracted into
-    # `apps/web/public/downloads/` (the manifest points to `/downloads/...`).
+    # GitHub Release IN THIS REPO containing a SINGLE ZIP: all binaries +
+    # `manifest.json` + `SHA256SUMS`.
+    # The ZIP is the official distribution channel: its assets are NEVER
+    # committed to Git. `apps/web/public/downloads/` only tracks
+    # `manifest.json` and `SHA256SUMS`; for local development, download the
+    # release ZIP and extract it there (the manifest points to `/downloads/...`).
     # `actions/checkout` is REQUIRED: without it, `gh release create` fails
     # with "fatal: not a git repository".
     name: release (full zip)
@@ -311,7 +313,7 @@ jobs:
           gh release create "$TAG" "LumiBoot-Network-proxy-${VERSION}.zip" \
             --title "LumiBoot Network Proxy ${VERSION}" \
             --generate-notes \
-            --notes $'### Usage\nDownload this ZIP and extract it into `apps/web/public/downloads/` (its `manifest.json` already points to `/downloads/...`).\n\n⚠️ **Unsigned / not notarized** binaries: Windows (SmartScreen) and macOS (Gatekeeper) will show a warning.'
+            --notes $'### Usage\nDownload the ZIP attached to this release and extract it locally. These binaries are NEVER committed to Git: `apps/web/public/downloads/` only tracks `manifest.json` and `SHA256SUMS`.\n\nFor local development, extract the ZIP into `apps/web/public/downloads/` so the `/downloads/...` URLs resolve.\n\nWarning: **unsigned / not notarized** binaries: Windows (SmartScreen) and macOS (Gatekeeper) will show a warning.'
 
   sign-windows:
     # OPTIONAL Authenticode signing: skipped when the secrets are absent.

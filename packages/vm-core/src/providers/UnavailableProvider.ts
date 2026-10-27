@@ -7,11 +7,7 @@ import type { VMInstance } from '../contracts/VMInstance';
 
 export const UNAVAILABLE_PROVIDER_ID = 'unavailable';
 
-/**
- * Builds an instance that honestly reports that no engine can start the
- * system: the first subscriber receives a typed error. No simulated progress is
- * ever emitted.
- */
+/** The first subscriber receives a typed error; no progress is simulated. */
 export function createErrorHandle(
   providerId: string,
   systemId: string,
@@ -43,11 +39,7 @@ export function createErrorHandle(
   };
 }
 
-/**
- * Fallback engine: it computes nothing and never renders a fake VM. It exists
- * so the interface stays honest when no real engine is available for a given
- * system.
- */
+/** Fallback engine: never renders a fake VM. */
 export class UnavailableProvider implements VMEngine {
   readonly id = UNAVAILABLE_PROVIDER_ID;
 

@@ -9,6 +9,6 @@
 - [ ] `pgrep -x xfce4-session` or `pgrep -x xfwm4` returns a PID.
 - [ ] `setxkbmap -query` reports the French keyboard layout.
 - [ ] On an X failure, `LUMIBOOT_DESKTOP_START_FAILED` appears and no fake `running` is emitted.
-- [ ] Stop then a second boot work without an orphaned worker.
+- [ ] Stop then a second boot works, without an orphaned worker.
 
 Real E2E: `VM_E2E_ASSETS=1 pnpm test:e2e --grep "XFCE"` (port `5200`).

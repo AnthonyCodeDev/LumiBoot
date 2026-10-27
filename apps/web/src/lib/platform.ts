@@ -1,14 +1,7 @@
 /**
  * Host platform detection for the local network proxy download.
- *
- * Strict rules: a Mac is NEVER assumed to be ARM64, nor a Windows box to be
- * AMD64. When the architecture is undetermined, `arch` is `'unknown'` and `key`
- * is `null` (the UI then asks the user to choose explicitly).
- *
- * Platform keys (aligned with `public/downloads/manifest.json`):
- * `windows-x64`, `windows-arm64`, `macos`, `linux-x64`, `linux-arm64`.
- * macOS has a single key (`macos`, universal binary) whatever the detected
- * architecture.
+ * When nothing proves the architecture, `arch` stays `'unknown'` and `key` is
+ * `null`; a Mac is never assumed ARM64 nor Intel.
  */
 
 export type HostOS = 'windows' | 'macos' | 'linux' | 'unknown';
@@ -21,7 +14,7 @@ export interface HostPlatform {
   key: PlatformKey | null;
 }
 
-/** Subset of `Navigator` used by detection (injectable in tests). */
+/** Subset of `Navigator` used by detection, injectable in tests. */
 export interface HostNavigator {
   readonly userAgent?: string;
   readonly userAgentData?: {
@@ -45,15 +38,7 @@ function detectOS(userAgent: string): HostOS {
   return 'unknown';
 }
 
-/**
- * Detects the architecture from the userAgent alone.
- *
- * On macOS, Apple Silicon Macs historically send
- * `Macintosh; Intel Mac OS X …` for compatibility: "Intel" therefore proves
- * nothing about the real architecture. `unknown` is always returned for macOS in
- * the synchronous path (only `detectHostPlatformAsync` through `userAgentData`
- * can lift the ambiguity).
- */
+/** Apple Silicon Macs send `Intel Mac OS X`, so macOS always yields `unknown`. */
 function detectArchFromUA(userAgent: string, os: HostOS): HostArch {
   const ua = userAgent.toLowerCase();
   const hasArm =
@@ -79,11 +64,7 @@ function keyFor(os: HostOS, arch: HostArch): PlatformKey | null {
   return null;
 }
 
-/**
- * Synchronous detection (`userAgent` fallback only).
- *
- * Pure and testable: pass a fake browser `{ userAgent }` in tests.
- */
+/** Synchronous detection from `userAgent` only. */
 export function detectHostPlatform(nav?: HostNavigator): HostPlatform {
   const resolved = resolveNavigator(nav);
   const userAgent = resolved?.userAgent ?? '';
@@ -93,14 +74,8 @@ export function detectHostPlatform(nav?: HostNavigator): HostPlatform {
 }
 
 /**
- * Asynchronous detection: uses `navigator.userAgentData.getHighEntropyValues`
- * (`architecture`, `platform`) when available, otherwise the synchronous
- * fallback.
- *
- * Chromium `architecture` mapping: `arm` → `arm64`, `x86` → `x64` (browsers
- * report `x86` even on x86_64). Any other value → `unknown` (no assumption).
- * Chromium `platform`: `Windows`, `macOS`, `Linux` (and `Android`/`Chrome OS` →
- * `unknown`).
+ * Uses `userAgentData.getHighEntropyValues` when available, otherwise the
+ * synchronous fallback. Chromium reports `x86` even on x86_64.
  */
 export async function detectHostPlatformAsync(nav?: HostNavigator): Promise<HostPlatform> {
   const resolved = resolveNavigator(nav);
@@ -122,7 +97,7 @@ export async function detectHostPlatformAsync(nav?: HostNavigator): Promise<Host
       else if (architecture.includes('x86') || architecture.includes('64')) arch = 'x64';
       if (os !== 'unknown') return { os, arch, key: keyFor(os, arch) };
     } catch {
-      // Synchronous fallback below (API refused or unavailable).
+      // Fall back to the synchronous path.
     }
   }
   return detectHostPlatform(resolved);

@@ -1,18 +1,7 @@
-// Local HTTP server serving one file through Range requests (RFC 9110 §14),
-// used to stream a large hard disk to v86 without ever loading it entirely into
-// memory or copying it into public/.
+// Local HTTP server streaming one file through Range requests.
 //
-// v86 0.5.471 requirements (verified in build/libv86.js):
-//   - v86 loads `hda.async` images through XMLHttpRequest with
-//     `Range: bytes=<start>-<end>` and `X-Accept-Encoding: identity`;
-//   - if a server answers 200 to a Range request, v86 LOGS and ABORTS
-//     ("Server sent full file in response to ranged request, aborting"):
-//     every valid Range request MUST therefore be answered with 206;
-//   - v86 probes the size with `Range: bytes=0-0` and reads the total size from
-//     the `Content-Range` header (regex /\/(\d+)\s*$/): `Content-Range` must
-//     always be present, including for small ranges;
-//   - no compression may be applied (an encoded response breaks range decoding),
-//     so Content-Encoding is never set.
+// v86 requirements: a valid Range request MUST be answered with 206, and
+// `Content-Range` must always be present; no compression may be applied.
 
 import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -21,14 +10,8 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 const CRLF = '\r\n';
 
 /**
- * Parses a `Range` header (RFC 9110).
- *
- * @param {string | undefined | null} headerValue
- * @param {number} size total size in bytes
- * @returns {{kind: 'none'} | {kind: 'unsatisfiable'} | {kind: 'ranges', ranges: Array<{start: number, end: number}>}}
- *   `none` = no header OR invalid/unreadable header (ignore it and serve the
- *   whole resource); `unsatisfiable` = valid syntax but no range overlaps the
- *   resource (416); `ranges` = satisfiable ranges, sorted.
+ * Parses a `Range` header: `none` when absent or unreadable, `unsatisfiable` on a
+ * 416, `ranges` on satisfiable ranges sorted.
  */
 export function parseRangeHeader(headerValue, size) {
   if (headerValue === undefined || headerValue === null || headerValue === '') {
@@ -61,7 +44,6 @@ export function parseRangeHeader(headerValue, size) {
     if (firstText === '' && lastText === '') return { kind: 'none' };
 
     if (firstText === '') {
-      // Suffix range: `-N` means the last N bytes.
       if (!/^\d+$/.test(lastText)) return { kind: 'none' };
       const suffix = Number(lastText);
       if (suffix <= 0 || size === 0) continue; // not satisfiable
@@ -80,7 +62,6 @@ export function parseRangeHeader(headerValue, size) {
 
     if (!/^\d+$/.test(lastText)) return { kind: 'none' };
     let last = Number(lastText);
-    // `last < first` makes the whole header invalid (RFC): ignore it.
     if (last < first) return { kind: 'none' };
     if (last >= size) last = size - 1;
     if (first >= size) continue;
@@ -89,8 +70,6 @@ export function parseRangeHeader(headerValue, size) {
 
   if (ranges.length === 0) return { kind: 'unsatisfiable' };
 
-  // Merge adjacent/overlapping ranges to avoid useless multipart responses
-  // while keeping the requested order.
   ranges.sort((a, b) => a.start - b.start || a.end - b.end);
   const merged = [];
   for (const range of ranges) {
@@ -117,7 +96,7 @@ function tokenMatches(candidate, expected) {
   }
 }
 
-/** Checks the access token (`?token=` or the `x-lumiboot-token` header). */
+/** Checks the access token from the query string or the `x-lumiboot-token` header. */
 export function isAuthorized(req, token) {
   if (token === null) return true;
   const headerToken = req.headers['x-lumiboot-token'];
@@ -170,10 +149,7 @@ function multipartLength(boundary, ranges, size, contentType) {
   return total;
 }
 
-/**
- * Creates a Node `(req, res)` handler serving ONE fixed file in ranges.
- * The path is never derived from the request: no directory traversal.
- */
+/** Creates a handler serving one fixed file in ranges; the path never comes from the request. */
 export function createRangeHandler(options) {
   const {
     filePath,
@@ -375,7 +351,7 @@ function pipeRange(res, state, filePath, range) {
   });
 }
 
-/** JSON handler without Range support (small manifests only). */
+/** JSON handler without Range support. */
 export function createJsonHandler(options) {
   const {
     body,
@@ -438,16 +414,7 @@ function resolveRoute(route) {
 }
 
 /**
- * Creates an HTTP server serving several fixed routes (files in ranges + JSON
- * manifests). By default the server is NOT listening: the caller picks the
- * interface (loopback recommended) through `listen()`.
- *
- * @param {{
- *   routes: Record<string, {file?: string, json?: unknown, contentType?: string}>,
- *   token?: string | null,
- *   corsOrigin?: string,
- *   extraHeaders?: Record<string, string>,
- * }} options
+ * Creates an HTTP server serving fixed routes; it does not listen until `listen()`.
  */
 export function createAssetServer(options) {
   const { routes, token = null, corsOrigin = '*', extraHeaders = {} } = options;
@@ -498,7 +465,6 @@ export function createAssetServer(options) {
   return {
     server,
     routes: [...handlers.keys()],
-    /** Listens and resolves the address actually bound. */
     listen({ host = '127.0.0.1', port = 0 } = {}) {
       return new Promise((resolve, reject) => {
         server.once('error', reject);

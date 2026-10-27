@@ -4,12 +4,7 @@ import { getSystemById } from '@lumiboot/catalog';
 import { V86Provider } from '@lumiboot/provider-v86';
 import { V86_LAZY_CAPABILITIES, createRegistry, explainSystemCompatibility } from './registry';
 
-/**
- * The front-end registry loads `V86Provider` lazily: it therefore cannot import
- * the provider to read its capabilities. These tests guarantee the ALIGNMENT of
- * the local copy with the REAL provider (shared source) and the absence of
- * unimplemented capabilities (RAM/disk snapshots).
- */
+/** Guards the local copy of the capabilities against the real provider. */
 describe('front-end registry — capabilities aligned with the real provider', () => {
   it('the lazy v86 engine advertises exactly the real V86Provider capabilities', () => {
     const lazy = createRegistry().engines.find((engine) => engine.id === 'v86');

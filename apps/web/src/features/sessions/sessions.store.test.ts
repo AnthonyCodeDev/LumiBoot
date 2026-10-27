@@ -1,13 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSystemById } from '@lumiboot/catalog';
 
-/**
- * Sessions store tests: media ownership by SESSION, boot generations,
- * cancellation, and normalization of asynchronous errors into a session status.
- * The engine registry, the runtime config, the proxy credentials and the media
- * storage are replaced by controllable doubles: the store ownership/cancellation
- * logic is observed, not v86.
- */
+/** Engine, runtime config, proxy credentials and media storage are doubles. */
 
 const mocks = vi.hoisted(() => {
   interface FakeInstance {
@@ -186,7 +180,7 @@ describe('useSessionsStore — media ownership', () => {
     await useSessionsStore.getState().boot(a, mount);
     await useSessionsStore.getState().boot(b, mount);
 
-    // Two VMs of the same OS: two distinct URLs, one per session.
+    // Two VMs of the same OS get two distinct URLs, one per session.
     expect(created).toHaveLength(2);
     const [urlA, urlB] = created;
     expect(urlA).not.toBe(urlB);
@@ -196,7 +190,7 @@ describe('useSessionsStore — media ownership', () => {
 
     await useSessionsStore.getState().dispose(a);
 
-    // Only A URL is revoked; B URL stays valid.
+    // Only the A URL is revoked.
     expect(revoked).toEqual([urlA]);
     expect(revoked).not.toContain(urlB);
     expect(useSessionsStore.getState().sessions[a]).toBeUndefined();
@@ -231,7 +225,7 @@ describe('useSessionsStore — media ownership', () => {
     resolveBytes?.(mediaStore.bytes.get(system.id) ?? null);
     await bootPromise;
 
-    // Any URL that may have been created was revoked; no VM started.
+    // Any URL created here was revoked and no VM started.
     expect(revoked).toEqual(created);
     expect(mocks.instances).toHaveLength(0);
     expect(useSessionsStore.getState().sessions[sessionId]).toBeUndefined();
@@ -301,7 +295,7 @@ describe('useSessionsStore — media ownership', () => {
     const secondUrl = created[1];
 
     expect(secondUrl).not.toBe(firstUrl);
-    // The previous URL of THIS session is revoked when the new one is published.
+    // The previous URL of this session is revoked on republish.
     expect(revoked).toContain(firstUrl);
     expect(revoked).not.toContain(secondUrl);
   });

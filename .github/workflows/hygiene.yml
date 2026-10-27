@@ -1,8 +1,10 @@
 name: Hygiene
 
 # Hygiene guardrails, in a SINGLE job to limit the number of checks:
-# Prettier formatting, v86 binary integrity (pinned SHA-256) and absence
-# of committed media/large files. Complements `ci.yml` without duplicating it.
+# Prettier formatting, v86 binary integrity (pinned SHA-256), no committed
+# media/large files and no committed network client release binaries (those
+# are published as GitHub Release assets). Complements `ci.yml` without
+# duplicating it.
 on:
   push:
     branches: [main]
@@ -40,7 +42,13 @@ jobs:
             echo "::error::Disk/media images are committed; they must stay out of Git."
             exit 1
           fi
-      - name: Large committed files (> 25 MiB, excluding published downloads)
+          # Release assets of the network client live in GitHub Releases only:
+          # the repository tracks `manifest.json` and `SHA256SUMS`, never binaries.
+          if git ls-files 'apps/web/public/downloads/*' | grep -Ei '\.(exe|tar\.gz|zip)$'; then
+            echo "::error::Network client binaries are committed. Publish them as GitHub Release assets (see network-proxy.yml) and keep only manifest.json and SHA256SUMS in Git."
+            exit 1
+          fi
+      - name: Large committed files (> 25 MiB)
         run: |
           set -euo pipefail
           offenders=""
@@ -48,10 +56,7 @@ jobs:
             [ -f "$f" ] || continue
             size=$(wc -c < "$f")
             if [ "$size" -gt 26214400 ]; then
-              case "$f" in
-                apps/web/public/downloads/*) ;;
-                *) offenders="${offenders}${size}  ${f}\n" ;;
-              esac
+              offenders="${offenders}${size}  ${f}\n"
             fi
           done < <(git ls-files)
           if [ -n "$offenders" ]; then
@@ -59,4 +64,4 @@ jobs:
             echo "::error::Large committed files detected."
             exit 1
           fi
-          echo "No committed file exceeds 25 MiB (excluding published downloads)."
+          echo "No committed file exceeds 25 MiB."

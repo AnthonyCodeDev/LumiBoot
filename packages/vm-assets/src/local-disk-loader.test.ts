@@ -37,7 +37,7 @@ function validDiskManifest(ref = 'windows-7-x86') {
   };
 }
 
-/** PUBLIC form: without `source` (real path) or `provenance` (internal). */
+/** Public form, without `source` or `provenance`. */
 function publicDiskManifest(ref = 'windows-7-x86') {
   const full = validDiskManifest(ref) as Record<string, unknown>;
   delete full.source;

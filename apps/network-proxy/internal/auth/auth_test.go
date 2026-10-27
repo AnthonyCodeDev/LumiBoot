@@ -56,7 +56,6 @@ func TestPairingFlow(t *testing.T) {
 		t.Fatalf("incomplete pairing: %+v", p)
 	}
 
-	// Exchange before approval: refused.
 	if _, _, err := a.Exchange(p.ID, "http://localhost:5200"); !errors.Is(err, ErrPairingNotApproved) {
 		t.Fatalf("pre-approval exchange: %v", err)
 	}
@@ -71,7 +70,6 @@ func TestPairingFlow(t *testing.T) {
 	if token == "" || expiresAt.IsZero() {
 		t.Fatal("empty token")
 	}
-	// Single use.
 	if _, _, err := a.Exchange(p.ID, "http://localhost:5200"); !errors.Is(err, ErrPairingNotFound) {
 		t.Fatalf("pairing reuse: %v", err)
 	}
@@ -79,7 +77,6 @@ func TestPairingFlow(t *testing.T) {
 	if !a.Verify(token, "http://localhost:5200") {
 		t.Fatal("valid token refused")
 	}
-	// Origin binding.
 	if a.Verify(token, "https://lumiboot.app") {
 		t.Fatal("token accepted from another origin")
 	}
@@ -207,7 +204,6 @@ func TestPendingPairings(t *testing.T) {
 	}
 }
 
-// issueToken pairs and exchanges a test session.
 func issueToken(t *testing.T, a *Authenticator) string {
 	t.Helper()
 	p, err := a.RequestPairing("http://localhost:5200")
@@ -235,7 +231,6 @@ func TestTransportClosedOnRevoke(t *testing.T) {
 	if !ok || info.ID == "" || tid == "" {
 		t.Fatal("transport attachment refused")
 	}
-	// Invalid token / different origin: no attachment.
 	if _, _, ok := a.AttachSession("wrong", "http://localhost:5200", func() {}); ok {
 		t.Fatal("attachment of an invalid token accepted")
 	}
@@ -268,7 +263,6 @@ func TestTransportClosedOnAdminRevokeAndExpiry(t *testing.T) {
 		return token, info.ID, closed
 	}
 
-	// AdminRevoke.
 	_, id, closed := attach()
 	if !a.AdminRevoke(id) {
 		t.Fatal("AdminRevoke failed")
@@ -279,7 +273,6 @@ func TestTransportClosedOnAdminRevokeAndExpiry(t *testing.T) {
 		t.Fatal("callback not invoked after AdminRevoke")
 	}
 
-	// Expiration: CleanupExpired closes the transport.
 	_, _, closed = attach()
 	now = now.Add(2 * time.Hour)
 	a.CleanupExpired()
@@ -323,20 +316,15 @@ func TestPairingFloodLimit(t *testing.T) {
 	if _, err := a.RequestPairing("http://localhost:5200"); !errors.Is(err, ErrPairingLimit) {
 		t.Fatalf("per-origin cap not applied: %v", err)
 	}
-	// Another allowed origin is not penalized.
 	if _, err := a.RequestPairing("https://lumiboot.app"); err != nil {
 		t.Fatalf("other origin wrongly blocked: %v", err)
 	}
-	// Purging expired entries frees the quota.
 	now = now.Add(11 * time.Minute)
 	if _, err := a.RequestPairing("http://localhost:5200"); err != nil {
 		t.Fatalf("after cleanup: %v", err)
 	}
 }
 
-// --- P0 regressions: multi-transport registry per token ---
-
-// expectClosed waits for a close callback invocation.
 func expectClosed(t *testing.T, ch <-chan struct{}, label string) {
 	t.Helper()
 	select {
@@ -346,9 +334,8 @@ func expectClosed(t *testing.T, ch <-chan struct{}, label string) {
 	}
 }
 
-// TestTwoTransportsSameTokenRevokeClosesBoth: P0 bug — two WebSockets attached
-// to the same token must no longer overwrite each other (single onClose);
-// Revoke closes 2/2.
+// TestTwoTransportsSameTokenRevokeClosesBoth: two WebSockets on one token must not
+// overwrite each other; Revoke closes both.
 func TestTwoTransportsSameTokenRevokeClosesBoth(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -369,7 +356,7 @@ func TestTwoTransportsSameTokenRevokeClosesBoth(t *testing.T) {
 	expectClosed(t, closedB, "transport B")
 }
 
-// TestDetachOnlyRemovesTargetTransport: P0 bug — detaching A must NOT close B.
+// TestDetachOnlyRemovesTargetTransport: detaching one transport must not close the other.
 func TestDetachOnlyRemovesTargetTransport(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -393,8 +380,8 @@ func TestDetachOnlyRemovesTargetTransport(t *testing.T) {
 	}
 }
 
-// TestVerifyExpiredClosesAllTransports: an expired session encountered by
-// Verify is purged AND all its transports are closed (no leak).
+// TestVerifyExpiredClosesAllTransports: Verify purges an expired session and closes
+// all its transports.
 func TestVerifyExpiredClosesAllTransports(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -414,8 +401,8 @@ func TestVerifyExpiredClosesAllTransports(t *testing.T) {
 	expectClosed(t, closedB, "Verify transport B")
 }
 
-// TestListSessionsExpiredClosesAllTransports: ListSessions never purges an
-// expired session without closing its connections.
+// TestListSessionsExpiredClosesAllTransports: ListSessions never purges a session
+// without closing its connections.
 func TestListSessionsExpiredClosesAllTransports(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -435,8 +422,7 @@ func TestListSessionsExpiredClosesAllTransports(t *testing.T) {
 	expectClosed(t, closedB, "ListSessions transport B")
 }
 
-// TestCleanupExpiredClosesAllTransports: the periodic sweep closes ALL
-// transports of an expired session.
+// TestCleanupExpiredClosesAllTransports: the sweep closes every transport.
 func TestCleanupExpiredClosesAllTransports(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -454,8 +440,7 @@ func TestCleanupExpiredClosesAllTransports(t *testing.T) {
 	expectClosed(t, closedB, "sweep transport B")
 }
 
-// TestCloseAllSessionsClosesEveryTransport: server shutdown closes every
-// transport of every session (distinct tokens).
+// TestCloseAllSessionsClosesEveryTransport: shutdown closes every transport.
 func TestCloseAllSessionsClosesEveryTransport(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -478,8 +463,7 @@ func TestCloseAllSessionsClosesEveryTransport(t *testing.T) {
 	}
 }
 
-// TestCloseAllSessionsIdempotent: the per-transport sync.Once prevents any
-// double close even if CloseAllSessions is called again.
+// TestCloseAllSessionsIdempotent: sync.Once prevents a double close.
 func TestCloseAllSessionsIdempotent(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -497,8 +481,7 @@ func TestCloseAllSessionsIdempotent(t *testing.T) {
 	}
 }
 
-// TestConcurrentAttachDetachRevoke: under -race, no deadlock and no double close
-// when attach/detach/revoke overlap.
+// TestConcurrentAttachDetachRevoke: no deadlock nor double close under -race.
 func TestConcurrentAttachDetachRevoke(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -523,7 +506,7 @@ func TestConcurrentAttachDetachRevoke(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Detach half of the transports: revocation must only close the rest.
+	// Detach half the transports: revocation only closes the rest.
 	for i := 0; i < n; i += 2 {
 		if tids[i] != "" {
 			a.DetachSession(token, tids[i])

@@ -6,16 +6,13 @@ export interface ProxyHealth {
   state: ProxyState;
   version?: string;
   wispVersion?: number;
-  /** Guided diagnostic message (uncertain `error` state). */
+  /** Guided diagnostic message for an uncertain `error` state. */
   error?: string;
-  /**
-   * `true` when the probe cannot decide (e.g. Chromium `TypeError` that is
-   * ambiguous between a stopped proxy and a local network access refusal).
-   */
+  /** `true` when the probe cannot decide between a stopped proxy and an LNA refusal. */
   uncertain?: boolean;
 }
 
-/** Probe timeout: the local network proxy is local, 1500 ms is enough. */
+/** Probe timeout in ms; the proxy is local. */
 export const PROXY_HEALTH_TIMEOUT_MS = 1500;
 
 function trimBaseUrl(baseUrl: string): string {
@@ -33,12 +30,7 @@ function isAbortError(error: unknown): boolean {
   );
 }
 
-/**
- * Does the browser support Local Network Access (heuristic)?
- *
- * Recent Chrome/Chromium exposes `navigator.userAgentData`; failing that, a
- * Chromium UA is detected. Outside Chromium the concept does not exist → `false`.
- */
+/** Heuristic: `userAgentData` or a Chromium user agent means LNA is supported. */
 export function supportsLocalNetworkAccess(nav?: {
   userAgent?: string;
   userAgentData?: unknown;
@@ -61,29 +53,9 @@ function isSecureContextActive(): boolean {
 }
 
 /**
- * Probes the local network proxy through `GET {baseUrl}/health`.
- *
- * Routes actually used (see `apps/network-proxy/internal/server/server.go`):
- * - `GET /health` → `{status: "ok", version, wispVersion: 1, …}`.
- *
- * Interpretation:
- * - network error / timeout (including `AbortError`) → `not-running`;
- * - non-JSON response or unexpected shape → `incompatible`;
- * - `wispVersion !== PROXY_WISP_VERSION` → `incompatible`;
- * - success → `connected` (local network proxy **reached**, not paired yet: the
- *   store also requires a token before showing "Connected").
- *
- * **Uncertain** state (DOCUMENTED LIMITATION): when the fetch fails with a
- * `TypeError` while `window.isSecureContext` is true AND the environment supports
- * Local Network Access (Chromium), the browser does NOT let us tell an LNA
- * refusal apart from a stopped local network proxy: both produce the same
- * generic `TypeError` ("Failed to fetch"). We therefore return an **uncertain**
- * `error` state (`uncertain: true`) carrying a guided diagnostic message,
- * instead of asserting `permission-required`. Outside a secure context or
- * outside Chromium, the same failure yields `not-running`.
- *
- * `not-installed` is NEVER returned here: the absence of a response does not
- * prove the absence of an installation.
+ * Probes `GET {baseUrl}/health`. A successful probe means reached, not paired.
+ * A Chromium `TypeError` in a secure context is ambiguous between an LNA refusal
+ * and a stopped proxy, so it returns `uncertain`.
  */
 export async function checkProxy(
   baseUrl: string,

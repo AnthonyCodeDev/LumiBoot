@@ -9,14 +9,7 @@ function isLocalHostname(hostname: string): boolean {
   return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
 }
 
-/**
- * Validates a personal WISP relay address.
- *
- * Only the `wss:` scheme is accepted. `ws:` (unencrypted) is tolerated only for
- * a localhost host and only if `allowInsecure` is enabled (development). The URL
- * must contain neither credentials (userinfo) nor fragment; the host is required
- * and the port stays optional.
- */
+/** `ws:` is only tolerated on localhost when `allowInsecure` is set. */
 export function validateRelayUrl(
   raw: unknown,
   options: { allowInsecure?: boolean } = {},

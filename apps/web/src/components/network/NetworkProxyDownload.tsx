@@ -9,13 +9,13 @@ import {
 } from '../../lib/platform';
 
 export interface NetworkProxyDownloadProps {
-  /** Platform injected in tests (otherwise auto-detected). */
+  /** Platform injected in tests. */
   platform?: HostPlatform | undefined;
-  /** Manifest injected in tests (otherwise loaded over the network). */
+  /** Manifest injected in tests. */
   manifest?: DownloadsManifest | undefined;
 }
 
-/** Human-readable labels for the targets, in manifest order. */
+/** Labels for the targets, in manifest order. */
 const TARGET_LABELS: Record<PlatformKey, string> = {
   'windows-x64': 'Windows x64',
   'windows-arm64': 'Windows ARM64',
@@ -24,14 +24,7 @@ const TARGET_LABELS: Record<PlatformKey, string> = {
   macos: 'macOS',
 };
 
-/**
- * Discreet "Install" text link to the local network proxy build for the host
- * platform, plus a "show all versions" button that expands the list of every
- * platform in the manifest.
- *
- * Everything goes through the manifest (`/downloads/manifest.json`): no
- * hard-coded URL, and a target is only clickable when `published === true && url`.
- */
+/** Install link for the host platform, plus the full list. A target is clickable only when published. */
 export function NetworkProxyDownload(props: NetworkProxyDownloadProps) {
   const [platform, setPlatform] = useState<HostPlatform | null>(props.platform ?? null);
   const [manifest, setManifest] = useState<DownloadsManifest | null>(props.manifest ?? null);
@@ -40,14 +33,14 @@ export function NetworkProxyDownload(props: NetworkProxyDownloadProps) {
   useEffect(() => {
     if (props.platform !== undefined || props.manifest !== undefined) return;
     let cancelled = false;
-    // Immediate synchronous detection (UA), then asynchronous refinement (userAgentData).
+    // Sync detection first, then refine with userAgentData.
     setPlatform(detectHostPlatform());
     void (async () => {
       try {
         const detected = await detectHostPlatformAsync();
         if (!cancelled) setPlatform(detected);
       } catch {
-        // The synchronous fallback already displayed is enough.
+        // The synchronous fallback is enough.
       }
       try {
         const loaded = await loadDownloadsManifest();

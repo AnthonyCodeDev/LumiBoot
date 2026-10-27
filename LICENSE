@@ -1,0 +1,76 @@
+LumiBoot Source-Available License 1.0
+
+Copyright (c) 2026 Anthony (AnthonyCodeDev). All rights reserved.
+
+This license lets you read, build, run and modify the Work for personal, educational or
+evaluation purposes. It lets you share modified versions if you keep the attribution and apply
+this same license to them. The Work is source-available, not an open source license approved by
+the OSI, and commercial use requires a separate written license.
+
+1. Definitions
+
+Work: the LumiBoot software, including its source code, scripts, configuration and documentation.
+Author: Anthony (AnthonyCodeDev), the copyright holder of the Work.
+You: any individual or legal entity exercising rights under this license.
+Commercial use: any use aimed at commercial advantage or monetary compensation.
+Distribute: to make the Work or a modified version available to any third party.
+Contribution: any material you intentionally submit to the Author for inclusion in the Work.
+
+2. Grant
+
+Subject to this license, the Author grants you a worldwide, royalty-free, non-exclusive,
+non-transferable and revocable license to:
+
+(a) read, clone, download, build and run the Work;
+(b) modify the Work for personal, educational or evaluation purposes, and run those changes;
+(c) distribute the Work or a modified version under Section 3.
+
+3. Conditions for distribution
+
+(a) Keep every copyright, license and attribution notice of the Work unchanged.
+(b) State that the work is based on LumiBoot by Anthony (AnthonyCodeDev), link to
+    https://github.com/AnthonyCodeDev/LumiBoot and include a copy of this license.
+(c) State clearly that you modified the Work, describe each change and give its date.
+(d) License the whole distribution under this same license, with no extra restrictions.
+(e) Claim no authorship of the Work and suggest no endorsement by the Author.
+
+4. Reserved rights
+
+(a) Commercial use. All commercial rights belong to the Author. Nothing here grants a
+    commercial right; any commercial use needs a written commercial license from the Author.
+(b) Relicensing and sublicensing. You may not relicense or sublicense the Work or a modified
+    version under any other terms.
+(c) Names and logos. You may not use the LumiBoot name or logo beyond the attribution required
+    by Section 3.
+
+5. Contributions
+
+By submitting a Contribution, you license it to the Author under this license. You also grant
+the Author a perpetual, irrevocable and worldwide right to use, modify, sublicense and
+distribute the Contribution, including commercially. You keep the copyright in your
+Contribution.
+
+6. Third-party components
+
+Third-party components such as v86, Debian and wisp-python remain under their own licenses.
+See docs/LICENSES.md for the list.
+
+7. Termination
+
+This license terminates automatically if you breach it. On termination you must stop all use
+and distribution and delete your copies. Sections 1, 4, 5, 8 and 9 survive termination.
+
+8. Warranty and liability
+
+THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE AUTHOR IS NOT LIABLE FOR ANY DAMAGES ARISING FROM
+THE WORK OR ITS USE.
+
+9. Commercial licensing and contact
+
+Commercial licensing: available on request; terms and pricing set by the Author.
+GitHub: https://github.com/AnthonyCodeDev
+Repository: https://github.com/AnthonyCodeDev/LumiBoot
+
+Only a written authorization from the Author grants rights beyond this license.

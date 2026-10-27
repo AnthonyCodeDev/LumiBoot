@@ -17,7 +17,6 @@ type approveCall struct {
 	approve bool
 }
 
-// fakeController is an in-memory Controller for tests.
 type fakeController struct {
 	mu       sync.Mutex
 	pending  []auth.Pairing

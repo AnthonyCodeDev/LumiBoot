@@ -199,7 +199,7 @@ describe('ensureImageManifest', () => {
 
     controller.abort();
     await expect(first).rejects.toMatchObject({ code: 'ASSET_ABORTED' });
-    // The remaining requester is NOT affected: the internal request stays alive.
+    // The remaining requester is not affected: the request stays alive.
     expect(signals[0]?.aborted).toBe(false);
 
     gate.resolve();

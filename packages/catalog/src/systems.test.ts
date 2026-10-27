@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getDeclaredReadiness, getSystemById, systems } from './systems';
 
-/**
- * Catalog availability is a DECLARED readiness: it never assumes the media is
- * really servable at runtime. `getDeclaredReadiness` makes that separation
- * explicit and exposes the media source to check.
- */
+/** Declared readiness never assumes the media is servable at runtime. */
 describe('getDeclaredReadiness — declared / runtime separation', () => {
   it('a validated bundled system is declared ready, media "bundled-image"', () => {
     const debian = getSystemById('debian-12-i386')!;
@@ -21,7 +17,7 @@ describe('getDeclaredReadiness — declared / runtime separation', () => {
       availability: 'ready',
       mediaSource: 'local-disk',
     });
-    // The local disk stays referenced: the runtime check knows what to probe.
+    // The runtime check knows what to probe.
     expect(windows.imageRef).toBeDefined();
   });
 
@@ -43,11 +39,7 @@ describe('getDeclaredReadiness — declared / runtime separation', () => {
   });
 });
 
-/**
- * Windows 10 x86 reuses the Windows 7 local RAW disk pipeline under v86. Since
- * that pipeline is validated like Windows 7, the derived availability becomes
- * `ready`: `validated` reflects a real boot, with no window dressing.
- */
+/** Windows 10 x86 reuses the validated Windows 7 disk pipeline. */
 describe('Windows 10 x86 — local disk pipeline under v86', () => {
   it('exposes the installed local RAW disk and the default "bundled" media', () => {
     const system = getSystemById('windows-10-x86')!;

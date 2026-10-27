@@ -7,10 +7,7 @@ import { SystemGrid } from './SystemGrid';
 import { availabilityLabels } from '../../lib/labels';
 import { useCatalogStore } from '../../features/catalog/catalog.store';
 
-/**
- * Expected card count: one per DISPLAYED system (group parents + standalone
- * systems). Child variants have no card of their own.
- */
+/** One card per displayed system: group parents and standalone systems. */
 const displayedCount = getDisplaySystems().length;
 
 function LocationProbe() {
@@ -45,8 +42,7 @@ describe('SystemGrid', () => {
     act(() => {
       useCatalogStore.getState().setQuery('debian');
     });
-    // Debian console, Desktop and XFCE match "debian", but the grid only shows
-    // the parent card: a single card.
+    // Three variants match "debian", but only the parent card is shown.
     const cards = screen.getAllByRole('article');
     expect(cards).toHaveLength(1);
     expect(cards[0]!.getAttribute('data-id')).toBe('debian-12-i386');
@@ -68,7 +64,7 @@ describe('SystemGrid', () => {
     const cards = screen.getAllByRole('article');
     expect(cards).toHaveLength(displayedCount);
     for (const card of cards) {
-      // Availability is not hard-coded here: it is read from the catalogue.
+      // Availability is read from the catalogue, never hard-coded.
       const id = card.getAttribute('data-id');
       const system = id ? getSystemById(id) : null;
       expect(system).not.toBeNull();

@@ -54,7 +54,6 @@ func TestSessionLimit(t *testing.T) {
 	if err := m.Add("s1", 2, "h", 80, "1.1.1.1", pipeConn(t)); !errors.Is(err, ErrSessionLimit) {
 		t.Fatalf("session limit not applied: %v", err)
 	}
-	// Another session is unaffected.
 	if err := m.Add("s2", 2, "h", 80, "1.1.1.1", pipeConn(t)); err != nil {
 		t.Fatalf("other session wrongly blocked: %v", err)
 	}
@@ -94,14 +93,12 @@ func TestSweepIdle(t *testing.T) {
 	if err := m.Add("s1", 1, "h", 80, "1.1.1.1", pipeConn(t)); err != nil {
 		t.Fatal(err)
 	}
-	// Negative timeout: everything is considered idle (deterministic, no sleep).
 	if n := m.SweepIdle(-time.Second); n != 1 {
 		t.Fatalf("sweep: %d closed", n)
 	}
 	if m.Count() != 0 {
 		t.Fatal("idle stream still tracked")
 	}
-	// Nothing idle with a long timeout.
 	if err := m.Add("s1", 2, "h", 80, "1.1.1.1", pipeConn(t)); err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +130,6 @@ func TestThrottleDisabled(t *testing.T) {
 }
 
 func TestThrottleCancellable(t *testing.T) {
-	// 1 byte/s: a 1 MiB transfer should wait for a very long time.
 	m := NewManager(8, 8, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {

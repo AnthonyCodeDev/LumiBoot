@@ -1,16 +1,9 @@
 import type { EngineId } from '@lumiboot/contracts';
 
-/**
- * Execution engine metadata.
- *
- * `integrated` tells whether the engine is really wired into this repository.
- * As long as it is `false`, no associated system can be announced as available,
- * whatever its catalog entry says.
- */
+/** `integrated: false` forbids any of its systems from being available. */
 export interface EngineDefinition {
   id: EngineId;
   label: string;
-  /** Where the computation takes place. */
   runtime: 'browser';
   description: string;
   integrated: boolean;

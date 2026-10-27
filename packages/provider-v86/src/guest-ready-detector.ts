@@ -5,29 +5,15 @@ import type {
 } from '@lumiboot/contracts';
 
 /**
- * Detection of the guest boot proof.
+ * Detects the guest boot proof declared by the profile `readiness` contract.
  *
- * Two modes, both backed by the `readiness` contract of the PROFILE (catalog):
- *
- * - `guest-marker`: the tag is written by the system that actually booted
- *   (systemd unit `lumiboot-ready.service`, `ttyS0` by default). It must NEVER be
- *   produced by JavaScript: it is the ONLY proof of an operational OS. Its
- *   absence within the delay is never a `running`: it is an unverified failure
- *   (see `V86Instance`).
- * - `disk-boot`: no marker exists (imported media/BIOS). The proof is a real read
- *   of the hard disk (`hda`). It is WEAKER: it attests boot activity, not an
- *   operational OS. It must never be presented as a guest marker.
- *
- * Audit fix #20: the marker, channel and delay come from the `readiness`
- * contract and are no longer hard-coded. The stream is read byte by byte: the
- * marker can be split across several notifications, so a bounded buffer is kept,
- * sized on the marker length OF THE INSTANCE (not on a global constant).
+ * `disk-boot` only attests BIOS activity and is never a guest marker.
  */
 const DEFAULT_CHANNEL: GuestReadinessChannel = 'serial';
 const DEFAULT_MODE: GuestReadinessMode = 'guest-marker';
 const DEFAULT_TIMEOUT_MS = 120_000;
 
-/** Buffer margin beyond the marker, to absorb noise from the rest of the stream. */
+/** Absorbs noise from the rest of the stream after the marker. */
 const EXTRA_TAIL_LENGTH = 64;
 
 export class GuestReadyDetector {
@@ -55,12 +41,11 @@ export class GuestReadyDetector {
     return this.#marker;
   }
 
-  /** Watched channel (`serial` or `vga`). */
   get channel(): GuestReadinessChannel {
     return this.#channel;
   }
 
-  /** Proof mode (`guest-marker` by default, `disk-boot` for an imported media). */
+  /** `guest-marker` by default; `disk-boot` for BIOS-booted media. */
   get mode(): GuestReadinessMode {
     return this.#mode;
   }
@@ -70,11 +55,7 @@ export class GuestReadyDetector {
     return this.#timeoutMs;
   }
 
-  /**
-   * Factual description of the proof expected by this instance. Used in failure
-   * messages: a `disk-boot` profile is labeled as such (disk read) and is never
-   * presented as a guest marker.
-   */
+  /** Labels a `disk-boot` proof as a disk read, never as a guest marker. */
   describeExpectedProof(): string {
     if (this.#mode === 'disk-boot') {
       return 'the first read of the hard disk (hda)';
@@ -84,23 +65,18 @@ export class GuestReadyDetector {
   }
 
   /**
-   * Consumes one byte from the stream (serial or VGA). Returns `true` only once,
-   * at the exact moment the complete marker becomes present in the buffer.
+   * Consumes one byte; `true` only once, when the full marker is present.
    */
   pushByte(byte: number): boolean {
     if (this.#detected) return false;
-    // The marker is ASCII: no UTF-8 boundary issue here.
+    // The marker is ASCII: no UTF-8 boundary issue.
     this.#tail = (this.#tail + String.fromCharCode(byte & 0xff)).slice(-this.#tailLength);
     if (!this.#tail.includes(this.#marker)) return false;
     this.#detected = true;
     return true;
   }
 
-  /**
-   * `disk-boot` mode: the proof is a real hard disk read, not a guest marker.
-   * Returns `true` only once, on the first observed disk access. This proof stays
-   * weaker than a marker (see class doc).
-   */
+  /** `true` once, on the first hard disk read; weaker than a marker. */
   markDiskBoot(): boolean {
     if (this.#detected) return false;
     this.#detected = true;

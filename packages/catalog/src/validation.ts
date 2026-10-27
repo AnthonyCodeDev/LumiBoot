@@ -1,12 +1,7 @@
 import { osCatalogSchema, type OSDefinition } from '@lumiboot/contracts';
 import { CatalogValidationError, type CatalogIssue } from './errors';
 
-/**
- * Validates a raw catalog (potentially untrusted data: generated file, JSON
- * manifest, external contribution) before use.
- *
- * Checks: Zod schema (fields, types, formats) + uniqueness of `id` and `slug`.
- */
+/** Zod validation plus `id`/`slug` uniqueness on untrusted input. */
 export function validateCatalog(input: unknown): OSDefinition[] {
   const result = osCatalogSchema.safeParse(input);
   if (!result.success) {
@@ -33,8 +28,7 @@ export function validateCatalog(input: unknown): OSDefinition[] {
     seenSlugs.add(system.slug);
   });
 
-  // Variant group integrity: a child must point to an EXISTING target that is
-  // indeed a parent (never another child), and cannot be its own group.
+  // A child must point to an existing parent, never to another child or itself.
   const systemsById = new Map(catalog.map((system) => [system.id, system] as const));
   catalog.forEach((system, index) => {
     const groupId = system.variantGroupId;

@@ -2,6 +2,7 @@
   "name": "@lumiboot/contracts",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "description": "Zod types and schemas shared by the web app, the API and the providers",
   "exports": {

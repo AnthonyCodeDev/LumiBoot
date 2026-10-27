@@ -32,67 +32,45 @@ export const V86_PROVIDER_ID = 'v86';
 
 const MiB = 1024 * 1024;
 
-/** Static locations of the engine binaries, prepared outside the repository. */
 export const V86_ASSET_PATHS = {
   wasm: '/v86/v86.wasm',
   bios: '/v86/seabios.bin',
   vgaBios: '/v86/vgabios.bin',
 } as const;
 
-/**
- * Kernel command line: 115200 serial console for the interactive console,
- * `root=/dev/sda` maps to the `hda` disk passed to v86.
- */
+/** 115200 serial console; `root=/dev/sda` maps to the `hda` disk. */
 export const DEFAULT_BOOT_CMDLINE = 'console=tty0 console=ttyS0,115200 root=/dev/sda rw';
 
-/**
- * `BootOrder` values (v86) we need, duplicated as numbers so we NEVER import
- * `v86` while loading the provider (the engine stays lazily loaded by
- * `browser-v86`). `CD_HARDDISK_FLOPPY = 0x123` boots the CD-ROM first, then the
- * hard disk.
- */
+/** Duplicated as a number so the provider never imports `v86` at load time. */
 const BOOT_ORDER_CD_HARDDISK_FLOPPY = 0x123 as BootOrder;
 
-/**
- * ACTUAL capabilities of the engine. `VMInstance` exposes no snapshot entry
- * point (RAM or disk): the provider must therefore never advertise
- * `ramSnapshots`/`diskSnapshots`, even if the `V86` class has an internal
- * `save_state`/`restore_state` not wired to the contract. Advertising a
- * capability missing from `VMInstance` would make the UI promise a feature that
- * does not exist.
- */
+/** `VMInstance` exposes no snapshot entry point, so snapshots are not advertised. */
 const V86_CAPABILITIES: VMCapabilities = {
   runtime: 'browser',
   architectures: ['i386'],
   ramSnapshots: false,
   diskSnapshots: false,
-  // v86 reads the disk through HTTP Range requests (`hda.async`).
+  // v86 reads the disk through HTTP Range requests.
   partialDownload: true,
   resumable: false,
   configurableMemory: true,
 };
 
 export interface V86ProviderOptions {
-  /** v86 instance factory (real by default, injectable in tests). */
+  /** Injectable in tests; real engine by default. */
   createEngine?: V86Factory;
-  /** Image manifest resolution (`ensureImageManifest` by default). */
+  /** Defaults to `ensureImageManifest`. */
   resolveManifest?: (ref: string, signal?: AbortSignal) => Promise<ImageManifest>;
-  /**
-   * Manifest resolution of a local disk booted by BIOS
-   * (`ensureLocalDiskManifest` by default).
-   */
+  /** Defaults to `ensureLocalDiskManifest`. */
   resolveDiskManifest?: (ref: string, signal?: AbortSignal) => Promise<LocalDiskManifest>;
-  /** Console adapter factory (VGA + serial), injectable in tests. */
+  /** Injectable in tests; DOM console by default. */
   createConsole?: () => V86ConsoleAdapter;
 }
 
 /**
  * 32-bit x86 browser engine backed by v86.
  *
- * All v86 knowledge stays confined here: the UI only sees a `VMInstance`. The
- * instance is only created when a session starts, and the guest kernel is never
- * considered operational before the `LUMIBOOT_GUEST_READY` marker is emitted on
- * `ttyS0`.
+ * The guest is never `running` before the proof declared by the profile.
  */
 export class V86Provider implements VMEngine {
   readonly id = V86_PROVIDER_ID;
@@ -147,13 +125,10 @@ export class V86Provider implements VMEngine {
       });
     }
 
-    // A `disk-boot` profile boots a hard disk through BIOS (no Linux kernel):
-    // either a RAW disk from the codebase (e.g. Windows 7) or a locally imported
-    // media. A `guest-marker` profile boots a published image through the kernel.
+    // A `disk-boot` profile boots a hard disk through BIOS, without a kernel.
     const isDiskBoot = launchProfile.readiness?.mode === 'disk-boot';
 
-    // Media imported by the user: direct BIOS boot. LumiBoot distributes NO
-    // proprietary media: it must have been provided locally.
+    // Imported media boots through BIOS; LumiBoot ships no proprietary media.
     const media = configuration?.media;
     if (os.mediaStrategy === 'user-import' && media === undefined) {
       throw new VMError(
@@ -173,7 +148,6 @@ export class V86Provider implements VMEngine {
         });
       }
       if (isDiskBoot) {
-        // Local RAW disk from the codebase: booted by BIOS via HTTP Range.
         diskManifest = await this.#loadDiskManifest(os, signal);
       } else {
         manifest = await this.#loadManifest(os, signal);
@@ -203,13 +177,7 @@ export class V86Provider implements VMEngine {
       diskManifest?.vgaMemoryMiB ??
       8;
 
-    // Network fixed BEFORE building the emulator: changing the network interface
-    // requires a full v86 restart. Each session owns its own controller (never
-    // shared between sessions).
-    //
-    // The emulated card comes from the HARDWARE PROFILE of the catalog: the
-    // provider only translates that contract (`network` -> `net_device.type`),
-    // never a per-system decision.
+    // Network must be fixed before the emulator is built: changing it restarts v86.
     const networkProfile = configuration?.network ?? defaultNetworkProfile;
     const networkController = createNetworkController({ profile: networkProfile });
     let netDevice: V86NetworkDevice | undefined;
@@ -230,8 +198,7 @@ export class V86Provider implements VMEngine {
     try {
       mounted = consoleAdapter.attach(mountTarget);
     } catch (error) {
-      // Mounting the console can fail (unexpected DOM): the network controller
-      // must never survive a start failure.
+      // The network controller must not survive a failed mount.
       await networkController.dispose().catch(() => undefined);
       throw new VMError('START_FAILED', `The v86 console could not be mounted for "${os.id}".`, {
         systemId: os.id,
@@ -243,16 +210,8 @@ export class V86Provider implements VMEngine {
     const kernelDisk = manifest?.files['disk'];
     const bzimage = manifest?.files['bzimage'];
     const initrd = manifest?.files['initrd'];
-    // Real boot plans:
-    // - imported RAW media -> BIOS + disk (`hda`), no Linux kernel;
-    // - imported ISO media -> BIOS + CD-ROM (`cdrom`) + CD-first boot order;
-    // - local RAW disk -> BIOS + disk (`hda`), no Linux kernel;
-    // - published image -> direct kernel boot (`bzimage`/`initrd` + `hda`).
-    //
-    // A RAW disk is read-only through Range requests (`async`): the base is
-    // never rewritten, guest writes stay in the memory buffer and disappear on
-    // stop (no persistence claimed, see docs/windows-7.md). An ISO is an optical
-    // media: it is NEVER mounted as a hard disk.
+    // RAW disks stay read-only through Range requests: guest writes live in memory
+    // and vanish on stop.
     const bootMedia: V86Options = media
       ? resolveMediaBootOptions(media, launchProfile, configuration, os.id)
       : diskManifest
@@ -279,8 +238,7 @@ export class V86Provider implements VMEngine {
       serial_console: { type: 'textarea', container: mounted.serialTextarea },
       autostart: false,
       ...bootMedia,
-      // ACPI comes from the hardware profile (required by modern NT guests).
-      // A session with imported media OR a local disk needs it.
+      // NT guests require ACPI; imported media and local disks enable it.
       ...(media === undefined && diskManifest === null
         ? {}
         : { acpi: launchProfile.hardwareProfile?.acpi ?? false }),
@@ -324,8 +282,7 @@ export class V86Provider implements VMEngine {
       });
       instance.wire();
     } catch (error) {
-      // Last safety net: if wiring fails, destroy the emulator and release the
-      // network controller so no orphaned resource is left behind.
+      // Wiring failure must leave no orphaned resource.
       try {
         await emulator.destroy();
       } catch {
@@ -381,7 +338,6 @@ export class V86Provider implements VMEngine {
   }
 }
 
-/** Default memory when no layer provides it. */
 const DEFAULT_MEMORY_MIB = 512;
 
 interface MemoryHint {
@@ -402,16 +358,8 @@ function resolveMemoryMiB(
 }
 
 /**
- * Validates guest memory against the ACTUAL constraints of v86 0.5.471.
- *
- * `create_memory` receives the size in bytes and rounds it down to a multiple of
- * 128 KiB. Above 2 GiB (`0x80000000`), the 32-bit integer overflows and becomes
- * negative; v86 does NOT trust that value and clamps it to `2^31 - 128 KiB`
- * (≈ 2047.875 MiB). The useful upper bound is therefore 2048 MiB (2 GiB), which
- * v86 accepts and reduces itself internally. A strictly greater value (e.g.
- * 4096) would be silently reduced to ~2 GiB: we reject it here rather than
- * promise memory that is not honored. A power of two is NOT required: 1536 MiB
- * is valid and accepted.
+ * v86 clamps memory to `2^31 - 128 KiB`; values above 2048 MiB are rejected
+ * instead of being silently reduced.
  */
 function assertSupportedMemoryMiB(value: number, label: string, systemId: string): void {
   const supported = Number.isInteger(value) && value > 0 && value * MiB <= 0x80000000;
@@ -424,11 +372,7 @@ function assertSupportedMemoryMiB(value: number, label: string, systemId: string
   }
 }
 
-/**
- * Converts any network layer failure into a start `VMError`: an invalid profile
- * (`user-relay` without a `wss://` URL, `local-network`) must fail the session at
- * start, never silently.
- */
+/** Network failures must fail the session at start, never silently. */
 function toStartFailure(error: unknown, systemId: string): VMError {
   if (isVMError(error)) return error;
   if (isNetworkError(error)) {
@@ -442,17 +386,8 @@ function toStartFailure(error: unknown, systemId: string): VMError {
 }
 
 /**
- * Translates a media imported by the user into v86 options, depending on its
- * format:
- *
- * - `raw`: hard disk (`hda`), read-only through Range requests (`async`).
- * - `iso`: optical media mounted as CD-ROM (`cdrom`) with a CD-first boot order.
- *
- * Installing an OS onto a blank disk is NOT supported: LumiBoot provides no
- * persistent writable disk and v86 writes to memory (lost on stop). An ISO meant
- * for installation is therefore rejected by an explicit `VMError`
- * (`UNSUPPORTED_ENVIRONMENT`) rather than simulating persistence. Only a "live"
- * bootable ISO (non-`disk-boot` profile and `bootDevice: 'cdrom'`) is accepted.
+ * `raw` media becomes a read-only `hda`, `iso` a CD-ROM with CD-first boot.
+ * Installation ISOs are rejected: v86 persists no write.
  */
 function resolveMediaBootOptions(
   media: VMMedia,

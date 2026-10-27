@@ -5,7 +5,7 @@
 
 ## Context
 
-Shared responsibilities: lifecycle, engine resolution, errors.
+Lifecycle, engine resolution and errors are shared responsibilities.
 
 ## Decision
 
@@ -17,10 +17,10 @@ Shared responsibilities: lifecycle, engine resolution, errors.
 - `compatibility/`: engine ↔ system ↔ browser;
 - `errors/` and `providers/`: normalized errors, unavailable engine.
 
-`SessionLifecycle` guarantees a single instance, idempotent stop and `dispose()` after a stop or a partial failure; `tests/architecture.test.ts` forbids React/Zustand outside the UI.
+`SessionLifecycle` enforces a single instance, an idempotent stop and `dispose()` after a stop or a partial failure. `tests/architecture.test.ts` forbids React/Zustand outside the UI.
 
 ## Consequences
 
-- New system through the catalogue, never through UI conditions.
-- Contracts and Zod schemas in `@lumiboot/contracts`.
-- `vm-assets`, `vm-storage` and `vm-network` independent of the frontend.
+- A new system goes through the catalogue, never through UI conditions.
+- Contracts and Zod schemas live in `@lumiboot/contracts`.
+- `vm-assets`, `vm-storage` and `vm-network` stay independent of the frontend.

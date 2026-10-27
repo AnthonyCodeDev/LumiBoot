@@ -1,9 +1,3 @@
-/**
- * Network modes offered by LumiBoot. Each mode describes *how* a virtual
- * machine accesses (or not) the network, independently of the execution engine
- * and of the guest system.
- */
-
 export const NETWORK_MODES = [
   'offline',
   'browser-fetch',
@@ -19,12 +13,7 @@ export interface NetworkModeInfo {
   label: string;
   description: string;
   availability: 'ready' | 'planned';
-  /**
-   * Always `true`: the v86 network profile is fixed **before** the emulator is
-   * built (translation to `net_device`). Any network profile change — including
-   * to/from `offline` — therefore requires a **new session**; no hot switching
-   * is supported.
-   */
+  /** Any profile change requires a new session: no hot switching. */
   requiresRestart: boolean;
   requiresConfiguration: boolean;
 }

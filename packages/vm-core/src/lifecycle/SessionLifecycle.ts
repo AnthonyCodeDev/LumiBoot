@@ -26,19 +26,8 @@ export interface SessionSnapshot {
 export type SessionListener = (snapshot: SessionSnapshot) => void;
 
 /**
- * Supervises the lifecycle of a session: start, stop, destroy.
- *
- * Guarantees:
- * - no concurrent double start;
- * - state transitions validated by the state machine;
- * - `dispose()` always releases resources, even after a partial failure;
- * - `running` is only reached on proof of a real system start;
- * - a fatal error (download, engine `run()`, `error` event from an engine)
- *   actually releases the VM, beyond the sole switch to `error`.
- *
- * Cleanup is supervised and idempotent: a single effective release is shared by
- * all concurrent operations (`start`/`stop`/`dispose`), cleanup failures stay
- * observable, and no exception is ever left unhandled.
+ * Supervises start, stop and dispose; `running` is only reached on a real guest
+ * proof and a fatal error actually releases the VM.
  */
 export class SessionLifecycle {
   readonly id: string;
@@ -59,8 +48,7 @@ export class SessionLifecycle {
   #starting = false;
   #runToken = 0;
   #disposed = false;
-  // Reconciled terminal stop (spontaneous engine stop): neutralizes any late
-  // engine event until the next `start()`.
+  // Neutralizes late engine events until the next `start()`.
   #halted = false;
   #cleanupPromise: Promise<void> | null = null;
   readonly #onCleanupError: ((error: unknown, context: string) => void) | undefined;
@@ -99,7 +87,7 @@ export class SessionLifecycle {
   }
 
   async start(mountTarget: unknown, configuration?: VMConfiguration): Promise<void> {
-    // A disposed session is terminal: no silent reactivation.
+    // A disposed session is terminal.
     if (this.#disposed) return;
     const current = this.#machine.state;
     if (this.#starting && this.#startPromise !== null) return this.#startPromise;
@@ -109,8 +97,7 @@ export class SessionLifecycle {
     const startToken = ++this.#runToken;
     this.#starting = true;
     this.#halted = false;
-    // New generation: the previous one (possibly already cleaned up) must not
-    // short-circuit the release of the new instance.
+    // New generation: a stale cleanup promise must not short-circuit this one.
     this.#cleanupPromise = null;
     this.#error = undefined;
     this.#phase = undefined;
@@ -139,9 +126,7 @@ export class SessionLifecycle {
         }
         this.#instance = instance;
         const unsubscribe = instance.subscribe((event) => this.#onEvent(event));
-        // A spontaneous stop that occurred DURING subscription (replay of
-        // memorized events) already released the instance: the unsubscribe is
-        // then neutralized instead of kept on a dead reference.
+        // A replayed `stopped` event may already have released the instance.
         if (this.#instance === instance) {
           this.#unsubscribe = unsubscribe;
         } else {
@@ -149,9 +134,7 @@ export class SessionLifecycle {
         }
         if (controller.signal.aborted || startToken !== this.#runToken) {
           await this.#stopInstance();
-          // An `error` event received during `subscribe()` already started the
-          // supervised cleanup: wait for it so `start()` never resolves with a
-          // still-living instance.
+          // An `error` replayed during `subscribe()` already started the cleanup.
           if (this.#cleanupPromise !== null) await this.#cleanupPromise;
           this.#settleCancelledStart();
           return;
@@ -165,9 +148,7 @@ export class SessionLifecycle {
           ? error
           : new VMError('START_FAILED', 'Startup failed.', { systemId: this.system.id });
         this.#fail(vmError.code, vmError.message);
-        // The failure actually releases the VM: wait for the supervised cleanup
-        // before resolving `start()`, so the instance is never orphaned when the
-        // caller gets control back.
+        // Wait for the cleanup so the instance is never orphaned on return.
         await this.#cleanupPromise;
       } finally {
         cleanupAbortRelay();
@@ -193,8 +174,7 @@ export class SessionLifecycle {
     }
     const state = this.#machine.state;
     if (state === 'idle' || state === 'stopped' || state === 'error') {
-      // A spontaneous stop may have started a cleanup: wait for it so we never
-      // return with a release still in flight.
+      // Wait for a cleanup already started, so no release stays in flight.
       if (this.#cleanupPromise !== null) await this.#cleanupPromise;
       return;
     }
@@ -202,12 +182,9 @@ export class SessionLifecycle {
       this.#machine.transition('stopping');
       this.#emit();
     }
-    // Idempotent, supervised release: the same promise is shared with a
-    // concurrent `dispose()`/`#fail()`, so a single effective release.
     await this.#releaseResources('stop');
     if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
-    // Terminal: a late event from a faulty engine must not resurrect the
-    // session (a later `start()` re-arms `#halted`).
+    // Terminal: a late engine event must not resurrect the session.
     this.#halted = true;
     this.#phase = undefined;
     this.#loadedBytes = undefined;
@@ -249,13 +226,10 @@ export class SessionLifecycle {
   }
 
   #onEvent(event: SessionEvent): void {
-    // A late event after disposal, or after a terminal stop (reconciled
-    // spontaneous stop / deliberate stop) has no observable effect.
+    // Late events after disposal or a terminal stop have no effect.
     if (this.#disposed || this.#halted) return;
     if (event.type === 'state') {
-      // `stopped` is handled separately: it is the signal of a SPONTANEOUS stop
-      // (guest shutdown/crash) that must traverse `stopping`, actually release
-      // the resources and then reach `stopped` — never be ignored.
+      // `stopped` means a spontaneous stop that must traverse `stopping`.
       if (event.state === 'stopped') {
         this.#reconcileSpontaneousStop();
       } else {
@@ -286,8 +260,7 @@ export class SessionLifecycle {
       return;
     }
     if (event.type === 'network') {
-      // Network diagnostics are purely observable: they refresh the snapshot
-      // without triggering any state transition or session failure.
+      // Purely observable: no state transition, no session failure.
       this.#network = event.network;
       this.#emit();
       return;
@@ -296,9 +269,8 @@ export class SessionLifecycle {
   }
 
   /**
-   * Applies an ordinary state transition emitted by the engine. `running`
-   * proven without an explicit `booting` phase traverses `booting` to respect
-   * the state machine invariant.
+   * `running` without an explicit `booting` traverses `booting` to respect the
+   * state machine invariant.
    */
   #applyState(state: VMState): void {
     if (this.#machine.canTransition(state)) {
@@ -310,15 +282,8 @@ export class SessionLifecycle {
   }
 
   /**
-   * Reconciles a spontaneous stop (`stopped` emitted by the engine without
-   * going through `stop()`), including from `running` or `booting`.
-   *
-   * The direct `running -> stopped` transition does not exist: we traverse
-   * `stopping`, actually release the resources in a supervised and idempotent
-   * way (`#releaseResources` immediately cuts the instance reference then
-   * cleans up), then reach `stopped`. No zombie VM, no blocked restart; an
-   * underlying `destroy()` failure is reported via `onCleanupError`. `#halted`
-   * then neutralizes any late event.
+   * The direct `running -> stopped` transition does not exist, so the stop
+   * traverses `stopping` and releases the resources.
    */
   #reconcileSpontaneousStop(): void {
     const state = this.#machine.state;
@@ -340,24 +305,16 @@ export class SessionLifecycle {
   #fail(code: string, message: string): void {
     this.#error = { code, message };
     if (this.#machine.canTransition('error')) this.#machine.transition('error');
-    // Invalidates any start in flight: the session is terminal on the execution
-    // side.
+    // Invalidates any start in flight.
     this.#invalidateStart();
     this.#emit();
-    // Supervised cleanup: actually releases the VM (and clears the instance
-    // reference). We do not wait here — `#onEvent` is synchronous — but the
-    // shared promise stays observable via `dispose()` and via the explicit wait
-    // performed in `start()`.
+    // Not awaited here: `#onEvent` is synchronous, the promise stays observable.
     void this.#releaseResources('error');
   }
 
   /**
-   * Supervised, idempotent release of the current instance resources.
-   *
-   * All concurrent operations share the same promise: `stop()`, `dispose()` and
-   * `#fail()` only trigger one effective cleanup. The promise never rejects;
-   * failures are reported via the `onCleanupError` callback (and
-   * `console.warn`).
+   * Concurrent operations share one effective cleanup; the promise never
+   * rejects, failures go to `onCleanupError`.
    */
   #releaseResources(context: string): Promise<void> {
     if (this.#cleanupPromise !== null) return this.#cleanupPromise;
@@ -365,8 +322,7 @@ export class SessionLifecycle {
     const instance = this.#instance;
     this.#unsubscribe?.();
     this.#unsubscribe = null;
-    // The reference is cut immediately: never an orphaned instance, even if the
-    // asynchronous cleanup fails later.
+    // The reference is cut first: no orphaned instance if cleanup fails later.
     this.#instance = null;
 
     const cleanup = (async () => {
@@ -382,8 +338,7 @@ export class SessionLifecycle {
         this.#reportCleanupError(error, 'dispose');
       }
     })().catch((error) => {
-      // Safety belt: no unhandled exception, even if the supervision itself
-      // fails.
+      // Safety belt: no unhandled exception if the supervision itself fails.
       this.#reportCleanupError(error, context);
     });
 
@@ -394,8 +349,7 @@ export class SessionLifecycle {
   #settleCancelledStart(): void {
     if (this.#machine.canTransition('stopping')) this.#machine.transition('stopping');
     if (this.#machine.canTransition('stopped')) this.#machine.transition('stopped');
-    // A cancelled start is terminal: any late event from the superseded
-    // instance is neutralized until the next `start()`.
+    // A cancelled start is terminal: late events are neutralized.
     this.#halted = true;
     this.#phase = undefined;
     this.#loadedBytes = undefined;

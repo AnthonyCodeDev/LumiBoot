@@ -1,11 +1,6 @@
 import { z } from 'zod';
 
-/**
- * Lifecycle of a virtual machine session.
- *
- * The single `booting -> running` transition must be proven by the real boot of
- * the guest system, never by a JavaScript timer.
- */
+/** `booting -> running` must be proven by the real guest boot, never a timer. */
 export const vmStateSchema = z.enum([
   'idle',
   'preparing',
@@ -17,11 +12,7 @@ export const vmStateSchema = z.enum([
   'error',
 ]);
 
-/**
- * Network diagnostics of a session. These values are deliberately duplicated
- * from `@lumiboot/vm-network`: `contracts` is the lowest layer and cannot
- * depend on the network subsystem (which itself depends on `contracts`).
- */
+/** Duplicated from `@lumiboot/vm-network`: contracts cannot depend on it. */
 export const networkModeSchema = z.enum([
   'offline',
   'browser-fetch',
@@ -43,10 +34,10 @@ export const networkStatusSchema = z.enum([
 
 export const networkTransportSchema = z.enum(['none', 'fetch', 'wisp']);
 
-/** Kind of a real network probe (mirror of the `vm-network` subsystem). */
+/** Mirror of the `vm-network` probe kinds. */
 export const networkProbeKindSchema = z.enum(['dns', 'http', 'https', 'tcp']);
 
-/** Result of a network probe, `at` = measurement timestamp (ms). */
+/** `at` is the measurement timestamp in ms. */
 export const networkProbeResultSchema = z.object({
   ok: z.boolean(),
   at: z.number(),

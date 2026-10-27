@@ -1,10 +1,6 @@
 import type { OSDefinition } from '@lumiboot/contracts';
 import { isEngineIntegrated } from './engines';
 
-/**
- * Runtime environment capabilities. Centralized here so that no UI component
- * decides compatibility "on behalf" of a system.
- */
 export interface BrowserCapabilities {
   webAssembly: boolean;
   webAssemblyStreaming: boolean;

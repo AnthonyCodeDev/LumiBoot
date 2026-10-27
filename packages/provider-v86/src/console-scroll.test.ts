@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { V86 } from 'v86';
 import { attachConsoleWheelScroll } from './console-scroll';
 
-/** Expected make+break scancodes (see `console-scroll.ts`). */
+/** Expected make/break scancodes. */
 const SHIFT_PAGE_UP = [0x2a, 0xe0, 0x49, 0xe0, 0xc9, 0xaa];
 const SHIFT_PAGE_DOWN = [0x2a, 0xe0, 0x51, 0xe0, 0xd1, 0xaa];
 
@@ -19,10 +19,7 @@ function createEmulator(): FakeEmulator {
   };
 }
 
-/**
- * Builds a fake screen containing `.v86-screen-text`. `display` is `null` to
- * leave the div visible (text mode), or `'none'` to simulate graphics mode.
- */
+/** `display` null leaves text mode visible; `'none'` simulates graphics mode. */
 function createScreen(display: string | null): { screen: HTMLElement; text: HTMLElement } {
   const screen = document.createElement('div');
   screen.className = 'v86-screen';

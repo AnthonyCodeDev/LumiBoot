@@ -27,7 +27,7 @@ export type ConfigLoadErrorCode =
   | 'CONFIG_INVALID_PROXY_URL'
   | 'CONFIG_FORBIDDEN_TOKEN';
 
-/** Typed error: every load failure carries a usable code. */
+/** Typed error: every load failure carries a code. */
 export class ConfigLoadError extends Error {
   readonly code: ConfigLoadErrorCode;
 
@@ -40,10 +40,7 @@ export class ConfigLoadError extends Error {
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-/**
- * Rejects a `user-relay` profile without an address, or whose WISP address is
- * invalid (non-`wss:` scheme, credentials, fragment…).
- */
+/** Rejects a `user-relay` profile without a valid WISP address. */
 function assertRelay(profile: NetworkProfile, label: string): void {
   if (profile.mode !== 'user-relay') return;
   const relayUrl = profile.relayUrl;
@@ -64,12 +61,7 @@ function assertRelay(profile: NetworkProfile, label: string): void {
   }
 }
 
-/**
- * Rejects any token persisted in the public file: `proxyToken` is runtime-only
- * (memory, never `lumiboot.config.json`). Scans the raw JSON recursively because
- * the strict schema would otherwise reject it as a generic `CONFIG_INVALID`,
- * without an explicit security message.
- */
+/** Rejects a `proxyToken` in the public file: it is runtime-only. */
 function assertNoProxyToken(raw: unknown): void {
   const seen = new Set<unknown>();
   const visit = (value: unknown): boolean => {
@@ -91,7 +83,7 @@ function assertNoProxyToken(raw: unknown): void {
   }
 }
 
-/** Validates the URL of a `local-proxy` profile (loopback only). */
+/** Validates the URL of a `local-proxy` profile. */
 function assertProxyUrl(proxyUrl: string | undefined, label: string): void {
   if (proxyUrl === undefined) return;
   const validation = validateProxyUrl(proxyUrl);
@@ -105,7 +97,7 @@ function assertProxyUrl(proxyUrl: string | undefined, label: string): void {
   }
 }
 
-/** Normalizes the `proxy` section (defaults applied, URL validated). */
+/** Normalizes the `proxy` section. */
 function toProxyConfig(parsed: ParsedProxyFileConfig | undefined): ProxyConfig {
   const url = parsed?.url ?? DEFAULT_PROXY_URL;
   const validation = validateProxyUrl(url);
@@ -127,7 +119,7 @@ function toProxyConfig(parsed: ParsedProxyFileConfig | undefined): ProxyConfig {
   return config;
 }
 
-/** Cleans validated profiles and checks relays before exposure. */
+/** Normalizes the profiles and validates relays and proxy URLs. */
 function toNetworkConfig(parsed: ParsedNetworkConfig): NetworkConfig {
   const defaultProfile = normalizeNetworkProfile(parsed.defaultProfile);
   assertRelay(defaultProfile, 'the default network profile');
@@ -155,11 +147,8 @@ function toNetworkConfig(parsed: ParsedNetworkConfig): NetworkConfig {
 }
 
 /**
- * Loads the global public config before the React render.
- *
- * Detects the SPA fallback (HTML page served instead of JSON), validates the
- * version, then the schema, then the relay addresses. Never throws an untyped
- * exception: every failure is a `ConfigLoadError`.
+ * Loads the global public config before the React render. Every failure is a
+ * `ConfigLoadError`, never an untyped exception.
  */
 export async function loadConfig(fetchImpl: FetchLike = fetch): Promise<LumibootConfig> {
   let response: Response;

@@ -16,7 +16,7 @@ type Listener = (arg: unknown) => void;
 
 class FakeV86 {
   readonly calls = { run: 0, stop: 0, destroy: 0 };
-  /** Events passed to `remove_listener` (checks the detach). */
+  /** Events passed to `remove_listener`. */
   readonly removed: string[] = [];
   destroyError: Error | null = null;
   runError: Error | null = null;
@@ -95,7 +95,7 @@ describe('V86Instance', () => {
     emulator.emit('emulator-ready', undefined);
 
     expect(emulator.calls.run).toBe(1);
-    // WASM ready (emulator-ready) is distinct from kernel boot (booting).
+    // WASM ready is distinct from kernel boot.
     expect(events).toEqual([
       { type: 'progress', phase: 'emulator-ready' },
       { type: 'progress', phase: 'booting' },
@@ -114,7 +114,7 @@ describe('V86Instance', () => {
 
     const running = events.filter((event) => event.type === 'state' && event.state === 'running');
     expect(running).toHaveLength(1);
-    // The transition is explicitly labeled "guest-ready" (strong proof).
+    // The transition is explicitly labeled "guest-ready".
     expect(events).toContainEqual({ type: 'progress', phase: 'guest-ready' });
     expect(instance.readiness).toBe('guest-ready');
   });
@@ -166,7 +166,7 @@ describe('V86Instance', () => {
     expect(emulator.listenerCount('screen-put-char')).toBe(0);
     expect(emulator.listenerCount('ide-read-end')).toBe(1);
 
-    // CD read (channel 1) or zero-length read: no boot proof.
+    // CD read on channel 1 or zero-length read: no boot proof.
     emulator.emit('ide-read-end', [1, 512, 1]);
     emulator.emit('ide-read-end', [0, 0, 0]);
     expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(false);
@@ -176,8 +176,7 @@ describe('V86Instance', () => {
     expect(
       events.filter((event) => event.type === 'state' && event.state === 'running'),
     ).toHaveLength(1);
-    // The disk proof is labeled `disk-boot`, never presented as a guest marker
-    // (`guest-ready`).
+    // The disk proof is labeled `disk-boot`, never `guest-ready`.
     expect(events).toContainEqual({ type: 'progress', phase: 'disk-boot' });
     expect(events).not.toContainEqual({ type: 'progress', phase: 'guest-ready' });
   });
@@ -220,7 +219,7 @@ describe('V86Instance', () => {
       );
       expect(instance.readiness).toBe('unverified');
 
-      // The screen (console) and the emulator stay alive: no cleanup.
+      // The console and the emulator stay alive: no cleanup.
       expect(detach).not.toHaveBeenCalled();
       expect(emulator.calls.stop).toBe(0);
       expect(emulator.calls.destroy).toBe(0);
@@ -262,7 +261,7 @@ describe('V86Instance', () => {
 
       const error = events.find((event) => event.type === 'error');
       expect(error).toMatchObject({ code: 'BOOT_TIMEOUT' });
-      // The message describes the real proof (disk read), not a guest marker.
+      // The message describes the real disk read, not a guest marker.
       expect(error && error.type === 'error' ? error.message : '').toMatch(/disk/i);
       expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(
         false,
@@ -398,7 +397,7 @@ describe('V86Instance', () => {
     const events: SessionEvent[] = [];
     instance.subscribe((event) => events.push(event));
 
-    // Spontaneous stop of the emulator (guest shutdown/crash).
+    // Spontaneous stop of the emulator.
     emulator.emit('emulator-stopped', undefined);
     await flushMicrotasks();
 
@@ -462,7 +461,7 @@ describe('V86Instance', () => {
     const events: SessionEvent[] = [];
     instance.subscribe((event) => events.push(event));
 
-    // The initial state is replayed to the first subscriber (offline status).
+    // The initial state is replayed to the first subscriber.
     expect(events.some((event) => event.type === 'network')).toBe(true);
 
     emulator.emit('net0-send', new Uint8Array(64));

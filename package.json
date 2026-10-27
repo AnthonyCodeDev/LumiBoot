@@ -4,6 +4,16 @@
   "version": "0.1.0",
   "type": "module",
   "description": "LumiBoot: a library and launcher for operating systems in the browser",
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "Anthony (AnthonyCodeDev)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AnthonyCodeDev/LumiBoot.git"
+  },
+  "homepage": "https://github.com/AnthonyCodeDev/LumiBoot#readme",
+  "bugs": {
+    "url": "https://github.com/AnthonyCodeDev/LumiBoot/issues"
+  },
   "packageManager": "pnpm@9.14.2",
   "engines": {
     "node": ">=20"
