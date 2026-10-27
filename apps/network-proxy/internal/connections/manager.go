@@ -13,13 +13,10 @@ import (
 // CloseThrottled is the WISP reason returned when a quota is reached.
 const CloseThrottled = byte(0x49)
 
-// ErrGlobalLimit reports that the global quota was exceeded.
 var ErrGlobalLimit = errors.New("connections: global quota reached")
 
-// ErrSessionLimit reports that the per-WISP-session quota was exceeded.
 var ErrSessionLimit = errors.New("connections: session quota reached")
 
-// StreamInfo describes an active stream (exposed to diagnostics and tests).
 type StreamInfo struct {
 	ID           uint32
 	Host         string
@@ -37,8 +34,7 @@ type entry struct {
 	conn net.Conn
 }
 
-// Manager tracks active streams. The zero value is unusable: use NewManager.
-// Thread-safe.
+// Manager tracks active streams. Thread-safe.
 type Manager struct {
 	mu            sync.Mutex
 	maxTotal      int
@@ -48,10 +44,7 @@ type Manager struct {
 	limiter       *tokenBucket
 }
 
-// NewManager builds a manager.
-// maxTotal bounds the total number of streams, maxPerSession bounds the number
-// per WISP session (identified by sessionID). bandwidthBytesPerSecond <= 0
-// disables bandwidth limiting.
+// NewManager builds a manager; a bandwidth limit of 0 or less disables throttling.
 func NewManager(maxTotal, maxPerSession int, bandwidthBytesPerSecond int64) *Manager {
 	if maxTotal <= 0 {
 		maxTotal = 64
@@ -115,8 +108,7 @@ func (m *Manager) Remove(sessionID string, id uint32) {
 	}
 }
 
-// SetConn attaches the TCP connection to a reserved stream. Returns false if the
-// stream no longer exists (reservation cancelled in the meantime).
+// SetConn attaches the connection; false when the stream no longer exists.
 func (m *Manager) SetConn(sessionID string, id uint32, conn net.Conn) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -131,7 +123,6 @@ func (m *Manager) SetConn(sessionID string, id uint32, conn net.Conn) bool {
 	return true
 }
 
-// Conn returns the TCP connection of a stream.
 func (m *Manager) Conn(sessionID string, id uint32) (net.Conn, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -141,7 +132,6 @@ func (m *Manager) Conn(sessionID string, id uint32) (net.Conn, bool) {
 	return nil, false
 }
 
-// Exists reports whether a stream is tracked.
 func (m *Manager) Exists(sessionID string, id uint32) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -149,7 +139,6 @@ func (m *Manager) Exists(sessionID string, id uint32) bool {
 	return ok
 }
 
-// Touch refreshes a stream's activity.
 func (m *Manager) Touch(sessionID string, id uint32) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -160,7 +149,6 @@ func (m *Manager) Touch(sessionID string, id uint32) {
 	}
 }
 
-// AddBytesIn accounts for guest -> network bytes.
 func (m *Manager) AddBytesIn(sessionID string, id uint32, n uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -172,7 +160,6 @@ func (m *Manager) AddBytesIn(sessionID string, id uint32, n uint64) {
 	}
 }
 
-// AddBytesOut accounts for network -> guest bytes.
 func (m *Manager) AddBytesOut(sessionID string, id uint32, n uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -184,21 +171,18 @@ func (m *Manager) AddBytesOut(sessionID string, id uint32, n uint64) {
 	}
 }
 
-// Count returns the total number of active streams.
 func (m *Manager) Count() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.total
 }
 
-// SessionCount returns the number of active streams of a session.
 func (m *Manager) SessionCount(sessionID string) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.streams[sessionID])
 }
 
-// Snapshot copies the state of the active streams.
 func (m *Manager) Snapshot() []StreamInfo {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -213,7 +197,7 @@ func (m *Manager) Snapshot() []StreamInfo {
 	return out
 }
 
-// SweepIdle closes streams idle for idleTimeout and returns how many it closed.
+// SweepIdle closes idle streams and returns how many it closed.
 func (m *Manager) SweepIdle(idleTimeout time.Duration) int {
 	cutoff := time.Now().Add(-idleTimeout)
 	type victim struct {
@@ -247,14 +231,11 @@ func (m *Manager) SweepIdle(idleTimeout time.Duration) int {
 	return len(victims)
 }
 
-// Throttle applies the global bandwidth limit (token bucket).
-// No effect when the limit is disabled. n is the number of bytes transferred.
-// The wait is cancellable: as soon as ctx is cancelled, Throttle returns.
+// Throttle applies the bandwidth limit; the wait is cancellable through ctx.
 func (m *Manager) Throttle(ctx context.Context, n int) {
 	m.limiter.consume(ctx, n)
 }
 
-// tokenBucket is a minimal token bucket for bandwidth limiting.
 type tokenBucket struct {
 	mu     sync.Mutex
 	rate   float64 // bytes per second, <= 0 = disabled

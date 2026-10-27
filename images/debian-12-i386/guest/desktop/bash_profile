@@ -1,9 +1,5 @@
-# ~/.bash_profile — LumiBoot (desktop flavor)
-#
-# The VGA console is tty1. After the autologin of the unprivileged "lumiboot"
-# account on tty1 (never root), this profile starts the graphical session
-# through startx. The serial console (ttyS0) keeps a normal shell, outside the
-# graphical session.
+# ~/.bash_profile: starts the graphical session on tty1 after the autologin of
+# the unprivileged account. The serial console keeps a plain shell.
 if [ -f "$HOME/.profile" ]; then
   . "$HOME/.profile"
 fi
@@ -11,6 +7,5 @@ fi
 if [ -z "${DISPLAY:-}" ] \
   && [ "$(tty 2>/dev/null)" = "/dev/tty1" ] \
   && command -v startx >/dev/null 2>&1; then
-  # lumiboot-startx tries "fbdev" (kernel framebuffer) then "modesetting" as a fallback.
   exec /usr/local/bin/lumiboot-startx
 fi

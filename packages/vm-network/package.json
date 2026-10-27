@@ -2,6 +2,7 @@
   "name": "@lumiboot/vm-network",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "description": "Universal network architecture, independent of the guest OS and execution engine",
   "exports": {

@@ -1,7 +1,5 @@
 // Package config loads and validates the local network proxy configuration:
-// safe defaults, JSON file, LUMIBOOT_PROXY_* environment overrides, then
-// strict validation (including refusing a non-loopback listen address unless
-// explicitly allowed).
+// safe defaults, then the JSON file, then LUMIBOOT_PROXY_* environment overrides.
 package config
 
 import (
@@ -16,22 +14,18 @@ import (
 	"time"
 )
 
-// Environment identifies the deployment profile that determines the default
-// origin allowlist. The default value is always `production`: widening it to
-// local loops is an EXPLICIT choice.
+// Environment selects the default origin allowlist; the default is always
+// `production`, widening it is an explicit choice.
 type Environment string
 
 const (
-	// EnvProduction: strict allowlist, LumiBoot production only. No generic
-	// `localhost` origin is accepted without opt-in.
+	// EnvProduction accepts no generic loopback origin without opt-in.
 	EnvProduction Environment = "production"
-	// EnvDevelopment: allowlist widened to the monorepo local loops
-	// (ports 5173/5200/3000/4173/8080).
+	// EnvDevelopment widens the allowlist to the monorepo loopback ports.
 	EnvDevelopment Environment = "development"
 )
 
-// Duration is a time.Duration serializable to JSON either as a string
-// ("10s", "5m") or as a number (seconds).
+// Duration is a time.Duration serializable as a string or a number of seconds.
 type Duration time.Duration
 
 // UnmarshalJSON accepts a Go duration string or a number of seconds.
@@ -61,14 +55,11 @@ func (d Duration) MarshalJSON() ([]byte, error) {
 // Std converts to a time.Duration.
 func (d Duration) Std() time.Duration { return time.Duration(d) }
 
-// Config is the local network proxy configuration.
 type Config struct {
 	ListenAddr string `json:"listenAddr"`
-	// Environment selects the default allowlist (strict production or local
-	// development). Empty = production.
+	// Environment selects the default allowlist; empty means production.
 	Environment Environment `json:"environment"`
-	// AllowLocalOrigins explicitly allows loopback origins in production, only
-	// when local pairing is actually needed.
+	// AllowLocalOrigins allows loopback origins in production.
 	AllowLocalOrigins            bool     `json:"allowLocalOrigins"`
 	AllowedOrigins               []string `json:"allowedOrigins"`
 	MaxConnections               int      `json:"maxConnections"`
@@ -88,9 +79,8 @@ type Config struct {
 // ErrNonLoopback reports a refused listen on a non-loopback address.
 var ErrNonLoopback = errors.New("config: non-loopback listen refused without explicit allowNonLoopback")
 
-// ProdOrigins lists the LumiBoot PRODUCTION origins. No generic local loop is
-// included: a local deployment (UI served from the machine) must explicitly add
-// its origin or enable `allowLocalOrigins`.
+// ProdOrigins lists the production origins; a local deployment must add its own
+// origin or enable `allowLocalOrigins`.
 func ProdOrigins() []string {
 	return []string{
 		"https://lumiboot.app",
@@ -98,9 +88,7 @@ func ProdOrigins() []string {
 	}
 }
 
-// DevOrigins lists the DEVELOPMENT origins: production plus the usual monorepo
-// local loops (dev port 5173, E2E port 5200, various preview ports). Never used
-// in production.
+// DevOrigins adds the monorepo loopback ports; never used in production.
 func DevOrigins() []string {
 	return append(ProdOrigins(),
 		"http://127.0.0.1:5173",
@@ -124,13 +112,12 @@ func OriginsForEnvironment(env Environment) []string {
 	return ProdOrigins()
 }
 
-// DefaultOrigins is the historical production alias: strict allowlist. Kept for
-// compatibility; prefer {@link ProdOrigins}.
+// DefaultOrigins is a production alias kept for compatibility.
 func DefaultOrigins() []string {
 	return ProdOrigins()
 }
 
-// Default returns the default configuration (secure, production).
+// Default returns the production configuration.
 func Default() Config {
 	return DefaultFor(EnvProduction)
 }
@@ -157,8 +144,7 @@ func DefaultFor(env Environment) Config {
 	}
 }
 
-// environmentFromEnv reads LUMIBOOT_PROXY_ENV. Any value other than
-// "development"/"dev" (or absence) is treated as production.
+// environmentFromEnv reads LUMIBOOT_PROXY_ENV; anything but dev means production.
 func environmentFromEnv() Environment {
 	v, ok := lookupEnv("LUMIBOOT_PROXY_ENV")
 	if !ok {
@@ -172,10 +158,8 @@ func environmentFromEnv() Environment {
 	}
 }
 
-// Load loads the configuration: defaults (allowlist by environment), then JSON
-// file (if path is not empty), then LUMIBOOT_PROXY_* environment variables, then
-// validation.
-// A missing file is not an error (first launch); invalid JSON is.
+// Load applies defaults, then the JSON file, then the environment, then
+// validation. A missing file is not an error.
 func Load(path string) (Config, error) {
 	cfg := DefaultFor(environmentFromEnv())
 	if path != "" {
@@ -269,9 +253,7 @@ func (c *Config) Validate() error {
 	if len(c.AllowedOrigins) == 0 {
 		return errors.New("config: allowedOrigins must not be empty")
 	}
-	// DEV/PROD segregation: in production, a generic loopback origin is only
-	// accepted when local pairing is explicitly needed (`allowLocalOrigins`) or
-	// when the environment is `development`.
+	// In production a loopback origin needs `allowLocalOrigins`.
 	if c.Environment != EnvDevelopment && !c.AllowLocalOrigins {
 		for _, origin := range c.AllowedOrigins {
 			if isLoopbackOrigin(origin) {
@@ -315,8 +297,8 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// isLoopbackHost reports whether a listen host is strictly local.
-// An empty host (":port", all interfaces) is NOT loopback.
+// isLoopbackHost reports whether a listen host is strictly local; an empty host
+// is not loopback.
 func isLoopbackHost(host string) bool {
 	if host == "" {
 		return false
@@ -331,10 +313,7 @@ func isLoopbackHost(host string) bool {
 	return ip.IsLoopback()
 }
 
-// isLoopbackOrigin reports whether an HTTP(S) origin targets a loopback address
-// (`http://localhost:5173`, `http://127.0.0.1:5200`, `https://[::1]:8443`...).
-// An unparsable origin is not considered loopback (fail safe in validation: it
-// is left to exact matching during authentication).
+// isLoopbackOrigin reports whether an HTTP(S) origin targets a loopback address.
 func isLoopbackOrigin(origin string) bool {
 	parsed, err := url.Parse(origin)
 	if err != nil {

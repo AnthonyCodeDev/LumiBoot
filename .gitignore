@@ -72,6 +72,14 @@ lerna-debug.log*
 /images/*/build*/
 /images/*/provenance.txt
 /media/
+# Network client release binaries (published as GitHub Release assets, never committed)
+/apps/web/public/downloads/*.exe
+/apps/web/public/downloads/*.tar.gz
+/apps/web/public/downloads/*.zip
+/apps/web/public/downloads/*.msi
+/apps/web/public/downloads/*.pkg
+!/apps/web/public/downloads/manifest.json
+!/apps/web/public/downloads/SHA256SUMS
 # IDE
 .idea/
 .vscode/*
@@ -113,6 +121,7 @@ LumiBoot-source.zip
 /opencode.jsonc
 /opencode.json
 /.opencode/
+/docs/AGENT_BRIEF.md
 # v86 binaries and disks prepared outside the repo
 /apps/web/public/v86/
 /apps/web/public/images/

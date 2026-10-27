@@ -2,6 +2,7 @@
   "name": "@lumiboot/provider-v86",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "description": "v86 (WebAssembly) x86 i386 engine: WASM, BIOS, HTTP Range disk, VGA/serial console",
   "exports": {

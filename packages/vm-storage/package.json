@@ -2,8 +2,9 @@
   "name": "@lumiboot/vm-storage",
   "version": "0.1.0",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
-  "description": "Versioned persistent storage, quotas and export/import for VM states",
+  "description": "Versioned key-value storage for VM metadata and disks: quotas, pluggable backend, snapshot export/import",
   "exports": {
     ".": {
       "types": "./src/index.ts",

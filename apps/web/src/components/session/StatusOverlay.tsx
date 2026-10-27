@@ -11,15 +11,12 @@ export interface StatusOverlayProps {
   consoleRef: RefObject<HTMLDivElement>;
 }
 
-/** Re-read period of the serial terminal (ms). */
+/** Serial terminal re-read period in ms. */
 const SERIAL_POLL_MS = 400;
 /** Number of log lines kept on screen. */
 const LOG_LINE_COUNT = 3;
 
-/**
- * Last non-empty lines of the guest serial terminal.
- * v86 writes into `.value` of `<textarea class="v86-serial">`, even when hidden.
- */
+/** Last non-empty serial lines; v86 writes into `.value`, even when hidden. */
 function readSerialTail(container: HTMLElement | null): string[] {
   const serial = container?.querySelector<HTMLTextAreaElement>('textarea.v86-serial');
   const raw = serial?.value ?? '';
@@ -35,11 +32,7 @@ interface SessionLogsProps {
   fallback: string;
 }
 
-/**
- * Log panel: the last 3 terminal lines, refreshed by polling to give the
- * impression of continuous scrolling. Always at least one line (fallback
- * derived from the state) so the panel is never empty.
- */
+/** Last 3 terminal lines, polled. Always at least the state fallback line. */
 function SessionLogs({ consoleRef, fallback }: SessionLogsProps) {
   const [tail, setTail] = useState('');
 

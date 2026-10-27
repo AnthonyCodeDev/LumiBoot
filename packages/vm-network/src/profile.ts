@@ -2,16 +2,11 @@ import { z } from 'zod';
 import { NETWORK_MODES, type NetworkMode } from './modes';
 import { NetworkError } from './errors';
 
-/** Network configuration of a virtual machine. No public relay by default. */
 export interface NetworkProfile {
   mode: NetworkMode;
   relayUrl?: string;
   proxyUrl?: string;
-  /**
-   * Session token of the local network proxy (RUNTIME only). Must NEVER come
-   * from the public config file (web validation rejects it): it is supplied at
-   * runtime (pairing) and is never persisted in the public config.
-   */
+  /** Runtime only; the public config rejects it and never persists it. */
   proxyToken?: string;
 }
 
@@ -61,7 +56,7 @@ function formatIssues(error: z.ZodError): string[] {
   });
 }
 
-/** Validates then cleans a profile: `relayUrl` is only kept in `user-relay` mode, `proxyUrl`/`proxyToken` only in `local-proxy` mode. */
+/** Drops the fields that do not belong to the selected mode. */
 export function normalizeNetworkProfile(input: unknown): NetworkProfile {
   const result = networkProfileSchema.safeParse(input);
   if (!result.success) {
@@ -74,7 +69,7 @@ export function normalizeNetworkProfile(input: unknown): NetworkProfile {
   return cleanProfile(result.data);
 }
 
-/** Validates a profile without throwing: returns the errors and the cleaned profile. */
+/** Non-throwing variant. */
 export function validateNetworkProfile(input: unknown): NetworkProfileValidation {
   const result = networkProfileSchema.safeParse(input);
   if (!result.success) {

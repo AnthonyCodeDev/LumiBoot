@@ -5,12 +5,8 @@ import {
 } from '@lumiboot/vm-assets';
 
 /**
- * Browser persistence for media imported by the user.
- *
- * File metadata and blob are kept in IndexedDB, in the user's browser only:
- * nothing is ever sent to a server. When IndexedDB is unavailable (restrictive
- * private browsing, tests), we cleanly fall back to an in-memory store — the
- * session works, but the import does not survive a reload.
+ * Persistence for media imported by the user, in IndexedDB only: nothing is sent
+ * to a server. Falls back to memory when IndexedDB is unavailable.
  */
 
 const DB_NAME = 'lumiboot-user-media';
@@ -33,10 +29,7 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
-/**
- * Runs a transaction and returns the result of the request built by `build`
- * (or `undefined` for a write). Rejects on any error.
- */
+/** Runs a transaction and resolves with the built request result. Rejects on error. */
 function runTransaction<T>(
   db: IDBDatabase,
   storeNames: string[],
@@ -90,7 +83,7 @@ function runTransaction<T>(
   });
 }
 
-/** IndexedDB store. Blobs are stored as-is (browser support). */
+/** IndexedDB store; blobs are stored as-is. */
 export function createIndexedDbUserMediaStore(db: IDBDatabase): UserMediaStore {
   return {
     async get(ref) {
@@ -139,10 +132,7 @@ export function createIndexedDbUserMediaStore(db: IDBDatabase): UserMediaStore {
 
 let storePromise: Promise<UserMediaStore> | null = null;
 
-/**
- * Resolves the store once: IndexedDB when really available, otherwise the
- * in-memory store (never a silent failure presented as persistence).
- */
+/** Resolves the store once: IndexedDB when available, otherwise memory. */
 export function getUserMediaStore(): Promise<UserMediaStore> {
   if (storePromise !== null) return storePromise;
   storePromise = (async () => {
@@ -157,7 +147,7 @@ export function getUserMediaStore(): Promise<UserMediaStore> {
   return storePromise;
 }
 
-/** Resets the store resolution (tests only). */
+/** Resets the store resolution, for tests. */
 export function resetUserMediaStoreForTests(): void {
   storePromise = null;
 }

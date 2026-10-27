@@ -1,6 +1,6 @@
-// Package security validates the destinations requested by the guest AFTER DNS
-// resolution and returns the validated IP the caller must dial (never the
-// hostname: DNS-rebinding / TOCTOU protection).
+// Package security validates the destinations requested by the guest after DNS
+// resolution and returns the validated IP the caller must dial, never the
+// hostname: DNS-rebinding and TOCTOU protection.
 package security
 
 import (
@@ -17,38 +17,33 @@ const (
 	ReasonDestinationBlocked = byte(0x48) // destination forbidden by policy
 )
 
-// BlockError is a typed error carrying the WISP close reason to send back to
-// the client.
+// BlockError is a typed error carrying the WISP close reason.
 type BlockError struct {
 	Reason  byte
 	Message string
 }
 
-// Error implements error.
 func (e *BlockError) Error() string { return e.Message }
 
 // LookupFunc resolves a host name to IP addresses.
 type LookupFunc func(ctx context.Context, host string) ([]net.IP, error)
 
-// metadataNets lists the cloud metadata endpoints, ALWAYS blocked, even with
-// AllowPrivateNetworks (risk of credential exfiltration).
+// Cloud metadata endpoints are always blocked, even with AllowPrivateNetworks.
 var metadataNets = mustParseCIDRs([]string{
-	"169.254.169.254/32", // AWS / GCP / Azure / Oracle
-	"100.100.100.200/32", // Alibaba Cloud
-	"169.254.170.2/32",   // ECS (task credentials)
-	"fd00:ec2::254/128",  // AWS IPv6
+	"169.254.169.254/32",
+	"100.100.100.200/32",
+	"169.254.170.2/32",
+	"fd00:ec2::254/128",
 })
 
-// metadataHostnames lists the cloud endpoint names blocked by name.
 var metadataHostnames = []string{
 	"metadata.google.internal",
 }
 
-// reservedNets lists the always-forbidden ranges.
 var reservedNets = mustParseCIDRs([]string{
-	"0.0.0.0/8",          // "this network" (RFC 1122)
-	"240.0.0.0/4",        // reserved / experimental
-	"255.255.255.255/32", // limited broadcast
+	"0.0.0.0/8",
+	"240.0.0.0/4",
+	"255.255.255.255/32",
 })
 
 func mustParseCIDRs(cidrs []string) []*net.IPNet {
@@ -72,14 +67,12 @@ func inNets(ip net.IP, nets []*net.IPNet) bool {
 	return false
 }
 
-// isMetadataEndpoint reports a cloud metadata endpoint.
 func isMetadataEndpoint(ip net.IP) bool {
 	return inNets(ip, metadataNets)
 }
 
-// forbiddenIP applies the policy to an already resolved IP.
-// allowPrivate allows loopback/private/link-local (explicit permission), but
-// NEVER cloud metadata or reserved ranges.
+// allowPrivate also permits loopback/private/link-local, but never metadata or
+// reserved ranges.
 func forbiddenIP(ip net.IP, allowPrivate bool) bool {
 	if ip == nil {
 		return true
@@ -100,12 +93,8 @@ func forbiddenIP(ip net.IP, allowPrivate bool) bool {
 	return false
 }
 
-// ValidateDestination resolves host then validates every resolved IP.
-// If a SINGLE resolved IP is forbidden, the whole destination is refused
-// (anti DNS-rebinding: the client must not be able to force a healthy IP and
-// then be redirected to an internal IP).
-// On success, returns the validated IP to dial: the caller MUST dial that IP,
-// never the hostname (anti TOCTOU).
+// ValidateDestination resolves the host, then validates every resolved IP and
+// returns the one to dial: the caller must dial that IP, never the hostname.
 func ValidateDestination(ctx context.Context, lookup LookupFunc, host string, port int, allowPrivate bool) (net.IP, error) {
 	trimmed := strings.TrimSuffix(strings.TrimSpace(host), ".")
 	if trimmed == "" {
@@ -120,7 +109,6 @@ func ValidateDestination(ctx context.Context, lookup LookupFunc, host string, po
 		}
 	}
 
-	// Literal IP: no DNS, direct validation.
 	if literal := net.ParseIP(trimmed); literal != nil {
 		if forbiddenIP(literal, allowPrivate) {
 			return nil, &BlockError{Reason: ReasonDestinationBlocked, Message: fmt.Sprintf("forbidden IP: %s", literal)}
@@ -146,11 +134,10 @@ func ValidateDestination(ctx context.Context, lookup LookupFunc, host string, po
 			}
 		}
 	}
-	// All IPs are healthy: dial the first one (already validated).
+	// Every IP is healthy: dial the first one.
 	return ips[0], nil
 }
 
-// defaultLookup is the machine's standard DNS resolution.
 func defaultLookup(ctx context.Context, host string) ([]net.IP, error) {
 	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 	if err != nil {

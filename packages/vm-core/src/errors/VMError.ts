@@ -2,8 +2,7 @@ export type VMErrorCode =
   | 'PROVIDER_NOT_FOUND'
   | 'ENGINE_NOT_INTEGRATED'
   | 'IMAGE_MISSING'
-  // The engine is integrated but the system media must be imported locally by
-  // the user (LumiBoot distributes no proprietary resource).
+  // Media must be imported locally; LumiBoot distributes no proprietary resource.
   | 'MEDIA_REQUIRED'
   | 'UNSUPPORTED_ENVIRONMENT'
   | 'INVALID_TRANSITION'
@@ -15,10 +14,7 @@ export interface VMErrorOptions {
   cause?: unknown;
 }
 
-/**
- * Typed error that can be rendered as a user message. Engines never throw an
- * anonymous error: every failure carries a code usable by the UI.
- */
+/** Every failure carries a code usable by the UI. */
 export class VMError extends Error {
   readonly code: VMErrorCode;
   readonly systemId: string | undefined;

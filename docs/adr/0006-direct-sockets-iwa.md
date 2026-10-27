@@ -5,11 +5,11 @@
 
 ## Context
 
-The `direct-sockets` permission exists only in a signed and installed Chrome Isolated Web App, never in a web page or a PWA.
+The `direct-sockets` permission exists only in a signed and installed Chrome Isolated Web App, not in a web page or a PWA.
 
 ## Decision
 
-No `direct-sockets` transport is implemented. Its place is `@lumiboot/vm-network`, never `VMEngine`; a browser IP stack would convert guest Ethernet frames into sockets.
+No `direct-sockets` transport is implemented. Its place would be `@lumiboot/vm-network`, not `VMEngine`: a browser IP stack would convert guest Ethernet frames into sockets.
 
 ## Consequences
 

@@ -1,0 +1,92 @@
+name: Bug report
+description: Report a reproducible defect in LumiBoot
+title: '[Bug]: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please search existing issues first, and do not paste
+        licence keys, serials, proprietary disks or personal data.
+  - type: input
+    id: project-version
+    attributes:
+      label: LumiBoot version
+      description: Commit hash or tag you are running, and whether it is a local build.
+      placeholder: 'e.g. 0f3c2ab or v0.1.0, pnpm dev'
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Host operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options:
+        - Chrome
+        - Firefox
+        - Safari
+        - Edge
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: Guest system concerned
+      options:
+        - Debian 12 XFCE
+        - Debian 12 X11
+        - Debian 12 CLI
+        - Windows 7
+        - Windows 10
+        - Other (describe below)
+        - Not applicable (UI or tooling)
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, numbered steps from a fresh page load.
+      placeholder: |
+        1. Open ...
+        2. Boot ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include the exact error message or the last visible state.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console and serial logs
+      description: Browser console output and the serial/VGA tail, with tokens redacted.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Confidentiality
+      options:
+        - label: I checked that this report contains no licence key, no serial and no proprietary disk or image.
+          required: true

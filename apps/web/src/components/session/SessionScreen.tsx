@@ -36,18 +36,14 @@ export function SessionScreen({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(true);
   const [logsOpen, setLogsOpen] = useState(false);
-  // Single mouse capture (Pointer Lock): only one visible cursor, the guest's.
-  // A click inside the screen captures, Escape releases. v86 already forwards
-  // relative movements: no movement is ever re-injected here.
+  // Single visible cursor: a click inside the screen captures, Escape releases.
   const {
     captured,
     supported: pointerLockSupported,
     error: pointerLockError,
   } = usePointerLockCapture(consoleRef, running);
 
-  // Fullscreen target: only the rendered screen, located through the standard
-  // display contract (`data-vm-display="screen"`) that the provider sets inside
-  // `.session-console`. No engine is targeted by name: no `.v86-screen`.
+  // Fullscreen target resolved through the display contract, never by engine class.
   const getScreenElement = useCallback(
     (): HTMLElement | null =>
       consoleRef.current?.querySelector<HTMLElement>(STANDARD_VM_DISPLAY.screenSelector) ?? null,
@@ -117,20 +113,15 @@ export function SessionScreen({
         onToggleLogs={() => setLogsOpen((open) => !open)}
       />
       {/*
-        The console container stays mounted through every phase: unmounting and
-        remounting the VM on a simple state change would break the session. The
-        overlay informs without blocking the terminal once `running`.
+        The console container stays mounted through every phase: remounting it would
+        break the running VM.
       */}
       <div className="session-viewport">
         <div className={`session-console${logsOpen ? '' : ' logs-hidden'}`} ref={consoleRef} />
         {!running ? (
           <StatusOverlay session={session} system={system} consoleRef={consoleRef} />
         ) : null}
-        {/*
-          Discreet capture indicator: never clickable (`pointer-events: none`),
-          it never overlays a cursor — the browser hides the host cursor
-          natively while the pointer is locked.
-        */}
+        {/* Never clickable and never paints a cursor: the browser hides the host cursor. */}
         {running && pointerLockSupported ? (
           <p
             className="session-pointer-hint"

@@ -2,55 +2,16 @@
 #
 # Reproducible build of a Debian 12 Bookworm i386 image for v86.
 #
-#   sudo ./images/debian-12-i386/build.sh              # "minimal" flavor (console, default)
-#   sudo FLAVOR=desktop ./images/debian-12-i386/build.sh   # "desktop" flavor (Xorg + Openbox)
-#   sudo FLAVOR=xfce ./images/debian-12-i386/build.sh      # "xfce" flavor (Xorg + XFCE)
-#   sudo ./images/debian-12-i386/build.sh desktop          # equivalent (flavor as first argument)
+#   sudo ./images/debian-12-i386/build.sh                 # minimal flavor
+#   sudo FLAVOR=desktop ./images/debian-12-i386/build.sh
+#   sudo FLAVOR=xfce SNAPSHOT=20240101T000000Z ./images/debian-12-i386/build.sh
 #
-# Run under Linux or WSL2, never on native Windows nor in a pipeline without
-# debootstrap. Never commit the produced binaries.
-#
-# WARNING: THIS SCRIPT HAS NOT BEEN EXECUTED in this repository's development
-#     environment (no debootstrap, no WSL, no Docker: no image can be built nor
-#     booted here). It must be tested on a suitable Linux/WSL2 machine BEFORE
-#     any publication. No real boot is proven at this stage.
-#
-# Three flavors share the SAME base below (no copy-paste):
-#
-#   * minimal  (default) -- validated E2E baseline: serial console + VGA, marker
-#              LUMIBOOT_GUEST_READY:debian-12-i386. Behavior/compatibility
-#              UNCHANGED compared to the previous version of the script.
-#   * desktop  -- minimal base + Xorg/Openbox graphical stack (see 4d), graphical
-#              session on the VGA canvas (autologin of the unprivileged account
-#              "lumiboot", never root). Emits
-#              LUMIBOOT_GUEST_READY:debian-12-i386-desktop (OS operational)
-#              THEN, only after the X server and the session have actually
-#              started, LUMIBOOT_DESKTOP_READY:debian-12-i386-desktop.
-#   * xfce     -- minimal base + Xorg/XFCE graphical stack (full desktop
-#              environment). Same markers, prefixed
-#              LUMIBOOT_GUEST_READY:debian-12-i386-xfce then
-#              LUMIBOOT_DESKTOP_READY:debian-12-i386-xfce. Its X configuration
-#              (fbdev/modesetting) is SHARED with the desktop flavor. WARNING:
-#              XFCE has NOT been built nor tested yet: no real boot proven.
-#
-#     The markers are emitted by the GUEST system through systemd (see guest/),
-#     never by JavaScript, and written to the serial console (ttyS0).
-#
-# Output in images/debian-12-i386/build[-desktop|-xfce]/ :
-#   rootfs.img      raw ext4 disk (Debian root)
-#   vmlinuz-686     kernel (bzimage) of the same version as the initrd
-#   initrd.img      matching initramfs
-#   manifest.json   real sizes + SHA-256 (strict @lumiboot/vm-assets schema)
-#   packages.tsv    actually installed versions (traceability)
-#   provenance.txt  mirror, release, optional snapshot, date, debootstrap version
-#
-# PINNING: the Debian release is pinned (bookworm). For a strictly reproducible
-# build, point to a dated snapshot:
-#   sudo SNAPSHOT=20240101T000000Z ./images/debian-12-i386/build.sh
-# (packages then come from snapshot.debian.org, cf. step 2).
+# Requires Linux or WSL2, root, debootstrap, and qemu-i386 on a non-x86_64 host.
+# DISK_SIZE and LUMIBOOT_BUILD_DIR override the disk size and the build directory.
+# Writes rootfs.img, vmlinuz-686, initrd.img, manifest.json, packages.tsv and
+# provenance.txt into build/, build-desktop/ or build-xfce/.
 set -euo pipefail
 
-# --- Flavor parameters -------------------------------------------------------
 FLAVOR="${1:-${FLAVOR:-minimal}}"
 case "$FLAVOR" in
   minimal)
@@ -78,8 +39,7 @@ case "$FLAVOR" in
     BUILD_SUFFIX="-xfce"
     READY_SERVICE_SRC="xfce/lumiboot-ready.service"
     GUEST_DIR="xfce"
-    # XFCE is much larger than the base: disk widened to 4 GiB
-    # (overridable through DISK_SIZE=... as before).
+    # XFCE is much larger: its disk defaults to 4 GiB.
     DISK_SIZE_DEFAULT="4G"
     ;;
   *)
@@ -88,8 +48,6 @@ case "$FLAVOR" in
     ;;
 esac
 
-# Graphical flavor (Xorg + session manager): desktop (Openbox) or xfce.
-# Drives the sharing of most steps (graphical stack, session, marker).
 GRAPHICAL=""
 if [ "$FLAVOR" = "desktop" ] || [ "$FLAVOR" = "xfce" ]; then
   GRAPHICAL="true"
@@ -99,16 +57,12 @@ RELEASE="bookworm"
 ARCH="i386"
 DEBIAN_MIRROR="${DEBIAN_MIRROR:-https://deb.debian.org/debian}"
 SECURITY_MIRROR="${SECURITY_MIRROR:-http://security.debian.org/debian-security}"
-# Optional dated snapshot (snapshot.debian.org format: 20240101T000000Z).
+# Optional dated snapshot, snapshot.debian.org format.
 SNAPSHOT="${SNAPSHOT:-}"
 DISK_SIZE="${DISK_SIZE:-$DISK_SIZE_DEFAULT}"
 
-# Kernel cmdline of the graphical flavors (desktop and xfce). Identical to the
-# base (V86Provider.DEFAULT_BOOT_CMDLINE) PLUS "vga=0x318" (1024x768x24): under
-# v86 there is no DRM, so the kernel VBE framebuffer console is forced to obtain
-# /dev/fb0, required by the Xorg "fbdev" fallback. The minimal flavor does NOT
-# emit boot.cmdline: it keeps the text VGA console and the provider's
-# DEFAULT_BOOT_CMDLINE (behavior unchanged).
+# Graphical flavors force the VBE framebuffer: under v86 there is no DRM, and
+# /dev/fb0 is required by the Xorg fbdev fallback.
 DESKTOP_CMDLINE="console=tty0 console=ttyS0,115200 root=/dev/sda rw vga=0x318"
 
 if [ -n "$SNAPSHOT" ]; then
@@ -117,16 +71,11 @@ if [ -n "$SNAPSHOT" ]; then
 fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# The build directory can be moved outside the repository (e.g. onto a native
-# ext4 filesystem under WSL) through LUMIBOOT_BUILD_DIR. Required because
-# debootstrap and chroot fail on 9p/DrvFs filesystems (/mnt/c): extracting some
-# packages (e.g. libpam-runtime) makes tar fail. By default, behavior is
-# unchanged (build/, build-desktop/ or build-xfce/ inside the repository).
+# The build directory can live on a native ext4 filesystem outside the
+# repository: debootstrap and chroot fail on 9p/DrvFs mounts.
 BUILD_DIR="${LUMIBOOT_BUILD_DIR:-$HERE/build$BUILD_SUFFIX}"
 ROOTFS="$BUILD_DIR/rootfs"
 
-# Packages of the common base (identical for ALL flavors: the console baseline
-# stays strictly the same).
 BASE_PACKAGES="linux-image-686 initramfs-tools systemd-sysv systemd-resolved udev kmod \
 bash coreutils util-linux mount login passwd sudo \
 curl wget ca-certificates gnupg openssl \
@@ -137,29 +86,16 @@ iproute2 iputils-ping dnsutils \
 python3 perl \
 console-setup kbd locales"
 
-# Graphical packages SHARED by the desktop (Openbox) and xfce flavors: minimal
-# Xorg stack (server, drivers, input, xinit, utilities), fonts and the session
-# D-Bus bus. Deliberately WITHOUT GNOME/KDE nor Wayland.
-#
-# Video driver: under v86 the kernel attaches a `bochs-drm` KMS driver
-# (framebuffer /dev/fb0). A VBE driver (`vesa`) then refuses to attach and X
-# fails with "no screens found". `fbdev` (kernel framebuffer) is therefore used
-# as primary and `modesetting` (KMS, provided by `xserver-xorg-core`) as
-# fallback -- see guest/xorg.conf.d/20-lumiboot-fbdev.conf (SHARED file).
-#
-# `xserver-xorg-legacy` is kept: it provides the setuid wrapper
-# `/usr/lib/xorg/Xorg.wrap` (+ `/etc/X11/Xwrapper.config`), required because
-# Xorg is started by the unprivileged "lumiboot" account with
-# `needs_root_rights=yes`.
+# Xorg stack shared by the desktop and xfce flavors, without GNOME, KDE or Wayland.
+# Under v86 the kernel binds a bochs-drm KMS driver: vesa cannot attach, fbdev is
+# primary and modesetting the fallback, and legacy provides the setuid Xorg.wrap.
 X_PACKAGES="xserver-xorg-core xserver-xorg-legacy xserver-xorg-video-vesa xserver-xorg-video-fbdev \
 xserver-xorg-input-libinput xinit x11-xserver-utils x11-utils x11-xkb-utils xauth \
 fonts-dejavu-core dbus-x11"
 
-# Desktop-flavor specific addition: Openbox + xterm (minimal desktop session).
 DESKTOP_PACKAGES="$X_PACKAGES xterm openbox"
 
-# XFCE-flavor specific addition: full XFCE desktop environment. No display
-# manager (lightdm/GDM): direct start through startx+~/.xinitrc.
+# XFCE addition: full desktop, started directly through startx, without a display manager.
 XFCE_PACKAGES="$X_PACKAGES xfce4 xfce4-session xfwm4 xfconf xfce4-panel xfce4-terminal thunar"
 
 PACKAGES="$BASE_PACKAGES"
@@ -212,9 +148,8 @@ cat > "$ROOTFS/etc/fstab" <<EOF
 /dev/sda   /   ext4   defaults,noatime   0 1
 EOF
 
-# French AZERTY keyboard: written BEFORE the install so that console-setup /
-# keyboard-configuration pick it up, and rewritten AFTERWARDS (their postinst
-# can regenerate this file from debconf) to guarantee XKBLAYOUT="fr".
+# Written before and after the install: the console-setup postinst can regenerate
+# this file from debconf.
 write_keyboard_config() {
   cat > "$1/etc/default/keyboard" <<'EOF'
 XKBMODEL="pc105"
@@ -226,7 +161,6 @@ EOF
 }
 write_keyboard_config "$ROOTFS"
 
-# debconf preseed answers: avoids any keyboard/locale prompt in noninteractive mode.
 cat > "$ROOTFS/tmp/lumiboot-preseed.txt" <<'EOF'
 keyboard-configuration keyboard-configuration/modelcode string pc105
 keyboard-configuration keyboard-configuration/layoutcode string fr
@@ -273,7 +207,7 @@ chroot "$ROOTFS" env PACKAGES="$PACKAGES" bash -e -c '
 rm -f "$ROOTFS/tmp/lumiboot-preseed.txt"
 
 echo "== 4b. fr keyboard + fr_FR/en_US locales =="
-# Firm rewrite after install (the console-setup postinst may have regenerated it).
+# Firm rewrite: the console-setup postinst may have regenerated it.
 write_keyboard_config "$ROOTFS"
 sed -i 's/^# *\(fr_FR.UTF-8 UTF-8\)/\1/' "$ROOTFS/etc/locale.gen"
 sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' "$ROOTFS/etc/locale.gen"
@@ -287,42 +221,29 @@ if [ -x "$ROOTFS/usr/bin/vim.tiny" ] && [ ! -e "$ROOTFS/usr/bin/vim" ]; then
   chroot "$ROOTFS" update-alternatives --install /usr/bin/vim vim /usr/bin/vim.tiny 10
 fi
 
-# -- 4d. Graphical stack (graphical flavors: desktop and xfce) ----------------
 if [ "$GRAPHICAL" = "true" ]; then
   echo "== 4d. Xorg graphical stack / session manager =="
-  # Video driver: the kernel attaches the "bochs-drm" KMS driver (framebuffer
-  # /dev/fb0). TWO ServerLayouts are defined (fbdev primary, modesetting as
-  # fallback), selected by /usr/local/bin/lumiboot-startx. "vesa" is no longer
-  # used (it refuses to attach when a KMS driver is bound -> "no screens found").
-  # This configuration is SHARED by desktop and xfce (a single source file).
+  # Two ServerLayouts, fbdev first and modesetting as fallback, selected by
+  # lumiboot-startx; vesa cannot attach once a KMS driver is bound.
   install -d -m 0755 "$ROOTFS/etc/X11/xorg.conf.d"
   install -D -m 0644 "$HERE/guest/xorg.conf.d/20-lumiboot-fbdev.conf" \
     "$ROOTFS/etc/X11/xorg.conf.d/20-lumiboot-fbdev.conf"
 
-  # Xwrapper.config: allows Xorg to be started by the UNPRIVILEGED "lumiboot"
-  # account with root rights (needs_root_rights=yes). The setuid Xorg.wrap
-  # wrapper comes from xserver-xorg-legacy. The SESSION (Openbox or XFCE) itself
-  # stays unprivileged.
+  # Xorg needs root rights for /dev/fb0, while the session stays unprivileged.
   cat > "$ROOTFS/etc/X11/Xwrapper.config" <<'EOF'
-# Xorg wrapper configuration (xserver-xorg-legacy) for v86.
-# The X server needs root rights (needs_root_rights=yes) to drive the kernel
-# framebuffer /dev/fb0, while the start by the "lumiboot" user must be allowed
-# (allowed_users). Without the setuid bit of Xorg.wrap, Xorg fails with
-# "no screens found".
+# Xorg wrapper for v86: root rights are needed to drive /dev/fb0, and the
+# lumiboot user must be allowed to start the server.
 allowed_users=anybody
 needs_root_rights=yes
 EOF
   chmod 0644 "$ROOTFS/etc/X11/Xwrapper.config"
 
-  # Belt and braces: the package installs Xorg.wrap as 6755 (setuid+setgid).
-  # The setuid bit is (re)applied so we never ship an image where Xorg cannot
-  # drive the kernel framebuffer -- a possible cause of "no screens found".
+  # Belt and braces: keep the setuid bit of Xorg.wrap.
   if [ -e "$ROOTFS/usr/lib/xorg/Xorg.wrap" ]; then
     chmod u+s "$ROOTFS/usr/lib/xorg/Xorg.wrap"
   fi
 
-  # Session launcher: tries "fbdev" then "modesetting" as a fallback (shared
-  # desktop/xfce; the session choice is made by the flavor's ~/.xinitrc).
+  # Session launcher: fbdev then modesetting; the flavor's .xinitrc picks the session.
   install -D -m 0755 "$HERE/guest/lumiboot-startx" \
     "$ROOTFS/usr/local/bin/lumiboot-startx"
 fi
@@ -342,8 +263,7 @@ chroot "$ROOTFS" bash -e -c '
     useradd --create-home --shell /bin/bash lumiboot
   fi
   passwd -d lumiboot >/dev/null
-  # Read/write access to the kernel framebuffer /dev/fb0 ("video" group),
-  # required by the X "fbdev" driver of the desktop flavor (useless on console).
+  # /dev/fb0 access for the X fbdev driver, through the video group.
   if getent group video >/dev/null 2>&1; then
     usermod -aG video lumiboot
   fi
@@ -353,19 +273,14 @@ install -D -m 0644 "$HERE/guest/serial-getty-autologin.conf" \
   "$ROOTFS/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf"
 install -D -m 0644 "$HERE/guest/getty-autologin.conf" \
   "$ROOTFS/etc/systemd/system/getty@tty1.service.d/autologin.conf"
-# Text VGA console: the minimal flavor blacklists the `bochs` DRM driver to
-# stay in text mode (`vga-console` checks). The graphical flavors (desktop,
-# xfce) want a REAL framebuffer /dev/fb0 instead (Xorg `fbdev` fallback): under
-# v86 the only framebuffer provider is `bochs-drm` (the Debian 6.1 kernel no
-# longer honors `vga=` at boot). `bochs` is therefore NOT blacklisted in
-# desktop/xfce.
+# The minimal flavor blacklists bochs to stay in text mode; the graphical flavors
+# need bochs-drm, the only /dev/fb0 provider under v86.
 if [ "$FLAVOR" = "minimal" ]; then
   install -D -m 0644 "$HERE/guest/no-drm.conf" \
     "$ROOTFS/etc/modprobe.d/lumiboot-no-drm.conf"
 fi
 
-# GUEST_READY marker: same "lumiboot-ready.service" unit for both flavors,
-# adapted content (different image reference).
+# GUEST_READY marker: same unit for both flavors, different image reference.
 if [ -n "$READY_SERVICE_SRC" ]; then
   install -D -m 0644 "$HERE/guest/$READY_SERVICE_SRC" \
     "$ROOTFS/etc/systemd/system/lumiboot-ready.service"
@@ -374,10 +289,8 @@ else
     "$ROOTFS/etc/systemd/system/lumiboot-ready.service"
 fi
 
-# Graphical session (desktop/xfce flavors): tty1 autologin -> ~/.bash_profile
-# runs startx -> ~/.xinitrc starts the session (Openbox or XFCE). The
-# DESKTOP_READY marker is only emitted after a real check of the X server and of
-# the session. The overlays come from the `guest/<flavor>/` folder.
+# tty1 autologin starts startx, then the flavor's .xinitrc runs the session;
+# DESKTOP_READY is emitted only after a real check of X and of the session.
 if [ "$GRAPHICAL" = "true" ]; then
   install -D -m 0755 "$HERE/guest/$GUEST_DIR/lumiboot-desktop-ready.sh" \
     "$ROOTFS/usr/local/bin/lumiboot-desktop-ready"
@@ -403,9 +316,7 @@ if [ "$GRAPHICAL" = "true" ]; then
   chroot "$ROOTFS" systemctl enable lumiboot-desktop-ready.service
 fi
 
-# Debian enables keyboard-setup.service through sysinit.target.wants (WantedBy
-# =sysinit.target); the multi-user.target.wants link expected by the acceptance
-# check is also added. No double effect: oneshot unit.
+# Also add the multi-user.target.wants link expected by the acceptance check.
 ln -sf /lib/systemd/system/keyboard-setup.service \
   "$ROOTFS/etc/systemd/system/multi-user.target.wants/keyboard-setup.service"
 
@@ -419,27 +330,18 @@ chroot "$ROOTFS" bash -e -c '
 '
 
 echo "== 6c. Guest network: DHCP (systemd-networkd) + DNS (systemd-resolved) =="
-# The minbase image configures NO network at all: the v86 virtio NIC (enp0s10)
-# is detected but stays DOWN, with no DHCP lease and no resolver. networkd
-# (DHCPv4 on wired interfaces) and resolved (DNS) are therefore enabled.
-# systemd-networkd is provided by the `systemd` package; resolved by
-# `systemd-resolved` (installed in step 4).
+# minbase configures no network: networkd brings DHCPv4 up and resolved the DNS.
 install -d -m 0755 "$ROOTFS/etc/systemd/network"
 cat > "$ROOTFS/etc/systemd/network/20-lumiboot.network" <<'EOF'
-# Wired interface emulated by v86 (virtio-net, enp0s10). `Name=en*` covers
-# predictable names (enp0s10, ens3...); `eth*` is a fallback for eth0.
+# Wired virtio-net interface; `eth*` is a fallback for older naming.
 [Match]
 Name=en* eth*
 
 [Network]
 DHCP=ipv4
 
-# The v86 virtual DHCP server ("fetch" backend) returns a DHCPOFFER WITHOUT
-# option 51 (lease lifetime). The systemd DHCPv4 client (>= v250) then rejects
-# the lease ("received lease lacks address, server address or lease lifetime")
-# and never configures the interface. Debian bookworm ships a systemd 252 that
-# can install a fallback lease: it is explicitly allowed here.
-# (systemd only accepts "forever" or "infinity" here.)
+# The v86 DHCP server omits option 51, which makes the systemd client reject the
+# lease; a fallback lifetime lets it accept.
 [DHCPv4]
 FallbackLeaseLifetimeSec=infinity
 EOF
@@ -453,8 +355,7 @@ echo "== 7. initramfs regeneration =="
 chroot "$ROOTFS" update-initramfs -u -k all
 
 echo "== 8. Kernel + initrd extraction (same version) =="
-# Default `dpkg-query -W` format = "Package<TAB>Version": no -f, hence no `$`
-# to escape across the shell/chroot layers.
+# Default `dpkg-query -W` format is "Package<TAB>Version": no `$` to escape.
 chroot "$ROOTFS" env PACKAGES="$PACKAGES" bash -c 'dpkg-query -W $PACKAGES' \
   > "$BUILD_DIR/packages.tsv" 2>/dev/null || true
 
@@ -539,13 +440,8 @@ cleanup_mounts
 trap - EXIT
 
 echo "== 8c. resolv.conf: systemd-resolved resolv.conf (removes the host WSL file) =="
-# debootstrap/apt copied the HOST's /etc/resolv.conf ("generated by WSL,
-# nameserver 10.255.255.254"): stale and useless inside the guest. It is
-# replaced LAST (after every install that needs the host's DNS) by a symlink to
-# systemd-resolved's "upstream" resolv.conf, recreated at every boot. The
-# upstream file is targeted (not the 127.0.0.53 stub) so that
-# `cat /etc/resolv.conf` directly exposes the DNS provided by the v86 virtual
-# DHCP (e.g. 192.168.86.1).
+# debootstrap copied the host resolv.conf; replace it last by a symlink to
+# systemd-resolved's upstream file, which exposes the guest DHCP DNS.
 rm -f "$ROOTFS/etc/resolv.conf"
 ln -sf /run/systemd/resolve/resolv.conf "$ROOTFS/etc/resolv.conf"
 ls -l "$ROOTFS/etc/resolv.conf"
@@ -554,21 +450,15 @@ echo "== 9. Raw ext4 disk image ($DISK_SIZE) =="
 truncate -s "$DISK_SIZE" "$BUILD_DIR/rootfs.img"
 mkfs.ext4 -F -L lumiboot -d "$ROOTFS" "$BUILD_DIR/rootfs.img"
 
-# `mkfs.ext4 -d` (metadata_csum enabled by default) can produce directory
-# blocks with no room for the checksum tail -> the guest kernel logs in a loop
-# "No space for directory leaf checksum. Please run e2fsck -D." then
-# "ext4_find_entry: reading directory lblock 0" on every read of the affected
-# directory. `e2fsck -fyD` rebuilds the directory indexes/checksums (option -D)
-# directly inside the freshly created image.
+# mkfs.ext4 -d can leave directory blocks without room for the checksum tail,
+# which floods the guest kernel log; e2fsck -fyD rebuilds them.
 e2fsck -fyD "$BUILD_DIR/rootfs.img"
 
-# Final READ-ONLY check: the pass above must have left a clean filesystem; any
-# remaining inconsistency must fail the build.
+# Final read-only check: any remaining inconsistency fails the build.
 e2fsck -fn "$BUILD_DIR/rootfs.img"
 
-# Post-copy verification: `mkfs.ext4 -d` MUST preserve the setuid bit of
-# Xorg.wrap (tree extraction/copy without losing permissions). It is checked
-# directly INSIDE the produced image, not only inside the chroot.
+# mkfs.ext4 -d must preserve the setuid bit of Xorg.wrap, checked inside the
+# produced image.
 if [ "$GRAPHICAL" = "true" ]; then
   echo "== 9b. setuid bit check inside rootfs.img (debugfs) =="
   if debugfs -R 'stat /usr/lib/xorg/Xorg.wrap' "$BUILD_DIR/rootfs.img" 2>/dev/null | grep -qE 'Mode: *0?[4-7][0-7]{3}'; then
@@ -581,9 +471,7 @@ if [ "$GRAPHICAL" = "true" ]; then
 fi
 
 echo "== 10. Manifest + provenance (real sizes + SHA) =="
-# The graphical flavors (desktop, xfce) publish their own kernel cmdline (VBE
-# framebuffer for the Xorg fbdev fallback); the minimal flavor does not emit it
-# and keeps the provider default (text console) -- behavior unchanged.
+# Only the graphical flavors publish a kernel cmdline.
 MANIFEST_CMDLINE=""
 if [ "$GRAPHICAL" = "true" ]; then
   MANIFEST_CMDLINE="$DESKTOP_CMDLINE"
@@ -603,7 +491,7 @@ IMAGE_REF="$REF" IMAGE_ARCH="$ARCH" IMAGE_MEMORY_MIB="$MEMORY_MIB" IMAGE_VGA_MIB
   echo "debootstrap: $(debootstrap --version 2>/dev/null | head -n1 || echo unknown)"
   echo "built-utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "note: the real SHA-256 of the artifacts are in manifest.json."
-  echo "note: this build was NOT executed in the development environment (no real image)."
+  echo "note: built locally by this script on a Linux host with debootstrap; not produced by CI, not signed by Debian."
 } > "$BUILD_DIR/provenance.txt"
 cat "$BUILD_DIR/provenance.txt"
 
@@ -623,5 +511,5 @@ For the desktop flavor: images/debian-12-i386/tests/desktop-smoke-test.md
 For the xfce flavor   : images/debian-12-i386/tests/xfce-smoke-test.md
 
 Only switch a system to availability:'ready' (and v86.integrated to true) AFTER
-a boot that is actually proven (see docs/debian-desktop.md and docs/debian-xfce.md).
+a boot that is actually proven (see images/debian-12-i386/README.md).
 EOF

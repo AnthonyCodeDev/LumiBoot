@@ -9,11 +9,7 @@ import {
 import { toUserMessage } from '../../lib/errors';
 import { getUserMediaStore } from './user-media.storage';
 
-/**
- * Maximum accepted size for an imported disk media (64 GiB). The media stays in
- * the user's browser: this bound avoids saturating the local storage quota and
- * assumes nothing about the content.
- */
+/** Maximum accepted size for an imported disk media: 64 GiB. */
 export const MAX_USER_MEDIA_BYTES = 64 * 1024 * 1024 * 1024;
 
 /** Recognized extensions, mapped to the disk format v86 expects. */
@@ -30,7 +26,7 @@ interface FileLike {
   readonly size: number;
 }
 
-/** Infers the media format from the extension; unknown -> raw disk. */
+/** Infers the media format from the extension. */
 export function detectMediaFormat(fileName: string): VMMediaFormat {
   return fileName.toLowerCase().endsWith('.iso') ? 'iso' : 'raw';
 }
@@ -48,11 +44,7 @@ function formatBytes(bytes: number): string {
   return `${bytes} bytes`;
 }
 
-/**
- * Validates a media file BEFORE any import: recognized extension, inferable disk
- * format, non-zero size under the cap. Throws an explicit `AssetError` (clear
- * user message), never an anonymous error.
- */
+/** Validates a media file before any import. Throws an `AssetError` with a user message. */
 export function validateUserMediaFile(file: FileLike): { format: VMMediaFormat } {
   const format = mediaFormatForFile(file.name);
   if (format === null) {
@@ -82,10 +74,7 @@ interface StorageEstimateLike {
   usage?: number;
 }
 
-/**
- * Remaining storage quota, or `null` when the API cannot be used. Never throws:
- * a missing estimate must not block a legitimate import.
- */
+/** Remaining storage quota, or `null` when unavailable. Never throws. */
 async function getRemainingQuotaBytes(): Promise<number | null> {
   const storage =
     typeof navigator === 'undefined'
@@ -102,10 +91,7 @@ async function getRemainingQuotaBytes(): Promise<number | null> {
   }
 }
 
-/**
- * Checks that the media fits in the local storage quota. Rejects with an
- * actionable message when the remaining space is insufficient.
- */
+/** Rejects with an actionable message when the media does not fit the quota. */
 export async function assertUserMediaFitsQuota(file: FileLike): Promise<void> {
   const remaining = await getRemainingQuotaBytes();
   if (remaining === null) return;
@@ -134,11 +120,7 @@ export interface UserMediaState {
   importing: boolean;
   error: string | undefined;
   load: () => Promise<void>;
-  /**
-   * Imports the media of a system. `licenseAcknowledged` is forwarded AS-IS to
-   * `vm-assets`: the license confirmation is a domain constraint, not just a UI
-   * checkbox.
-   */
+  /** `licenseAcknowledged` is forwarded as-is to `vm-assets`. */
   importFor: (
     system: OSDefinition,
     media: File,
@@ -148,11 +130,7 @@ export interface UserMediaState {
   remove: (ref: string) => Promise<void>;
 }
 
-/**
- * Front-end store for imported media. It only relays `vm-assets` and the
- * persistence store: no emulation logic here, and **no upload** — the user media
- * never leaves their browser (IndexedDB/OPFS).
- */
+/** Front-end store for imported media: relays `vm-assets` and the persistence store. */
 export const useUserMediaStore = create<UserMediaState>((set) => ({
   records: {},
   loading: false,

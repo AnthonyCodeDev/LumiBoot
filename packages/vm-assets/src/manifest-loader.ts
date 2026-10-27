@@ -5,14 +5,7 @@ import { getImageManifest, registerImageManifest, type ImageManifest } from './m
 const HEX64 = /^[0-9a-f]{64}$/i;
 const IMAGE_REF = /^[a-z0-9-]+$/;
 
-/**
- * Strict validation of the image manifest served statically.
- *
- * Rejects any absolute URL (unexpected network access), any non-hexadecimal
- * 64-character SHA, any non-positive size and any incomplete manifest: an
- * invalid manifest makes the start fail instead of producing an inconsistent
- * session.
- */
+/** Rejects absolute URLs, non-hex SHAs and incomplete manifests. */
 export const imageFileRefSchema = z.object({
   url: z
     .string()
@@ -50,15 +43,7 @@ export const imageManifestSchema = z
   })
   .strict();
 
-// ---------------------------------------------------------------------------
-// Shared requests (deduplication)
-// ---------------------------------------------------------------------------
-
-/**
- * Registry entry: a single request in flight per key, shared by all consumers.
- * Each consumer owns its own abort signal; the underlying request uses an
- * internal signal that is NEVER a consumer's.
- */
+/** One request per key; the request never receives a consumer signal. */
 interface SharedRequestEntry<V> {
   readonly promise: Promise<V>;
   readonly controller: AbortController;
@@ -68,42 +53,31 @@ interface SharedRequestEntry<V> {
 
 export interface SharedRequestRegistry<V> {
   /**
-   * Joins or starts the shared request associated with `key`.
-   *
-   * Canceling a consumer only rejects ITS promise: the underlying request
-   * continues as long as another consumer awaits it. It is only interrupted when
-   * ALL consumers have canceled. A rejection (failure) is never cached: the next
-   * request starts a new one.
+   * Canceling a consumer only rejects its own promise; the request stops when
+   * all consumers cancel. Failures are never cached.
    */
   run(
     key: string,
     signal: AbortSignal | undefined,
     load: (signal: AbortSignal) => Promise<V>,
   ): Promise<V>;
-  /** Number of requests currently in flight (diagnostics / tests). */
+  /** Requests currently in flight. */
   pending(): number;
-  /** Interrupts and forgets all in-flight requests (tests). */
+  /** Interrupts and forgets all in-flight requests. */
   clear(): void;
 }
 
-/**
- * Builds a registry of deduplicated requests, isolating per-consumer
- * cancellation (`ref-count`) from the request internal signal.
- *
- * @param createAbortError builds the error returned to a canceled consumer.
- */
+/** @param createAbortError error returned to a canceled consumer. */
 export function createSharedRequestRegistry<V>(
   createAbortError: (cause?: unknown) => Error,
 ): SharedRequestRegistry<V> {
   const entries = new Map<string, SharedRequestEntry<V>>();
 
-  /** Releases a consumer; interrupts the request if nobody is waiting anymore. */
+  /** Releases a consumer, aborting the request when nobody waits. */
   function release(key: string, entry: SharedRequestEntry<V>): void {
     entry.consumers -= 1;
     if (entry.consumers <= 0 && !entry.controller.signal.aborted) {
-      // Request abandoned by ALL: it is interrupted AND removed immediately so a
-      // later call starts on a fresh request (a collective cancellation is never
-      // a hidden failure).
+      // Removed immediately so a later call starts on a fresh request.
       entry.controller.abort();
       if (entries.get(key) === entry) entries.delete(key);
     }
@@ -111,8 +85,7 @@ export function createSharedRequestRegistry<V>(
 
   return {
     run(key, signal, load) {
-      // An already aborted signal triggers NO request (and does not join an
-      // existing request): the consumer is immediately canceled.
+      // An already aborted signal starts and joins nothing.
       if (signal?.aborted) {
         return Promise.reject(createAbortError());
       }
@@ -123,12 +96,10 @@ export function createSharedRequestRegistry<V>(
         const created: SharedRequestEntry<V> = {
           controller,
           consumers: 0,
-          // The internal request NEVER receives a consumer signal: canceling the
-          // first requester therefore cannot break the others.
+          // The request never receives a consumer signal.
           promise: Promise.resolve().then(() => load(controller.signal)),
         };
-        // A failure is never kept: the entry disappears as soon as it settles,
-        // whatever the outcome (success or rejection).
+        // A failure is never kept: the entry disappears once settled.
         void created.promise
           .finally(() => {
             if (entries.get(key) === created) entries.delete(key);
@@ -188,11 +159,8 @@ const imageManifestRequests = createSharedRequestRegistry<ImageManifest>(
 );
 
 /**
- * Ensures a manifest is registered, then returns it.
- *
- * Never fetches the disk bytes: the manifest is small, the disk is read by v86
- * through HTTP Range. An already registered manifest is not reloaded (reloading
- * a new version is done by clearing the registry via `clearImageManifests()`).
+ * An already registered manifest is not reloaded; only the JSON is fetched, the
+ * disk is read by v86 through HTTP Range.
  */
 export async function ensureImageManifest(
   ref: string,
@@ -274,11 +242,7 @@ export async function loadImageManifest(ref: string, signal?: AbortSignal): Prom
   return manifest;
 }
 
-// ---------------------------------------------------------------------------
-// Asset availability (manifest + actually servable disk)
-// ---------------------------------------------------------------------------
-
-/** Stable unavailability reason, intended for the UI and diagnostics. */
+/** Stable reason, intended for the UI and diagnostics. */
 export type AssetUnavailableReason =
   | 'ref-invalid'
   | 'manifest-missing'
@@ -359,13 +323,7 @@ function unavailable(
   return { available: false, reason, message };
 }
 
-/**
- * Canonical user-facing messages for the "file is not published" cause. They are
- * shown as-is by the UI (`RUNTIME_REASON_MESSAGES` in
- * `apps/web/src/lib/launch.ts`, which reuses them), so their wording — notably
- * the "manifest … missing … 404" word order — is part of the contract and must
- * stay stable.
- */
+/** The wording is part of the UI contract and must stay stable. */
 export const ASSET_UNAVAILABLE_MESSAGES = {
   'manifest-missing': 'The media manifest is missing from the server (HTTP 404).',
   'disk-missing': 'The media disk is missing from the server (HTTP 404).',
@@ -379,10 +337,7 @@ type JsonDocumentResult =
       readonly message: string;
     };
 
-/**
- * Fetches a JSON document while explicitly distinguishing the failure causes:
- * 404, SPA HTML fallback (instead of JSON), unreadable JSON or network error.
- */
+/** Distinguishes 404, SPA HTML fallback, unreadable JSON and network error. */
 export async function fetchJsonDocument(
   url: string,
   options: AssetAvailabilityOptions = {},
@@ -443,10 +398,8 @@ export async function fetchJsonDocument(
 }
 
 /**
- * Checks that a URL is really served over HTTP Range (206 + `Content-Range`), a
- * condition REQUIRED by v86 (`hda.async`). A server that answers 200 to a Range
- * request returns the whole file: the body is immediately canceled and the lack
- * of Range support is reported clearly.
+ * v86 requires HTTP Range: a server answering 200 sends the whole file, whose
+ * body is canceled at once.
  */
 export async function probeRangeAvailability(
   url: string,
@@ -520,10 +473,7 @@ export async function probeRangeAvailability(
   return unavailable('network', `Unexpected disk response (HTTP ${response.status}).`);
 }
 
-/**
- * Checks that a published image is really usable: JSON manifest valid against
- * the schema, consistent reference, then disk served over HTTP Range (206).
- */
+/** Valid manifest, matching reference, then disk served over HTTP Range. */
 export async function checkImageAvailability(
   ref: string,
   options: AssetAvailabilityOptions = {},

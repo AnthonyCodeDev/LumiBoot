@@ -9,31 +9,15 @@ import {
 } from './manifest-loader';
 
 /**
- * Manifest of a disk provided **locally** (file present on the operator machine,
- * never distributed by LumiBoot) booted by BIOS under v86.
- *
- * It differs from the published image manifest (`manifest.ts`): the latter
- * requires a kernel (`bzimage`/`initrd`) and URLs under `/images/`, while a local
- * disk has neither kernel nor bundled binary. This module therefore only
- * describes the disk, the v86 engine binaries that run it, and the HTTP Range
- * read parameters (`hda.async`).
- *
- * Two forms coexist, deliberately distinct:
- * - the **private** form (repository file) may document `source` (a path
- *   RELATIVE to the repository, or an `external` marker without a path) and
- *   `provenance`;
- * - the **public** form (served over HTTP) FORBIDS those internal fields: no
- *   absolute source path must ever leave the operator machine.
- *
- * Nothing here is Windows-specific: the same format describes an XP, Vista or
- * any other bootable x86 system provided by the user.
+ * Local disk booted by BIOS. The public form forbids `source` and `provenance`
+ * so no operator path is ever served.
  */
 
 const HEX64 = /^[0-9a-f]{64}$/i;
 const IMAGE_REF = /^[a-z0-9-]+$/;
 const ARCHITECTURES = ['i386', 'x86', 'x86_64', 'arm', 'arm64', 'powerpc', 'm68k'] as const;
 
-/** v86 engine binary (WASM or BIOS) served statically under `/v86/`. */
+/** v86 engine binary served under `/v86/`. */
 export const localDiskEngineBinarySchema = z
   .object({
     url: z
@@ -58,11 +42,7 @@ export const localDiskEngineSchema = z
   })
   .strict();
 
-/**
- * Disk actually exposed to v86 through HTTP Range. `url` is a relative URL
- * (never absolute) served by the local host; `fileName` is the **served** name,
- * which may differ from the source file name on disk.
- */
+/** `fileName` is the served name, which may differ from the source name. */
 export const localDiskFileSchema = z
   .object({
     fileName: z.string().min(1),
@@ -77,14 +57,7 @@ export const localDiskFileSchema = z
   })
   .strict();
 
-/**
- * Location of the source file (never distributed). Two exclusive forms:
- * - `path`: path RELATIVE to the repository root (e.g. `images/<ref>/disk.img`).
- *   A local absolute path has no value on another machine and must never be
- *   published; it stays tolerated for older local manifests.
- * - `external: true`: disk outside the repository, for which NO path is recorded
- *   (size + mtime are enough to re-detect the file).
- */
+/** Exactly one of repository-relative `path` or `external` is expected. */
 export const localDiskSourceSchema = z
   .object({
     path: z.string().min(1).optional(),
@@ -97,11 +70,7 @@ export const localDiskSourceSchema = z
     message: 'source: exactly one of "path" (repo-relative) or "external" is expected',
   });
 
-/**
- * Parameters passed to v86 for an asynchronous range read. `async: true` and
- * `size` are mandatory: without a size, v86 queries the server with
- * `Range: bytes=0-0` then reads the disk in blocks, without a full load.
- */
+/** v86 probes with `Range: bytes=0-0` then reads blocks; `size` is mandatory. */
 export const localDiskBootSchema = z
   .object({
     mode: z.literal('disk-boot'),
@@ -114,7 +83,6 @@ export const localDiskBootSchema = z
   })
   .strict();
 
-/** Fields shared by the public and private forms. */
 const localDiskCoreShape = {
   version: z.literal(1),
   ref: z.string().regex(IMAGE_REF, 'reference: lowercase letters, digits and dashes'),
@@ -129,17 +97,10 @@ const localDiskCoreShape = {
   notes: z.array(z.string().min(1)).optional(),
 } as const;
 
-/**
- * **Public** manifest: exactly what is served over HTTP. `.strict()` rejects any
- * unknown key, in particular `source` and `provenance`: a manifest that tried to
- * expose a source path is rejected, not served.
- */
+/** `.strict()` rejects `source` and `provenance` from the served form. */
 export const localDiskPublicManifestSchema = z.object(localDiskCoreShape).strict();
 
-/**
- * **Private** manifest (repository file): the public form, plus optional
- * `source` and `provenance` (internal documentation never distributed).
- */
+/** Public form plus the optional internal `source` and `provenance`. */
 export const localDiskManifestSchema = z
   .object({
     ...localDiskCoreShape,
@@ -159,11 +120,7 @@ function formatIssues(error: z.ZodError): string {
     .join('; ');
 }
 
-/**
- * Validates a disk manifest (private or public form). Throws an explicit
- * `AssetError` (including field paths): an inconsistent manifest must never
- * produce a silent partial start.
- */
+/** Throws `AssetError` with the failing field paths. */
 export function parseLocalDiskManifest(input: unknown): LocalDiskManifest {
   const parsed = localDiskManifestSchema.safeParse(input);
   if (!parsed.success) {
@@ -175,10 +132,7 @@ export function parseLocalDiskManifest(input: unknown): LocalDiskManifest {
   return parsed.data;
 }
 
-/**
- * Validates the **public** form only. Used to guarantee that a manifest served
- * over HTTP contains no internal field.
- */
+/** Rejects any internal field in a served manifest. */
 export function parseLocalDiskPublicManifest(input: unknown): LocalDiskPublicManifest {
   const parsed = localDiskPublicManifestSchema.safeParse(input);
   if (!parsed.success) {
@@ -190,12 +144,7 @@ export function parseLocalDiskPublicManifest(input: unknown): LocalDiskPublicMan
   return parsed.data;
 }
 
-/**
- * Serializes the **public** form of a disk manifest: removes `source` (real
- * machine path) and `provenance` (internal). It is the ONLY form that must be
- * written on the network; the result is revalidated so no internal field can
- * slip in.
- */
+/** Only form allowed on the network; the result is revalidated. */
 export function toPublicLocalDiskManifest(manifest: LocalDiskManifest): LocalDiskPublicManifest {
   const candidate = {
     version: manifest.version,
@@ -228,16 +177,13 @@ export interface V86AsyncDrive {
 }
 
 /**
- * Translates the manifest into v86 `hda` options. The provider
- * (`@lumiboot/provider-v86`) already passes `async: true` and `size`; this
- * function makes the rule explicit and testable without depending on the
- * provider.
+ * Keeps the `async`/`size` rule testable without depending on the provider.
  */
 export function toV86AsyncDrive(manifest: LocalDiskManifest): V86AsyncDrive {
   return { url: manifest.boot.url, async: true, size: manifest.disk.size };
 }
 
-/** Disk media in the format expected by `VMMedia` (`@lumiboot/contracts`). */
+/** Shape expected by `VMMedia`. */
 export interface LocalDiskMedia {
   readonly kind: 'disk';
   readonly url: string;
@@ -256,10 +202,9 @@ export function toLocalDiskMedia(manifest: LocalDiskManifest): LocalDiskMedia {
   };
 }
 
-/** Already resolved local disk manifests, indexed by reference. */
 const localDiskManifests = new Map<string, LocalDiskManifest>();
 
-/** Shared registry: deduplicates without depending on the first requester signal. */
+/** Deduplicated without depending on the first requester signal. */
 const localDiskRequests = createSharedRequestRegistry<LocalDiskManifest>(
   () => new AssetError('ASSET_ABORTED', 'Disk manifest load canceled.'),
 );
@@ -276,16 +221,7 @@ export function clearLocalDiskManifests(): void {
   localDiskManifests.clear();
 }
 
-/**
- * Ensures a local disk manifest is loaded, then returns it.
- *
- * The manifest is small (`/images/<ref>/manifest.json`); the disk itself is
- * never downloaded here: v86 reads it through HTTP Range. An already registered
- * manifest is not reloaded (clear it via `clearLocalDiskManifests()`).
- *
- * Canceling one caller never interrupts the shared load of the others: see
- * `createSharedRequestRegistry`.
- */
+/** Only the small JSON is fetched here; the disk is read by v86 over HTTP Range. */
 export async function ensureLocalDiskManifest(
   ref: string,
   signal?: AbortSignal,
@@ -362,11 +298,7 @@ export async function loadLocalDiskManifest(
   return manifest;
 }
 
-/**
- * Checks that a local disk is really servable: valid JSON manifest, consistent
- * reference, then disk served over HTTP Range (206 + `Content-Range`). Every
- * unavailability is motivated (404, SPA HTML fallback, missing Range…).
- */
+/** Valid manifest, matching reference, then working HTTP Range. */
 export async function checkLocalDiskAvailability(
   ref: string,
   options: AssetAvailabilityOptions = {},
@@ -411,12 +343,8 @@ export async function checkLocalDiskAvailability(
 }
 
 /**
- * Compares a manifest against the facts measured on the file (size, mtime,
- * optional checksum). Returns the list of inconsistencies (empty = conforming):
- * no exception, the caller decides the severity level.
- *
- * `source` being optional (a public form has none), the size comparison falls
- * back to the disk size and mtime is only checked when the source is documented.
+ * Returns the inconsistencies; an empty list means conforming. `mtime` is only
+ * compared when the manifest documents a `source`.
  */
 export function diffLocalDiskIntegrity(
   manifest: LocalDiskManifest,

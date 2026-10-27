@@ -24,7 +24,6 @@ func TestCounters(t *testing.T) {
 		t.Fatalf("errors: %+v", snap)
 	}
 
-	// Never below zero.
 	c.DecConnections()
 	c.DecConnections()
 	if got := c.Snapshot().ActiveConnections; got != 0 {

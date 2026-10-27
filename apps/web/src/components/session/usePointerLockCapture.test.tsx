@@ -3,10 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 import { usePointerLockCapture } from './usePointerLockCapture';
 import { POINTER_LOCKED_CLASS } from './pointer-lock';
 
-/**
- * Minimal Pointer Lock mock for jsdom: really locks the requested element,
- * reflects `document.pointerLockElement` and emits `pointerlockchange`.
- */
+/** Minimal Pointer Lock mock for jsdom. */
 function installPointerLock(): { restore: () => void; exitCalls: number } {
   const doc = document as Document & { pointerLockElement: Element | null };
   let locked: Element | null = null;
@@ -63,7 +60,7 @@ function makeFixture(): Fixture {
   const container = document.createElement('div');
   container.className = 'session-console';
   const screen = document.createElement('div');
-  // Fake screen matching the display contract (no `.v86-screen` class).
+  // Display contract marker only, no v86 class.
   screen.setAttribute('data-vm-display', 'screen');
   const canvas = document.createElement('canvas');
   screen.append(canvas);

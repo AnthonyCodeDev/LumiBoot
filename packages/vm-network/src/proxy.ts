@@ -1,11 +1,6 @@
 /**
- * **Shared** concepts of the LumiBoot local network proxy (no React/Go
- * dependency).
- *
- * The local network proxy is a local WISP server exposed on loopback
- * (`http://127.0.0.1:37892` by default). The VM connects to it through a
- * WebSocket URL `ws(s)://…/wisp/` derived from the HTTP(S) URL of the local
- * network proxy.
+ * The proxy is a local WISP server on loopback; the VM reaches it through a
+ * `ws(s)://…/wisp/` URL derived from its HTTP(S) URL.
  */
 
 import type { NetworkMode } from './modes';
@@ -15,7 +10,7 @@ export const DEFAULT_PROXY_HOST = '127.0.0.1';
 export const DEFAULT_PROXY_PORT = 37892;
 export const DEFAULT_PROXY_URL = `http://${DEFAULT_PROXY_HOST}:${DEFAULT_PROXY_PORT}`;
 
-/** WISP protocol version required by the current v86 client. */
+/** WISP protocol version required by the v86 client. */
 export const PROXY_WISP_VERSION = 1;
 
 export const PROXY_STATES = [
@@ -43,8 +38,9 @@ function isLoopbackHostname(hostname: string): boolean {
 }
 
 /**
- * Validates a local network proxy URL: loopback `http:`/`https:` only, no
- * userinfo and no fragment. Returns the normalized URL (`URL.href`) on success.
+ * Loopback `http:`/`https:` only, no userinfo and no fragment.
+ *
+ * @returns the normalized URL in `url` on success.
  */
 export function validateProxyUrl(raw: unknown): ProxyValidation {
   if (typeof raw !== 'string') {
@@ -92,15 +88,7 @@ export function validateProxyUrl(raw: unknown): ProxyValidation {
   return { ok: true, url: url.href };
 }
 
-/**
- * Builds the local WISP relay URL (`ws://`/`wss://…/wisp/`) from the local
- * network proxy URL and an optional token.
- *
- * E.g.: `buildProxyWispUrl('http://127.0.0.1:37892', 'abc')` →
- * `'ws://127.0.0.1:37892/wisp/?token=abc'`.
- *
- * Throws if the local network proxy URL is invalid.
- */
+/** @throws Error when the local network proxy URL is invalid. */
 export function buildProxyWispUrl(proxyUrl: string, token?: string): string {
   const validation = validateProxyUrl(proxyUrl);
   if (!validation.ok || validation.url === undefined) {
@@ -121,26 +109,21 @@ export function buildProxyWispUrl(proxyUrl: string, token?: string): string {
   return url.href;
 }
 
-/** Fallback mode when `local-proxy` is requested but the local network proxy is absent. */
+/** `local-proxy` falls back to it when the proxy is absent. */
 export const DEFAULT_NETWORK_FALLBACK_MODE: NetworkMode = 'browser-fetch';
 
 export interface ProxyAvailability {
-  /** Is the local network proxy enabled in the config? Default: true. */
+  /** Defaults to true. */
   enabled?: boolean;
-  /** Connected AND paired (the token must be present). */
+  /** Connected and paired: the token must be present. */
   connected: boolean;
   proxyUrl?: string;
   proxyToken?: string;
 }
 
 /**
- * Selects the effective network profile:
- * - local network proxy connected (enabled, `connected`, token present) and base
- *   mode neither `offline` nor `user-relay` → `local-proxy` (with runtime URL +
- *   token);
- * - base mode `local-proxy` without a local network proxy → `browser-fetch`
- *   fallback;
- * - otherwise → unchanged base mode.
+ * A connected and paired proxy wins over the base mode; a `local-proxy` base
+ * without proxy falls back to `browser-fetch`.
  */
 export function selectEffectiveNetworkProfile(
   base: NetworkProfile,

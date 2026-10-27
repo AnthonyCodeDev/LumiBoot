@@ -3,7 +3,7 @@ import type { PlatformKey } from '../lib/platform';
 import { resolveProxyConfig } from './runtime';
 import type { FetchLike } from './load-config';
 
-/** Default public location of the downloads manifest. */
+/** Public location of the downloads manifest. */
 export const DOWNLOADS_MANIFEST_URL = '/downloads/manifest.json';
 
 const downloadEntrySchema = z
@@ -43,13 +43,7 @@ export class DownloadsManifestError extends Error {
   }
 }
 
-/**
- * Loads the downloads manifest of the local network proxy.
- *
- * Source: `proxy.downloadManifestUrl` (config) when set, otherwise
- * `/downloads/manifest.json`. No download URL is built anywhere else: everything
- * goes through this manifest.
- */
+/** Loads the proxy downloads manifest. Every download URL comes from it. */
 export async function loadDownloadsManifest(
   fetchImpl: FetchLike = fetch,
 ): Promise<DownloadsManifest> {
@@ -86,12 +80,7 @@ export async function loadDownloadsManifest(
   return result.data;
 }
 
-/**
- * Resolves the download link for a platform.
- *
- * An entry is downloadable only when `published === true` AND `url` is not
- * null; otherwise `null` (the UI then shows "Unavailable").
- */
+/** Downloadable only when `published` and `url` is set; gives `null` otherwise. */
 export function resolveDownloadUrl(manifest: DownloadsManifest, key: PlatformKey): string | null {
   const entry = manifest.platforms[key];
   if (!entry.published) return null;

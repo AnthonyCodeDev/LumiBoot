@@ -1,8 +1,6 @@
 // Package server exposes the local network proxy: HTTP pairing and health
-// endpoints, plus the WISP WebSocket entry point. Administration (approval,
-// revocation) happens in the terminal console (internal/console), without a web
-// page. Listens STRICTLY on loopback (validated by config). Graceful shutdown
-// via context.
+// endpoints, plus the WISP WebSocket entry point. Listens on loopback unless
+// `allowNonLoopback` is set; administration happens in the terminal console.
 package server
 
 import (
@@ -29,16 +27,15 @@ import (
 	"github.com/lumiboot/network-proxy/internal/wisp"
 )
 
-// Version can be overridden at build time (-ldflags "-X ...Version=...").
+// Version can be overridden at build time with -ldflags.
 var Version = "0.1.0-dev"
 
-// WispVersion advertises the supported protocol (V1 only).
+// WispVersion advertises the supported protocol version.
 const WispVersion = 1
 
-// maxBody bounds JSON request bodies (64 KiB).
+// maxBody bounds JSON request bodies to 64 KiB.
 const maxBody = 64 * 1024
 
-// Server is the local network proxy server.
 type Server struct {
 	cfg       config.Config
 	auth      *auth.Authenticator
@@ -49,9 +46,8 @@ type Server struct {
 	httpSrv   *http.Server
 	startTime time.Time
 
-	// ws counts active WISP handlers. http.Server.Shutdown does not wait for
-	// hijacked connections (WebSocket): they are closed through the revocation
-	// registry, then we wait for their termination on this counter.
+	// ws counts active WISP handlers: Shutdown does not wait for hijacked
+	// WebSockets, so their termination is awaited here.
 	ws sync.WaitGroup
 }
 
@@ -67,7 +63,7 @@ func New(cfg config.Config) (*Server, error) {
 		stats:     &diagnostics.Counters{},
 		startTime: time.Now(),
 		upgrader: websocket.Upgrader{
-			// Origin is checked manually before the upgrade (counting + JSON 403).
+			// Origin is checked manually before the upgrade to return a JSON 403.
 			CheckOrigin:     func(_ *http.Request) bool { return true },
 			ReadBufferSize:  32 * 1024,
 			WriteBufferSize: 32 * 1024,
@@ -86,15 +82,13 @@ func New(cfg config.Config) (*Server, error) {
 	s.httpSrv = &http.Server{
 		Handler:           securityHeaders(s.preflightMiddleware(mux)),
 		ReadHeaderTimeout: 10 * time.Second,
-		// Internal server logs are filtered so a session token present in a query
-		// string can never leak.
+		// Filtered so a session token in a query string can never leak.
 		ErrorLog: log.New(redactingWriter{os.Stderr}, "", 0),
 	}
 	return s, nil
 }
 
-// redactingWriter redacts any "token=<value>" before writing: the token must
-// never appear in the logs.
+// redactingWriter redacts any "token=<value>" before writing.
 type redactingWriter struct{ w io.Writer }
 
 func (rw redactingWriter) Write(p []byte) (int, error) {
@@ -114,18 +108,18 @@ func (rw redactingWriter) Write(p []byte) (int, error) {
 	return rw.w.Write([]byte(s))
 }
 
-// Handler exposes the mux for tests (httptest).
+// Handler exposes the mux for tests.
 func (s *Server) Handler() http.Handler {
 	return securityHeaders(s.preflightMiddleware(s.mux))
 }
 
-// Stats exposes the counters (diagnostics, tests).
+// Stats exposes the counters.
 func (s *Server) Stats() *diagnostics.Counters { return s.stats }
 
-// Authenticator exposes the authenticator (tests).
+// Authenticator exposes the authenticator for tests.
 func (s *Server) Authenticator() *auth.Authenticator { return s.auth }
 
-// Run listens and serves until the context is cancelled (graceful shutdown).
+// Run listens and serves until the context is cancelled.
 func (s *Server) Run(ctx context.Context) error {
 	ln, err := net.Listen("tcp", s.cfg.ListenAddr)
 	if err != nil {
@@ -169,9 +163,8 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 }
 
-// Shutdown explicitly closes every WebSocket session (http.Server does not
-// stop hijacked connections), waits for their termination within the ctx
-// deadline, then stops the HTTP server.
+// Shutdown closes every WebSocket session and waits for their termination;
+// http.Server alone does not stop hijacked connections.
 func (s *Server) Shutdown(ctx context.Context) {
 	s.auth.CloseAllSessions()
 	done := make(chan struct{})
@@ -192,8 +185,6 @@ func sweepInterval(idle time.Duration) time.Duration {
 	}
 	return 5 * time.Second
 }
-
-// --- HTTP helpers ---
 
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -228,7 +219,7 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-// setCORS reflects the origin ONLY if allowed. Never "*".
+// setCORS reflects the origin only if it is allowed. Never "*".
 func (s *Server) setCORS(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	if origin != "" && s.auth.IsOriginAllowed(origin) {
@@ -237,7 +228,6 @@ func (s *Server) setCORS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handlePreflight answers OPTIONS preflights for allowed origins.
 func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodOptions {
 		return false
@@ -255,9 +245,8 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// preflightMiddleware answers OPTIONS requests (CORS preflight) BEFORE the mux:
-// routes are registered per method (Go 1.22+), so OPTIONS would match no route
-// and the mux would return 405 without this short-circuit.
+// preflightMiddleware answers OPTIONS before the mux: routes are registered per
+// method, so OPTIONS would otherwise return 405.
 func (s *Server) preflightMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions {
@@ -268,9 +257,8 @@ func (s *Server) preflightMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// requireAllowedOrigin refuses requests carrying a disallowed origin.
-// A missing origin is refused on sensitive endpoints (the LumiBoot provider
-// always runs in a browser, which sends Origin).
+// requireAllowedOrigin refuses a disallowed origin; a missing origin is refused
+// too, since the provider always runs in a browser and sends one.
 func (s *Server) requireAllowedOrigin(w http.ResponseWriter, r *http.Request) string {
 	origin := r.Header.Get("Origin")
 	if !s.auth.IsOriginAllowed(origin) {
@@ -280,8 +268,6 @@ func (s *Server) requireAllowedOrigin(w http.ResponseWriter, r *http.Request) st
 	}
 	return auth.NormalizeOrigin(origin)
 }
-
-// --- routes ---
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	s.setCORS(w, r)
@@ -327,7 +313,6 @@ func (s *Server) handlePairRequest(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePairStatus(w http.ResponseWriter, r *http.Request) {
 	s.setCORS(w, r)
-	// Status queried by the web page (allowed origin).
 	if s.requireAllowedOrigin(w, r) == "" {
 		return
 	}
@@ -382,10 +367,8 @@ func (s *Server) handleSessionRevoke(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusNotFound, "session not found")
 }
 
-// handleSessionVerify verifies Origin + token WITHOUT an upgrade and returns the
-// session expiration. The frontend uses it to stop showing "connected" on a
-// mere /health. GET, no custom header (simple CORS request, token in the query,
-// like /wisp/).
+// handleSessionVerify checks Origin and token without an upgrade, so the frontend
+// stops showing "connected" on a mere /health.
 func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
 	s.setCORS(w, r)
 	origin := r.Header.Get("Origin")
@@ -406,11 +389,8 @@ func (s *Server) handleSessionVerify(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleWisp negotiates the WebSocket after checking Origin + token, then runs
-// the WISP V1 session. The token travels in the query string because v86 sends
-// neither a header nor a subprotocol. The transport is registered with the
-// authenticator: Revoke/AdminRevoke/expiration/shutdown actually close the
-// WebSocket and all associated TCP net.Conns.
+// handleWisp negotiates the WebSocket after checking Origin and token, then runs
+// the WISP session; the token travels in the query because v86 sends no header.
 func (s *Server) handleWisp(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	if !s.auth.IsOriginAllowed(origin) {
@@ -419,7 +399,7 @@ func (s *Server) handleWisp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := r.URL.Query().Get("token")
-	// Prior check: returns a clear JSON 403 (API behavior).
+	// Prior check: returns a clear JSON 403.
 	if !s.auth.Verify(token, origin) {
 		s.stats.IncRejectedAuth()
 		writeError(w, http.StatusForbidden, "invalid or expired session token")
@@ -446,11 +426,8 @@ func (s *Server) handleWisp(w http.ResponseWriter, r *http.Request) {
 		SessionID:            sessionID,
 	})
 
-	// Atomic transport registration: if the session was revoked between the
-	// verification and the upgrade, the attachment fails and we close.
-	// Each WebSocket gets its own transport ID: several connections can share
-	// the same token without overwriting each other, and a normal detach only
-	// removes that one connection.
+	// Atomic registration: if the session was revoked between the check and the
+	// upgrade, the attachment fails and the connection is closed.
 	_, transportID, ok := s.auth.AttachSession(token, origin, h.Close)
 	if !ok {
 		_ = conn.Close()

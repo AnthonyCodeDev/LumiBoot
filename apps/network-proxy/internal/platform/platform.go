@@ -7,11 +7,9 @@ import (
 	"path/filepath"
 )
 
-// ConfigDirName is the application folder under the OS config directory.
 const ConfigDirName = "Network Proxy"
 
-// ConfigFilePath returns the configuration file path:
-// <os.UserConfigDir>/LumiBoot/Network Proxy/config.json.
+// ConfigFilePath returns <os.UserConfigDir>/LumiBoot/Network Proxy/config.json.
 func ConfigFilePath() (string, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
@@ -20,7 +18,6 @@ func ConfigFilePath() (string, error) {
 	return filepath.Join(base, "LumiBoot", ConfigDirName, "config.json"), nil
 }
 
-// EnsureConfigDir creates the configuration folder if needed and returns it.
 func EnsureConfigDir() (string, error) {
 	path, err := ConfigFilePath()
 	if err != nil {

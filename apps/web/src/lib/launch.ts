@@ -17,18 +17,13 @@ export interface LaunchReadiness {
 }
 
 export interface LaunchReadinessOptions {
-  /**
-   * Has the local media required by a `user-import` system actually been imported
-   * (bytes available)? Provided by the user media store.
-   */
+  /** Has the media required by a `user-import` system actually been imported? */
   userMediaReady?: boolean;
 }
 
 /**
- * Stable user message per runtime unavailability cause. A raw technical reason is
- * never shown: every cause (404, SPA HTML fallback, missing HTTP Range…) has an
- * actionable explanation. The "file not published" causes reuse the canonical
- * strings of `@lumiboot/vm-assets`, so both layers cannot drift apart.
+ * Stable user message per runtime unavailability cause; a raw technical reason is
+ * never shown. Published-file causes reuse the canonical `@lumiboot/vm-assets` strings.
  */
 const RUNTIME_REASON_MESSAGES: Record<AssetUnavailableReason, string> = {
   'ref-invalid': 'The system media reference is invalid.',
@@ -49,22 +44,8 @@ const RUNTIME_REASON_MESSAGES: Record<AssetUnavailableReason, string> = {
 };
 
 /**
- * Source of truth for enabling the "Start session" button, on the DECLARED side
- * (catalogue) plus static constraints.
- *
- * - **Local disk** system (`readiness.mode === 'disk-boot'`, e.g. Windows 7):
- *   launchable once the engine is integrated, a disk is referenced
- *   (`imageRef`), the allocated memory is consistent and the architecture is
- *   served by the engine. No media is imported or requested: the disk belongs to
- *   the codebase and is served locally. Its real presence is checked at runtime
- *   by `checkSystemRuntimeAvailability`.
- * - `bundled` system: launchable when the catalogue entry is `ready`, the main
- *   engine is integrated and the architecture is served.
- * - `user-import` system: launchable once the user imported THEIR legal
- *   media — never before.
- *
- * An unserved architecture (e.g. `x86_64`/`arm64` under v86) and a missing
- * integrated engine are refused EXPLICITLY here, before any boot.
+ * Declared-side source of truth for the "Start session" button.
+ * Refuses an unserved architecture or a missing engine before any boot.
  */
 export function getLaunchReadiness(
   system: OSDefinition,
@@ -121,12 +102,11 @@ export function getLaunchReadiness(
     }
   }
 
-  // 2. Declared memory constraint (profile consistency / allocated memory).
+  // 2. Declared memory constraint.
   const memoryReason = getMemoryConstraintReason(system, profile);
   if (memoryReason !== null) return { canLaunch: false, reason: memoryReason };
 
-  // 3. Runtime architecture/CPU compatibility + browser prerequisites. An engine
-  //    that does not serve the system architecture is refused here, not at boot.
+  // 3. Architecture/CPU compatibility and browser prerequisites.
   const compatibility = explainSystemCompatibility(system);
   if (!compatibility.compatible) {
     return { canLaunch: false, reason: compatibility.reasons.join(' ') };
@@ -135,11 +115,7 @@ export function getLaunchReadiness(
   return { canLaunch: true };
 }
 
-/**
- * Static memory constraint: the configured memory must be set and at least equal
- * to the profile's declared minimum. Both values come from the catalogue; this
- * check stops an inconsistent profile from promising a boot it cannot deliver.
- */
+/** Static memory constraint: configured memory must reach the declared minimum. */
 function getMemoryConstraintReason(system: OSDefinition, profile: LaunchProfile): string | null {
   const configured = profile.configuration?.memoryMiB ?? system.minMemoryMiB;
   if (configured === undefined || configured <= 0) {
@@ -152,7 +128,6 @@ function getMemoryConstraintReason(system: OSDefinition, profile: LaunchProfile)
   return null;
 }
 
-/** Options for the runtime availability check (injectable in tests). */
 export interface RuntimeCheckOptions {
   readonly signal?: AbortSignal;
   readonly fetchImpl?: typeof fetch;
@@ -162,20 +137,14 @@ export interface RuntimeCheckOptions {
 export interface RuntimeAvailability {
   readonly available: boolean;
   readonly reason?: string;
-  /** Disk size announced by the server (`Content-Range`), when known. */
+  /** Disk size announced by the server via `Content-Range`, when known. */
   readonly size?: number;
 }
 
 /**
- * Checks that the DECLARED media of a system is really servable right now: valid
- * JSON manifest, consistent reference and disk served over HTTP Range
- * (206 + `Content-Range`). Separate from catalogue availability: a declared
- * `ready` may well map to a missing disk (gitignored), to an SPA HTML fallback or
- * to a server ignoring Range.
- *
- * For a `user-import` system, the media is local (browser blob): it is never
- * checked over HTTP — only the imported presence (`userMediaReady`) matters,
- * checked by the caller.
+ * Checks that the declared media is really servable now: valid manifest,
+ * consistent reference, disk served over HTTP Range. A `user-import` system is
+ * skipped: its media is local.
  */
 export async function checkSystemRuntimeAvailability(
   system: OSDefinition,
@@ -209,12 +178,7 @@ export async function checkSystemRuntimeAvailability(
   return { available: false, reason };
 }
 
-/**
- * COMPLETE readiness of the launch button: first the declared constraints
- * (catalogue, engine, architecture, memory, imported media), then the runtime
- * availability (manifest + HTTP Range disk). Returns the first explicit refusal
- * reason.
- */
+/** Full readiness: declared constraints first, then runtime availability. */
 export async function resolveLaunchReadiness(
   system: OSDefinition,
   options: LaunchReadinessOptions & RuntimeCheckOptions = {},

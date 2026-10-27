@@ -8,16 +8,11 @@ import {
   type PointerLockCaptureHandle,
 } from './pointer-lock';
 
-/**
- * Pointer Lock mock for jsdom (which does not implement it). It reproduces the
- * observed real contract: `requestPointerLock()` locks the requested element,
- * `document.pointerLockElement` reflects the lock, `exitPointerLock()` releases
- * it, and every transition emits `pointerlockchange` on `document`.
- */
+/** Pointer Lock mock for jsdom: lock, unlock and `pointerlockchange` events. */
 interface PointerLockMock {
   requestCalls: number;
   exitCalls: number;
-  /** Forces an external release (native Escape) + `pointerlockchange` event. */
+  /** Forces a native release plus a `pointerlockchange` event. */
   releaseExternally(): void;
   restore(): void;
 }
@@ -100,11 +95,7 @@ interface Fixture {
   serial: HTMLTextAreaElement;
 }
 
-/**
- * FAKE screen matching the provider-agnostic display contract only:
- * `data-vm-display="screen"` marker, NO `.v86-screen` class. A successful capture
- * on this element proves that the UI does not depend on the v86 engine.
- */
+/** Fake screen carrying only the display contract marker, never a v86 class. */
 function makeFixture(): Fixture {
   const container = document.createElement('div');
   container.className = 'session-console';
@@ -190,7 +181,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     pointerDownOn(canvas);
     expect(handle.isCaptured()).toBe(true);
 
-    // Escape is handled natively by the browser: it releases and fires the event.
+    // Escape is native: it releases and fires the event.
     mock.releaseExternally();
 
     expect(document.pointerLockElement).toBeNull();
@@ -198,7 +189,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     expect(screen.classList.contains(POINTER_LOCKED_CLASS)).toBe(false);
     expect(states).toEqual([true, false]);
 
-    // New explicit click => recapture.
+    // New explicit click recaptures.
     pointerDownOn(screen);
     expect(handle.isCaptured()).toBe(true);
     expect(document.pointerLockElement).toBe(screen);
@@ -227,7 +218,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
 
     pointerDownOn(canvas);
 
-    // Asynchronous rejection + fallback without options: let the microtasks finish.
+    // Rejection plus fallback without options: let the microtasks finish.
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(onError).toHaveBeenCalled();
@@ -262,7 +253,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     expect(document.pointerLockElement).toBeNull();
     expect(handle.isCaptured()).toBe(false);
 
-    // After dispose: no listener is active anymore.
+    // After dispose no listener is active anymore.
     const callsAfterDispose = mock.requestCalls;
     pointerDownOn(canvas);
     expect(mock.requestCalls).toBe(callsAfterDispose);
@@ -307,7 +298,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
   it('exposes a provider-agnostic screen selector (standard contract)', () => {
     expect(DEFAULT_SCREEN_SELECTOR).toBe(STANDARD_VM_DISPLAY.screenSelector);
     expect(DEFAULT_SCREEN_SELECTOR).toBe('[data-vm-display="screen"]');
-    // No trace of a v86-specific selector remains in the generic UI.
+    // No v86-specific selector leaks into the generic UI.
     expect(DEFAULT_SCREEN_SELECTOR).not.toContain('v86');
   });
 

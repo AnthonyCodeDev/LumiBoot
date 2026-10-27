@@ -1,8 +1,5 @@
-// Command lumiboot-network is the local "LumiBoot Network Proxy" binary.
-//
-// This program starts the local WISP WebSocket server (network bridge to the
-// Internet for the virtualized OS) and an interactive administration console
-// (pairing, sessions). It does NOT run any virtual machine.
+// Command lumiboot-network is the local network proxy: a WISP WebSocket server
+// plus an interactive console for pairing and sessions. It runs no VM.
 package main
 
 import (
@@ -71,8 +68,7 @@ func run() error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// HTTP/WS server and interactive console run in parallel: as soon as one
-	// stops, the context is cancelled and the other is allowed to finish.
+	// Server and console run in parallel; when one stops the other is cancelled.
 	errCh := make(chan error, 2)
 	go func() { errCh <- srv.Run(ctx) }()
 	go func() { errCh <- console.New(srv.Authenticator(), os.Stdin, os.Stdout).Run(ctx) }()
@@ -102,7 +98,6 @@ func run() error {
 	return nil
 }
 
-// printBanner prints the startup banner (plain, aligned).
 func printBanner(listenAddr string) {
 	rule := strings.Repeat("─", 60)
 	fmt.Println(rule)

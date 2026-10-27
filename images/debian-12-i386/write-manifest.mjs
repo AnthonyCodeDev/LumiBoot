@@ -1,16 +1,11 @@
 #!/usr/bin/env node
-// Generates an image manifest compliant with the strict @lumiboot/vm-assets
-// schema (ref, architecture, memoryMiB, vgaMemoryMiB, license,
-// files{disk,bzimage,initrd}).
-// Sizes and SHA-256 are ALWAYS computed from the real files: no fictitious value
-// is ever written.
+// Generates the image manifest for the @lumiboot/vm-assets schema. Sizes and
+// SHA-256 are always computed from the real files.
 //
 //   node images/debian-12-i386/write-manifest.mjs <artifacts-dir>
 //
-// Configurable through environment variables (used by build.sh depending on the
-// flavor); the default values reproduce EXACTLY the console image
-// `debian-12-i386` :
-//   IMAGE_REF=debian-12-i386-desktop IMAGE_MEMORY_MIB=1024 node write-manifest.mjs build-desktop
+// IMAGE_REF, IMAGE_ARCH, IMAGE_MEMORY_MIB, IMAGE_VGA_MIB and IMAGE_CMDLINE
+// override the defaults, which reproduce the console image.
 
 import { createHash } from 'node:crypto';
 import { stat, writeFile } from 'node:fs/promises';
@@ -21,9 +16,7 @@ const REF = process.env.IMAGE_REF ?? 'debian-12-i386';
 const ARCH = process.env.IMAGE_ARCH ?? 'i386';
 const MEMORY_MIB = Number(process.env.IMAGE_MEMORY_MIB ?? 512);
 const VGA_MIB = Number(process.env.IMAGE_VGA_MIB ?? 16);
-// Optional kernel cmdline, specific to the flavor (the desktop flavor adds
-// "vga=0x318" to get a /dev/fb0 framebuffer, Xorg fbdev fallback).
-// Empty/absent -> no `boot` field: the provider applies its DEFAULT_BOOT_CMDLINE.
+// Optional kernel cmdline; empty means no `boot` field.
 const CMDLINE = (process.env.IMAGE_CMDLINE ?? '').trim();
 const LICENSE = 'Debian GNU/Linux — see the package notices (Debian Free Software Guidelines)';
 const BASE_URL = `/images/${REF}`;
@@ -42,8 +35,7 @@ async function describe(fileName) {
   if (!info) {
     throw new Error(`Missing artifact: ${path}. Build the image before generating the manifest.`);
   }
-  // Streaming hash: the disk is 2 GiB, impossible to load into memory in one
-  // go (readFile limit > 2 GiB on Node).
+  // Streamed: the disk is several GiB.
   const sha256 = await new Promise((resolveHash, reject) => {
     const hash = createHash('sha256');
     const stream = createReadStream(path);
@@ -68,8 +60,7 @@ const manifest = {
   files,
 };
 
-// Optional `boot` field: present only when a cmdline was provided (desktop
-// flavor). The @lumiboot/vm-assets schema validates `boot.cmdline`.
+// `boot` is present only when a cmdline was provided.
 if (CMDLINE) {
   manifest.boot = { cmdline: CMDLINE };
 }

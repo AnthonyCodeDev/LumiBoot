@@ -58,7 +58,6 @@ func TestForbiddenRanges(t *testing.T) {
 }
 
 func TestLiteralBlocked(t *testing.T) {
-	// Literal forbidden IP, without DNS.
 	_, err := ValidateDestination(context.Background(), nil, "10.1.2.3", 80, false)
 	if reasonOf(t, err) != ReasonDestinationBlocked {
 		t.Fatalf("unexpected reason: %v", err)
@@ -96,7 +95,6 @@ func TestMetadataAlwaysBlocked(t *testing.T) {
 }
 
 func TestOneBadIPRefusesAll(t *testing.T) {
-	// Anti DNS-rebinding: a single forbidden IP among healthy ones refuses all.
 	_, err := ValidateDestination(context.Background(), lookupIPs("93.184.216.34", "169.254.169.254"), "trap.example", 443, false)
 	if reasonOf(t, err) != ReasonDestinationBlocked {
 		t.Fatalf("rebinding not detected: %v", err)
@@ -111,7 +109,6 @@ func TestPublicAllowed(t *testing.T) {
 	if got.String() != "93.184.216.34" {
 		t.Fatalf("unexpected IP returned: %s", got)
 	}
-	// The caller must dial the validated IP, not the hostname.
 	if got.String() == "example.com" {
 		t.Fatal("the validated IP must be returned, not the hostname")
 	}

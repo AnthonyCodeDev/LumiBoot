@@ -19,7 +19,6 @@ func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
 	cfg := config.Default()
 	cfg.AllowedOrigins = []string{testOrigin}
-	// Tests on loopback: local pairing explicitly allowed.
 	cfg.AllowLocalOrigins = true
 	s, err := New(cfg)
 	if err != nil {
@@ -61,7 +60,6 @@ func TestHealth(t *testing.T) {
 
 func TestCORS(t *testing.T) {
 	_, ts := newTestServer(t)
-	// Allowed preflight.
 	req, _ := http.NewRequest(http.MethodOptions, ts.URL+"/api/pair/request", nil)
 	req.Header.Set("Origin", testOrigin)
 	resp, err := http.DefaultClient.Do(req)
@@ -75,7 +73,7 @@ func TestCORS(t *testing.T) {
 	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != testOrigin {
 		t.Fatalf("CORS: %q", got)
 	}
-	// Hostile preflight refused, never "*".
+	// Hostile preflight refused, never a wildcard.
 	req, _ = http.NewRequest(http.MethodOptions, ts.URL+"/api/pair/request", nil)
 	req.Header.Set("Origin", "http://evil.com")
 	resp, err = http.DefaultClient.Do(req)
@@ -95,7 +93,6 @@ func TestPairingAPI(t *testing.T) {
 	s, ts := newTestServer(t)
 	client := ts.Client()
 
-	// Request from an allowed origin (via Origin).
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/pair/request", nil)
 	req.Header.Set("Origin", testOrigin)
 	resp, err := client.Do(req)
@@ -112,7 +109,6 @@ func TestPairingAPI(t *testing.T) {
 		t.Fatalf("creation: %+v (%d)", created, resp.StatusCode)
 	}
 
-	// Hostile request refused.
 	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/pair/request", nil)
 	req.Header.Set("Origin", "http://evil.com")
 	resp, err = client.Do(req)
@@ -124,7 +120,6 @@ func TestPairingAPI(t *testing.T) {
 		t.Fatalf("hostile origin: %d", resp.StatusCode)
 	}
 
-	// Exchange before approval: refused.
 	exchange := func() *http.Response {
 		r, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/pair/exchange",
 			strings.NewReader(`{"pairingId":"`+created.PairingID+`"}`))
@@ -142,12 +137,10 @@ func TestPairingAPI(t *testing.T) {
 		t.Fatalf("pre-approval exchange: %d", resp.StatusCode)
 	}
 
-	// Approval from the console (direct call to the authenticator).
 	if err := s.Authenticator().Approve(created.PairingID, true); err != nil {
 		t.Fatalf("approval: %v", err)
 	}
 
-	// Exchange: token issued only once.
 	resp = exchange()
 	var exchanged struct {
 		Token string `json:"token"`
@@ -162,7 +155,6 @@ func TestPairingAPI(t *testing.T) {
 		t.Fatalf("pairing reuse: %d", resp.StatusCode)
 	}
 
-	// Self-revocation.
 	revoke, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/session/revoke",
 		strings.NewReader(`{"token":"`+exchanged.Token+`"}`))
 	revoke.Header.Set("Content-Type", "application/json")
@@ -176,7 +168,6 @@ func TestPairingAPI(t *testing.T) {
 	}
 }
 
-// obtainToken runs pairing + approval + exchange and returns the token.
 func obtainToken(t *testing.T, s *Server, ts *httptest.Server) string {
 	t.Helper()
 	client := ts.Client()
@@ -228,7 +219,6 @@ func TestSessionVerify(t *testing.T) {
 		return resp
 	}
 
-	// Valid token -> 200 {"ok":true,"expiresAt":...}.
 	resp := get(token, testOrigin)
 	var body struct {
 		Ok        bool   `json:"ok"`
@@ -239,21 +229,18 @@ func TestSessionVerify(t *testing.T) {
 		t.Fatalf("valid verify: %+v (%d)", body, resp.StatusCode)
 	}
 
-	// Invalid token -> 401.
 	resp = get("DeliberatelyWrong", testOrigin)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("invalid token verify: %d", resp.StatusCode)
 	}
 
-	// Missing token -> 401.
 	resp = get("", testOrigin)
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("missing token verify: %d", resp.StatusCode)
 	}
 
-	// Disallowed origin -> 403.
 	resp = get(token, "http://evil.com")
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
@@ -273,7 +260,6 @@ func TestWispAuthGate(t *testing.T) {
 		t.Fatalf("unexpected status: %d", resp.StatusCode)
 	}
 
-	// Hostile origin, even without a token.
 	header = http.Header{"Origin": []string{"http://evil.com"}}
 	if _, resp, err := dialer.Dial(wsURL, header); err == nil {
 		t.Fatal("hostile origin accepted")

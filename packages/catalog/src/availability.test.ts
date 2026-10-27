@@ -49,8 +49,7 @@ describe('getAggregatedAvailability (audit #19)', () => {
   });
 
   it('does not mix the validation of one profile with the engine of another', () => {
-    // Candidate A: validated but engine not integrated.
-    // Candidate B: engine integrated but not validated.
+    // A: validated without an integrated engine. B: the opposite.
     // Independent `some()` calls would produce a false `ready`.
     const candidates: SystemAvailabilityFacts[] = [
       { ...allFacts, engineIntegrated: false, validated: true },
@@ -151,7 +150,7 @@ describe('catalog: Windows 7 Professional (validated child) under v86', () => {
     expect(profile && isEngineIntegrated(profile.engineId)).toBe(true);
     // `validated` lives on the catalog definition, not on the contract.
     expect(definition?.validated).toBe(true);
-    // Availability is DERIVED from `validated`: never hard-coded.
+    // Availability follows `validated`; it is never hard-coded.
     expect(windows?.availability).toBe(definition?.validated ? 'ready' : 'planned');
   });
 
@@ -179,8 +178,7 @@ describe('catalog: Windows 7 Professional (validated child) under v86', () => {
     const profile = system?.launchProfiles[0];
     expect(system?.displayName).toBe('Windows 7 (Professional)');
     expect(system?.versionLabel).toBe('SP1 · x86');
-    // v86 rounds `create_memory` to a multiple of 128 KiB and accepts
-    // non-power-of-two values: 1536 MiB (installed under QEMU) is valid.
+    // v86 accepts non-power-of-two memory; 1536 MiB is what the guest needs.
     expect(profile?.configuration?.memoryMiB).toBe(1536);
     expect(profile?.minMemoryMiB).toBe(1536);
   });
@@ -200,7 +198,7 @@ describe('catalog: Windows 7 Lite (group parent) under v86', () => {
     expect(lite).not.toBeNull();
     expect(lite?.family).toBe('windows');
     expect(lite?.architecture).toBe('i386');
-    // The parent carries the group: it has no `variantGroupId`.
+    // The parent carries the group: no `variantGroupId`.
     expect(lite?.variantGroupId).toBeUndefined();
     expect(lite?.variantName).toBe('Lite');
     expect(lite?.variantOrder).toBe(2);
@@ -212,11 +210,10 @@ describe('catalog: Windows 7 Lite (group parent) under v86', () => {
   it('derives availability from `validated` and is `ready` (real boot proven)', () => {
     const lite = getSystemById('windows-7-x86');
     const definition = launchProfiles.find((candidate) => candidate.id === 'windows-7-x86');
-    // `validated` lives on the catalog definition, not on the contract: the
-    // availability follows the same rule as Professional (never declared).
+    // `validated` lives on the catalog definition, follow it rather than declaring.
     expect(definition?.validated).toBe(true);
     expect(lite?.availability).toBe(definition?.validated ? 'ready' : 'planned');
-    // Real desktop boot proven (tests/e2e/windows7-desktop.spec.ts): `ready`.
+    // Real desktop boot proven by the E2E suite.
     expect(lite?.availability).toBe('ready');
   });
 
@@ -246,9 +243,9 @@ describe('catalog: Windows 10 x86 (parent) under v86', () => {
     expect(system?.imageRef).toBe('windows-10-x86');
     expect(profile?.engineId).toBe('v86');
     expect(profile && isEngineIntegrated(profile.engineId)).toBe(true);
-    // Same validated pipeline as Windows 7.
+    // Availability follows `validated`, as for Professional.
     expect(definition?.validated).toBe(true);
-    // The derived availability is `ready`, like Windows 7.
+    // The derived availability is `ready`.
     expect(system?.availability).toBe('ready');
   });
 
@@ -264,10 +261,7 @@ describe('catalog: hardware profiles and boot proofs', () => {
     for (const system of systems) {
       for (const profile of system.launchProfiles) {
         expect(profile.hardwareProfile?.network).toBeDefined();
-        // The operational OS proves its boot with LUMIBOOT_GUEST_READY; a
-        // graphical session also requires LUMIBOOT_DESKTOP_READY, and imported
-        // media are proven by a disk read (LUMIBOOT_DISK_BOOT), never simulated
-        // on the JavaScript side.
+        // Markers come from the real guest, both for OS and graphical proofs.
         expect(profile.readiness?.marker).toMatch(
           /^LUMIBOOT_(GUEST|DESKTOP)_READY:|^LUMIBOOT_DISK_BOOT:/,
         );
@@ -306,7 +300,7 @@ describe('catalog: Debian Desktop flavor (published image + validated boot)', ()
   it('becomes available: published image (`imageRef`) + real validated graphical boot', () => {
     const desktop = getSystemById('debian-12-i386-desktop');
     const profile = launchProfiles.find((candidate) => candidate.id === 'debian-12-i386-desktop');
-    // Published image and proven Xorg+Openbox boot (see docs/debian-desktop.md).
+    // Published image with a proven Xorg + Openbox boot.
     expect(desktop?.imageRef).toBe('debian-12-i386-desktop');
     expect(profile?.validated).toBe(true);
     expect(desktop?.availability).toBe('ready');
@@ -335,7 +329,7 @@ describe('catalog: Debian XFCE flavor (published image + validated boot)', () =>
   it('becomes available: published image (`imageRef`) + real validated graphical boot', () => {
     const xfce = getSystemById('debian-12-i386-xfce');
     const profile = launchProfiles.find((candidate) => candidate.id === 'debian-12-i386-xfce');
-    // Published image and proven Xorg + XFCE boot (see docs/debian-xfce.md).
+    // Published image with a proven Xorg + XFCE boot.
     expect(xfce?.imageRef).toBe('debian-12-i386-xfce');
     expect(profile?.validated).toBe(true);
     expect(xfce?.availability).toBe('ready');

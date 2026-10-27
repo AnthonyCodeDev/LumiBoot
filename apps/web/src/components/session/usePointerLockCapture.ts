@@ -6,7 +6,7 @@ export interface PointerLockCaptureState {
   readonly captured: boolean;
   /** True when Pointer Lock is usable in this browser. */
   readonly supported: boolean;
-  /** Readable error message on refusal/unavailability, otherwise `null`. */
+  /** Readable error message on refusal, otherwise `null`. */
   readonly error: string | null;
 }
 
@@ -15,12 +15,7 @@ function describePointerLockError(error: unknown): string {
   return 'Unable to capture the mouse on the screen.';
 }
 
-/**
- * Wires the Pointer Lock orchestration to the screen container while the
- * session is active (`enabled`). On stop, on unmount, or when the page loses
- * focus, the lock is released and listeners are detached: no resource and no
- * hidden cursor outlives the session.
- */
+/** Attaches the capture while the session is active; dispose releases the lock. */
 export function usePointerLockCapture(
   containerRef: RefObject<HTMLElement>,
   enabled: boolean,
@@ -40,7 +35,6 @@ export function usePointerLockCapture(
       container,
       onCaptureChange: (next) => {
         setCaptured(next);
-        // A successful capture clears any previous error message.
         if (next) setError(null);
       },
       onError: (cause) => setError(describePointerLockError(cause)),

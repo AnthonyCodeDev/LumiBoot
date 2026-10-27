@@ -161,10 +161,7 @@ class FlakyEngine implements VMEngine {
   }
 }
 
-/**
- * Instance whose `subscribe` returns an ineffective unsubscribe: simulates a
- * faulty engine that keeps emitting after its release.
- */
+/** Faulty engine keeping its listener after release. */
 class LeakyInstance implements VMInstance {
   readonly id = 'leaky-instance';
   readonly providerId = 'leaky';
@@ -203,9 +200,7 @@ class FixedEngine implements VMEngine {
 }
 
 /**
- * Controllable instance: `subscribe` replays an initial state (`booting` or
- * `running`) then lets the test emit any event. `leaky` simulates a faulty
- * engine whose unsubscribe is ineffective (late events received after release).
+ * Replays an initial state on subscribe; `leaky` ignores the unsubscribe.
  */
 class ManualInstance implements VMInstance {
   readonly id = 'manual-instance';
@@ -590,11 +585,10 @@ describe('SessionLifecycle', () => {
     expect(lifecycle.snapshot.state).toBe('running');
 
     const instance = engine.instances[0]!;
-    // Both the direct `stopped` signal and the `stopping` -> `stopped` sequence
-    // emitted by the v86 provider must be reconciled.
+    // Both the direct `stopped` signal and `stopping -> stopped` must reconcile.
     instance.emit({ type: 'state', state: 'stopping' });
     instance.emit({ type: 'state', state: 'stopped' });
-    // The terminal `stop()` waits for the cleanup in flight (stop then dispose).
+    // The terminal `stop()` waits for the cleanup in flight.
     await lifecycle.stop();
 
     expect(lifecycle.snapshot.state).toBe('stopped');
@@ -647,7 +641,7 @@ describe('SessionLifecycle', () => {
     const instance = engine.instances[0]!;
 
     instance.emit({ type: 'state', state: 'stopped' });
-    // Late events from a faulty engine (ineffective unsubscribe): ignored.
+    // Late events from a faulty engine are ignored.
     instance.emit({ type: 'state', state: 'stopped' });
     instance.emit({ type: 'state', state: 'running' });
     instance.emit({ type: 'progress', phase: 'booting', loadedBytes: 5, totalBytes: 10 });
@@ -676,8 +670,7 @@ describe('SessionLifecycle', () => {
     expect(lifecycle.snapshot.state).toBe('running');
 
     instance.emit({ type: 'state', state: 'stopped' });
-    // The terminal `stop()` waits for the cleanup in flight so it only hands
-    // back control once the release is over (even if it fails).
+    // `stop()` only returns once the release is over, even if it fails.
     await lifecycle.stop();
 
     expect(lifecycle.snapshot.state).toBe('stopped');

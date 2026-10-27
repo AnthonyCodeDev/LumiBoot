@@ -5,11 +5,11 @@
 
 ## Context
 
-Network modes to translate into `net_device` without leaking the abstraction.
+Network modes must translate into `net_device` without leaking the abstraction.
 
 ## Decision
 
-`@lumiboot/vm-network` describes profiles, capabilities, diagnostics and lifecycle independently of the engine; `provider-v86` translates the profile into `net_device`.
+`@lumiboot/vm-network` describes profiles, capabilities, diagnostics and lifecycle independently of the engine. `provider-v86` translates the profile into `net_device`.
 
 | Mode | Transport |
 |---|---|
@@ -22,7 +22,7 @@ Configured profile, theoretical capability and probe-verified connectivity stay 
 
 ## Consequences
 
-- Profile fixed before start; any change recreates the session.
-- No public relay provided.
+- The profile is fixed before start; any change recreates the session.
+- No public relay is provided.
 - Traffic counters do not prove connectivity.
-- Details: [`../network.md`](../network.md).
+- Details: [`../network/network.md`](../network/network.md).

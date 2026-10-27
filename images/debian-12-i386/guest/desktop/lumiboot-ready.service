@@ -1,14 +1,11 @@
 [Unit]
 Description=LumiBoot guest boot readiness marker (flavor desktop)
-# Only emitted when the multi-user system is reached.
 After=systemd-user-sessions.service
 Wants=systemd-user-sessions.service
 
 [Service]
 Type=oneshot
-# The marker comes from the real guest system, never from JavaScript. It attests
-# that the OS is operational (not yet that the graphical session is: that is the
-# role of the distinct LUMIBOOT_DESKTOP_READY marker).
+# OS ready marker; the graphical session has its own LUMIBOOT_DESKTOP_READY marker.
 ExecStart=/bin/sh -c 'printf "LUMIBOOT_GUEST_READY:debian-12-i386-desktop\n" > /dev/ttyS0'
 RemainAfterExit=yes
 

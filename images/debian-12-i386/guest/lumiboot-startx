@@ -1,19 +1,9 @@
 #!/bin/sh
-# X session startup under v86 (desktop AND xfce flavors).
+# X session startup under v86, shared by the desktop and xfce flavors: the
+# flavor's ~/.xinitrc picks the session.
 #
-# File SHARED by both graphical flavors: the session choice (Openbox or XFCE) is
-# made by the ~/.xinitrc of each flavor; only the X server start (fbdev then
-# modesetting) is common here.
-#
-# Under v86 the kernel attaches a "bochs-drm" KMS driver (framebuffer /dev/fb0).
-# A VBE driver such as "vesa" then refuses to attach ("Ignoring device with a
-# bound kernel driver") and X fails with "no screens found". So we first try
-# "fbdev" (kernel framebuffer, no I/O ports) then "modesetting" (bochs-drm KMS)
-# as a fallback; both ServerLayouts are defined in
-# /etc/X11/xorg.conf.d/20-lumiboot-fbdev.conf.
-#
-# The driver choice is made on the X server side (-layout); the SESSION itself
-# stays unprivileged (user "lumiboot").
+# vesa cannot attach once bochs-drm is bound, so fbdev is tried first and
+# modesetting is the fallback.
 set -u
 
 if startx -- :0 vt1 -nolisten tcp -layout LumiBootFBDev; then

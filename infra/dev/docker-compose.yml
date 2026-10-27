@@ -1,5 +1,4 @@
-# `web` service only: no backend is needed to run local Debian through v86.
-# Usage: docker compose -f infra/dev/docker-compose.yml up web
+# Web app only: running local Debian through v86 needs no backend.
 
 services:
   web:

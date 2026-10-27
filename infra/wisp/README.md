@@ -1,6 +1,6 @@
 # Remote WISP relay
 
-Docker Compose WISP relay (`wisp-python` 0.9.0, `Dockerfile:8`) behind Caddy: `wisp` (internal 8080, read-only) and `caddy:2` (80/443), no VM.
+Docker Compose WISP relay (`wisp-python` 0.9.0, pinned in the `Dockerfile` `pip install` step) behind Caddy: `wisp` (internal only, compose `expose: 8080`, read-only) and `caddy:2` (80/443), no VM.
 
 ## Start
 
@@ -14,7 +14,7 @@ docker compose logs -f --tail=80
 curl -i https://relay.example.com/healthz
 ```
 
-`/healthz`: Caddy probe, not the WISP backend (`Caddyfile:3`). Caddy returns 403 if `Origin` differs from `LUMIBOOT_ORIGIN` or without a WebSocket upgrade (`Caddyfile:8-18`).
+`/healthz`: Caddy probe, not the WISP backend (the `handle /healthz` block of the `Caddyfile`). Caddy returns 403 if `Origin` differs from `LUMIBOOT_ORIGIN` or without a WebSocket upgrade: the `handle @allowed` block only reverse-proxies to `wisp:8080` when both headers match, the fallback `handle` responds 403.
 
 ## LumiBoot configuration
 
@@ -23,7 +23,7 @@ curl -i https://relay.example.com/healthz
 ```json
 {
   "version": 1,
-  "network": { "defaultProfile": { "mode": "user-relay", "relayUrl": "wss://relay.example.com/" } }
+  "network": { "defaultProfile": { "mode": "user-relay", "relayUrl": "wss://relay.example.com/" }, "systems": {} }
 }
 ```
 

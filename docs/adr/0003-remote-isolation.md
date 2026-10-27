@@ -9,7 +9,7 @@ A VM backend would impose compute, secrets and server state, against ADR 0001.
 
 ## Decision
 
-No remote compute, no orchestration API, no remote console: engines in the browser, `stop()` then `dispose()`.
+No remote compute, no orchestration API, no remote console. Engines run in the browser, with `stop()` then `dispose()`.
 
 Allowed, without running a VM:
 

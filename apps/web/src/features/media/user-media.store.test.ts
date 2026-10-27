@@ -10,12 +10,7 @@ import {
 } from './user-media.store';
 import { getUserMediaStore } from './user-media.storage';
 
-/**
- * User media store tests: validation (extension, format, size, quota, license
- * confirmation), clear failure messages and local storage. `getUserMediaStore` is
- * replaced by a real in-memory `vm-assets` store: the import logic under test is
- * the front store one, not IndexedDB.
- */
+/** `getUserMediaStore` is replaced by a real in-memory `vm-assets` store. */
 
 vi.mock('./user-media.storage', () => ({
   getUserMediaStore: vi.fn(),

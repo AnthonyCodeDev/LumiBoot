@@ -1,6 +1,5 @@
-// Integration test: a complete WISP V1 session against a real local TCP echo
-// server, going through the whole HTTP cycle (pairing -> console approval ->
-// exchange -> authenticated WebSocket).
+// Integration tests: a complete WISP V1 session against a real local TCP echo
+// server, through the whole HTTP cycle.
 package proxy_test
 
 import (
@@ -26,7 +25,6 @@ import (
 
 const itOrigin = "http://localhost:5200"
 
-// echoServer starts a TCP echo server on loopback.
 func echoServer(t *testing.T) (host string, port int) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -50,12 +48,10 @@ func echoServer(t *testing.T) (host string, port int) {
 	return "127.0.0.1", addr.Port
 }
 
-// proxyFixture mounts the local network proxy behind httptest.
 func proxyFixture(t *testing.T, mutate func(*config.Config)) (*server.Server, *httptest.Server) {
 	t.Helper()
 	cfg := config.Default()
 	cfg.AllowedOrigins = []string{itOrigin}
-	// Tests on loopback: local pairing explicitly allowed.
 	cfg.AllowLocalOrigins = true
 	cfg.AllowPrivateNetworks = true // to reach the local echo; metadata always blocked
 	if mutate != nil {
@@ -70,7 +66,6 @@ func proxyFixture(t *testing.T, mutate func(*config.Config)) (*server.Server, *h
 	return srv, ts
 }
 
-// pair runs the full cycle and returns the session token.
 func pair(t *testing.T, srv *server.Server, ts *httptest.Server) string {
 	t.Helper()
 	client := ts.Client()
@@ -93,7 +88,6 @@ func pair(t *testing.T, srv *server.Server, ts *httptest.Server) string {
 		t.Fatalf("pair/request: %d", resp.StatusCode)
 	}
 
-	// Approval from the console (direct call to the authenticator).
 	if err := srv.Authenticator().Approve(created.PairingID, true); err != nil {
 		t.Fatalf("pair/approve: %v", err)
 	}
@@ -167,7 +161,6 @@ func TestFullSession(t *testing.T) {
 
 	conn := dialWISP(t, ts, token, itOrigin)
 
-	// 1. Initial stream 0 CONTINUE (mandatory for v86).
 	first := readWISP(t, conn)
 	if first.Type != wisp.TypeContinue || first.StreamID != 0 {
 		t.Fatalf("initial CONTINUE expected, got type=%#x stream=%d", first.Type, first.StreamID)
@@ -176,7 +169,6 @@ func TestFullSession(t *testing.T) {
 		t.Fatal("zero initial window")
 	}
 
-	// 2. CONNECT -> DATA -> CLOSE round trip against the local echo.
 	connect := wisp.Frame{
 		Type:     wisp.TypeConnect,
 		StreamID: 1,
@@ -189,7 +181,6 @@ func TestFullSession(t *testing.T) {
 		t.Fatalf("unexpected echo: %+v", echo)
 	}
 
-	// 3. Blocked destination (metadata) -> CLOSE 0x48.
 	sendWISP(t, conn, wisp.Frame{
 		Type:     wisp.TypeConnect,
 		StreamID: 2,
@@ -203,7 +194,6 @@ func TestFullSession(t *testing.T) {
 		t.Fatalf("expected reason 0x48, got %#x", reason)
 	}
 
-	// 4. Clean close of stream 1.
 	sendWISP(t, conn, wisp.Frame{Type: wisp.TypeClose, StreamID: 1, Payload: []byte{wisp.CloseClientDone}})
 }
 
@@ -236,14 +226,12 @@ func TestWispRejectsBadOriginAndMissingToken(t *testing.T) {
 		}
 	}
 
-	// Rejected-auth counter incremented.
 	if got := srv.Stats().Snapshot().RejectedAuth; got < 2 {
 		t.Fatalf("rejectedAuth=%d, expected >= 2", got)
 	}
 }
 
-// trackedEchoServer starts a TCP echo server and reports the close of every
-// accepted connection: it verifies that the proxy really cuts the TCP side.
+// trackedEchoServer reports the close of every accepted connection.
 func trackedEchoServer(t *testing.T) (host string, port int, closed <-chan struct{}) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -271,15 +259,9 @@ func trackedEchoServer(t *testing.T) (host string, port int, closed <-chan struc
 	return "127.0.0.1", addr.Port, closedCh
 }
 
-// expectTransportClosed verifies that both the WebSocket AND the TCP close
-// within 5s.
-//
-// A successful read does NOT mean the session is still open: while the server
-// tears the session down it legitimately flushes the WISP frames that explain
-// the close (at minimum a CLOSE for the stream, possibly a trailing CONTINUE or
-// DATA) before/while closing the socket. Only a read *error* proves the socket
-// is gone, so every received frame is tolerated and the attempt is repeated
-// until the WebSocket errors out or the global 5s budget is exhausted.
+// expectTransportClosed requires both the WebSocket and the TCP side to close.
+// A successful read does not prove the session is open: the server may flush a
+// trailing CLOSE first. Only a read error proves the socket is gone.
 func expectTransportClosed(t *testing.T, conn *websocket.Conn, closed <-chan struct{}, label string) {
 	t.Helper()
 
@@ -290,8 +272,7 @@ func expectTransportClosed(t *testing.T, conn *websocket.Conn, closed <-chan str
 	for {
 		msgType, msg, err := conn.ReadMessage()
 		if err != nil {
-			// A read timeout means the deadline expired with the socket still
-			// open (no frame, no FIN/RST): this is a real failure.
+			// A read timeout means the socket is still open: a real failure.
 			if isTimeoutErr(err) {
 				t.Fatalf("%s: WebSocket still open after %s (last frame: %s)", label, budget, last)
 			}
@@ -307,13 +288,11 @@ func expectTransportClosed(t *testing.T, conn *websocket.Conn, closed <-chan str
 	}
 }
 
-// isTimeoutErr reports whether err is a deadline expiration on the socket.
 func isTimeoutErr(err error) bool {
 	var nerr net.Error
 	return errors.Is(err, os.ErrDeadlineExceeded) || (errors.As(err, &nerr) && nerr.Timeout())
 }
 
-// describeWSFrame renders a received WebSocket message for failure messages.
 func describeWSFrame(msgType int, msg []byte) string {
 	if msgType != websocket.BinaryMessage {
 		return fmt.Sprintf("ws type %d, %d bytes", msgType, len(msg))
@@ -325,10 +304,8 @@ func describeWSFrame(msgType int, msg []byte) string {
 	return fmt.Sprintf("WISP type %#02x stream %d reason/payload %x", f.Type, f.StreamID, f.Payload)
 }
 
-// TestExpectTransportClosedToleratesWispCloseFrame guards the helper itself: a
-// CLOSE frame flushed by the server while it tears the session down is a
-// legitimate end-of-session event, NOT proof that the WebSocket is still open.
-// Asserting on the first read made the revocation tests intermittently fail.
+// TestExpectTransportClosedToleratesWispCloseFrame guards the helper: a CLOSE
+// frame flushed during teardown is a legitimate end-of-session event.
 func TestExpectTransportClosedToleratesWispCloseFrame(t *testing.T) {
 	up := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -354,8 +331,7 @@ func TestExpectTransportClosedToleratesWispCloseFrame(t *testing.T) {
 	expectTransportClosed(t, conn, closed, "close-frame-before-fin")
 }
 
-// openEchoStream opens the WISP session, sets up a TCP stream to the local echo
-// and confirms establishment with a DATA round trip.
+// openEchoStream opens a stream to the local echo and confirms it with a DATA round trip.
 func openEchoStream(t *testing.T, conn *websocket.Conn, echoPort int) {
 	t.Helper()
 	_ = readWISP(t, conn) // initial CONTINUE
@@ -385,9 +361,8 @@ func TestRevocationClosesWebSocketAndTCP(t *testing.T) {
 	expectTransportClosed(t, conn, closed, "revocation")
 }
 
-// TestRevocationClosesMultipleWebSocketsSameToken: P0 regression — two
-// WebSockets sharing the same token no longer overwrite each other; revocation
-// closes 2/2 (WebSocket and associated TCP).
+// TestRevocationClosesMultipleWebSocketsSameToken: two WebSockets sharing a token
+// must not overwrite each other; revocation closes both.
 func TestRevocationClosesMultipleWebSocketsSameToken(t *testing.T) {
 	srv, ts := proxyFixture(t, nil)
 	token := pair(t, srv, ts)
@@ -462,7 +437,6 @@ func TestConnectionLimit(t *testing.T) {
 	if reason, _ := wisp.ParseClose(limited.Payload); reason != 0x49 {
 		t.Fatalf("expected reason 0x49, got %#x", reason)
 	}
-	// The first stream stays functional.
 	sendWISP(t, conn, wisp.Frame{Type: wisp.TypeData, StreamID: 1, Payload: []byte("still-there")})
 	echo := readWISP(t, conn)
 	if echo.Type != wisp.TypeData || string(echo.Payload) != "still-there" {

@@ -1,35 +1,12 @@
 #!/usr/bin/env node
-// Builds the manifest of the Windows 10 x86 system disk supplied LOCALLY by the
-// operator, so it can be streamed to v86 over HTTP Range.
-//
-// This script is a DELEGATE: it reimplements NOTHING and simply calls the proven
-// generator `scripts/prepare-windows7-asset.mjs` (same `LocalDiskManifest`
-// format, same streamed SHA-256, same "source never written" guarantee) while
-// pinning the Windows 10 x86 values (ref/display-name/architecture/memory/VGA/
-// output directory/notes).
+// Builds the manifest of the Windows 10 x86 disk supplied locally, by delegating
+// to prepare-windows7-asset.mjs with the Windows 10 values pinned; operator
+// options come after and win.
 //
 //   pnpm assets:windows10:prepare -- --source "D:\VM\Windows10-32bit.img"
 //   pnpm assets:windows10:check
-//   node scripts/prepare-windows10-asset.mjs --source D:\VM\win10.img --skip-hash
-//   node scripts/prepare-windows10-asset.mjs --source D:\VM\win10.img --json
 //
-// The disk is served IN PLACE: the manifest records `source.path` RELATIVE to the
-// repository root (e.g. `images/windows-10-x86/disk.img`, `/` separators) and
-// copies NOTHING into the repository. A disk OUTSIDE the repository (e.g.
-// `--source D:\VM\win10.img`) records NO path: `source` becomes
-// `{ external: true, size, mtimeMs }`, and `--check` then explicitly requires
-// `--source` (no absolute path is ever published). The dev middleware
-// (`scripts/lib/disk-asset-dev.mjs`) discovers the `images/windows-10-x86/`
-// directory automatically, nothing needs to be wired.
-//
-// PIPELINE CONSTRAINT: Windows 10 boots in `disk-boot` mode through an async
-// `hda`, so the media MUST be a RAW disk **already installed**. A standalone ISO
-// is not a bootable disk and a QCOW2 is not a RAW disk: both are rejected BEFORE
-// any generation (no bogus manifest is written).
-//
-// Options forwarded as-is to the generator: --check, --force, --skip-hash,
-// --resume, --json, --copy-to, etc. Any option supplied by the operator
-// (including --source) is placed AFTER the default values, so it overrides them.
+// Writes images/windows-10-x86/manifest.json. The disk is served in place.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -88,7 +65,7 @@ Example:
 `;
 }
 
-/** Last value of a `--name value` or `--name=value` option (last one wins). */
+/** Last value of a `--name value` or `--name=value` option. */
 function lastValue(args, name) {
   let value;
   for (let i = 0; i < args.length; i += 1) {
@@ -106,11 +83,7 @@ function hasFlag(args, ...names) {
   return args.some((arg) => names.includes(arg));
 }
 
-/**
- * Rejects any media that cannot boot from an async `hda`: a standalone ISO
- * (not a disk) and container formats (QCOW/QCOW2/VHD/VMDK/VDI) that are not raw.
- * Throws before any generation, so no fake manifest is ever written.
- */
+/** Rejects media that cannot boot from an async `hda`: ISO and container formats. */
 function assertBootableRawDisk(sourcePath, requestedFormat) {
   if (typeof sourcePath !== 'string' || sourcePath.length === 0) {
     throw new Error('Missing source disk: provide --source <RAW disk> or WINDOWS10_IMG.');
@@ -151,10 +124,7 @@ function runGenerator(args) {
 }
 
 function main() {
-  // Neutralizes a lone `--` injected by `pnpm <script> -- <opts>`: it is neither
-  // an option of the wrapper nor a value, so it is dropped BEFORE any validation
-  // and before being forwarded to the generator (which would tolerate it too,
-  // but this avoids any ambiguity with `lastValue`/`hasFlag`).
+  // A lone `--` injected by pnpm is dropped before validation and forwarding.
   const userArgs = process.argv.slice(2).filter((arg) => arg !== '--');
 
   if (hasFlag(userArgs, '--help', '-h')) {
@@ -164,7 +134,7 @@ function main() {
 
   const check = hasFlag(userArgs, '--check');
 
-  // Windows 10 x86 specific values, then the operator options (which win).
+  // Windows 10 x86 values, then the operator options.
   const defaults = [
     '--ref',
     REF,
@@ -182,8 +152,7 @@ function main() {
     `images/${REF}/disk.img (local disk served in place)`,
     ...NOTES.flatMap((note) => ['--note', note]),
   ];
-  // On a check without --source, let the generator follow the path recorded in
-  // the manifest; otherwise offer the default source.
+  // Without --check, pass the default source; --check follows the recorded path.
   if (!check) defaults.push('--source', DEFAULT_SOURCE);
 
   const args = [...defaults, ...userArgs];

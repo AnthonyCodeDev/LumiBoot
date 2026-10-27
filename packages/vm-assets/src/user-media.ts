@@ -4,22 +4,14 @@ import { AssetError } from './errors';
 import { sha256Hex } from './hash';
 
 /**
- * System media provided **locally by the user** (browser import).
- *
- * LumiBoot neither distributes nor downloads any proprietary media (Windows,
- * macOS). This module only describes, validates and keeps the metadata of the
- * file chosen by the user; the bytes stay in their browser (in-memory blob or
- * IndexedDB on the `apps/web` side). See docs/windows-7.md.
+ * Media imported by the user; the bytes never leave their browser and LumiBoot
+ * distributes no proprietary media.
  */
 
 const HEX64 = /^[0-9a-f]{64}$/i;
 const IMAGE_REF = /^[a-z0-9-]+$/;
 
-/**
- * Optional manifest a user may provide with their own media to allow an
- * integrity check (size, SHA-256). It never contains the image itself — only
- * metadata and a provenance.
- */
+/** Metadata only, never the image itself. */
 export const userMediaManifestSchema = z
   .object({
     version: z.literal(1),
@@ -37,12 +29,8 @@ export const userMediaManifestSchema = z
 
 export type UserMediaManifest = z.infer<typeof userMediaManifestSchema>;
 
-/** Integrity state actually observed for an imported media. */
-export type UserMediaIntegrity =
-  /** SHA-256 recomputed AND matching the manifest provided by the user. */
-  | 'verified'
-  /** No possible verification (no reference checksum, or file too large). */
-  | 'unverified';
+/** `verified` requires a recomputed SHA-256 matching the user manifest. */
+export type UserMediaIntegrity = 'verified' | 'unverified';
 
 export interface UserMediaDescriptor {
   readonly ref: string;
@@ -60,14 +48,11 @@ export interface UserMediaInput {
   readonly displayName: string;
   readonly fileName: string;
   readonly format: VMMediaFormat;
-  /** The user certifies holding a legal and authorized license/media. */
+  /** The user certifies holding a legal license. */
   readonly licenseAcknowledged: boolean;
 }
 
-/**
- * Persistence of imported media. The contract does NOT presume the storage:
- * memory (tests), IndexedDB/OPFS (browser, see `apps/web`).
- */
+/** Storage is not prescribed: memory, IndexedDB or OPFS. */
 export interface UserMediaStore {
   get(ref: string): Promise<UserMediaDescriptor | null>;
   list(): Promise<UserMediaDescriptor[]>;
@@ -76,24 +61,21 @@ export interface UserMediaStore {
   remove(ref: string): Promise<void>;
 }
 
-/** Maximum size hashed by default (256 MiB) — beyond it, verification is skipped. */
+/** Beyond this size, verification is skipped: 256 MiB. */
 export const DEFAULT_MAX_HASH_BYTES = 256 * 1024 * 1024;
 
 export interface UserMediaImportOptions {
-  /** Expected checksum (user manifest): if absent, integrity is `unverified`. */
+  /** Without an expected checksum, integrity stays `unverified`. */
   readonly expectedSha256?: string;
-  /** Expected size (user manifest): rejected if different. */
+  /** Import is rejected when different. */
   readonly expectedSize?: number;
-  /** Hashing cap (256 MiB default); beyond it, integrity stays `unverified`. */
+  /** Beyond this cap, integrity stays `unverified`. */
   readonly maxHashBytes?: number;
-  /** Injectable hashing implementation (tests). */
+  /** Injectable for tests. */
   readonly hash?: (bytes: Blob) => Promise<string>;
 }
 
-/**
- * Validates a user manifest. Throws an explicit `AssetError` on inconsistency,
- * never an anonymous error.
- */
+/** Throws `AssetError` on inconsistency, never an anonymous error. */
 export function parseUserMediaManifest(input: unknown): UserMediaManifest {
   const parsed = userMediaManifestSchema.safeParse(input);
   if (!parsed.success) {
@@ -106,14 +88,8 @@ export function parseUserMediaManifest(input: unknown): UserMediaManifest {
 }
 
 /**
- * Imports a user media: checks the license, the size and (if provided) the
- * SHA-256, then persists metadata + bytes in the store.
- *
- * Honesty rules:
- * - without a license acknowledgement, the import is rejected;
- * - an unexpected size or checksum makes the import fail;
- * - without a reference checksum, the media is marked `unverified`: the
- *   interface must never present it as verified.
+ * Without a license acknowledgement the import is rejected; without a reference
+ * checksum the media stays `unverified`.
  */
 export async function importUserMedia(
   store: UserMediaStore,
@@ -158,10 +134,7 @@ export async function importUserMedia(
   return descriptor;
 }
 
-/**
- * Computes the checksum only if a reference is expected and if the file stays
- * under the cap. Otherwise returns `null` (no verification).
- */
+/** Returns `null` when no reference checksum is expected or the file is too big. */
 async function resolveIntegrity(
   bytes: Blob,
   options: UserMediaImportOptions,
@@ -187,7 +160,7 @@ async function defaultHash(bytes: Blob): Promise<string> {
   return sha256Hex(buffer);
 }
 
-/** In-memory store (tests, fallback without browser persistence). */
+/** In-memory fallback without browser persistence. */
 export function createMemoryUserMediaStore(): UserMediaStore {
   const entries = new Map<string, { descriptor: UserMediaDescriptor; bytes: Blob }>();
   return {

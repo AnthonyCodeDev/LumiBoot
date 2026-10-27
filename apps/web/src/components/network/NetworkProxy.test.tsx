@@ -42,7 +42,7 @@ const WIN: HostPlatform = { os: 'windows', arch: 'x64', key: 'windows-x64' };
 const PUBLISHED_WIN = manifestWith({ 'windows-x64': 'https://example.com/win.exe' });
 const PROXY_URL = resolveProxyConfig().url;
 
-/** Persists a valid (non-expired) pairing session for the current URL. */
+/** Persists a valid, non-expired pairing session for the current URL. */
 function persistSession(): void {
   saveProxySession({
     token: 'tok',
@@ -51,8 +51,7 @@ function persistSession(): void {
   });
 }
 
-// Store actions replaced by spies: the card then triggers no network call
-// (tests drive the state directly).
+// Store actions replaced by spies: tests drive the state directly.
 const refresh = vi.fn(async () => {});
 const cancelPairing = vi.fn();
 const startPairing = vi.fn(async () => {});
@@ -144,10 +143,10 @@ describe('NetworkProxyCard', () => {
       error: 'A long technical store message that must not be displayed.',
     });
     render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
-    // No error/alert message when not paired.
+    // No error and no alert when not paired.
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByRole('status')).toBeNull();
-    // Never the long store message, nor the former alarming message.
+    // Never the store message nor the former alarming copy.
     expect(screen.queryByText(/long technical store message/)).toBeNull();
     expect(screen.queryByText(/The proxy did not answer/)).toBeNull();
     expect(screen.queryByText(/Pairing impossible/)).toBeNull();
@@ -176,7 +175,7 @@ describe('NetworkProxyCard', () => {
     const user = userEvent.setup();
     persistSession();
     useProxyStore.setState({ state: 'not-running' });
-    // The real action would switch to 'connecting': simulate that transition.
+    // The real action switches to 'connecting': simulate that transition.
     startPairing.mockImplementation(async () => {
       useProxyStore.setState({ state: 'connecting' });
     });
@@ -227,10 +226,10 @@ describe('NetworkProxyDownload', () => {
 
     // All 5 platforms are listed.
     expect(screen.getAllByRole('listitem')).toHaveLength(5);
-    // Published target: clickable link.
+    // Published target is a clickable link.
     const winLink = screen.getByRole('link', { name: 'Windows x64' });
     expect(winLink.getAttribute('href')).toBe('https://example.com/win.exe');
-    // Unpublished targets: "Unavailable".
+    // Unpublished targets show as unavailable.
     expect(screen.getByText(/Windows ARM64 · Unavailable/)).toBeTruthy();
     expect(screen.getByText(/macOS · Unavailable/)).toBeTruthy();
 

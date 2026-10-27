@@ -6,19 +6,7 @@ export interface PersistedProxySession {
   proxyUrl: string;
 }
 
-/**
- * Session storage for the pairing bearer.
- *
- * P2 security choice: `sessionStorage` (not `localStorage`). The token no longer
- * survives closing the tab and stays scoped to the current tab, which strongly
- * reduces the exposure window in case of XSS or later physical access.
- * Persistence within the tab (F5 included) is preserved: the reconnection UX is
- * not degraded.
- *
- * No secret is written anywhere else. The former `localStorage` key from an
- * earlier version is purged on first interaction (see
- * {@link purgeLegacyStorage}).
- */
+/** `sessionStorage`, not `localStorage`: the token dies with the tab. */
 function storage(): Storage | null {
   try {
     return typeof sessionStorage === 'undefined' ? null : sessionStorage;
@@ -27,11 +15,7 @@ function storage(): Storage | null {
   }
 }
 
-/**
- * Removes the legacy `localStorage` entry (long-lived bearer of previous
- * versions). No migration: exposing a persistent bearer is exactly what this
- * change fixes. Never throws.
- */
+/** Removes the legacy `localStorage` bearer. No migration. Never throws. */
 function purgeLegacyStorage(): void {
   try {
     if (typeof localStorage !== 'undefined') {
@@ -42,7 +26,7 @@ function purgeLegacyStorage(): void {
   }
 }
 
-/** Persists the pairing session; never throws (quota, denied access…). */
+/** Persists the pairing session. Never throws. */
 export function saveProxySession(session: PersistedProxySession): void {
   purgeLegacyStorage();
   const store = storage();
@@ -55,16 +39,11 @@ export function saveProxySession(session: PersistedProxySession): void {
 }
 
 /**
- * Re-reads the persisted session for the given local network proxy URL.
- *
- * Returns `null` (and cleans the storage) when:
- * - storage is unavailable or empty;
- * - the JSON is corrupted or the format invalid;
- * - the stored `proxyUrl` differs from the expected one;
- * - `expiresAt` is missing, unreadable or already past.
+ * Re-reads the persisted session for the given proxy URL. Returns `null` and clears
+ * the storage on missing, corrupted, foreign or expired entries.
  */
 export function loadProxySession(proxyUrl: string): PersistedProxySession | null {
-  // Opportunistic purge of the legacy persistent bearer before any re-read.
+  // Purge the legacy persistent bearer before any re-read.
   purgeLegacyStorage();
   const store = storage();
   if (store === null) return null;

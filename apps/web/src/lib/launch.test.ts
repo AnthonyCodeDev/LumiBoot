@@ -129,9 +129,7 @@ describe('getLaunchReadiness', () => {
   });
 
   it('blocks 64-bit Windows 11 while the wasm-x86_64 engine is not integrated', () => {
-    // v86 only emulates 32-bit x86: the 64-bit Windows 11 profile targets
-    // `wasm-x86_64`, which is not integrated. The launch must be refused
-    // explicitly, never promising a boot.
+    // v86 only emulates 32-bit x86; `wasm-x86_64` is not integrated.
     const readiness = getLaunchReadiness(system('windows-11-x64'));
     expect(readiness.canLaunch).toBe(false);
     expect(readiness.reason).toMatch(/wasm-x86_64/);

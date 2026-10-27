@@ -2,10 +2,7 @@ import { z } from 'zod';
 import { networkProfileSchema, type NetworkProfile } from '@lumiboot/vm-network';
 
 /**
- * LumiBoot global config schema (`public/lumiboot.config.json`).
- *
- * Reuses `networkProfileSchema` from `@lumiboot/vm-network`: network modes and
- * profile shape stay defined in a single place. Every object is `.strict()`: no
+ * Global config schema. Reuses `networkProfileSchema` and is `.strict()` so no
  * unknown key is silently tolerated.
  */
 export const networkConfigSchema = z
@@ -31,18 +28,18 @@ export const lumibootConfigSchema = z
   })
   .strict();
 
-/** Raw schema output (before cleanup / normalization). */
+/** Raw schema output, before normalization. */
 export type ParsedLumibootConfig = z.infer<typeof lumibootConfigSchema>;
 export type ParsedNetworkConfig = z.infer<typeof networkConfigSchema>;
 export type ParsedProxyFileConfig = z.infer<typeof proxyFileSchema>;
 
-/** Normalized network config (clean profiles, consistent relayUrl). */
+/** Normalized network config. */
 export interface NetworkConfig {
   defaultProfile: NetworkProfile;
   systems?: Record<string, NetworkProfile>;
 }
 
-/** Normalized local network proxy config (defaults applied). */
+/** Normalized proxy config, defaults applied. */
 export interface ProxyConfig {
   enabled: boolean;
   url: string;

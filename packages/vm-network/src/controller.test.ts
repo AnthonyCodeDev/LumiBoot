@@ -73,8 +73,7 @@ describe('createNetworkController', () => {
     expect(controller.snapshot().verified).toBe(false);
     controller.setStatus('online');
     expect(controller.snapshot().status).toBe('online');
-    // `online` is a transport statement: without a successful tcp/https probe,
-    // `verified` stays false (never inferred from the status or the mode).
+    // Without a successful tcp/https probe, `verified` stays false.
     expect(controller.snapshot().verified).toBe(false);
   });
 

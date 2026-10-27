@@ -6,11 +6,7 @@ import type { SessionSnapshot } from '@lumiboot/vm-core';
 import { SessionPage } from './SessionPage';
 import { useSessionsStore } from '../features/sessions/sessions.store';
 
-/**
- * Session page tests: UI capture of asynchronous `boot()`/`restart()` rejections
- * and no overwriting of a new session. The sessions store and the session screen
- * are replaced by doubles: only the page logic is observed.
- */
+/** The sessions store and the session screen are replaced by doubles. */
 
 vi.mock('../components/session/SessionScreen', () => ({
   SessionScreen: ({
