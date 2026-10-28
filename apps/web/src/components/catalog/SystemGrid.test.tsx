@@ -3,12 +3,16 @@ import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { getDisplaySystems, getSystemById, systems } from '@lumiboot/catalog';
+import type { Availability } from '@lumiboot/contracts';
 import { SystemGrid } from './SystemGrid';
 import { availabilityLabels } from '../../lib/labels';
 import { useCatalogStore } from '../../features/catalog/catalog.store';
 
 /** One card per displayed system: group parents and standalone systems. */
 const displayedCount = getDisplaySystems().length;
+
+/** Availabilities rendered in the main, non-muted group. */
+const PLAYABLE: ReadonlySet<Availability> = new Set(['ready', 'resource-required']);
 
 function LocationProbe() {
   const location = useLocation();
@@ -76,36 +80,66 @@ describe('SystemGrid', () => {
     }
   });
 
-  it('orders available cards before unavailable ones', () => {
+  it('orders playable cards before the pending ones', () => {
     renderGrid();
     const availabilities = screen.getAllByRole('article').map((card) => {
       const id = card.getAttribute('data-id');
       return getSystemById(id!)!.availability;
     });
-    let seenUnavailable = false;
+    // `resource-required` is playable: only its media is user-supplied.
+    let seenPending = false;
     for (const availability of availabilities) {
-      if (availability !== 'ready') {
-        seenUnavailable = true;
+      if (PLAYABLE.has(availability)) {
+        expect(seenPending).toBe(false);
       } else {
-        expect(seenUnavailable).toBe(false);
+        seenPending = true;
       }
     }
   });
 
-  it('renders a separator between available systems and the others', () => {
+  it('renders a separator between the playable systems and the others', () => {
     renderGrid();
     expect(screen.getByRole('separator').tagName).toBe('HR');
   });
 
-  it('applies the is-muted class only to unavailable cards', () => {
+  it('omits the separator when only one group is visible', () => {
+    renderGrid();
+    // "custom" only matches the generic entry: a single, playable group.
+    act(() => {
+      useCatalogStore.getState().setFamily('custom');
+    });
+    expect(screen.getAllByRole('article')).toHaveLength(1);
+    expect(screen.queryByRole('separator')).toBeNull();
+  });
+
+  it('applies the is-muted class only to pending cards', () => {
     renderGrid();
     const cards = screen.getAllByRole('article');
+    expect(cards.length).toBeGreaterThan(0);
     for (const card of cards) {
       const id = card.getAttribute('data-id');
       const system = getSystemById(id!)!;
       const isMuted = card.classList.contains('is-muted');
-      expect(isMuted).toBe(system.availability !== 'ready');
+      expect(isMuted).toBe(!PLAYABLE.has(system.availability));
+      // `ready` and `resource-required` always render at full opacity.
+      if (system.availability === 'ready' || system.availability === 'resource-required') {
+        expect(isMuted).toBe(false);
+      }
     }
+  });
+
+  it('keeps the generic "Custom image" card in the first, non-muted group', () => {
+    renderGrid();
+    const card = screen.getAllByRole('article').find((article) => {
+      return article.getAttribute('data-id') === 'custom-image';
+    });
+    expect(card).toBeDefined();
+    expect(card!.classList.contains('is-muted')).toBe(false);
+    expect(getSystemById('custom-image')!.availability).toBe('resource-required');
+    // It sits in the first `.cards` container: the one without `is-muted` cards.
+    const group = card!.closest('.cards');
+    expect(group).not.toBeNull();
+    expect(group!.querySelector('.is-muted')).toBeNull();
   });
 
   it('navigates straight to the system page on click (no popup)', async () => {
