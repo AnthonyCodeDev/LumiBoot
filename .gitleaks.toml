@@ -6,14 +6,7 @@
 
 title = "LumiBoot"
 
-# Keep ALL built-in gitleaks rules and only add the
-# allowlists below (without `useDefault`, providing this file would replace the
-# default rule set — the scan would then detect nothing).
+# Keep ALL built-in gitleaks rules (without `useDefault`, providing this file
+# would replace the default rule set — the scan would then detect nothing).
 [extend]
 useDefault = true
-
-[[allowlists]]
-description = "Invented value (random UUID v4) used as the apiKey of a fictitious provider in opencode.jsonc (local AI-agent config, never application code): introduced in commit 623da32, removed in commit af62cfb, file no longer tracked. Not a credential; nothing needs to be revoked. Exception limited to this exact value. Delete this entry once history is purged (opencode.jsonc removed from history), as it will then have no reason to exist."
-regexes = [
-  '''REDACTED''',
-]
