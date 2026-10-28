@@ -501,6 +501,64 @@ describe('V86Provider: imported media (Windows 7)', () => {
     expect(captured).toHaveLength(0);
   });
 
+  /**
+   * `custom-image` declares no `bootDevice`: the media format alone decides the
+   * mount, so a bootable ISO is no longer mistaken for an installer.
+   */
+  function makeCustomImageOS(): OSDefinition {
+    return makeOS({
+      id: 'custom-image',
+      slug: 'custom-image',
+      family: 'custom',
+      mediaStrategy: 'user-import',
+      architecture: 'i386',
+      availability: 'resource-required',
+      imageRef: undefined,
+      launchProfiles: [
+        {
+          id: 'custom-image',
+          engineId: 'v86',
+          executionMode: 'browser',
+          minMemoryMiB: 512,
+          configuration: { memoryMiB: 512 },
+          hardwareProfile: { network: 'virtio' },
+        },
+      ],
+    });
+  }
+
+  it('custom image with an ISO: mounted as CD-ROM, CD-first boot, never rejected', async () => {
+    const { provider, captured } = setup();
+    await provider.start(makeCustomImageOS(), document.createElement('div'), {
+      media: { kind: 'disk', url: 'blob:live.iso', size: 700_000_000, format: 'iso' },
+    });
+
+    const options = captured[0];
+    expect(options?.cdrom).toMatchObject({
+      url: 'blob:live.iso',
+      async: true,
+      size: 700_000_000,
+    });
+    expect(options?.hda).toBeUndefined();
+    expect(options?.boot_order).toBe(0x123);
+  });
+
+  it('custom image with a RAW media: mounted as the read-only hda', async () => {
+    const { provider, captured } = setup();
+    await provider.start(makeCustomImageOS(), document.createElement('div'), {
+      media: { kind: 'disk', url: 'blob:disk.raw', size: 8_000_000_000, format: 'raw' },
+    });
+
+    const options = captured[0];
+    expect(options?.hda).toMatchObject({
+      url: 'blob:disk.raw',
+      async: true,
+      size: 8_000_000_000,
+    });
+    expect(options?.cdrom).toBeUndefined();
+    expect(options?.boot_order).toBeUndefined();
+  });
+
   it('fails honestly (MEDIA_REQUIRED) without imported media', async () => {
     const { provider, captured } = setup();
     await expect(

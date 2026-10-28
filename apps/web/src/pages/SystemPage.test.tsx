@@ -136,18 +136,59 @@ describe('SystemPage — variant selector', () => {
 });
 
 describe('SystemPage — user media import', () => {
-  it('shows the import card for a user-import system and refuses the launch', () => {
-    renderSystemPage('windows-11-x64');
+  it('shows the import card for the generic custom image and refuses the launch until a media is imported', () => {
+    renderSystemPage('custom-image');
 
     expect(screen.getByText('Required media (provided by you)')).toBeTruthy();
-    // The engine of this system is not integrated: explicit refusal.
+    // v86 is integrated, but nothing is distributed: the user must import a media.
     const launch = screen.getByRole('button', { name: 'Start session' });
     expect((launch as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/is not integrated|not supported/i)).toBeTruthy();
+    // The refusal comes from the missing media, not from a missing engine.
+    expect(screen.getByRole('status').textContent).toMatch(
+      /resource required.*import a disk media/i,
+    );
+  });
+
+  it('shows no import card for a system that is not developed (Windows 11)', () => {
+    renderSystemPage('windows-11-x64');
+
+    // Not developed: neither media to import nor a launchable session.
+    expect(screen.queryByText('Required media (provided by you)')).toBeNull();
+    const launch = screen.getByRole('button', { name: 'Start session' });
+    expect((launch as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('never shows the import card for Windows 7 (local disk from the codebase)', () => {
     renderSystemPage('windows-7-x86');
     expect(screen.queryByText('Required media (provided by you)')).toBeNull();
+  });
+
+  it('shows the picked media and only enables the import once the licence is acknowledged', async () => {
+    const user = userEvent.setup();
+    const { container } = renderSystemPage('custom-image');
+
+    const mediaInput = container.querySelector(
+      '.media-file-field input[type=file]',
+    ) as HTMLInputElement;
+    expect(mediaInput.getAttribute('accept')).toBe('.iso,.img,.raw');
+    // The input stays inside the clickable tile (clipped, not `display: none`).
+    const tile = mediaInput.closest('label.media-file-field') as HTMLElement;
+    expect(tile).toBeTruthy();
+    expect(tile.getAttribute('data-state')).toBe('empty');
+    expect(mediaInput.getAttribute('aria-label')).toBe('Disk image file (.iso, .img, .raw)');
+
+    await user.upload(mediaInput, new File(['payload'], 'custom.iso'));
+
+    // The tile switches to its selected state and shows the file name and size.
+    expect(tile.getAttribute('data-state')).toBe('selected');
+    expect(screen.getByText('custom.iso')).toBeTruthy();
+    expect(screen.getByText('7 bytes')).toBeTruthy();
+    expect(screen.getByText('Replace')).toBeTruthy();
+
+    const importButton = screen.getByRole('button', { name: 'Import media' }) as HTMLButtonElement;
+    expect(importButton.disabled).toBe(true);
+
+    await user.click(screen.getByRole('checkbox'));
+    expect(importButton.disabled).toBe(false);
   });
 });

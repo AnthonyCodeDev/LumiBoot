@@ -13,6 +13,7 @@ export const familyLabels: Record<OSFamily, string> = {
   linux: 'Linux',
   windows: 'Windows',
   macos: 'macOS',
+  custom: 'Custom',
 };
 
 export const engineLabels: Record<EngineId, string> = {

@@ -96,7 +96,7 @@ imageRef present
 = ready
 ```
 
-Each image × profile candidate is evaluated on its own. Required user media gives `resource-required`; an unproven `ready` falls back to the non-ready state of `packages/catalog/src/availability.ts`. Variants: [`systems.md`](systems.md#variant-order).
+Each image × profile candidate is evaluated on its own. Required user media gives `resource-required`; an unproven `ready` falls back to the non-ready state of `packages/catalog/src/availability.ts`. Only the generic `custom-image` entry declares `mediaStrategy: 'user-import'`, so it is the single `resource-required` system; every other non-ready system stays `planned`. Variants: [`systems.md`](systems.md#variant-order).
 
 ## Routes
 
@@ -114,7 +114,8 @@ Each image × profile candidate is evaluated on its own. Required user media giv
 - Debian 12: CLI, X11/Openbox and XFCE validated.
 - Windows 7: Lite and Professional SP1, local RAW disks over HTTP Range.
 - Windows 10 x86: boot proven on an operator RAW disk over HTTP Range, with `virtio-net` and the VirtIO NetKVM driver; guest connectivity untested, see [`images/windows-10-x86/README.md`](../images/windows-10-x86/README.md).
-- Windows 11, Ubuntu, Fedora, Mint and macOS: catalogue only, engines or images missing.
+- Windows 11, Ubuntu, Fedora, Mint and macOS: catalogue only, not developed, engines or images missing.
+- Custom image: generic entry point booting a local `.iso`, `.img` or `.raw` imported by the visitor, through the integrated v86 engine.
 - Network modes `offline`, `browser-fetch`, `local-proxy` and `user-relay` are implemented.
 
 ## Invariants

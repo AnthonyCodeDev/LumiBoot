@@ -22,10 +22,22 @@ describe('getDeclaredReadiness — declared / runtime separation', () => {
   });
 
   it('a user-import system without media stays "resource-required" with media "user-import"', () => {
-    const windows = getSystemById('windows-11-x64')!;
-    expect(getDeclaredReadiness(windows)).toEqual({
+    const custom = getSystemById('custom-image')!;
+    expect(getDeclaredReadiness(custom)).toEqual({
       availability: 'resource-required',
       mediaSource: 'user-import',
+    });
+    // Nothing is distributed: the media is the user's own file.
+    expect(custom.imageRef).toBeUndefined();
+  });
+
+  it('Windows 11 is not developed: "planned", with no user media to import', () => {
+    const windows = getSystemById('windows-11-x64')!;
+    expect(windows.mediaStrategy).toBe('bundled');
+    expect(windows.imageRef).toBeUndefined();
+    expect(getDeclaredReadiness(windows)).toEqual({
+      availability: 'planned',
+      mediaSource: 'bundled-image',
     });
   });
 
@@ -68,5 +80,34 @@ describe('Windows 10 x86 — local disk pipeline under v86', () => {
   it('is `ready`: validated local disk pipeline', () => {
     const system = getSystemById('windows-10-x86')!;
     expect(system.availability).toBe('ready');
+  });
+});
+
+/** Generic entry point: any local disk media the user owns, through v86. */
+describe('Custom image — user-import under the integrated v86 engine', () => {
+  it('is the last catalogue entry, with the neutral `custom` family', () => {
+    const system = getSystemById('custom-image')!;
+    expect(systems[systems.length - 1]?.id).toBe('custom-image');
+    expect(system.family).toBe('custom');
+    expect(system.displayName).toBe('Custom image');
+    expect(system.architecture).toBe('i386');
+    expect(system.mediaStrategy).toBe('user-import');
+    expect(system.imageRef).toBeUndefined();
+  });
+
+  it('stays `resource-required` while the media is missing', () => {
+    expect(getSystemById('custom-image')!.availability).toBe('resource-required');
+  });
+
+  it('runs on the integrated v86 engine with 512 MiB and no fixed boot device', () => {
+    const profile = getSystemById('custom-image')!.launchProfiles[0]!;
+    expect(profile.engineId).toBe('v86');
+    expect(profile.executionMode).toBe('browser');
+    expect(profile.minMemoryMiB).toBe(512);
+    expect(profile.configuration?.memoryMiB).toBe(512);
+    // `bootDevice: 'disk'` would reject every ISO: the provider picks `hda` for a
+    // RAW/IMG and a CD-ROM with CD-first boot for an ISO.
+    expect(profile.configuration?.bootDevice).toBeUndefined();
+    expect(profile.hardwareProfile?.network).toBe('virtio');
   });
 });

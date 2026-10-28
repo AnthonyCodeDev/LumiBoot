@@ -1,15 +1,18 @@
 # Systems
 
-| Reference                | Variant                        | Guest RAM | Media             | Readiness                |
-| ------------------------ | ------------------------------ | --------- | ----------------- | ------------------------ |
-| `debian-12-i386`         | Debian 12 CLI                  | 512 MiB   | built rootfs      | `LUMIBOOT_GUEST_READY`   |
-| `debian-12-i386-desktop` | Debian 12 X11/Openbox          | 1024 MiB  | built rootfs      | `LUMIBOOT_DESKTOP_READY` |
-| `debian-12-i386-xfce`    | Debian 12 XFCE                 | 1024 MiB  | built rootfs      | `LUMIBOOT_DESKTOP_READY` |
-| `windows-7-pro-sp1-x86`  | Windows 7 Professional SP1 x86 | 1536 MiB  | operator RAW disk | `disk-boot`              |
-| `windows-7-x86`          | Windows 7 Lite x86             | 1024 MiB  | operator RAW disk | `disk-boot`              |
-| `windows-10-x86`         | Windows 10 x86 32-bit          | 2048 MiB  | operator RAW disk | `disk-boot`              |
+| Reference                | Variant                        | Guest RAM | Media               | Readiness                |
+| ------------------------ | ------------------------------ | --------- | ------------------- | ------------------------ |
+| `debian-12-i386`         | Debian 12 CLI                  | 512 MiB   | built rootfs        | `LUMIBOOT_GUEST_READY`   |
+| `debian-12-i386-desktop` | Debian 12 X11/Openbox          | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
+| `debian-12-i386-xfce`    | Debian 12 XFCE                 | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
+| `windows-7-pro-sp1-x86`  | Windows 7 Professional SP1 x86 | 1536 MiB  | operator RAW disk   | `disk-boot`              |
+| `windows-7-x86`          | Windows 7 Lite x86             | 1024 MiB  | operator RAW disk   | `disk-boot`              |
+| `windows-10-x86`         | Windows 10 x86 32-bit          | 2048 MiB  | operator RAW disk   | `disk-boot`              |
+| `custom-image`           | Custom image (ISO / IMG / RAW) | 512 MiB   | user-imported media | `LUMIBOOT_GUEST_READY`   |
 
 No disk, ISO or license key is shipped by this repository. This page is the index and the commands; details live next to each image under `images/<ref>/`.
+
+Windows 11, Ubuntu 18.04, Fedora, Linux Mint and macOS are catalogued but not developed: their x86-64 or ARM engine is not integrated, so they stay `planned` ("Not ready") with nothing to import.
 
 ## Debian 12
 
@@ -49,6 +52,16 @@ pnpm assets:windows10:check
 ```
 
 2048 MiB of guest RAM minimum. The virtio-net driver must already be in the disk. QEMU install, VirtualBox conversion and validation: [`images/windows-10-x86/README.md`](../images/windows-10-x86/README.md).
+
+## Custom image
+
+Generic entry point: boot any 32-bit disk media you own with the integrated v86 engine.
+
+- Accepted formats: `.iso`, `.img`, `.raw`. A `.img`/`.raw` boots as a hard disk (`hda`); a bootable (live) `.iso` is mounted as a CD-ROM and boots from it (CD-first boot order). Installation ISOs are not supported: v86 persists no write, so run a media that is already bootable.
+- The media is imported through the page's import card and stored as a local blob in the browser; it is never uploaded, and LumiBoot distributes no image.
+- 512 MiB of guest RAM, no fixed boot device (the media format decides the mount), `LUMIBOOT_GUEST_READY:custom-image` marker.
+- Availability stays `resource-required` ("Resource required") until a media is imported.
+- You must hold a licence for the software contained in the media; the security of that disk is yours.
 
 ## Variant order
 

@@ -61,7 +61,6 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
       readiness: launchProfile.readiness,
     })),
     requirements: [...image.requirements],
-    licenseNotes: image.licenseNotes ?? undefined,
     accent: family.accent,
     accentRgb: family.accentRgb,
     featured: launchProfilesForImage.some((launchProfile) => launchProfile.featured) || undefined,

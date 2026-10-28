@@ -1,13 +1,13 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Library', () => {
-  test('shows the eight displayed catalog systems (mothers + standalone)', async ({ page }) => {
+  test('shows the nine displayed catalog systems (mothers + standalone)', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible();
-    // 11 entries in the flat catalog, but the 3 child variants (2 Debian +
+    // 12 entries in the flat catalog, but the 3 child variants (2 Debian +
     // 1 Windows 7 Professional) are folded onto their mother card:
-    // 8 displayed cards.
-    await expect(page.locator('.os-card')).toHaveCount(8);
+    // 9 displayed cards, the last one being the generic "Custom image".
+    await expect(page.locator('.os-card')).toHaveCount(9);
   });
 
   test('searches for a system and filters by family', async ({ page }) => {
@@ -25,6 +25,11 @@ test.describe('Library', () => {
     await page.getByLabel('Search for a system').fill('');
     await page.getByRole('button', { name: 'Windows' }).click();
     await expect(page.locator('.os-card')).toHaveCount(3);
+
+    // The generic entry has its own family chip, after macOS.
+    await page.getByRole('button', { name: 'Custom' }).click();
+    await expect(page.locator('.os-card')).toHaveCount(1);
+    await expect(page.locator('.os-card[data-id="custom-image"]')).toHaveCount(1);
   });
 
   test('a click opens the page directly (no popup)', async ({ page }) => {
@@ -43,6 +48,43 @@ test.describe('Library', () => {
     await expect(page).toHaveURL(/\/systems\//);
     await expect(page.locator('.detail-drawer')).toHaveCount(0);
     await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+});
+
+/**
+ * Windows 11 is not developed: no x86-64 engine and no image, hence "Not ready",
+ * with no media to import. The generic "Custom image" is the only
+ * `resource-required` entry: it reuses the user-import path of v86.
+ */
+test.describe('Windows 11 and the generic custom image', () => {
+  test('Windows 11 is "Not ready", without an import card', async ({ page }) => {
+    await page.goto('/');
+
+    const card = page.locator('.os-card[data-id="windows-11-x64"]');
+    await expect(card).toHaveCount(1);
+    // `planned` renders as "Not ready": no media is expected from the visitor.
+    await expect(card.locator('.card-status')).toHaveAttribute('data-state', 'planned');
+    await expect(card.locator('.card-status')).toHaveText('Not ready');
+
+    await card.click();
+    await expect(page).toHaveURL(/\/systems\/windows-11-x64$/);
+    await expect(page.getByText('Required media (provided by you)')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Start session' })).toBeDisabled();
+  });
+
+  test('the custom image is "Resource required" and exposes the import card', async ({ page }) => {
+    await page.goto('/');
+
+    const card = page.locator('.os-card[data-id="custom-image"]');
+    await expect(card).toHaveCount(1);
+    await expect(card.locator('.card-status')).toHaveAttribute('data-state', 'resource-required');
+    await expect(card.locator('.card-status')).toHaveText('Resource required');
+
+    await card.click();
+    await expect(page).toHaveURL(/\/systems\/custom-image$/);
+    // The visitor imports their own media: the launch stays blocked until then.
+    await expect(page.getByText('Required media (provided by you)')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start session' })).toBeDisabled();
   });
 });
 

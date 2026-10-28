@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const osFamilySchema = z.enum(['linux', 'windows', 'macos']);
+export const osFamilySchema = z.enum(['linux', 'windows', 'macos', 'custom']);
 export const executionModeSchema = z.enum(['browser']);
 export const engineIdSchema = z.enum([
   'v86',
@@ -127,7 +127,6 @@ export const osDefinitionSchema = z.object({
   mediaStrategy: mediaStrategySchema.optional(),
   launchProfiles: z.array(launchProfileSchema).min(1),
   requirements: z.array(z.string().min(1)).min(1),
-  licenseNotes: z.string().min(1).optional(),
   accent: z.string().min(1),
   accentRgb: accentRgbSchema,
   featured: z.boolean().optional(),
