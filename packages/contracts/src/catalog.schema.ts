@@ -4,6 +4,7 @@ export const osFamilySchema = z.enum(['linux', 'windows', 'macos', 'custom']);
 export const executionModeSchema = z.enum(['browser']);
 export const engineIdSchema = z.enum([
   'v86',
+  'v64',
   'wasm-x86',
   'wasm-x86_64',
   'wasm-arm',
@@ -40,6 +41,8 @@ export const vmMediaSchema = z.object({
   url: z.string().min(1),
   size: z.number().int().positive(),
   format: vmMediaFormatSchema,
+  /** Stable identity of the imported bytes, used by persistent browser disks. */
+  sourceId: z.string().min(1).optional(),
   sha256: z
     .string()
     .regex(/^[0-9a-f]{64}$/i)
@@ -56,7 +59,7 @@ export const vmConfigurationSchema = z.object({
 });
 
 /** `none` means no card. */
-export const hardwareNetworkSchema = z.enum(['virtio', 'ne2k', 'none']);
+export const hardwareNetworkSchema = z.enum(['virtio', 'ne2k', 'e1000', 'none']);
 
 /**
  * Hardware seen by the guest; each provider only translates it into engine

@@ -27,9 +27,9 @@ describe('filterSystems', () => {
   });
 
   it('filters by family and search', () => {
-    // Four flat entries: Lite, Professional, Windows 10 x86, Windows 11.
+    // Five flat entries: Lite, Professional, Windows 8.1 x64, Windows 10 x86, Windows 11.
     // "Custom image" belongs to its own `custom` family, never to Windows.
-    expect(filterSystems({ ...base, family: 'windows' })).toHaveLength(4);
+    expect(filterSystems({ ...base, family: 'windows' })).toHaveLength(5);
     expect(filterSystems({ ...base, family: 'custom' })).toHaveLength(1);
     expect(filterSystems({ ...base, query: 'fedora' })).toHaveLength(1);
     expect(filterSystems({ ...base, query: 'ubuntu x64' })).toHaveLength(0);

@@ -37,7 +37,7 @@ Revocation `POST /api/session/revoke` disconnects: the proxy drops the session a
 
 ## Deployment
 
-Security headers come from `infra/nginx/security-headers.conf`. COOP/COEP are optional through `LUMIBOOT_COOP_COEP=1`; v86 0.5.471 does not use `SharedArrayBuffer`.
+Security headers come from `infra/nginx/security-headers.conf`. The Vite dev and preview servers enable COOP/COEP by default because v64 uses `SharedArrayBuffer` for parallel vCPU Workers; `LUMIBOOT_COOP_COEP=0` selects the cooperative fallback. v86 0.5.471 itself does not use `SharedArrayBuffer`.
 
 `infra/nginx/site.conf`:
 

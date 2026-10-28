@@ -15,6 +15,7 @@
     "@lumiboot/catalog": "workspace:*",
     "@lumiboot/contracts": "workspace:*",
     "@lumiboot/provider-v86": "workspace:*",
+    "@lumiboot/provider-v64": "workspace:*",
     "@lumiboot/vm-assets": "workspace:*",
     "@lumiboot/vm-core": "workspace:*",
     "@lumiboot/vm-network": "workspace:*",

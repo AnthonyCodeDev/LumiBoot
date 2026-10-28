@@ -14,7 +14,7 @@ import { extname, join, relative } from 'node:path';
 const repoRoot = process.cwd();
 
 /** Free image references allowed in the public webroot. */
-const ALLOWED_IMAGE_REFS = [/^debian-/i, /^ubuntu-/i];
+const ALLOWED_IMAGE_REFS = [/^alpine-/i, /^debian-/i, /^ubuntu-/i];
 
 const DISK_SUFFIXES = new Set([
   '.img',
@@ -80,7 +80,7 @@ function listRelativeFiles(root: string): string[] {
 }
 
 describe('public webroot guardrail', () => {
-  it('flags a Windows disk and allows free Debian and Ubuntu disks', () => {
+  it('flags a Windows disk and allows free Alpine, Debian and Ubuntu disks', () => {
     const violations = findForbiddenWebrootMedia([
       'windows-7-pro-sp1-x86/disk.img',
       'debian-12-i386/rootfs.img',
@@ -88,6 +88,7 @@ describe('public webroot guardrail', () => {
       'debian-12-i386/manifest.json',
       'ubuntu-18-i386/rootfs.img',
       'ubuntu-18-i386/manifest.json',
+      'alpine-3-24-x86-64/alpine-virt-3.24.0-x86_64.iso',
     ]);
     // Only the proprietary Windows disk is a violation.
     expect(violations).toHaveLength(1);

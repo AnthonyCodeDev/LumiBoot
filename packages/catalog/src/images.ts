@@ -16,6 +16,20 @@ export interface SystemImageDefinition {
 
 export const images = [
   {
+    id: 'alpine-3-24-x86-64-image',
+    familyId: 'alpine',
+    architecture: 'x86_64',
+    imageRef: 'alpine-3-24-x86-64',
+    requirements: [
+      'Modern browser with WebAssembly',
+      '1024 MiB guest memory',
+      'Cross-origin isolation for parallel host threads',
+      'Official Alpine 3.24.0 virt ISO prepared locally',
+    ],
+    integrationNote:
+      'Official Alpine 3.24.0 x86_64 virt ISO, pinned by SHA-256 and booted through v64 with a reproducible LumiBoot autologin overlay. Two guest cores use parallel Workers when cross-origin isolation is available and cooperative scheduling otherwise.',
+  },
+  {
     id: 'debian-12-i386-image',
     familyId: 'debian',
     architecture: 'i386',
@@ -145,6 +159,22 @@ export const images = [
       'Direct BIOS boot of the local RAW disk through IDE hda (never cdrom), ' +
       'read over HTTP Range via v86. Immutable base, guest writes kept in memory ' +
       'for the duration of the session. "Lite" variant.',
+  },
+  {
+    id: 'windows-8-1-x64-image',
+    familyId: 'windows',
+    architecture: 'x86_64',
+    mediaStrategy: 'user-import',
+    requiresUserMedia: true,
+    requirements: [
+      'An already installed Windows 8.1 x64 RAW/IMG disk you legally own',
+      'Modern Chromium-class browser with WebAssembly and OPFS',
+      'At least 2048 MiB guest memory',
+      'Cross-origin isolation for parallel CPU Workers',
+      'WebGPU recommended for VMware SVGA 3D acceleration',
+    ],
+    integrationNote:
+      'v64 upstream verifies Windows 8.1 x64 from an installed image on 1, 2 and 4 cores. LumiBoot does not distribute Windows and does not claim that installation from an ISO works. Imported RAW disks are copied once into OPFS and written back there by the CPU Worker.',
   },
   {
     id: 'windows-7-pro-sp1-x86-image',

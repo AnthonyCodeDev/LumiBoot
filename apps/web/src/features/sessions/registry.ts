@@ -22,6 +22,16 @@ export const V86_LAZY_CAPABILITIES: VMCapabilities = {
   configurableMemory: true,
 };
 
+export const V64_LAZY_CAPABILITIES: VMCapabilities = {
+  runtime: 'browser',
+  architectures: ['x86_64'],
+  ramSnapshots: false,
+  diskSnapshots: false,
+  partialDownload: true,
+  resumable: false,
+  configurableMemory: true,
+};
+
 class LazyV86Provider implements VMEngine {
   readonly id = 'v86';
 
@@ -49,10 +59,40 @@ class LazyV86Provider implements VMEngine {
   }
 }
 
-/** Builds the application engine registry, with v86 loaded on demand. */
+class LazyV64Provider implements VMEngine {
+  readonly id = 'v64';
+
+  capabilities(): VMCapabilities {
+    return V64_LAZY_CAPABILITIES;
+  }
+
+  canRun(os: OSDefinition): boolean {
+    return (
+      os.architecture === 'x86_64' &&
+      os.launchProfiles.some(
+        (profile) => profile.executionMode === 'browser' && profile.engineId === 'v64',
+      )
+    );
+  }
+
+  async start(
+    os: OSDefinition,
+    mountTarget: unknown,
+    configuration?: Parameters<VMEngine['start']>[2],
+  ): Promise<VMInstance> {
+    const { V64Provider } = await import('@lumiboot/provider-v64');
+    const provider = new V64Provider();
+    return configuration === undefined
+      ? provider.start(os, mountTarget)
+      : provider.start(os, mountTarget, configuration);
+  }
+}
+
+/** Builds the application engine registry, with both browser engines loaded on demand. */
 export function createRegistry(): VMRegistry {
   const registry = new VMRegistry();
   registry.register(new LazyV86Provider());
+  registry.register(new LazyV64Provider());
 
   return registry;
 }

@@ -1,14 +1,14 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Library', () => {
-  test('shows the nine displayed catalog systems (mothers + standalone)', async ({ page }) => {
+  test('shows the eleven displayed catalog systems (mothers + standalone)', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible();
-    // 12 entries in the flat catalog, but the 3 child variants (2 Debian +
-    // 1 Windows 7 Professional) are folded onto their mother card:
-    // 9 displayed cards, the generic "Custom image" closing the first,
+    // Child variants are folded onto their mother card. With Alpine x86-64
+    // and Windows 8.1 x64 integrated, the grid exposes 11 mother/standalone
+    // cards, the generic "Custom image" closing the first,
     // playable group.
-    await expect(page.locator('.os-card')).toHaveCount(9);
+    await expect(page.locator('.os-card')).toHaveCount(11);
   });
 
   test('searches for a system and filters by family', async ({ page }) => {
@@ -25,7 +25,7 @@ test.describe('Library', () => {
 
     await page.getByLabel('Search for a system').fill('');
     await page.getByRole('button', { name: 'Windows' }).click();
-    await expect(page.locator('.os-card')).toHaveCount(3);
+    await expect(page.locator('.os-card')).toHaveCount(4);
 
     // The generic entry has its own family chip, after macOS.
     await page.getByRole('button', { name: 'Custom' }).click();

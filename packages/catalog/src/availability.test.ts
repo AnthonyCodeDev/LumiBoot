@@ -348,7 +348,7 @@ describe('catalog: hardware profiles and boot proofs', () => {
         expect(profile.hardwareProfile?.network).toBeDefined();
         // Markers come from the real guest, both for OS and graphical proofs.
         expect(profile.readiness?.marker).toMatch(
-          /^LUMIBOOT_(GUEST|DESKTOP)_READY:|^LUMIBOOT_DISK_BOOT:/,
+          /^LUMIBOOT_(GUEST|DESKTOP)_READY:|^LUMIBOOT_DISK_BOOT:|^lumiboot@lumiboot$/,
         );
       }
     }

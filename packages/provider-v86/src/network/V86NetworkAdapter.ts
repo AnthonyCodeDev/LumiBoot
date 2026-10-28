@@ -85,6 +85,8 @@ const DEVICE_TYPE_BY_NETWORK: Readonly<
 > = {
   virtio: 'virtio',
   ne2k: 'ne2k',
+  // The pinned v86 provider does not expose v64's Intel E1000 plugin.
+  e1000: undefined,
   none: undefined,
 };
 

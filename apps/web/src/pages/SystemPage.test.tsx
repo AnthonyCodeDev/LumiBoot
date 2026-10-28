@@ -33,7 +33,7 @@ describe('SystemPage — variant selector', () => {
 
     const trigger = screen.getByRole('button', { name: 'Choose variant' });
     // Only the name is shown, never a "Variant" label.
-    expect(trigger.textContent).toBe('Debian XFCE');
+    expect(trigger.textContent).toBe('Debian XFCE · 32 bits');
     expect(screen.queryByText('Variant')).toBeNull();
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
 
@@ -46,7 +46,11 @@ describe('SystemPage — variant selector', () => {
 
     const options = screen.getAllByRole('option').map((option) => option.textContent);
     // Order comes from `variantOrder`: the best variant first.
-    expect(options).toEqual(['Debian XFCE', 'Debian X11', 'Debian CLI']);
+    expect(options).toEqual([
+      'Debian XFCE · 32 bits',
+      'Debian X11 · 32 bits',
+      'Debian CLI · 32 bits',
+    ]);
   });
 
   it('choosing X11 changes the dropdown WITHOUT navigating or changing the content', async () => {
@@ -54,12 +58,14 @@ describe('SystemPage — variant selector', () => {
     renderSystemPage('debian-12-i386');
 
     await user.click(screen.getByRole('button', { name: 'Choose variant' }));
-    await user.click(screen.getByRole('button', { name: 'Debian X11' }));
+    await user.click(screen.getByRole('button', { name: 'Debian X11 · 32 bits' }));
 
     // No navigation: we stay on the parent page.
     expect(screen.getByTestId('location').textContent).toBe('/systems/debian-12-i386');
     // The trigger reflects the variant to launch…
-    expect(screen.getByRole('button', { name: 'Choose variant' }).textContent).toBe('Debian X11');
+    expect(screen.getByRole('button', { name: 'Choose variant' }).textContent).toBe(
+      'Debian X11 · 32 bits',
+    );
     // …but the page content stays the base one.
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Debian');
     expect(screen.getByRole('heading', { level: 1 }).textContent).not.toContain('Bureau');
@@ -70,7 +76,9 @@ describe('SystemPage — variant selector', () => {
 
     // Wait for the effect that syncs the selection onto the child.
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Choose variant' }).textContent).toBe('Debian X11');
+      expect(screen.getByRole('button', { name: 'Choose variant' }).textContent).toBe(
+        'Debian X11 · 32 bits',
+      );
     });
     // The displayed content stays the parent one.
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Debian');
@@ -96,11 +104,11 @@ describe('SystemPage — variant selector', () => {
     renderSystemPage('windows-7-x86');
 
     const trigger = screen.getByRole('button', { name: 'Choose variant' });
-    expect(trigger.textContent).toBe('Windows 7 Professional');
+    expect(trigger.textContent).toBe('Windows 7 Professional · 32 bits');
 
     await user.click(trigger);
     const options = screen.getAllByRole('option').map((option) => option.textContent);
-    expect(options).toEqual(['Windows 7 Professional', 'Windows 7 Lite']);
+    expect(options).toEqual(['Windows 7 Professional · 32 bits', 'Windows 7 Lite · 32 bits']);
   });
 
   it('shows no selector for a standalone system (Windows 10 x86)', () => {
@@ -114,7 +122,7 @@ describe('SystemPage — variant selector', () => {
     renderSystemPage('ubuntu-18-i386');
 
     const trigger = screen.getByRole('button', { name: 'Choose variant' });
-    expect(trigger.textContent).toBe('Ubuntu XFCE');
+    expect(trigger.textContent).toBe('Ubuntu XFCE · 32 bits');
     // The hero shows the base, not the selected variant.
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Ubuntu');
     expect(screen.getByRole('heading', { level: 1 }).textContent).not.toContain('XFCE');
@@ -122,7 +130,11 @@ describe('SystemPage — variant selector', () => {
     await user.click(trigger);
     const options = screen.getAllByRole('option').map((option) => option.textContent);
     // Order comes from `variantOrder`: the best variant first.
-    expect(options).toEqual(['Ubuntu XFCE', 'Ubuntu X11', 'Ubuntu CLI']);
+    expect(options).toEqual([
+      'Ubuntu XFCE · 32 bits',
+      'Ubuntu X11 · 32 bits',
+      'Ubuntu CLI · 32 bits',
+    ]);
   });
 
   it('reflects the selected variant in the spec table', async () => {
@@ -137,7 +149,7 @@ describe('SystemPage — variant selector', () => {
 
     // The console CLI variant reduces memory to 512 MiB.
     await user.click(screen.getByRole('button', { name: 'Choose variant' }));
-    await user.click(screen.getByRole('button', { name: 'Debian CLI' }));
+    await user.click(screen.getByRole('button', { name: 'Debian CLI · 32 bits' }));
     expect(screen.getByText('512 MiB')).toBeTruthy();
     expect(screen.queryByText('1024 MiB')).toBeNull();
   });
@@ -146,7 +158,7 @@ describe('SystemPage — variant selector', () => {
     renderSystemPage('windows-7-x86');
 
     // Windows 7 Professional is the default variant of the group.
-    expect(screen.getByText('Windows 7 Professional')).toBeTruthy();
+    expect(screen.getByText('Windows 7 Professional · 32 bits')).toBeTruthy();
     expect(screen.getByText('1536 MiB')).toBeTruthy();
     expect(screen.getByText('NE2000')).toBeTruthy();
   });

@@ -1,0 +1,29 @@
+{
+  "name": "@lumiboot/provider-v64",
+  "version": "0.1.0",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "description": "v64 x86-64 browser engine: JIT WebAssembly, Workers, WebGPU and OPFS disks",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lumiboot/contracts": "workspace:*",
+    "@lumiboot/provider-v86": "workspace:*",
+    "@lumiboot/vm-assets": "workspace:*",
+    "@lumiboot/vm-core": "workspace:*",
+    "@lumiboot/vm-network": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
