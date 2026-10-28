@@ -56,7 +56,7 @@ The provided image embeds the **VirtIO NetKVM x86** driver. If the disk lacks it
 LumiBoot only reads RAW; `qemu-img convert` writes a new file.
 
 ```powershell
-qemu-img convert -f qcow2 -O raw "D:\VM\Windows10-32bit.qcow2" "D:\VM\Windows10-32bit.img"
+qemu-img convert -f qcow2 -O raw "<path>\Windows10-32bit.qcow2" "<path>\Windows10-32bit.img"
 ```
 
 From VirtualBox: `vdi`, `vhd`/`vpc` or `vhdx`.
@@ -64,11 +64,11 @@ From VirtualBox: `vdi`, `vhd`/`vpc` or `vhdx`.
 ```powershell
 # Clone VirtualBox to RAW; the original is untouched.
 & "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe" clonemedium `
-  "D:\VM\Windows10-32bit.vdi" "D:\VM\Windows10-32bit.img" --format RAW
+  "<path>\Windows10-32bit.vdi" "<path>\Windows10-32bit.img" --format RAW
 
 # Or through qemu-img.
-qemu-img convert -f vpc -O raw  "D:\VM\Windows10-32bit.vhd"  "D:\VM\Windows10-32bit.img"   # VHD
-qemu-img convert -f vhdx -O raw "D:\VM\Windows10-32bit.vhdx" "D:\VM\Windows10-32bit.img"  # VHDX
+qemu-img convert -f vpc -O raw  "<path>\Windows10-32bit.vhd"  "<path>\Windows10-32bit.img"   # VHD
+qemu-img convert -f vhdx -O raw "<path>\Windows10-32bit.vhdx" "<path>\Windows10-32bit.img"  # VHDX
 ```
 
 The RAW must hold a complete system disk, with an MBR table and an active NTFS partition, not a data volume.
@@ -78,7 +78,7 @@ The RAW must hold a complete system disk, with an MBR table and an active NTFS p
 The disk lives outside `public/` and is ignored by Git. The command writes a `disk-boot` manifest pointing **in place** at the real file.
 
 ```powershell
-pnpm assets:windows10:prepare --source "D:\VM\Windows10-32bit.img"
+pnpm assets:windows10:prepare --source "<path>\Windows10-32bit.img"
 pnpm assets:windows10:check
 ```
 

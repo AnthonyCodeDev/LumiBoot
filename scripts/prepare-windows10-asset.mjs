@@ -3,7 +3,7 @@
 // to prepare-windows7-asset.mjs with the Windows 10 values pinned; operator
 // options come after and win.
 //
-//   pnpm assets:windows10:prepare -- --source "D:\VM\Windows10-32bit.img"
+//   pnpm assets:windows10:prepare -- --source "<path>/Windows10-32bit.img"
 //   pnpm assets:windows10:check
 //
 // Writes images/windows-10-x86/manifest.json. The disk is served in place.
@@ -61,7 +61,7 @@ Windows 10 x86 generator (delegates to prepare-windows7-asset.mjs).
   -h, --help              Show this help
 
 Example:
-  pnpm assets:windows10:prepare -- --source "D:\\\\VM\\\\Windows10-32bit.img"
+  pnpm assets:windows10:prepare -- --source "<path>/Windows10-32bit.img"
 `;
 }
 
