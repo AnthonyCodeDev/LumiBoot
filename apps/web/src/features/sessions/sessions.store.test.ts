@@ -166,7 +166,7 @@ afterEach(() => {
 
 describe('useSessionsStore — media ownership', () => {
   it('two VMs of the same OS: releasing A never revokes B media', async () => {
-    const system = getSystemById('windows-11-x64');
+    const system = getSystemById('custom-image');
     if (!system) throw new Error('test system not found');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
@@ -200,7 +200,7 @@ describe('useSessionsStore — media ownership', () => {
   });
 
   it('dispose during the blob read: no start, no leak', async () => {
-    const system = getSystemById('windows-11-x64');
+    const system = getSystemById('custom-image');
     if (!system) throw new Error('test system not found');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
@@ -232,7 +232,7 @@ describe('useSessionsStore — media ownership', () => {
   });
 
   it('stop during the blob read: no start, no leak', async () => {
-    const system = getSystemById('windows-11-x64');
+    const system = getSystemById('custom-image');
     if (!system) throw new Error('test system not found');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
@@ -260,7 +260,7 @@ describe('useSessionsStore — media ownership', () => {
   });
 
   it('dispose is idempotent: a single revocation per session', async () => {
-    const system = getSystemById('windows-11-x64');
+    const system = getSystemById('custom-image');
     if (!system) throw new Error('test system not found');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
@@ -279,7 +279,7 @@ describe('useSessionsStore — media ownership', () => {
   });
 
   it('restarting the same session replaces its URL (no accumulation)', async () => {
-    const system = getSystemById('windows-11-x64');
+    const system = getSystemById('custom-image');
     if (!system) throw new Error('test system not found');
     const mediaStore = makeMediaStore();
     seedMedia(mediaStore, system.id);
@@ -303,7 +303,7 @@ describe('useSessionsStore — media ownership', () => {
 
 describe('useSessionsStore — normalized errors', () => {
   it('an IndexedDB error before lifecycle.start becomes a session status', async () => {
-    const system = getSystemById('windows-11-x64');
+    const system = getSystemById('custom-image');
     if (!system) throw new Error('test system not found');
     mocks.getUserMediaStore.mockResolvedValue({
       get: vi.fn(async () => {
@@ -324,7 +324,7 @@ describe('useSessionsStore — normalized errors', () => {
   });
 
   it('a late failure of a superseded boot does not overwrite the current state', async () => {
-    const system = getSystemById('windows-11-x64');
+    const system = getSystemById('custom-image');
     if (!system) throw new Error('test system not found');
     let rejectGet: ((error: Error) => void) | undefined;
     mocks.getUserMediaStore.mockResolvedValue({

@@ -6,6 +6,7 @@ const FILTERS: ReadonlyArray<{ value: FamilyFilter; label: string }> = [
   { value: 'linux', label: 'Linux' },
   { value: 'windows', label: 'Windows' },
   { value: 'macos', label: 'macOS' },
+  { value: 'custom', label: 'Custom' },
 ];
 
 export function Filters() {

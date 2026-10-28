@@ -18,8 +18,14 @@ selected mode provides it. No system image is shipped; you supply the media.
 | Debian 12      | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | local ext4 image built by script  |
 | Windows 7      | Professional SP1 / Lite  | 1536 / 1024 MiB         | RAW disk provided by the operator |
 | Windows 10 x86 | 32-bit                   | 2048 MiB                | RAW disk provided by the operator |
+| Custom image   | ISO / IMG / RAW          | 512 MiB                 | disk media imported by the visitor |
 
-Without a registered image, a system is listed as unavailable.
+Windows 11, Ubuntu 18.04, Fedora, Linux Mint and macOS are listed for information as
+**Not ready**: no engine or image is integrated for them yet.
+
+Without a registered image, a system is listed as unavailable. `Custom image` is the generic
+entry point for a `.iso`, `.img` or `.raw` you own: the file stays in the browser tab and is
+never uploaded.
 
 ## Requirements
 
@@ -49,6 +55,7 @@ No disk, ISO or license key is shipped or downloaded: register your own image be
 | Debian 12      | built rootfs, kernel and initrd    | `images/debian-12-i386/build.sh` |
 | Windows 7      | installed 32-bit BIOS/MBR RAW disk | `pnpm assets:windows7:prepare`   |
 | Windows 10 x86 | installed 32-bit BIOS/MBR RAW disk | `pnpm assets:windows10:prepare`  |
+| Custom image   | `.iso`, `.img` or `.raw` you own   | the import card of its page      |
 
 ```bash
 sudo ./images/debian-12-i386/build.sh

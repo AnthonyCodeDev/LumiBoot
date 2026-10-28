@@ -17,7 +17,8 @@ vi.mock('./user-media.storage', () => ({
 }));
 
 const getStoreMock = vi.mocked(getUserMediaStore);
-const system = getSystemById('windows-11-x64');
+// Generic entry point: any local disk media supplied by the user.
+const system = getSystemById('custom-image');
 if (!system) throw new Error('test system not found');
 
 function makeFile(name: string, size: number): File {
@@ -77,7 +78,7 @@ describe('useUserMediaStore.importFor', () => {
     const store = createMemoryUserMediaStore();
     getStoreMock.mockResolvedValue(store);
 
-    await useUserMediaStore.getState().importFor(system, makeFile('windows10.iso', 4096), true);
+    await useUserMediaStore.getState().importFor(system, makeFile('custom.iso', 4096), true);
 
     const record = useUserMediaStore.getState().records[system.id];
     expect(record?.format).toBe('iso');
@@ -89,7 +90,7 @@ describe('useUserMediaStore.importFor', () => {
 
   it('refuses the import without a license confirmation, without touching storage', async () => {
     await expect(
-      useUserMediaStore.getState().importFor(system, makeFile('windows10.iso', 4096), false),
+      useUserMediaStore.getState().importFor(system, makeFile('custom.iso', 4096), false),
     ).rejects.toMatchObject({ code: 'ASSET_IMPORT_REJECTED' });
 
     expect(useUserMediaStore.getState().error).toMatch(/license/i);
@@ -124,7 +125,7 @@ describe('useUserMediaStore.importFor', () => {
     });
 
     await expect(
-      useUserMediaStore.getState().importFor(system, makeFile('windows10.img', 4096), true),
+      useUserMediaStore.getState().importFor(system, makeFile('custom.img', 4096), true),
     ).rejects.toMatchObject({ code: 'ASSET_CACHE_QUOTA_EXCEEDED' });
 
     expect(useUserMediaStore.getState().error).toMatch(/Not enough storage/i);
@@ -137,9 +138,7 @@ describe('useUserMediaStore.importFor', () => {
       text: async () => '{ this is not JSON',
     } as unknown as File;
     await expect(
-      useUserMediaStore
-        .getState()
-        .importFor(system, makeFile('windows10.img', 4096), true, manifest),
+      useUserMediaStore.getState().importFor(system, makeFile('custom.img', 4096), true, manifest),
     ).rejects.toMatchObject({ code: 'ASSET_INVALID_MANIFEST' });
     expect(useUserMediaStore.getState().error).toMatch(/invalid JSON/);
   });
@@ -159,9 +158,7 @@ describe('useUserMediaStore.importFor', () => {
         }),
     } as unknown as File;
     await expect(
-      useUserMediaStore
-        .getState()
-        .importFor(system, makeFile('windows10.img', 4096), true, manifest),
+      useUserMediaStore.getState().importFor(system, makeFile('custom.img', 4096), true, manifest),
     ).rejects.toMatchObject({ code: 'ASSET_INVALID_MANIFEST' });
     expect(useUserMediaStore.getState().error).toMatch(/reference/i);
   });
@@ -171,7 +168,7 @@ describe('useUserMediaStore.remove', () => {
   it('removes the media from local storage and from the state', async () => {
     const store = createMemoryUserMediaStore();
     getStoreMock.mockResolvedValue(store);
-    await useUserMediaStore.getState().importFor(system, makeFile('windows10.iso', 2048), true);
+    await useUserMediaStore.getState().importFor(system, makeFile('custom.iso', 2048), true);
 
     await useUserMediaStore.getState().remove(system.id);
 

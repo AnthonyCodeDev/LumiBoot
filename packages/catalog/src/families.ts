@@ -1,6 +1,6 @@
 export interface OSFamilyDefinition {
   readonly id: string;
-  readonly family: 'linux' | 'windows' | 'macos';
+  readonly family: 'linux' | 'windows' | 'macos' | 'custom';
   readonly displayName: string;
   readonly iconUrl: string;
   readonly accent: string;
@@ -55,5 +55,14 @@ export const families = [
     iconUrl: '/icons/os/macos.svg',
     accent: '#c6b9ff',
     accentRgb: '198,185,255',
+  },
+  {
+    // Generic entry: any disk media the user owns, no brand.
+    id: 'custom',
+    family: 'custom',
+    displayName: 'Custom',
+    iconUrl: '/icons/os/custom.svg',
+    accent: '#9fb0c9',
+    accentRgb: '159,176,201',
   },
 ] as const satisfies readonly OSFamilyDefinition[];

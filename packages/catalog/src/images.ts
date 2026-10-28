@@ -11,7 +11,6 @@ export interface SystemImageDefinition {
   /** Keeps the state `resource-required` as long as the media is absent. */
   readonly requiresUserMedia?: boolean;
   readonly requirements: readonly string[];
-  readonly licenseNotes?: string;
   readonly integrationNote: string;
 }
 
@@ -122,9 +121,6 @@ export const images = [
       '2048 MiB guest memory',
       'Disk boot (MBR); no Linux kernel',
     ],
-    licenseNotes:
-      'Windows license required (held by the user). No ISO and no proprietary ' +
-      'disk is distributed by LumiBoot.',
     integrationNote:
       'Reuses the Windows 7 local RAW disk + 32-bit v86 pipeline (IDE hda, ' +
       'HTTP Range, guest writes kept in memory for the duration of the session). ' +
@@ -134,17 +130,33 @@ export const images = [
     id: 'windows-11-x64-image',
     familyId: 'windows',
     architecture: 'x86_64',
-    mediaStrategy: 'user-import',
-    requirements: ['WebAssembly', 'Virtual TPM depending on configuration', 'Windows license'],
-    licenseNotes: 'Windows license required. No proprietary ISO provided.',
-    integrationNote: 'Base image to pair with an x86-64 browser engine.',
+    // Not developed: no engine, no image, no media accepted; listed for information.
+    requirements: ['x86-64 browser engine (not integrated yet)', 'Windows license'],
+    integrationNote:
+      'Not developed yet: no x86-64 browser engine is integrated and no image is ' +
+      'bundled or imported. Listed for information only, like Fedora, Mint and macOS.',
   },
   {
     id: 'macos-sequoia-image',
     familyId: 'macos',
     architecture: 'arm64',
     requirements: ['WebAssembly', 'Enough memory', 'macOS license compliance'],
-    licenseNotes: 'macOS virtualization subject to the Apple license and compatible hardware.',
     integrationNote: 'Base image to pair with an ARM browser engine.',
+  },
+  {
+    id: 'custom-image-i386',
+    familyId: 'custom',
+    architecture: 'i386',
+    // Nothing is distributed: the user imports their own disk media.
+    mediaStrategy: 'user-import',
+    requiresUserMedia: true,
+    requirements: [
+      'A disk media you own (.iso, .img, .raw)',
+      'Modern browser with WebAssembly (v86, 32-bit)',
+      'Enough memory (≥ 512 MiB)',
+    ],
+    integrationNote:
+      'Generic entry point: start a local disk media (.iso, .img, .raw) you own through ' +
+      'v86. The file stays in your browser tab as a local blob and is never uploaded.',
   },
 ] as const satisfies readonly SystemImageDefinition[];

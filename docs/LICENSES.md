@@ -43,12 +43,13 @@ image is loaded from an external domain at runtime.
 - Debian: Bookworm images, provenance and packages recorded (`packages.tsv`).
 - Windows 7: operator RAW disks, outside Git, HTTP Range in development; no image or key distributed.
 - Windows 10 x86: operator RAW disk converted from their own QEMU/VirtualBox installation, outside Git, HTTP Range in development. The user's Windows licence is required; no media or third-party link distributed. Same pipeline as Windows 7: [`images/windows-10-x86/README.md`](../images/windows-10-x86/README.md).
-- Windows 11: user media required for x86-64; no integrated engine.
+- Windows 11: not developed; no x86-64 engine, no image, no media distributed.
+- Custom image: any `.iso`, `.img` or `.raw` imported by the visitor, kept as a local blob in the tab; LumiBoot distributes no media and the file is never uploaded.
 - macOS: Apple licence and authorised hardware.
 
 ## Trademarks
 
-- The OS icons in `apps/web/public/icons/os/` are original drawings made for this project.
+- The OS icons in `apps/web/public/icons/os/` are the official brand marks, sourced from [Simple Icons](https://simpleicons.org/) (released under CC0 1.0). Brand colours follow each owner's palette. See https://simpleicons.org/ for the full set.
 - Windows, macOS, Ubuntu, Linux Mint, Fedora and Debian are trademarks of their respective owners.
 - LumiBoot is not affiliated with, endorsed by or sponsored by any of them.
 - Those names and icons are used only to identify the systems, nominatively and descriptively.

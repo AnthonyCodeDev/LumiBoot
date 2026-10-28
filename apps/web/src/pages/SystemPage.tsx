@@ -215,29 +215,44 @@ export function SystemPage() {
               </strong>
             </div>
           </div>
-          {base.licenseNotes ? (
-            <>
-              <h3>Licenses</h3>
-              <p className="drawer-bodytext">{base.licenseNotes}</p>
-            </>
-          ) : null}
           {isUserImport ? (
-            <section className="media-import" aria-label="Required media (provided by you)">
-              <h3>Required media (provided by you)</h3>
+            <section className="media-import" aria-labelledby="media-import-title">
+              <p className="media-import-eyebrow">Media</p>
+              <h3 id="media-import-title">Required media (provided by you)</h3>
               <p className="drawer-bodytext">
-                LumiBoot neither distributes nor downloads any image for this system. Import a disk
-                media you own legally: it stays in your browser and is never uploaded to a server.
+                No image is distributed or downloaded for this system. Import a disk you own
+                legally: it stays in your browser and is never uploaded.
               </p>
-              {mediaLoading ? <p className="drawer-bodytext">Loading media…</p> : null}
+              {mediaLoading ? (
+                <p className="drawer-bodytext media-import-loading">Loading media…</p>
+              ) : null}
               {mediaRecord ? (
-                <div className="media-import-current" role="status">
-                  <p className="drawer-bodytext">
-                    Imported media: <strong>{mediaRecord.fileName}</strong> (
-                    {mediaRecord.format.toUpperCase()}, {formatBytes(mediaRecord.size)}) —{' '}
-                    {mediaRecord.integrity === 'verified'
-                      ? 'integrity verified'
-                      : 'integrity not verified'}
-                  </p>
+                <div className="media-file-card" role="status">
+                  <span className="media-file-card-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="9" />
+                      <circle cx="12" cy="12" r="2.6" />
+                    </svg>
+                  </span>
+                  <div className="media-file-card-body">
+                    <p className="media-file-card-name" title={mediaRecord.fileName}>
+                      <span className="visually-hidden">Imported media: </span>
+                      {mediaRecord.fileName}
+                    </p>
+                    <p className="media-file-card-meta">
+                      <span>{mediaRecord.format.toUpperCase()}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>{formatBytes(mediaRecord.size)}</span>
+                      <span
+                        className="media-integrity"
+                        data-integrity={
+                          mediaRecord.integrity === 'verified' ? 'verified' : 'unverified'
+                        }
+                      >
+                        {mediaRecord.integrity === 'verified' ? 'Verified' : 'Not verified'}
+                      </span>
+                    </p>
+                  </div>
                   <Button
                     variant="ghost"
                     type="button"
@@ -250,41 +265,112 @@ export function SystemPage() {
                   </Button>
                 </div>
               ) : null}
-              <div className="media-import-fields">
-                <label>
-                  <span>Media file (.iso, .img, .raw)</span>
-                  <input type="file" accept=".iso,.img,.raw" onChange={handleFileChange} />
-                </label>
-                <label>
-                  <span>Optional integrity manifest (JSON)</span>
+              <div className="media-fields">
+                <label className="media-file-field" data-state={mediaFile ? 'selected' : 'empty'}>
                   <input
+                    className="visually-hidden"
+                    type="file"
+                    accept=".iso,.img,.raw"
+                    aria-label="Disk image file (.iso, .img, .raw)"
+                    onChange={handleFileChange}
+                  />
+                  <span className="media-file-field-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="9" />
+                      <circle cx="12" cy="12" r="2.6" />
+                    </svg>
+                  </span>
+                  <span className="media-file-field-body">
+                    <span className="media-file-field-title">
+                      <span className="media-file-field-label">Disk image</span>
+                    </span>
+                    {mediaFile ? (
+                      <>
+                        <span className="media-file-field-name" title={mediaFile.name}>
+                          {mediaFile.name}
+                        </span>
+                        <span className="media-file-field-sub">
+                          <span>{formatBytes(mediaFile.size)}</span>
+                          <span className="media-file-field-badge">Replace</span>
+                        </span>
+                      </>
+                    ) : (
+                      <span className="media-file-field-hint">.iso · .img · .raw</span>
+                    )}
+                  </span>
+                </label>
+                <label
+                  className="media-file-field media-file-field--optional"
+                  data-state={mediaManifest ? 'selected' : 'empty'}
+                >
+                  <input
+                    className="visually-hidden"
                     type="file"
                     accept=".json,application/json"
+                    aria-label="Integrity manifest (JSON, optional)"
                     onChange={handleManifestChange}
                   />
-                </label>
-                <label className="media-license">
-                  <input
-                    type="checkbox"
-                    checked={licenseAcknowledged}
-                    onChange={(event) => setLicenseAcknowledged(event.target.checked)}
-                  />
-                  <span>I confirm that I hold a license and the right to use this media.</span>
+                  <span className="media-file-field-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                      <path d="M14 3v5h5" />
+                      <path d="M9 13h5M9 17h3" />
+                    </svg>
+                  </span>
+                  <span className="media-file-field-body">
+                    <span className="media-file-field-title">
+                      <span className="media-file-optional">Optional</span>
+                      <span className="media-file-field-label">Manifest</span>
+                    </span>
+                    {mediaManifest ? (
+                      <>
+                        <span className="media-file-field-name" title={mediaManifest.name}>
+                          {mediaManifest.name}
+                        </span>
+                        <span className="media-file-field-sub">
+                          <span>{formatBytes(mediaManifest.size)}</span>
+                          <span className="media-file-field-badge">Replace</span>
+                        </span>
+                      </>
+                    ) : (
+                      <span className="media-file-field-hint">.json</span>
+                    )}
+                  </span>
                 </label>
               </div>
-              <Button
-                variant="primary"
-                type="button"
-                disabled={mediaFile === null || !licenseAcknowledged || mediaImporting}
-                onClick={() => {
-                  void handleImport();
-                }}
-              >
-                {mediaImporting ? 'Importing…' : 'Import media'}
-              </Button>
+              <label className="media-license">
+                <input
+                  type="checkbox"
+                  checked={licenseAcknowledged}
+                  onChange={(event) => setLicenseAcknowledged(event.target.checked)}
+                />
+                <span>I confirm that I hold a license and the right to use this media.</span>
+              </label>
+              <div className="media-import-actions">
+                <Button
+                  variant="primary"
+                  type="button"
+                  disabled={mediaFile === null || !licenseAcknowledged || mediaImporting}
+                  onClick={() => {
+                    void handleImport();
+                  }}
+                >
+                  {mediaImporting ? 'Importing…' : 'Import media'}
+                </Button>
+                <p className="media-import-hint">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="4" y="10" width="16" height="10" rx="2" />
+                    <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                  </svg>
+                  Stays in your browser · never uploaded
+                </p>
+              </div>
               {mediaError ? (
-                <p className="drawer-bodytext" role="alert">
-                  {mediaError}
+                <p className="media-alert" role="alert">
+                  <span className="media-alert-icon" aria-hidden="true">
+                    !
+                  </span>
+                  <span>{mediaError}</span>
                 </p>
               ) : null}
             </section>

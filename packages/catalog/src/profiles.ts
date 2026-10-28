@@ -295,7 +295,7 @@ export const launchProfiles = [
     displayName: 'Windows 11',
     versionLabel: '64-bit',
     validated: false,
-    description: 'A modern Windows virtual machine built for local execution in the browser.',
+    description: 'Not developed yet: no x86-64 browser engine is integrated.',
   },
   {
     id: 'macos-sequoia',
@@ -314,5 +314,25 @@ export const launchProfiles = [
     versionLabel: 'Sequoia · Apple Silicon',
     validated: false,
     description: 'A macOS session built for an ARM-capable browser engine.',
+  },
+  {
+    id: 'custom-image',
+    imageId: 'custom-image-i386',
+    // v86 is the only integrated 32-bit x86 browser engine.
+    engineId: 'v86',
+    executionMode: 'browser',
+    minMemoryMiB: 512,
+    // No boot device: a RAW/IMG arrives as `hda`, a bootable ISO as a CD-ROM.
+    configuration: {
+      memoryMiB: 512,
+    },
+    hardwareProfile: pcHardware('virtio'),
+    readiness: guestReadiness('custom-image'),
+    slug: 'custom-image',
+    displayName: 'Custom image',
+    versionLabel: 'ISO · IMG · RAW',
+    validated: false,
+    description:
+      'Start a local disk media you own (.iso, .img, .raw) in the browser, with no installation.',
   },
 ] as const satisfies readonly LaunchProfileDefinition[];
