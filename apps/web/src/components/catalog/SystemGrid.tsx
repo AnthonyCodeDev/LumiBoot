@@ -1,8 +1,18 @@
 import { useNavigate } from 'react-router-dom';
+import type { Availability, OSDefinition } from '@lumiboot/contracts';
 import { useCatalogStore } from '../../features/catalog/catalog.store';
 import { useVisibleSystems } from '../../features/catalog/catalog.selectors';
 import { Button } from '../ui/Button';
 import { SystemCard } from './SystemCard';
+
+/**
+ * Availabilities whose card stays fully playable in the main group.
+ * `resource-required` is playable: only the media is supplied by the user
+ * (the generic "Custom image" entry boots it through v86).
+ */
+const PLAYABLE_AVAILABILITIES: ReadonlySet<Availability> = new Set(['ready', 'resource-required']);
+
+const isPlayable = (system: OSDefinition) => PLAYABLE_AVAILABILITIES.has(system.availability);
 
 export function SystemGrid() {
   const visible = useVisibleSystems();
@@ -22,14 +32,15 @@ export function SystemGrid() {
     );
   }
 
-  const available = visible.filter((system) => system.availability === 'ready');
-  const unavailable = visible.filter((system) => system.availability !== 'ready');
+  // Catalogue order is preserved in both groups: no extra sorting.
+  const playable = visible.filter(isPlayable);
+  const pending = visible.filter((system) => !isPlayable(system));
 
   return (
     <div id="cards" aria-live="polite">
-      {available.length > 0 && (
+      {playable.length > 0 && (
         <div className="cards">
-          {available.map((system) => (
+          {playable.map((system) => (
             <SystemCard
               key={system.id}
               system={system}
@@ -39,10 +50,10 @@ export function SystemGrid() {
           ))}
         </div>
       )}
-      {available.length > 0 && unavailable.length > 0 && <hr className="cards-separator" />}
-      {unavailable.length > 0 && (
+      {playable.length > 0 && pending.length > 0 && <hr className="cards-separator" />}
+      {pending.length > 0 && (
         <div className="cards">
-          {unavailable.map((system) => (
+          {pending.map((system) => (
             <SystemCard
               key={system.id}
               system={system}
