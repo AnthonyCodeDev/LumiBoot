@@ -16,12 +16,18 @@ selected mode provides it. No system image is shipped; you supply the media.
 | System         | Variants                 | Guest RAM               | Media                             |
 | -------------- | ------------------------ | ----------------------- | --------------------------------- |
 | Debian 12      | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | local ext4 image built by script  |
+| Ubuntu 18.04   | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | local ext4 image built by script  |
 | Windows 7      | Professional SP1 / Lite  | 1536 / 1024 MiB         | RAW disk provided by the operator |
 | Windows 10 x86 | 32-bit                   | 2048 MiB                | RAW disk provided by the operator |
 | Custom image   | ISO / IMG / RAW          | 512 MiB                 | disk media imported by the visitor |
 
-Windows 11, Ubuntu 18.04, Fedora, Linux Mint and macOS are listed for information as
-**Not ready**: no engine or image is integrated for them yet.
+Windows 11, Fedora, Linux Mint and macOS are listed for information as **Not ready**: no engine
+or image is integrated for them yet.
+
+Ubuntu 18.04 LTS is built locally and validated by a real boot. One build script produces three
+variants (CLI, X11/Openbox, XFCE); each one was built, published under `apps/web/public/images/`
+and booted, so the three profiles carry `validated: true`. No image is distributed here. Build and
+smoke tests: [`images/ubuntu-18-i386/README.md`](images/ubuntu-18-i386/README.md).
 
 Without a registered image, a system is listed as unavailable. `Custom image` is the generic
 entry point for a `.iso`, `.img` or `.raw` you own: the file stays in the browser tab and is
@@ -33,7 +39,7 @@ never uploaded.
 - pnpm 9.14.2, enabled with `corepack enable`.
 - Go stable, only to build `apps/network-proxy`.
 - A recent Chrome, Edge or Firefox.
-- Linux or WSL2 to rebuild the Debian images.
+- Linux or WSL2 to rebuild the Debian and Ubuntu images.
 
 ## Quick start
 
@@ -53,12 +59,14 @@ No disk, ISO or license key is shipped or downloaded: register your own image be
 | System         | Required media                     | Register with                    |
 | -------------- | ---------------------------------- | -------------------------------- |
 | Debian 12      | built rootfs, kernel and initrd    | `images/debian-12-i386/build.sh` |
+| Ubuntu 18.04   | built rootfs, kernel and initrd    | `images/ubuntu-18-i386/build.sh` |
 | Windows 7      | installed 32-bit BIOS/MBR RAW disk | `pnpm assets:windows7:prepare`   |
 | Windows 10 x86 | installed 32-bit BIOS/MBR RAW disk | `pnpm assets:windows10:prepare`  |
 | Custom image   | `.iso`, `.img` or `.raw` you own   | the import card of its page      |
 
 ```bash
 sudo ./images/debian-12-i386/build.sh
+sudo ./images/ubuntu-18-i386/build.sh
 pnpm assets:windows7:prepare --source images/windows-7-pro-sp1-x86/disk.img
 pnpm assets:windows10:prepare --source images/windows-10-x86/disk.img
 ```

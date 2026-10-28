@@ -14,7 +14,7 @@ pnpm assets:prepare
 pnpm dev
 ```
 
-Dev server: `http://127.0.0.1:5173`, strict port. Windows 7/10 disks are not in Git; the app asks for a local RAW disk. Debian images need Linux or WSL2; the boot test is opt-in through `VM_E2E_ASSETS=1`.
+Dev server: `http://127.0.0.1:5173`, strict port. Windows 7/10 disks are not in Git; the app asks for a local RAW disk. Debian and Ubuntu images need Linux or WSL2; the boot test is opt-in through `VM_E2E_ASSETS=1`.
 
 ## Checks before opening a pull request
 

@@ -1,0 +1,13 @@
+#!/bin/sh
+# ~/.xinitrc: XFCE session on tty1, started by startx after the autologin.
+
+# Session D-Bus, required by many X clients and by XFCE.
+if command -v dbus-launch >/dev/null 2>&1 && [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+  eval "$(dbus-launch --sh-syntax --exit-with-session)"
+fi
+
+# French keyboard.
+setxkbmap fr 2>/dev/null || true
+
+# Replaces the shell: end of the XFCE session means end of the X session.
+exec startxfce4

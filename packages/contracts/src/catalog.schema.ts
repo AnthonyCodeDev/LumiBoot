@@ -84,7 +84,9 @@ export const guestReadinessModeSchema = z.enum(['guest-marker', 'disk-boot']);
 
 /**
  * `marker` comes from the real guest, never from JavaScript. `timeoutMs` is a
- * safety threshold: expiry publishes `BOOT_TIMEOUT` without going running.
+ * diagnostic threshold only: expiry publishes the `boot-timeout` progress
+ * phase, it never stops the VM, and a late marker is still a valid proof for
+ * `running`.
  */
 export const guestReadinessSchema = z.object({
   marker: z.string().min(1),
@@ -92,6 +94,12 @@ export const guestReadinessSchema = z.object({
   channel: guestReadinessChannelSchema.optional(),
   timeoutMs: z.number().int().positive().optional(),
 });
+
+/**
+ * Which surface is the primary view of a session: `text` for a CLI guest whose
+ * only output is the serial console, `graphical` for a VGA/framebuffer guest.
+ */
+export const displayModeSchema = z.enum(['text', 'graphical']);
 
 export const launchProfileSchema = z.object({
   id: z.string().min(1),
@@ -104,6 +112,11 @@ export const launchProfileSchema = z.object({
   hardwareProfile: hardwareProfileSchema.optional(),
   /** Absent entries fall back to `DEFAULT_GUEST_READINESS`. */
   readiness: guestReadinessSchema.optional(),
+  /**
+   * `text` = the serial console is the primary view (CLI); `graphical`/absent =
+   * the VGA/framebuffer screen is.
+   */
+  displayMode: displayModeSchema.optional(),
 });
 
 /** Stored as "r,g,b" so it can feed `rgba(var(--accent-rgb), x)` directly. */
@@ -155,6 +168,7 @@ export type HardwareProfile = z.infer<typeof hardwareProfileSchema>;
 export type GuestReadinessChannel = z.infer<typeof guestReadinessChannelSchema>;
 export type GuestReadinessMode = z.infer<typeof guestReadinessModeSchema>;
 export type GuestReadiness = z.infer<typeof guestReadinessSchema>;
+export type DisplayMode = z.infer<typeof displayModeSchema>;
 export type LaunchProfile = z.infer<typeof launchProfileSchema>;
 export type OSDefinition = z.infer<typeof osDefinitionSchema>;
 

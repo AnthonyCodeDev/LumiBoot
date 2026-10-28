@@ -111,3 +111,45 @@ describe('Custom image — user-import under the integrated v86 engine', () => {
     expect(profile.hardwareProfile?.network).toBe('virtio');
   });
 });
+
+/**
+ * `displayMode` is an explicit catalog fact: a CLI guest only talks on ttyS0, so
+ * the session must open on its serial console. Never inferred from a label.
+ */
+describe('displayMode — primary view declared per profile', () => {
+  it('marks the two CLI profiles as `text`', () => {
+    for (const systemId of ['debian-12-i386', 'ubuntu-18-i386']) {
+      expect(getSystemById(systemId)!.launchProfiles[0]!.displayMode, systemId).toBe('text');
+    }
+  });
+
+  it('marks every graphical profile as `graphical`', () => {
+    const graphical = [
+      'debian-12-i386-desktop',
+      'debian-12-i386-xfce',
+      'ubuntu-18-i386-desktop',
+      'ubuntu-18-i386-xfce',
+      'windows-7-x86',
+      'windows-7-pro-sp1-x86',
+      'windows-10-x86',
+    ];
+    for (const systemId of graphical) {
+      expect(getSystemById(systemId)!.launchProfiles[0]!.displayMode, systemId).toBe('graphical');
+    }
+  });
+
+  it('never exposes an `undefined` displayMode key, so absent means graphical', () => {
+    for (const system of systems) {
+      for (const profile of system.launchProfiles) {
+        if (profile.displayMode === undefined) {
+          expect(Object.hasOwn(profile, 'displayMode'), profile.id).toBe(false);
+        } else {
+          expect(['text', 'graphical']).toContain(profile.displayMode);
+        }
+      }
+    }
+    // A user-import system has no image: it keeps the graphical default.
+    const custom = getSystemById('custom-image')!.launchProfiles[0]!;
+    expect('displayMode' in custom).toBe(false);
+  });
+});

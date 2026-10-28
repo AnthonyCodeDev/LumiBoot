@@ -38,8 +38,16 @@ export const V86_ASSET_PATHS = {
   vgaBios: '/v86/vgabios.bin',
 } as const;
 
-/** 115200 serial console; `root=/dev/sda` maps to the `hda` disk. */
-export const DEFAULT_BOOT_CMDLINE = 'console=tty0 console=ttyS0,115200 root=/dev/sda rw';
+/**
+ * 115200 serial console; `root=/dev/sda` maps to the `hda` disk.
+ *
+ * `rootwait rootdelay=5` are required: v86 serves the disk over asynchronous
+ * HTTP Range requests, so the root device may answer after the ATA probe. An
+ * initramfs that does not wait (systemd 237 on Ubuntu bionic) then abandons the
+ * boot with "ALERT! /dev/sda does not exist".
+ */
+export const DEFAULT_BOOT_CMDLINE =
+  'console=tty0 console=ttyS0,115200 root=/dev/sda rw rootwait rootdelay=5';
 
 /** Duplicated as a number so the provider never imports `v86` at load time. */
 const BOOT_ORDER_CD_HARDDISK_FLOPPY = 0x123 as BootOrder;

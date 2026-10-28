@@ -1,0 +1,12 @@
+#!/bin/sh
+# X session startup under v86, shared by the desktop and xfce flavors: the
+# flavor's ~/.xinitrc picks the session.
+#
+# vesa cannot attach once bochs-drm is bound, so fbdev is tried first and
+# modesetting is the fallback.
+set -u
+
+if startx -- :0 vt1 -nolisten tcp -layout LumiBootFBDev; then
+  exit 0
+fi
+exec startx -- :0 vt1 -nolisten tcp -layout LumiBootModesetting

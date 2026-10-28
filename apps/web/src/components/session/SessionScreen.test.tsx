@@ -1,13 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen as testingScreen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { getSystemById } from '@lumiboot/catalog';
 import type { SessionSnapshot } from '@lumiboot/vm-core';
 import { SessionScreen } from './SessionScreen';
 
 const system = getSystemById('debian-12-i386')!;
 
-function makeSession(state: SessionSnapshot['state']): SessionSnapshot {
-  return { id: 'session-pointer-lock', systemId: system.id, providerId: 'v86', state };
+function makeSession(state: SessionSnapshot['state'], phase?: string): SessionSnapshot {
+  return {
+    id: 'session-pointer-lock',
+    systemId: system.id,
+    providerId: 'v86',
+    state,
+    ...(phase === undefined ? {} : { phase }),
+  };
 }
 
 function installPointerLock(): { restore: () => void } {
@@ -112,5 +119,149 @@ describe('SessionScreen — indicateur de capture souris', () => {
     );
 
     expect(testingScreen.queryByTestId('pointer-lock-hint')).toBeNull();
+  });
+});
+
+describe('SessionScreen — voile de boot et note de preuve tardive', () => {
+  it('keeps the 5 s veil bounded and then leaves the console visible', () => {
+    vi.useFakeTimers();
+    try {
+      const consoleRef = { current: null as HTMLDivElement | null };
+      const { container } = render(
+        <SessionScreen
+          session={makeSession('booting')}
+          system={system}
+          consoleRef={consoleRef}
+          onStop={() => undefined}
+          onRestart={() => undefined}
+        />,
+      );
+
+      // Veil on mount, still there at 4 999 ms…
+      expect(container.querySelector('.status-overlay')).not.toBeNull();
+      act(() => {
+        vi.advanceTimersByTime(4_999);
+      });
+      expect(container.querySelector('.status-overlay')).not.toBeNull();
+
+      // …gone at 5 000 ms, with the console still mounted: no remount, live VM.
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(container.querySelector('.status-overlay')).toBeNull();
+      expect(container.querySelector('.session-console')).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows the non-blocking note only while booting after a diagnostic timeout', () => {
+    const consoleRef = { current: null as HTMLDivElement | null };
+    const { container } = render(
+      <SessionScreen
+        session={makeSession('booting', 'boot-timeout')}
+        system={system}
+        consoleRef={consoleRef}
+        onStop={() => undefined}
+        onRestart={() => undefined}
+      />,
+    );
+
+    const note = testingScreen.getByTestId('boot-timeout-note');
+    expect(note.tagName).toBe('P');
+    expect(note.getAttribute('role')).toBe('status');
+    expect(note.textContent).toContain('not verified');
+    // Under the viewport, never an overlay: the console stays clickable.
+    expect(container.querySelector('.session-viewport .session-boot-note')).toBeNull();
+    expect(container.querySelector('.session-screen > .session-boot-note')).toBe(note);
+  });
+
+  it('shows no late-proof note in another phase or another state', () => {
+    const cases: { session: SessionSnapshot; render: string }[] = [
+      { session: makeSession('booting', 'booting'), render: 'booting' },
+      { session: makeSession('booting'), render: 'booting without phase' },
+      { session: makeSession('running', 'boot-timeout'), render: 'running' },
+      { session: makeSession('stopped', 'boot-timeout'), render: 'stopped' },
+    ];
+
+    for (const { session, render: label } of cases) {
+      const consoleRef = { current: null as HTMLDivElement | null };
+      const { unmount } = render(
+        <SessionScreen
+          session={session}
+          system={system}
+          consoleRef={consoleRef}
+          onStop={() => undefined}
+          onRestart={() => undefined}
+        />,
+      );
+      expect(testingScreen.queryByTestId('boot-timeout-note'), label).toBeNull();
+      unmount();
+    }
+  });
+});
+
+describe('SessionScreen — terminal série ouvert par défaut en mode texte', () => {
+  function renderSession(systemId: string) {
+    const system = getSystemById(systemId)!;
+    const consoleRef = { current: null as HTMLDivElement | null };
+    const view = render(
+      <SessionScreen
+        session={{
+          id: `session-${systemId}`,
+          systemId,
+          providerId: 'v86',
+          state: 'running',
+        }}
+        system={system}
+        consoleRef={consoleRef}
+        onStop={() => undefined}
+        onRestart={() => undefined}
+      />,
+    );
+    return {
+      unmount: view.unmount,
+      console: view.container.querySelector<HTMLElement>('.session-console'),
+      logs: testingScreen.getByRole('button', { name: 'Logs' }),
+    };
+  }
+
+  function expectOpen(console: HTMLElement | null, logs: HTMLElement): void {
+    // `logs-hidden` is what really hides `textarea.v86-serial`: the panel is open.
+    expect(console?.classList.contains('logs-hidden')).toBe(false);
+    expect(logs.getAttribute('aria-pressed')).toBe('true');
+  }
+
+  function expectClosed(console: HTMLElement | null, logs: HTMLElement): void {
+    expect(console?.classList.contains('logs-hidden')).toBe(true);
+    expect(logs.getAttribute('aria-pressed')).toBe('false');
+  }
+
+  it('opens the serial console for a CLI guest (`displayMode: "text"`)', () => {
+    for (const systemId of ['ubuntu-18-i386', 'debian-12-i386']) {
+      const { console, logs, unmount } = renderSession(systemId);
+      expectOpen(console, logs);
+      unmount();
+    }
+  });
+
+  it('keeps the logs collapsed for a graphical guest', () => {
+    for (const systemId of ['ubuntu-18-i386-xfce', 'windows-10-x86']) {
+      const { console, logs, unmount } = renderSession(systemId);
+      expectClosed(console, logs);
+      unmount();
+    }
+  });
+
+  it('keeps the "Logs" button a working toggle, even when opened by default', async () => {
+    const user = userEvent.setup();
+    const { console, logs } = renderSession('ubuntu-18-i386');
+    expectOpen(console, logs);
+
+    await user.click(logs);
+    expectClosed(console, logs);
+
+    await user.click(logs);
+    expectOpen(console, logs);
   });
 });

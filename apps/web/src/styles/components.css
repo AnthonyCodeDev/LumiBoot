@@ -510,6 +510,17 @@
   min-width: 0;
   min-height: 0;
 }
+/* Late-proof diagnostic: the boot marker is missing but the VM is still alive.
+   Inline under the viewport, never full screen, never clickable-blocking. */
+.session-boot-note {
+  flex: 0 0 auto;
+  margin: 10px 0 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+  user-select: none;
+}
 /* Logs hidden by default: the VGA screen then uses all the space. */
 .session-console.logs-hidden .v86-serial {
   display: none !important;

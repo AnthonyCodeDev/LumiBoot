@@ -7,14 +7,14 @@ import { extname, join, relative } from 'node:path';
  *
  * The published webroot, `apps/web/public/` then `apps/web/dist/`, must NEVER
  * contain a proprietary system image such as Windows media, nor user media. Free
- * distribution disks such as Debian stay allowed: this guardrail must not break
- * free Linux images.
+ * distribution disks such as Debian and Ubuntu stay allowed: this guardrail must
+ * not break free Linux images.
  */
 
 const repoRoot = process.cwd();
 
 /** Free image references allowed in the public webroot. */
-const ALLOWED_IMAGE_REFS = [/^debian-/i];
+const ALLOWED_IMAGE_REFS = [/^debian-/i, /^ubuntu-/i];
 
 const DISK_SUFFIXES = new Set([
   '.img',
@@ -80,13 +80,16 @@ function listRelativeFiles(root: string): string[] {
 }
 
 describe('public webroot guardrail', () => {
-  it('flags a Windows disk and allows a Debian disk', () => {
+  it('flags a Windows disk and allows free Debian and Ubuntu disks', () => {
     const violations = findForbiddenWebrootMedia([
       'windows-7-pro-sp1-x86/disk.img',
       'debian-12-i386/rootfs.img',
       'debian-12-i386/initrd.img',
       'debian-12-i386/manifest.json',
+      'ubuntu-18-i386/rootfs.img',
+      'ubuntu-18-i386/manifest.json',
     ]);
+    // Only the proprietary Windows disk is a violation.
     expect(violations).toHaveLength(1);
     expect(violations[0]?.path).toBe('windows-7-pro-sp1-x86/disk.img');
   });

@@ -1,0 +1,13 @@
+[Unit]
+Description=LumiBoot guest boot readiness marker (flavor xfce)
+After=systemd-user-sessions.service
+Wants=systemd-user-sessions.service
+
+[Service]
+Type=oneshot
+# OS ready marker; the graphical session has its own LUMIBOOT_DESKTOP_READY marker.
+ExecStart=/bin/sh -c 'printf "LUMIBOOT_GUEST_READY:ubuntu-18-i386-xfce\n" > /dev/ttyS0'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -4,6 +4,7 @@ import { STANDARD_VM_DISPLAY, type SessionSnapshot } from '@lumiboot/vm-core';
 import { SessionToolbar } from './SessionToolbar';
 import { StatusOverlay } from './StatusOverlay';
 import { usePointerLockCapture } from './usePointerLockCapture';
+import { opensSerialConsoleByDefault } from '../../lib/display-mode';
 
 export interface SessionScreenProps {
   session: SessionSnapshot;
@@ -35,7 +36,10 @@ export function SessionScreen({
   const running = session.state === 'running';
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(true);
-  const [logsOpen, setLogsOpen] = useState(false);
+  // A CLI guest (`displayMode: 'text'`) opens on its serial console: the VGA text
+  // screen freezes while systemd only writes on ttyS0, which looks like a hang.
+  // The toolbar button stays a toggle, so the panel can still be folded back.
+  const [logsOpen, setLogsOpen] = useState(() => opensSerialConsoleByDefault(system));
   // Single visible cursor: a click inside the screen captures, Escape releases.
   const {
     captured,
@@ -142,6 +146,15 @@ export function SessionScreen({
           </p>
         ) : null}
       </div>
+      {/*
+        Late-proof note: the diagnostic timeout never stops the VM, so the
+        console stays live; the note must never block the interaction.
+      */}
+      {session.state === 'booting' && session.phase === 'boot-timeout' ? (
+        <p className="session-boot-note" role="status" data-testid="boot-timeout-note">
+          Guest boot not verified yet — still booting, the console stays live.
+        </p>
+      ) : null}
     </div>
   );
 }
