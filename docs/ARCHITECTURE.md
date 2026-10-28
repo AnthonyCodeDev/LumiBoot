@@ -26,6 +26,7 @@ VM, CPU and RAM run in the browser; the local proxy and the WISP relay carry net
 | `packages/catalog` | families, images, profiles, variants and availability |
 | `packages/vm-core` | engine contracts, registry, compatibility and lifecycle |
 | `packages/provider-v86` | v86 integration, console, readiness and network |
+| `packages/provider-v64` | v64 x86-64 JIT integration, Workers, WebGPU and OPFS disks |
 | `packages/vm-assets` | manifests, download, integrity and local disks |
 | `packages/vm-storage` | versioned storage, quotas, backends; implemented, not wired to the sessions yet |
 | `packages/vm-network` | network modes, profiles, capabilities and diagnostics |
@@ -41,7 +42,7 @@ VM, CPU and RAM run in the browser; the local proxy and the WISP relay carry net
 `ALLOWED_INTERNAL_DEPS` pins the dependency direction:
 
 ```text
-apps/web                → {catalog, contracts, provider-v86, vm-assets, vm-core, vm-network}
+apps/web                → {catalog, contracts, provider-v86, provider-v64, vm-assets, vm-core, vm-network}
 contracts               → ∅
 catalog                 → contracts
 vm-network              → contracts
@@ -49,6 +50,7 @@ vm-assets               → contracts
 vm-storage              → ∅
 vm-core                 → {contracts, vm-network}
 provider-v86            → {contracts, vm-assets, vm-core, vm-network}
+provider-v64            → {contracts, provider-v86 (shared console/lifecycle adapters), vm-assets, vm-core, vm-network}
 ```
 
 - `@lumiboot/contracts` is a leaf and imports no `@lumiboot/*` package.
@@ -77,7 +79,7 @@ provider-v86            → {contracts, vm-assets, vm-core, vm-network}
 
 1. The catalogue builds and validates the `OSDefinition` objects, an image plus a profile.
 2. The UI creates a session from the system or variant id.
-3. `VMRegistry` resolves the engine; the web adapter imports `@lumiboot/provider-v86` dynamically.
+3. `VMRegistry` resolves the engine; the web adapter imports `@lumiboot/provider-v86` or `@lumiboot/provider-v64` dynamically.
 4. `V86Provider` checks the manifest and builds the emulator for the profile.
 5. `running` follows a proof: Linux serial marker or first disk read (`disk-boot`).
 6. Stop releases the network controller, emulator, listeners and session.
@@ -112,7 +114,7 @@ Each image × profile candidate is evaluated on its own. Required user media giv
 
 ## Functional state
 
-- Integrated engine: v86, x86 32-bit.
+- Integrated engines: v86 for i386 and v64 for x86-64.
 - Debian 12: CLI, X11/Openbox and XFCE validated.
 - Ubuntu 18.04 LTS: CLI, X11/Openbox and XFCE built locally, published and validated by a real boot.
 - Windows 7: Lite and Professional SP1, local RAW disks over HTTP Range.

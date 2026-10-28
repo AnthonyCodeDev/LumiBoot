@@ -1,0 +1,87 @@
+{
+  "revision": "74d2bafcc7d568e2ab4374804e176f1a8a350f61",
+  "repository": "https://github.com/speedyHKjournalist/v64",
+  "buildSource": "https://v64-2ys.pages.dev",
+  "assets": {
+    "libv86.mjs": {
+      "url": "https://v64-2ys.pages.dev/build/libv86.mjs",
+      "size": 761192,
+      "sha256": "672bc48b6128a842b57faaef5ede62db39032fef8bc965d9e63af6d4ca503a74"
+    },
+    "v86.wasm": {
+      "url": "https://v64-2ys.pages.dev/build/v86.wasm",
+      "size": 2918241,
+      "sha256": "37be9a835537e23a3ae38e28b22a768254b56bb975eceb96ed0b5e1d4989bcc1"
+    },
+    "v86-fallback.wasm": {
+      "url": "https://v64-2ys.pages.dev/build/v86-fallback.wasm",
+      "size": 2941598,
+      "sha256": "fc013ffd34429ebbafd92430e1e92d83ead9fc61c7e9de2e11096363feae3668"
+    },
+    "v86-parallel.wasm": {
+      "url": "https://v64-2ys.pages.dev/build/v86-parallel.wasm",
+      "size": 2887532,
+      "sha256": "525b6096ce0dd4fe894b1df9a037fec4a34ec7e4049f510adc5edcc7bb3ad69c"
+    },
+    "cpu-worker.js": {
+      "url": "https://v64-2ys.pages.dev/build/cpu-worker.js",
+      "size": 770324,
+      "sha256": "583688be84ad585519f95c158031c394dfe16c703dd2e21f93e2d1a02149fb5c"
+    },
+    "vcpu-worker.js": {
+      "url": "https://v64-2ys.pages.dev/build/vcpu-worker.js",
+      "size": 771218,
+      "sha256": "55f957c177a132376155b22f451875a49782e9265791777452e294ac46d1960f"
+    },
+    "v86-bochs-vga.js": {
+      "url": "https://v64-2ys.pages.dev/build/v86-bochs-vga.js",
+      "size": 44376,
+      "sha256": "ce8415006ca38dc53bd807323fc01fcfc47e9d3c31b7aad3934636e4408d1984"
+    },
+    "v86-virtio-gpu.js": {
+      "url": "https://v64-2ys.pages.dev/build/v86-virtio-gpu.js",
+      "size": 803907,
+      "sha256": "5e054377d4ffb27fa4a5e98d59837cddf4dd0e71aba89cbdd95eb8910f2fe618"
+    },
+    "v86-vmware-svga.js": {
+      "url": "https://v64-2ys.pages.dev/build/v86-vmware-svga.js",
+      "size": 247385,
+      "sha256": "261eed7e2b3ed02c18a030089c67e733aabe77ad74c9681a3b972be1b18ab005"
+    },
+    "v86-hd-audio.js": {
+      "url": "https://v64-2ys.pages.dev/build/v86-hd-audio.js",
+      "size": 22888,
+      "sha256": "ed66370e5e87c7dec3e181b0980cd6ef976e5c05354a9179db5dd987031e59b4"
+    },
+    "v86-ne2k.js": {
+      "url": "https://v64-2ys.pages.dev/build/v86-ne2k.js",
+      "size": 20401,
+      "sha256": "9d855fa313b769f2f2b6b1dc283b6bd17500bfeb05371053e9105599fde822c9"
+    },
+    "v86-e1000.js": {
+      "url": "https://v64-2ys.pages.dev/build/v86-e1000.js",
+      "size": 29319,
+      "sha256": "50d50c0bd88581b0f5c7d871e35c1703cfb1b18a47759d915c6740565f5bbdc4"
+    },
+    "seabios.bin": {
+      "url": "https://v64-2ys.pages.dev/bios/seabios.bin",
+      "size": 131072,
+      "sha256": "73e3f359102e3a9982c35fce98eb7cd08f18303ac7f1ba6ebfbe6cdc1c244d98"
+    },
+    "vgabios.bin": {
+      "url": "https://v64-2ys.pages.dev/bios/vgabios.bin",
+      "size": 36352,
+      "sha256": "a4bc0d80cc3ca028c73dafa8fee396b8d054ce87ebd8abfbd31b06b437607880"
+    },
+    "glbridge/libv86-webgpu.js": {
+      "url": "https://v64-2ys.pages.dev/build/glbridge/libv86-webgpu.js",
+      "size": 2669644,
+      "sha256": "732152af9665bb9bdd7e4c99aaf22147a827688f5a28b8e2234a7f6042a5a720"
+    },
+    "glbridge/vx_naga.wasm": {
+      "url": "https://v64-2ys.pages.dev/build/glbridge/vx_naga.wasm",
+      "size": 1491737,
+      "sha256": "d96b6fa13625e92750a83d1b92838303b024e9e192a30f008ae47db9ab91c29e"
+    }
+  }
+}

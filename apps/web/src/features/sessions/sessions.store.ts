@@ -119,7 +119,14 @@ async function resolveUserMedia(
   mediaObjectUrls.set(sessionId, { url, controller });
   return {
     status: 'ready',
-    media: { kind: 'disk', url, size: bytes.size, format: descriptor.format },
+    media: {
+      kind: 'disk',
+      url,
+      size: bytes.size,
+      format: descriptor.format,
+      sourceId: `${systemId}:${descriptor.importedAt}`,
+      ...(descriptor.sha256 === undefined ? {} : { sha256: descriptor.sha256 }),
+    },
   };
 }
 

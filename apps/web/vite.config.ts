@@ -7,8 +7,10 @@ import { createDiskAssetMiddleware } from '../../scripts/lib/disk-asset-dev.mjs'
 // `process` is read through globalThis: no @types/node on the front end.
 const nodeEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
   ?.env;
-// Opt-in COOP/COEP (LUMIBOOT_COOP_COEP=1): not needed for v86 0.5.471, and COEP requires CORP everywhere.
-const crossOriginIsolation = nodeEnv?.LUMIBOOT_COOP_COEP === '1';
+// v64 uses SharedArrayBuffer to place guest cores in separate Workers. Set
+// LUMIBOOT_COOP_COEP=0 only for a deployment that cannot isolate its origin;
+// v64 then falls back to cooperative multicore on one host thread.
+const crossOriginIsolation = nodeEnv?.LUMIBOOT_COOP_COEP !== '0';
 
 // Prod sourcemaps: off by default, `1` = served, `hidden` = .map not referenced.
 const sourcemapSetting = nodeEnv?.LUMIBOOT_SOURCEMAP;

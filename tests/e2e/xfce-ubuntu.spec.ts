@@ -83,7 +83,7 @@ async function openXfceSession(page: Page): Promise<{ serial: Locator; state: Lo
   await page.locator('.os-card[data-id="ubuntu-18-i386"]').click();
   await expect(page).toHaveURL(/\/systems\/ubuntu-18-i386$/);
   await page.getByRole('button', { name: 'Choose variant' }).click();
-  await page.getByRole('button', { name: 'Ubuntu XFCE', exact: true }).click();
+  await page.getByRole('button', { name: /^Ubuntu XFCE\b/ }).click();
   // The dropdown does not navigate: the mother page stays displayed.
   await expect(page).toHaveURL(/\/systems\/ubuntu-18-i386$/);
   await page.getByRole('button', { name: 'Start session' }).click();

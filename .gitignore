@@ -127,4 +127,5 @@ LumiBoot-source.zip
 /docs/AGENT_BRIEF.md
 # v86 binaries and disks prepared outside the repo
 /apps/web/public/v86/
+/apps/web/public/v64/
 /apps/web/public/images/

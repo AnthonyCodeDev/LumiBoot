@@ -9,6 +9,14 @@ export interface OSFamilyDefinition {
 
 export const families = [
   {
+    id: 'alpine',
+    family: 'linux',
+    displayName: 'Alpine Linux',
+    iconUrl: '/icons/os/alpine.svg',
+    accent: '#4f93d2',
+    accentRgb: '79,147,210',
+  },
+  {
     id: 'debian',
     family: 'linux',
     displayName: 'Debian',

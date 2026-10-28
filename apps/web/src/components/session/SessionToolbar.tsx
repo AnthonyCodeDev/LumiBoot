@@ -1,7 +1,7 @@
 import type { OSDefinition } from '@lumiboot/contracts';
 import type { SessionSnapshot, VMState } from '@lumiboot/vm-core';
 import { Button } from '../ui/Button';
-import { engineShortLabels, getPrimaryLaunchProfile } from '../../lib/labels';
+import { engineShortLabels, getPrimaryLaunchProfile, systemVersionLabel } from '../../lib/labels';
 import { resolveNetworkProfile } from '../../config/runtime';
 import { useSessionsStore } from '../../features/sessions/sessions.store';
 
@@ -49,7 +49,7 @@ export function SessionToolbar({
         <div className="session-title">
           <h1>{system.displayName}</h1>
           <p>
-            {system.versionLabel} · {engineShortLabels[launchProfile.engineId]}
+            {systemVersionLabel(system)} · {engineShortLabels[launchProfile.engineId]}
           </p>
         </div>
       </div>

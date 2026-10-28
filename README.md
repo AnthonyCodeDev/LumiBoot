@@ -1,15 +1,23 @@
+<div align="center">
+
+<img src="apps/web/public/assets/banniere.svg" alt="Cornelius, le miroir intelligent de la famille" width="100%" />
+
 # LumiBoot
 
-**The first launcher that boots real x86 operating systems in a browser tab.**
+<h3>A universal platform for booting real operating systems directly in a browser tab.</h3>
 
-LumiBoot boots x86 operating systems inside a browser tab. The CPU is emulated in WebAssembly by
-v86, the firmware is a real BIOS, and disks are read over HTTP Range. No backend sits between the
-browser and the guest: the machine boots from BIOS to kernel to desktop, with networking when the
-selected mode provides it. No system image is shipped; you supply the media.
+LumiBoot is a browser-based operating system emulation platform designed to run a wide range of real operating systems, from legacy 32-bit environments to modern 64-bit systems. Powered by WebAssembly, it emulates hardware directly on the user's device, allowing operating systems to boot and run entirely inside a browser tab, without installation, server-side virtualization, or dedicated software.
+
+<p>
+  <img alt="Debian, Ubuntu and Windows systems" src="https://img.shields.io/badge/systems-Debian%20%7C%20Ubuntu%20%7C%20Windows-8b7cf6?style=flat-square" />
+  <a href="LICENSE"><img alt="LumiBoot Source-Available License 1.0" src="https://img.shields.io/badge/license-Source--Available%201.0-b39dff?style=flat-square" /></a>
+</p>
 
 [![CI](https://github.com/AnthonyCodeDev/LumiBoot/actions/workflows/ci.yml/badge.svg)](https://github.com/AnthonyCodeDev/LumiBoot/actions/workflows/ci.yml)
 [![Hygiene](https://github.com/AnthonyCodeDev/LumiBoot/actions/workflows/hygiene.yml/badge.svg)](https://github.com/AnthonyCodeDev/LumiBoot/actions/workflows/hygiene.yml)
 [![Security](https://github.com/AnthonyCodeDev/LumiBoot/actions/workflows/security.yml/badge.svg)](https://github.com/AnthonyCodeDev/LumiBoot/actions/workflows/security.yml)
+
+</div>
 
 ## Systems
 
@@ -20,18 +28,6 @@ selected mode provides it. No system image is shipped; you supply the media.
 | Windows 7      | Professional SP1 / Lite  | 1536 / 1024 MiB         | RAW disk provided by the operator |
 | Windows 10 x86 | 32-bit                   | 2048 MiB                | RAW disk provided by the operator |
 | Custom image   | ISO / IMG / RAW          | 512 MiB                 | disk media imported by the visitor |
-
-Windows 11, Fedora, Linux Mint and macOS are listed for information as **Not ready**: no engine
-or image is integrated for them yet.
-
-Ubuntu 18.04 LTS is built locally and validated by a real boot. One build script produces three
-variants (CLI, X11/Openbox, XFCE); each one was built, published under `apps/web/public/images/`
-and booted, so the three profiles carry `validated: true`. No image is distributed here. Build and
-smoke tests: [`images/ubuntu-18-i386/README.md`](images/ubuntu-18-i386/README.md).
-
-Without a registered image, a system is listed as unavailable. `Custom image` is the generic
-entry point for a `.iso`, `.img` or `.raw` you own: the file stays in the browser tab and is
-never uploaded.
 
 ## Requirements
 
@@ -101,13 +97,14 @@ The real boot tests need several GiB of media and stay opt-in: `VM_E2E_ASSETS=1 
 | `packages/catalog`      | images, profiles, engines, variants, availability                               |
 | `packages/vm-core`      | engine contracts, registry, lifecycle                                           |
 | `packages/provider-v86` | v86 integration, readiness, console, network                                    |
+| `packages/provider-v64` | v64 x86-64 JIT, Workers, WebGPU and OPFS persistence                            |
 | `packages/vm-assets`    | manifests, integrity, local disks                                               |
 | `packages/vm-storage`   | versioned storage, quotas, backends; implemented, not wired to the sessions yet |
 | `packages/vm-network`   | modes, profiles, capabilities, diagnostics                                      |
 | `images`                | build scripts and manifests; binaries ignored                                   |
 | `infra`                 | nginx, Docker dev, WISP relay                                                   |
 
-UI → `VMRegistry` → dynamic import of `provider-v86` → manifest → emulator. Stop calls `stop()` then `dispose()`. Design notes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+UI → `VMRegistry` → dynamic import of the selected provider → manifest/media → emulator. Stop calls `stop()` then `dispose()`. Design notes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/v64.md`](docs/v64.md).
 
 ## Network
 

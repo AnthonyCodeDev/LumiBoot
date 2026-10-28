@@ -74,6 +74,9 @@ importers:
       '@lumiboot/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@lumiboot/provider-v64':
+        specifier: workspace:*
+        version: link:../../packages/provider-v64
       '@lumiboot/provider-v86':
         specifier: workspace:*
         version: link:../../packages/provider-v86
@@ -133,6 +136,28 @@ importers:
       zod:
         specifier: ^4.6.7
         version: 4.6.7
+    devDependencies:
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
+  packages/provider-v64:
+    dependencies:
+      '@lumiboot/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@lumiboot/provider-v86':
+        specifier: workspace:*
+        version: link:../provider-v86
+      '@lumiboot/vm-assets':
+        specifier: workspace:*
+        version: link:../vm-assets
+      '@lumiboot/vm-core':
+        specifier: workspace:*
+        version: link:../vm-core
+      '@lumiboot/vm-network':
+        specifier: workspace:*
+        version: link:../vm-network
     devDependencies:
       typescript:
         specifier: ^5.6.3

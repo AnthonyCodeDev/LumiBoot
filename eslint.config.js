@@ -13,6 +13,8 @@ export default tseslint.config(
       'docs/**',
       'playwright-report/**',
       'test-results/**',
+      '.tmp/**',
+      'apps/web/public/v64/**',
       '**/*.config.js',
       '**/*.config.ts',
     ],

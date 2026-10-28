@@ -17,6 +17,13 @@ export const engines: Record<EngineId, EngineDefinition> = {
     description: '32-bit x86 emulator in WebAssembly, running in the visitor tab.',
     integrated: true,
   },
+  v64: {
+    id: 'v64',
+    label: 'v64 / WebAssembly JIT',
+    runtime: 'browser',
+    description: '64-bit x86 emulator with a WebAssembly JIT, Workers and optional WebGPU.',
+    integrated: true,
+  },
   'wasm-x86': {
     id: 'wasm-x86',
     label: 'WASM x86',

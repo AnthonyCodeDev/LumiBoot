@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { OSDefinition } from '@lumiboot/contracts';
-import { availabilityLabels } from '../../lib/labels';
+import { getVariantGroup } from '@lumiboot/catalog';
+import { availabilityLabels, systemVersionLabel } from '../../lib/labels';
 
 export interface SystemCardProps {
   system: OSDefinition;
@@ -16,6 +17,7 @@ function accentStyle(system: OSDefinition): CSSProperties {
 }
 
 export function SystemCard({ system, onOpen, muted = false }: SystemCardProps) {
+  const variants = getVariantGroup(system);
   return (
     <article
       className={muted ? 'os-card is-muted' : 'os-card'}
@@ -40,7 +42,7 @@ export function SystemCard({ system, onOpen, muted = false }: SystemCardProps) {
       </div>
       <div className="card-info">
         <h3>{system.displayName}</h3>
-        <p className="card-version">{system.versionLabel}</p>
+        <p className="card-version">{systemVersionLabel(system, variants)}</p>
       </div>
     </article>
   );

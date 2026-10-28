@@ -37,7 +37,9 @@ test.describe('Ubuntu 18.04 LTS i386 session (v86, real boot)', () => {
     // variant: it is selected EXPLICITLY to guarantee a text-mode boot with
     // VGA/tty1 login and no X session.
     await page.getByRole('button', { name: 'Choose variant' }).click();
-    await page.getByRole('button', { name: 'Ubuntu CLI', exact: true }).click();
+    // The option label carries the architecture suffix (`Ubuntu CLI · 32 bits`):
+    // the anchor still pins the exact variant instead of a loose substring.
+    await page.getByRole('button', { name: /^Ubuntu CLI\b/ }).click();
     await page.getByRole('button', { name: 'Start session' }).click();
     await expect(page).toHaveURL(/\/session\//);
 

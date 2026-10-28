@@ -18,11 +18,14 @@ import {
 } from '../lib/launch';
 import {
   availabilityLabels,
+  architectureLabels,
+  architectureSummary,
   bootDeviceLabels,
   engineLabels,
   familyLabels,
   getPrimaryLaunchProfile,
   hardwareNetworkLabels,
+  systemVersionLabel,
 } from '../lib/labels';
 import { NotFoundPage } from './NotFoundPage';
 
@@ -175,10 +178,10 @@ export function SystemPage() {
         <img src={base.iconUrl} alt="" />
         <div>
           <span className="drawer-family">
-            {familyLabels[base.family]} <span>·</span> {base.architecture.toUpperCase()}
+            {familyLabels[base.family]} <span>·</span> {architectureSummary(variants)}
           </span>
           <h1>
-            {base.displayName} <span>{base.versionLabel}</span>
+            {base.displayName} <span>{systemVersionLabel(base, variants)}</span>
           </h1>
           <p className="drawer-description">{base.description}</p>
           <div className="spec-box">
@@ -188,7 +191,7 @@ export function SystemPage() {
             </div>
             <div>
               <span>Architecture</span>
-              <strong>{selected.architecture}</strong>
+              <strong>{architectureLabels[selected.architecture]}</strong>
             </div>
             {memoryMiB !== undefined ? (
               <div>
@@ -381,9 +384,11 @@ export function SystemPage() {
                 variants={variants.map((variant) => ({
                   id: variant.id,
                   slug: variant.slug,
-                  name: variant.variantName
-                    ? `${base.displayName} ${variant.variantName}`
-                    : variant.displayName,
+                  name: `${
+                    variant.variantName
+                      ? `${base.displayName} ${variant.variantName}`
+                      : variant.displayName
+                  } · ${architectureLabels[variant.architecture]}`,
                 }))}
                 value={selected.id}
                 onSelect={(variantSlug) => {

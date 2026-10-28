@@ -36,6 +36,7 @@ const ISOLATED_PACKAGES = [
   'packages/vm-core',
   'packages/vm-network',
   'packages/provider-v86',
+  'packages/provider-v64',
   'packages/vm-assets',
   'packages/vm-storage',
   'packages/catalog',
@@ -87,10 +88,18 @@ const ALLOWED_INTERNAL_DEPS: Record<string, readonly string[]> = {
     '@lumiboot/vm-core',
     '@lumiboot/vm-network',
   ],
+  '@lumiboot/provider-v64': [
+    '@lumiboot/contracts',
+    '@lumiboot/provider-v86',
+    '@lumiboot/vm-assets',
+    '@lumiboot/vm-core',
+    '@lumiboot/vm-network',
+  ],
   '@lumiboot/web': [
     '@lumiboot/catalog',
     '@lumiboot/contracts',
     '@lumiboot/provider-v86',
+    '@lumiboot/provider-v64',
     '@lumiboot/vm-assets',
     '@lumiboot/vm-core',
     '@lumiboot/vm-network',
@@ -104,6 +113,7 @@ const ALLOWED_INTERNAL_DEPS: Record<string, readonly string[]> = {
  */
 const ENGINE_ARCHITECTURES: Record<EngineId, readonly Architecture[]> = {
   v86: ['i386', 'x86'],
+  v64: ['x86_64'],
   'wasm-x86': ['i386', 'x86'],
   'wasm-x86_64': ['x86_64'],
   'wasm-arm': ['arm', 'arm64'],
