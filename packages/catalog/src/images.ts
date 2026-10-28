@@ -57,9 +57,63 @@ export const images = [
     id: 'ubuntu-18-i386-image',
     familyId: 'ubuntu',
     architecture: 'i386',
-    requirements: ['Compatible i386 image', 'Boot tests'],
+    // CLI variant: same locally built rootfs, text console only.
+    imageRef: 'ubuntu-18-i386',
+    requirements: [
+      'Modern browser with WebAssembly (v86)',
+      'Ubuntu 18.04 LTS i386 rootfs built locally',
+      '512 MiB guest memory',
+      'HTTP Range transport of the ext4 image',
+    ],
     integrationNote:
-      'Old release kept for plausible browser compatibility. Image to be wired with the Debian batch.',
+      'Ubuntu 18.04.6 LTS (bionic) i386 rootfs built locally by ' +
+      'images/ubuntu-18-i386/build.sh with debootstrap against the bionic archive; ' +
+      'booted by v86 as bzimage + initrd + hda. Guest writes stay in memory for ' +
+      'the duration of the session. No image is distributed. Real boot proven by ' +
+      'the E2E suite (tests/e2e/session-ubuntu.spec.ts).',
+  },
+  {
+    id: 'ubuntu-18-i386-desktop-image',
+    familyId: 'ubuntu',
+    architecture: 'i386',
+    // Xorg + minimal window manager, 3 GiB ext4 rootfs built locally.
+    imageRef: 'ubuntu-18-i386-desktop',
+    requirements: [
+      'Modern browser with WebAssembly (v86)',
+      'Ubuntu 18.04 LTS i386 rootfs built locally',
+      'HTTP Range transport of the ext4 image',
+      'Enough memory (≥ 1 GiB)',
+      'Xorg framebuffer (/dev/fb0)',
+    ],
+    integrationNote:
+      'Graphical variant of Ubuntu 18.04 LTS (bionic) i386: 3 GiB ext4 rootfs ' +
+      'built locally by images/ubuntu-18-i386/build.sh with debootstrap against ' +
+      'the bionic archive, plus a kernel and an initrd. Booted by v86 as bzimage + ' +
+      'initrd + hda; guest writes stay in memory for the duration of the session. ' +
+      'No image is distributed. Real Xorg + Openbox boot proven by the E2E suite ' +
+      '(tests/e2e/desktop-ubuntu.spec.ts).',
+  },
+  {
+    id: 'ubuntu-18-i386-xfce-image',
+    familyId: 'ubuntu',
+    architecture: 'i386',
+    // Xorg + XFCE, 4 GiB ext4 rootfs built locally.
+    imageRef: 'ubuntu-18-i386-xfce',
+    requirements: [
+      'Modern browser with WebAssembly (v86)',
+      'Ubuntu 18.04 LTS i386 rootfs built locally',
+      'HTTP Range transport of the ext4 image',
+      'Enough memory (≥ 1 GiB)',
+      'Xorg framebuffer (/dev/fb0)',
+      'XFCE disk (~4 GiB)',
+    ],
+    integrationNote:
+      'Ubuntu 18.04 LTS (bionic) i386 variant with the full XFCE desktop: 4 GiB ' +
+      'ext4 rootfs built locally by images/ubuntu-18-i386/build.sh with debootstrap ' +
+      'against the bionic archive, plus a kernel and an initrd. Booted by v86 as bzimage ' +
+      '+ initrd + hda; guest writes stay in memory for the duration of the session. ' +
+      'No image is distributed. Real Xorg + XFCE boot proven by the E2E suite ' +
+      '(tests/e2e/xfce-ubuntu.spec.ts).',
   },
   {
     id: 'fedora-workstation-image',

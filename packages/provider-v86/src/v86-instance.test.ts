@@ -181,7 +181,7 @@ describe('V86Instance', () => {
     expect(events).not.toContainEqual({ type: 'progress', phase: 'guest-ready' });
   });
 
-  it('timeout without marker: BOOT_TIMEOUT, never running, console preserved', async () => {
+  it('timeout without marker: diagnostic only, never running, console preserved', async () => {
     vi.useFakeTimers();
     try {
       const emulator = new FakeV86();
@@ -207,36 +207,32 @@ describe('V86Instance', () => {
       emulator.emit('emulator-ready', undefined);
       await vi.advanceTimersByTimeAsync(1000);
 
-      // No simulated `running`: the failure is explicit and the state unverified.
+      // Expiry is a diagnostic: no simulated `running`, no fatal error.
+      expect(events).toContainEqual({ type: 'progress', phase: 'boot-timeout' });
+      expect(events.some((event) => event.type === 'error')).toBe(false);
       expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(
         false,
       );
-      expect(events).toEqual(
-        expect.arrayContaining([
-          { type: 'progress', phase: 'boot-timeout' },
-          expect.objectContaining({ type: 'error', code: 'BOOT_TIMEOUT' }),
-        ]),
-      );
       expect(instance.readiness).toBe('unverified');
 
-      // The console and the emulator stay alive: no cleanup.
+      // The console and the emulator stay alive: no cleanup, no stop.
       expect(detach).not.toHaveBeenCalled();
       expect(emulator.calls.stop).toBe(0);
       expect(emulator.calls.destroy).toBe(0);
       expect(emulator.listenerCount('serial0-output-byte')).toBe(1);
 
-      // A LATE proof must never produce a `running`.
-      emitMarker(emulator);
+      // The timeout is not re-armed: a single diagnostic marker.
       await vi.advanceTimersByTimeAsync(5000);
-      expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(
-        false,
-      );
+      expect(
+        events.filter((event) => event.type === 'progress' && event.phase === 'boot-timeout'),
+      ).toHaveLength(1);
+      expect(emulator.calls.stop).toBe(0);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('disk-boot: timeout without a disk read => BOOT_TIMEOUT labeled disk', async () => {
+  it('disk-boot: timeout is diagnostic only, a later real disk read still proves running', async () => {
     vi.useFakeTimers();
     try {
       const emulator = new FakeV86();
@@ -259,19 +255,26 @@ describe('V86Instance', () => {
       emulator.emit('emulator-ready', undefined);
       await vi.advanceTimersByTimeAsync(1000);
 
-      const error = events.find((event) => event.type === 'error');
-      expect(error).toMatchObject({ code: 'BOOT_TIMEOUT' });
-      // The message describes the real disk read, not a guest marker.
-      expect(error && error.type === 'error' ? error.message : '').toMatch(/disk/i);
+      expect(events).toContainEqual({ type: 'progress', phase: 'boot-timeout' });
+      expect(events.some((event) => event.type === 'error')).toBe(false);
       expect(events.some((event) => event.type === 'state' && event.state === 'running')).toBe(
         false,
       );
+      // The disk listener is still wired: no cleanup happened.
+      expect(emulator.listenerCount('ide-read-end')).toBe(1);
+      expect(emulator.calls.stop).toBe(0);
+
+      // A real hda read arriving after the timeout is still a valid proof.
+      emulator.emit('ide-read-end', [0, 512, 1]);
+      const running = events.filter((event) => event.type === 'state' && event.state === 'running');
+      expect(running).toHaveLength(1);
+      expect(events).toContainEqual({ type: 'progress', phase: 'disk-boot' });
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('does not emit BOOT_TIMEOUT if the marker arrives before the delay', async () => {
+  it('does not publish the boot-timeout diagnostic if the marker arrives before the delay', async () => {
     vi.useFakeTimers();
     try {
       const emulator = new FakeV86();
@@ -292,6 +295,9 @@ describe('V86Instance', () => {
 
       expect(events.some((event) => event.type === 'error')).toBe(false);
       expect(
+        events.some((event) => event.type === 'progress' && event.phase === 'boot-timeout'),
+      ).toBe(false);
+      expect(
         events.filter((event) => event.type === 'state' && event.state === 'running'),
       ).toHaveLength(1);
     } finally {
@@ -299,7 +305,7 @@ describe('V86Instance', () => {
     }
   });
 
-  it('emits no running after BOOT_TIMEOUT, even if the marker arrives', async () => {
+  it('a late marker after the timeout is still a proof: running is emitted once', async () => {
     vi.useFakeTimers();
     try {
       const emulator = new FakeV86();
@@ -315,17 +321,53 @@ describe('V86Instance', () => {
       instance.subscribe((event) => events.push(event));
 
       emulator.emit('emulator-ready', undefined);
-      // Failure at expiry: unverified state…
+      // Timeout first: diagnostic only, the VM stays alive…
       await vi.advanceTimersByTimeAsync(1000);
-      // …then the marker arrives late: never a `running`.
+      expect(events).toContainEqual({ type: 'progress', phase: 'boot-timeout' });
+
+      // …then the real marker arrives late and is still a valid proof.
       emitMarker(emulator);
       await vi.advanceTimersByTimeAsync(2000);
 
-      expect(events.filter((event) => event.type === 'error')).toHaveLength(1);
+      expect(events.some((event) => event.type === 'error')).toBe(false);
       expect(
         events.filter((event) => event.type === 'state' && event.state === 'running'),
-      ).toHaveLength(0);
-      expect(instance.readiness).toBe('unverified');
+      ).toHaveLength(1);
+      expect(events).toContainEqual({ type: 'progress', phase: 'guest-ready' });
+      expect(instance.readiness).toBe('guest-ready');
+      expect(emulator.calls.stop).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never emits a second running, even if the marker is replayed after the timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const emulator = new FakeV86();
+      const instance = new V86Instance({
+        providerId: 'v86',
+        systemId: 'sample',
+        emulator: emulator as unknown as V86,
+        console: createConsoleStub(),
+        readiness: { marker: GUEST_READY_MARKER, timeoutMs: 1000 },
+      });
+      instance.wire();
+      const events: SessionEvent[] = [];
+      instance.subscribe((event) => events.push(event));
+
+      emulator.emit('emulator-ready', undefined);
+      await vi.advanceTimersByTimeAsync(1000);
+      emitMarker(emulator);
+      emitMarker(emulator);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(
+        events.filter((event) => event.type === 'state' && event.state === 'running'),
+      ).toHaveLength(1);
+      expect(
+        events.filter((event) => event.type === 'progress' && event.phase === 'guest-ready'),
+      ).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }

@@ -16,7 +16,10 @@ const debianXfce = getSystemById('debian-12-i386-xfce')!;
 const windowsMother = getSystemById('windows-7-x86')!;
 const windowsPro = getSystemById('windows-7-pro-sp1-x86')!;
 const windows10Mother = getSystemById('windows-10-x86')!;
-const ubuntu = getSystemById('ubuntu-18-i386')!;
+const ubuntuMother = getSystemById('ubuntu-18-i386')!;
+const ubuntuDesktop = getSystemById('ubuntu-18-i386-desktop')!;
+const ubuntuXfce = getSystemById('ubuntu-18-i386-xfce')!;
+const macosSequoia = getSystemById('macos-sequoia')!;
 
 describe('Debian variant group', () => {
   it('sorts the best variant first (XFCE → X11 → CLI)', () => {
@@ -59,6 +62,57 @@ describe('Debian variant group', () => {
   it('always resolves a child variant by its id and slug', () => {
     expect(getSystemById('debian-12-i386-xfce')).not.toBeNull();
     expect(getSystemById('debian-12-i386-xfce')?.id).toBe('debian-12-i386-xfce');
+  });
+});
+
+describe('Ubuntu variant group', () => {
+  it('sorts the best variant first (XFCE → X11 → CLI)', () => {
+    const group = getVariantGroup(ubuntuMother);
+    expect(group).toHaveLength(3);
+    expect(group.map((system) => system.id)).toEqual([
+      'ubuntu-18-i386-xfce',
+      'ubuntu-18-i386-desktop',
+      'ubuntu-18-i386',
+    ]);
+  });
+
+  it('finds the same group from any member', () => {
+    const expected = ['ubuntu-18-i386-xfce', 'ubuntu-18-i386-desktop', 'ubuntu-18-i386'];
+    expect(getVariantGroup(ubuntuDesktop).map((system) => system.id)).toEqual(expected);
+    expect(getVariantGroup(ubuntuXfce).map((system) => system.id)).toEqual(expected);
+  });
+
+  it('finds the same parent from any child', () => {
+    expect(getVariantParent(ubuntuDesktop).id).toBe('ubuntu-18-i386');
+    expect(getVariantParent(ubuntuXfce).id).toBe('ubuntu-18-i386');
+    expect(getVariantParent(ubuntuMother).id).toBe('ubuntu-18-i386');
+  });
+
+  it('exposes the effective parent id and the variant label', () => {
+    expect(getVariantParentId(ubuntuDesktop)).toBe('ubuntu-18-i386');
+    expect(getVariantParentId(ubuntuXfce)).toBe('ubuntu-18-i386');
+    expect(getVariantParentId(ubuntuMother)).toBe('ubuntu-18-i386');
+    expect(ubuntuMother.variantGroupId).toBeUndefined();
+    expect(ubuntuMother.variantName).toBe('CLI');
+    expect(ubuntuDesktop.variantName).toBe('X11');
+    expect(ubuntuXfce.variantName).toBe('XFCE');
+  });
+
+  it('exposes an ascending variantOrder (XFCE < X11 < CLI)', () => {
+    expect(ubuntuXfce.variantOrder).toBe(1);
+    expect(ubuntuDesktop.variantOrder).toBe(2);
+    expect(ubuntuMother.variantOrder).toBe(3);
+  });
+
+  it('always resolves a child variant by its id', () => {
+    expect(getSystemById('ubuntu-18-i386-desktop')?.id).toBe('ubuntu-18-i386-desktop');
+    expect(getSystemById('ubuntu-18-i386-xfce')?.id).toBe('ubuntu-18-i386-xfce');
+  });
+
+  it('selects XFCE as the default variant of the group', () => {
+    expect(getDefaultVariant(ubuntuMother).id).toBe('ubuntu-18-i386-xfce');
+    expect(getDefaultVariant(ubuntuDesktop).id).toBe('ubuntu-18-i386-xfce');
+    expect(getDefaultVariant(ubuntuXfce).id).toBe('ubuntu-18-i386-xfce');
   });
 });
 
@@ -121,7 +175,7 @@ describe('getDefaultVariant', () => {
   });
 
   it('returns the system itself when it is standalone', () => {
-    expect(getDefaultVariant(ubuntu).id).toBe('ubuntu-18-i386');
+    expect(getDefaultVariant(windows10Mother).id).toBe('windows-10-x86');
   });
 });
 
@@ -132,6 +186,8 @@ describe('getDisplaySystems', () => {
     expect(display.some((system) => system.id === 'debian-12-i386-desktop')).toBe(false);
     expect(display.some((system) => system.id === 'debian-12-i386-xfce')).toBe(false);
     expect(display.some((system) => system.id === 'windows-7-pro-sp1-x86')).toBe(false);
+    expect(display.some((system) => system.id === 'ubuntu-18-i386-desktop')).toBe(false);
+    expect(display.some((system) => system.id === 'ubuntu-18-i386-xfce')).toBe(false);
   });
 
   it('keeps the Debian parent, the Windows 7 parent and the standalone systems', () => {
@@ -142,10 +198,13 @@ describe('getDisplaySystems', () => {
     expect(ids).not.toContain('windows-7-pro-sp1-x86');
     // Windows 10 x86 is standalone.
     expect(ids).toContain('windows-10-x86');
+    // The displayed Ubuntu card is the parent, not the desktop children.
     expect(ids).toContain('ubuntu-18-i386');
+    expect(ids).not.toContain('ubuntu-18-i386-desktop');
+    expect(ids).not.toContain('ubuntu-18-i386-xfce');
     expect(ids).toContain('macos-sequoia');
-    // Three children folded in: 2 Debian, 1 Windows 7.
-    expect(getDisplaySystems()).toHaveLength(systems.length - 3);
+    // Five children folded in: 2 Debian, 1 Windows 7, 2 Ubuntu.
+    expect(getDisplaySystems()).toHaveLength(systems.length - 5);
   });
 });
 
@@ -164,7 +223,13 @@ describe('hasVariants', () => {
     expect(hasVariants(windows10Mother)).toBe(false);
   });
 
+  it('is true for Ubuntu 18.04 (parent as well as children)', () => {
+    expect(hasVariants(ubuntuMother)).toBe(true);
+    expect(hasVariants(ubuntuDesktop)).toBe(true);
+    expect(hasVariants(ubuntuXfce)).toBe(true);
+  });
+
   it('is false for a standalone system', () => {
-    expect(hasVariants(ubuntu)).toBe(false);
+    expect(hasVariants(macosSequoia)).toBe(false);
   });
 });

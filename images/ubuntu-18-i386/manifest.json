@@ -1,0 +1,20 @@
+{
+  "$comment": "Deliberately invalid versioned sentinel: the image is not built, no file is published and no checksum is computed.",
+  "ref": "ubuntu-18-i386",
+  "os": "Ubuntu",
+  "release": "18.04 LTS (bionic)",
+  "architecture": "i386",
+  "engine": "v86",
+  "engineVersion": "not pinned",
+  "memoryMiB": 512,
+  "vgaMemoryMiB": 8,
+  "license": "Ubuntu — free software, see /usr/share/doc/*/copyright (Ubuntu licensing)",
+  "provenance": "not documented (debootstrap against archive.ubuntu.com; no ISO is distributed)",
+  "files": {},
+  "status": "not-built",
+  "notes": [
+    "The image binary is never committed to the repository.",
+    "Every published file carries its sha256 and its size, filled in during the build.",
+    "status only becomes 'ready' after the full smoke test."
+  ]
+}

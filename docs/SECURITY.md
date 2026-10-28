@@ -43,7 +43,7 @@ Security headers come from `infra/nginx/security-headers.conf`. COOP/COEP are op
 
 - `/downloads/`: strict static files, no SPA fallback, so a missing file is a real 404; `Accept-Ranges`, compression off to preserve `206`; `/downloads/manifest.json` as `application/json` with `no-store`.
 - v86 WASM as `application/wasm`, no fallback under `/v86/`.
-- `/images/`: the free Debian disks over HTTP Range, no index and no fallback. Proprietary and user media are forbidden in the webroot: Nginx 404 block on `^/images/.*(windows|winxp|winvista|win[0-9])`, plus `tests/webroot-assets.test.ts` on `apps/web/public/` and `apps/web/dist/`.
+- `/images/`: the free Debian and Ubuntu disks over HTTP Range, no index and no fallback. Proprietary and user media are forbidden in the webroot: Nginx 404 block on `^/images/.*(windows|winxp|winvista|win[0-9])`, plus `tests/webroot-assets.test.ts` on `apps/web/public/` and `apps/web/dist/`, whose allowlist accepts only the `/^debian-/i` and `/^ubuntu-/i` disk refs.
 
 ## Reporting a vulnerability
 

@@ -1,0 +1,11 @@
+# ~/.bash_profile: starts the XFCE session on tty1 after the autologin of the
+# unprivileged account. The serial console keeps a plain shell.
+if [ -f "$HOME/.profile" ]; then
+  . "$HOME/.profile"
+fi
+
+if [ -z "${DISPLAY:-}" ] \
+  && [ "$(tty 2>/dev/null)" = "/dev/tty1" ] \
+  && command -v startx >/dev/null 2>&1; then
+  exec /usr/local/bin/lumiboot-startx
+fi

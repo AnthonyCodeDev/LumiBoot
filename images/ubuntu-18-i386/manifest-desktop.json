@@ -1,0 +1,21 @@
+{
+  "$comment": "Deliberately invalid versioned sentinel describing the format expected by @lumiboot/vm-assets (ensureImageManifest) for the desktop flavor. `files` is empty and the `$comment`/`status`/`notes` keys are rejected by the strict schema: this file can never simulate the presence of the image. The usable manifest is produced by build.sh (FLAVOR=desktop) then published into apps/web/public/images/ubuntu-18-i386-desktop/ (a Git-ignored directory), where a real boot validates it.",
+  "ref": "ubuntu-18-i386-desktop",
+  "os": "Ubuntu",
+  "release": "18.04 LTS (bionic)",
+  "architecture": "i386",
+  "engine": "v86",
+  "engineVersion": "not pinned",
+  "memoryMiB": 1024,
+  "vgaMemoryMiB": 16,
+  "license": "Ubuntu — free software, see /usr/share/doc/*/copyright (Ubuntu licensing)",
+  "provenance": "not documented (debootstrap against archive.ubuntu.com; no ISO is distributed)",
+  "files": {},
+  "status": "not-built",
+  "notes": [
+    "This file is a versioned template; the usable manifest lives in the `public` directory (Git-ignored) and a real boot validates it.",
+    "The image binaries are never committed to the repository.",
+    "The sha256 and size of disk/bzimage/initrd are filled in during the real build.",
+    "The catalog references the image (imageRef set) and availability stays derived from a validated boot (the profile's `validated`)."
+  ]
+}

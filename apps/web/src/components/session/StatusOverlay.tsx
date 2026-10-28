@@ -15,6 +15,24 @@ export interface StatusOverlayProps {
 const SERIAL_POLL_MS = 400;
 /** Number of log lines kept on screen. */
 const LOG_LINE_COUNT = 3;
+/**
+ * Loading veil window, measured from mount. Past it the real UI (CLI console or
+ * graphical screen) is shown, whatever the boot state: a slow boot (software
+ * emulation) must never hide a live console behind a blocked loading screen.
+ */
+export const BOOT_VEIL_MS = 5_000;
+
+/** `true` during the first `BOOT_VEIL_MS` only; the window never reopens. */
+function useBootVeil(): boolean {
+  const [expired, setExpired] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setExpired(true), BOOT_VEIL_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return !expired;
+}
 
 /** Last non-empty serial lines; v86 writes into `.value`, even when hidden. */
 function readSerialTail(container: HTMLElement | null): string[] {
@@ -68,6 +86,8 @@ function SessionLogs({ consoleRef, fallback }: SessionLogsProps) {
 
 export function StatusOverlay({ session, system, consoleRef }: StatusOverlayProps) {
   const launchProfile = getPrimaryLaunchProfile(system);
+  // Called before every early return so the hook order never changes.
+  const veilVisible = useBootVeil();
 
   if (session.state === 'error') {
     const mediaRequired = session.error?.code === 'MEDIA_REQUIRED';
@@ -124,6 +144,9 @@ export function StatusOverlay({ session, system, consoleRef }: StatusOverlayProp
   }
 
   const statusText = statusTextForSession(session);
+
+  // preparing / downloading / booting: only the time-boxed veil, then nothing.
+  if (!veilVisible) return null;
 
   return (
     <div className="status-overlay" role="status" aria-live="polite">

@@ -33,12 +33,10 @@ export const V86_PROGRESS = {
   bootTimeout: 'boot-timeout',
 } as const;
 
-/** Error code published when no boot proof arrives within the delay. */
-export const V86_BOOT_TIMEOUT_CODE = 'BOOT_TIMEOUT';
-
 /**
- * `running` is emitted once, only on the proof declared by the profile; a
- * timeout publishes `BOOT_TIMEOUT` and leaves the guest unverified.
+ * `running` is emitted once, only on the proof declared by the profile. A
+ * timeout only publishes the `boot-timeout` diagnostic: it never stops the VM
+ * and a late proof is still accepted.
  */
 export class V86Instance implements VMInstance {
   readonly id: string;
@@ -62,7 +60,11 @@ export class V86Instance implements VMInstance {
   #stopSignalled = false;
   #disposed = false;
   #runningEmitted = false;
-  #bootFailed = false;
+  /**
+   * Diagnostic only: the delay for the boot proof expired. It never blocks a
+   * later proof and never issues a stop.
+   */
+  #bootTimedOut = false;
   #readinessStage: V86ReadinessStage = 'idle';
   #readyTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -166,7 +168,7 @@ export class V86Instance implements VMInstance {
 
   /** Emits `running` once, for the profile-declared proof only. */
   #emitRunning(proof: 'guest-marker' | 'disk-boot'): void {
-    if (this.#runningEmitted || this.#bootFailed || this.#stopping || this.#disposed) return;
+    if (this.#runningEmitted || this.#stopping || this.#disposed) return;
     this.#runningEmitted = true;
     this.#clearReadyTimeout();
     this.#readinessStage = 'guest-ready';
@@ -191,39 +193,30 @@ export class V86Instance implements VMInstance {
   };
 
   /**
-   * On expiry without proof, `BOOT_TIMEOUT` is published and the console stays
-   * alive for diagnostics.
+   * On expiry without proof, only the `boot-timeout` diagnostic is published:
+   * the VM and its console stay alive and the session stays `booting`.
    */
   #armReadyTimeout(): void {
     if (this.#readyTimer !== null) return;
     this.#readyTimer = setTimeout(() => {
       this.#readyTimer = null;
-      if (this.#disposed || this.#stopping || this.#bootFailed || this.#detector.detected) {
+      if (this.#disposed || this.#stopping || this.#bootTimedOut || this.#detector.detected) {
         return;
       }
-      this.#bootTimedOut();
+      this.#publishBootTimeout();
     }, this.#detector.timeoutMs);
   }
 
-  /** Freezes the guest as `unverified`; the screen stays displayed. */
-  #bootTimedOut(): void {
-    this.#bootFailed = true;
+  /**
+   * Diagnostic only: never fatal, never re-armed. The guest stays `unverified`
+   * but a proof arriving afterwards still triggers `running`, so no `running`
+   * is ever produced without a real proof.
+   */
+  #publishBootTimeout(): void {
+    if (this.#bootTimedOut) return;
+    this.#bootTimedOut = true;
     this.#readinessStage = 'unverified';
     this.#emit({ type: 'progress', phase: V86_PROGRESS.bootTimeout });
-    this.#emit({
-      type: 'error',
-      code: V86_BOOT_TIMEOUT_CODE,
-      message: this.#describeBootTimeout(),
-    });
-  }
-
-  #describeBootTimeout(): string {
-    const seconds = Math.round(this.#detector.timeoutMs / 1000);
-    return (
-      `Boot proof missing after ${seconds}s: ` +
-      `${this.#detector.describeExpectedProof()} was not observed. ` +
-      'The guest boot stays NOT verified (no simulated "running" state).'
-    );
   }
 
   #clearReadyTimeout(): void {
@@ -242,14 +235,14 @@ export class V86Instance implements VMInstance {
   }
 
   readonly #onSerialByte = (byte: number): void => {
-    if (this.#disposed || this.#stopping || this.#bootFailed) return;
+    if (this.#disposed || this.#stopping) return;
     if (this.#detector.pushByte(byte)) {
       this.#emitRunning('guest-marker');
     }
   };
 
   readonly #onScreenChar = (arg: V86Event['screen-put-char']): void => {
-    if (this.#disposed || this.#stopping || this.#bootFailed) return;
+    if (this.#disposed || this.#stopping) return;
     if (this.#detector.pushByte(arg[2])) {
       this.#emitRunning('guest-marker');
     }
@@ -260,7 +253,7 @@ export class V86Instance implements VMInstance {
    * treated as a guest marker.
    */
   readonly #onDiskRead = (arg: V86Event['ide-read-end']): void => {
-    if (this.#disposed || this.#stopping || this.#bootFailed) return;
+    if (this.#disposed || this.#stopping) return;
     const [channelNr, byteCount] = arg;
     if (channelNr !== 0 || byteCount <= 0) return;
     if (this.#detector.markDiskBoot()) {

@@ -59,6 +59,10 @@ const definitions: unknown = images.map((image: SystemImageDefinition) => {
       configuration: launchProfile.configuration,
       hardwareProfile: launchProfile.hardwareProfile,
       readiness: launchProfile.readiness,
+      // Conditional spread: never introduce an `undefined` key.
+      ...(launchProfile.displayMode !== undefined
+        ? { displayMode: launchProfile.displayMode }
+        : {}),
     })),
     requirements: [...image.requirements],
     accent: family.accent,

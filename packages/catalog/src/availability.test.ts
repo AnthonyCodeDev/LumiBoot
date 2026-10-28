@@ -81,7 +81,8 @@ describe('catalog: consistent effective availability', () => {
   });
 
   it('keeps the other systems at planned', () => {
-    expect(getSystemById('ubuntu-18-i386')?.availability).toBe('planned');
+    // Every Ubuntu 18.04 variant (CLI, X11, XFCE) is now proven by a real boot;
+    // the systems below are still wired but not validated.
     expect(getSystemById('fedora-workstation')?.availability).toBe('planned');
     expect(getSystemById('macos-sequoia')?.availability).toBe('planned');
   });
@@ -94,9 +95,93 @@ describe('catalog: consistent effective availability', () => {
   });
 
   it('does not make a system without a referenced image available', () => {
+    // Linux Mint has no published media (`imageRef` undefined): it can never be ready.
+    const mint = getSystemById('mint-x64');
+    expect(mint?.imageRef).toBeUndefined();
+    expect(mint?.availability).not.toBe('ready');
+  });
+});
+
+describe('catalog: Ubuntu 18.04 i386 (published image, CLI boot proven)', () => {
+  it('publishes its locally built image and is `ready` once the CLI boot is proven', () => {
     const ubuntu = getSystemById('ubuntu-18-i386');
-    expect(ubuntu?.imageRef).toBeUndefined();
-    expect(ubuntu?.availability).not.toBe('ready');
+    expect(ubuntu?.imageRef).toBe('ubuntu-18-i386');
+    expect(ubuntu?.mediaStrategy).toBe('bundled');
+    // The CLI profile was booted by the E2E suite: one valid candidate suffices.
+    expect(ubuntu?.availability).toBe('ready');
+  });
+
+  it('keeps the CLI profile of the group validated', () => {
+    // `validated` lives on the catalog definitions: follow it, never declare.
+    const cli = launchProfiles.find((candidate) => candidate.id === 'ubuntu-18-i386');
+    expect(cli?.validated).toBe(true);
+  });
+});
+
+describe('catalog: Ubuntu 18.04 i386 X11 flavor (published image + validated boot)', () => {
+  it('exposes the graphical profile with its dedicated Desktop marker', () => {
+    const desktop = getSystemById('ubuntu-18-i386-desktop');
+    const profile = desktop?.launchProfiles[0];
+    expect(profile?.engineId).toBe('v86');
+    expect(profile?.executionMode).toBe('browser');
+    expect(profile?.minMemoryMiB).toBe(1024);
+    expect(profile?.readiness?.marker).toBe('LUMIBOOT_DESKTOP_READY:ubuntu-18-i386-desktop');
+    expect(profile?.hardwareProfile?.network).toBe('virtio');
+  });
+
+  it('becomes available: published image (`imageRef`) + real validated graphical boot', () => {
+    const desktop = getSystemById('ubuntu-18-i386-desktop');
+    const profile = launchProfiles.find((candidate) => candidate.id === 'ubuntu-18-i386-desktop');
+    // Published image with a proven Xorg + Openbox boot.
+    expect(desktop?.imageRef).toBe('ubuntu-18-i386-desktop');
+    expect(profile?.validated).toBe(true);
+    expect(desktop?.availability).toBe('ready');
+  });
+});
+
+describe('catalog: Ubuntu 18.04 i386 XFCE flavor (published image + validated boot)', () => {
+  it('exposes the XFCE graphical profile with its dedicated Desktop marker', () => {
+    const xfce = getSystemById('ubuntu-18-i386-xfce');
+    const profile = xfce?.launchProfiles[0];
+    expect(profile?.engineId).toBe('v86');
+    expect(profile?.executionMode).toBe('browser');
+    expect(profile?.minMemoryMiB).toBe(1024);
+    expect(profile?.readiness?.marker).toBe('LUMIBOOT_DESKTOP_READY:ubuntu-18-i386-xfce');
+    expect(profile?.hardwareProfile?.network).toBe('virtio');
+  });
+
+  it('becomes available: published image (`imageRef`) + real validated graphical boot', () => {
+    const xfce = getSystemById('ubuntu-18-i386-xfce');
+    const profile = launchProfiles.find((candidate) => candidate.id === 'ubuntu-18-i386-xfce');
+    // Published image with a proven Xorg + XFCE boot.
+    expect(xfce?.imageRef).toBe('ubuntu-18-i386-xfce');
+    expect(profile?.validated).toBe(true);
+    expect(xfce?.availability).toBe('ready');
+  });
+});
+
+describe('catalog: Ubuntu 18.04 i386 group aggregate', () => {
+  it('stays ready with every variant proven on its own image/profile/engine triple', () => {
+    const ids = ['ubuntu-18-i386', 'ubuntu-18-i386-desktop', 'ubuntu-18-i386-xfce'] as const;
+    const candidates: SystemAvailabilityFacts[] = ids.map((id) => {
+      const system = getSystemById(id);
+      const definition = launchProfiles.find((candidate) => candidate.id === id);
+      const profile = system?.launchProfiles[0];
+      return {
+        hasImage: system?.imageRef !== undefined,
+        hasCompatibleProfile: profile?.executionMode === 'browser',
+        engineIntegrated: profile ? isEngineIntegrated(profile.engineId) : false,
+        validated: definition?.validated === true,
+      };
+    });
+    // No candidate is missing a fact: the group is `ready`, not a false positive.
+    expect(candidates.every((facts) => facts.validated && facts.hasImage)).toBe(true);
+    expect(getAggregatedAvailability(candidates)).toBe('ready');
+  });
+
+  it('would drop to planned if a single variant were not proven', () => {
+    // Guards the aggregation: one unproven candidate alone is not enough.
+    expect(getAggregatedAvailability([{ ...allFacts, validated: false }])).toBe('planned');
   });
 });
 

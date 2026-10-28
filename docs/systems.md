@@ -5,6 +5,9 @@
 | `debian-12-i386`         | Debian 12 CLI                  | 512 MiB   | built rootfs        | `LUMIBOOT_GUEST_READY`   |
 | `debian-12-i386-desktop` | Debian 12 X11/Openbox          | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
 | `debian-12-i386-xfce`    | Debian 12 XFCE                 | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
+| `ubuntu-18-i386`         | Ubuntu 18.04 CLI               | 512 MiB   | built rootfs        | `LUMIBOOT_GUEST_READY`   |
+| `ubuntu-18-i386-desktop` | Ubuntu 18.04 X11/Openbox       | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
+| `ubuntu-18-i386-xfce`    | Ubuntu 18.04 XFCE              | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
 | `windows-7-pro-sp1-x86`  | Windows 7 Professional SP1 x86 | 1536 MiB  | operator RAW disk   | `disk-boot`              |
 | `windows-7-x86`          | Windows 7 Lite x86             | 1024 MiB  | operator RAW disk   | `disk-boot`              |
 | `windows-10-x86`         | Windows 10 x86 32-bit          | 2048 MiB  | operator RAW disk   | `disk-boot`              |
@@ -12,7 +15,14 @@
 
 No disk, ISO or license key is shipped by this repository. This page is the index and the commands; details live next to each image under `images/<ref>/`.
 
-Windows 11, Ubuntu 18.04, Fedora, Linux Mint and macOS are catalogued but not developed: their x86-64 or ARM engine is not integrated, so they stay `planned` ("Not ready") with nothing to import.
+Windows 11, Fedora, Linux Mint and macOS are catalogued but not developed: their x86-64 or ARM engine is not integrated, so they stay `planned` ("Not ready") with nothing to import.
+
+Ubuntu 18.04 LTS follows the Debian pipeline — one script, three variants — and all three are built
+locally, published into the Git-ignored `apps/web/public/images/<ref>/` directories and validated by
+a real boot (`validated: true`, availability `ready`), with XFCE as the default variant. Nothing is
+distributed here: rebuild the media from
+[`images/ubuntu-18-i386/README.md`](../images/ubuntu-18-i386/README.md); see
+[Ubuntu 18.04 LTS](#ubuntu-1804-lts).
 
 ## Debian 12
 
@@ -27,6 +37,38 @@ sudo FLAVOR=xfce ./images/debian-12-i386/build.sh     # XFCE
 Outputs land in `build/`, `build-desktop/` and `build-xfce/`. Copy `rootfs.img`, `vmlinuz-686`, `initrd.img` and `manifest.json` into `apps/web/public/images/<ref>/`. `<ref>` is `debian-12-i386`, `debian-12-i386-desktop` or `debian-12-i386-xfce`.
 
 Build details, package lists, profile measurements and smoke tests: [`images/debian-12-i386/README.md`](../images/debian-12-i386/README.md).
+
+## Ubuntu 18.04 LTS
+
+Prerequisites: Linux or WSL2, root, `debootstrap` (with its `bionic` script), `e2fsprogs`, `util-linux`, `coreutils`, `node`.
+
+```bash
+sudo ./images/ubuntu-18-i386/build.sh                 # CLI
+sudo FLAVOR=desktop ./images/ubuntu-18-i386/build.sh  # X11 + Openbox
+sudo FLAVOR=xfce ./images/ubuntu-18-i386/build.sh     # XFCE
+```
+
+| Flavor | Reference | RAM | Disk |
+|---|---|---:|---:|
+| CLI | `ubuntu-18-i386` | 512 MiB | 3 GiB |
+| X11 + Openbox | `ubuntu-18-i386-desktop` | 1024 MiB | 3 GiB |
+| XFCE | `ubuntu-18-i386-xfce` | 1024 MiB | 4 GiB |
+
+Outputs land in `build/`, `build-desktop/` and `build-xfce/`: `rootfs.img`, `vmlinuz-686`, `initrd.img`, `manifest.json`, `packages.tsv` and `provenance.txt`. Copy the first four into `apps/web/public/images/<ref>/`, a Git-ignored directory. v86 boots `bzimage + initrd + hda`, with no installer; the cmdline is `console=tty0 console=ttyS0,115200 root=/dev/sda rw rootwait rootdelay=5`, plus `vga=0x318` on the graphical variants, and all three manifests carry it as `boot.cmdline`.
+
+`rootwait rootdelay=5` is required, not decorative: v86 serves the disk over asynchronous HTTP Range requests, so `/dev/sda` may answer after the ATA probe. Without it the bionic initramfs (systemd 237) abandons the first probe and drops to a shell (`Gave up waiting for root file system device … ALERT! /dev/sda does not exist`) even though the kernel booted. Debian tolerates the race, Ubuntu does not.
+
+The bionic 4.15 kernel names the DRM driver `bochs_drm` (renamed `bochs` in 4.20+), so `guest/no-drm.conf` blacklists both names for the CLI variant, which must keep the text VGA console; the graphical variants keep `bochs_drm`, the only `/dev/fb0` provider under v86.
+
+18.04 "bionic" is the **last Ubuntu release with an i386 port**, and it is end-of-life (ESM). `archive.ubuntu.com` and `security.ubuntu.com` still serve it, i386 included, and they are the script's defaults. If the archive stops serving bionic, point `UBUNTU_MIRROR` and `UBUNTU_SECURITY_MIRROR` at `http://old-releases.ubuntu.com/ubuntu`. `SNAPSHOT`, `DISK_SIZE`, `LUMIBOOT_BUILD_DIR` and `UBUNTU_KEYRING` are supported.
+
+The bionic keyring is often missing (a Debian host, or a current `ubuntu-keyring`): pass `UBUNTU_KEYRING=/usr/share/keyrings/ubuntu-archive-keyring.gpg`, otherwise `debootstrap` runs with `--no-check-gpg` and says so; `provenance.txt` records the mode.
+
+A successful build is not a proof: the order is build → publish → smoke test (`images/ubuntu-18-i386/tests/*.md`) → `validated: true` in `packages/catalog/src/profiles.ts` → `VM_E2E_ASSETS=1 pnpm test:e2e --grep "Ubuntu"`. All three variants went through it. Measured real boots: CLI about 2 min 30 (booted twice per run: first boot and restart), X11/Openbox 3 min 27, XFCE 4 min 04; `uname -a` reports `4.15.0-213-generic i686`, `/etc/os-release` says Ubuntu 18.04 LTS, `sudo -n whoami` returns `root`, and autologin works on both VGA and serial; `session-ubuntu.spec.ts`, `desktop-ubuntu.spec.ts` and `xfce-ubuntu.spec.ts` pass with `VM_E2E_ASSETS=1`. Keep that order as the maintenance rule: revert the flag as soon as a rebuild or a boot stops matching the smoke test.
+
+Build details, packages, provenance and smoke tests: [`images/ubuntu-18-i386/README.md`](../images/ubuntu-18-i386/README.md).
+
+Readiness threshold: the CLI profile waits 240 s for `LUMIBOOT_GUEST_READY`, like the graphical variants, because software emulation can push a measured boot past 120 s. Expiry is diagnostic only (`boot-timeout`): the VM is not stopped, the console stays live and a late marker still reaches `running`.
 
 ## Windows 7
 
@@ -74,14 +116,18 @@ Fields in `packages/catalog/src/profiles.ts`, copied into `OSDefinition` by `sys
 | `variantGroupId` | parent id; absent on the parent |
 | `variantName` | short selector label |
 | `variantOrder` | ascending priority; lowest = default; absent = after the ordered variants |
+| `displayMode` | `text` for a CLI guest whose serial console is the primary view; `graphical` (or absent) for a VGA/framebuffer guest |
 
 Each variant has its own image, profile, readiness and availability.
+
+`displayMode` is explicit, never inferred from the display name: the two CLI profiles (`debian-12-i386`, `ubuntu-18-i386`) open the serial terminal by default, since systemd writes on ttyS0 only while the VGA text screen appears frozen; every graphical profile opens on the screen, logs collapsed. The "Logs" button stays a toggle in both cases.
 
 Current groups:
 
 | Group | Order | Default |
 |---|---|---|
 | Debian (`debian-12-i386`) | XFCE, X11, CLI | XFCE |
+| Ubuntu (`ubuntu-18-i386`) | XFCE, X11, CLI | XFCE |
 | Windows 7 (`windows-7-x86`) | Professional, Lite | Professional |
 
 Helpers in `packages/catalog/src/systems.ts`: `getDisplaySystems()` returns the parents and standalone systems, `getVariantGroup()` the members sorted by `variantOrder`, `getDefaultVariant()` the first member, `getVariantParent()` and `getVariantParentId()` resolve the parent, and `hasVariants()` tells whether a group holds several entries.

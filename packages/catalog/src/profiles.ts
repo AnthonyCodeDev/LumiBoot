@@ -1,4 +1,5 @@
 import type {
+  DisplayMode,
   EngineId,
   ExecutionMode,
   GuestReadiness,
@@ -18,6 +19,11 @@ export interface LaunchProfileDefinition {
   readonly configuration?: VMConfiguration;
   readonly hardwareProfile: HardwareProfile;
   readonly readiness: GuestReadiness;
+  /**
+   * `text` = the serial console is the primary view (CLI); `graphical`/absent =
+   * the VGA/framebuffer screen is.
+   */
+  readonly displayMode?: DisplayMode;
   readonly slug: string;
   readonly displayName: string;
   readonly versionLabel: string;
@@ -37,7 +43,7 @@ function pcHardware(network: HardwareProfile['network']): HardwareProfile {
   return { network, machine: 'pc', video: 'vga', input: 'ps2', disk: 'ide', audio: false };
 }
 
-/** Marker emitted by `lumiboot-ready.service`; 120 s safety timeout. */
+/** Marker emitted by `lumiboot-ready.service`; 120 s diagnostic timeout. */
 function guestReadiness(systemId: string): GuestReadiness {
   return {
     marker: `LUMIBOOT_GUEST_READY:${systemId}`,
@@ -80,6 +86,8 @@ export const launchProfiles = [
     },
     hardwareProfile: pcHardware('virtio'),
     readiness: guestReadiness('debian-12-i386'),
+    // CLI: systemd talks on ttyS0 only, so the serial console is the primary view.
+    displayMode: 'text',
     slug: 'debian-12-i386',
     displayName: 'Debian',
     versionLabel: '12 Bookworm',
@@ -105,6 +113,7 @@ export const launchProfiles = [
     },
     hardwareProfile: pcHardware('virtio'),
     readiness: desktopReadiness('debian-12-i386-desktop'),
+    displayMode: 'graphical',
     slug: 'debian-12-i386-desktop',
     displayName: 'Debian (Desktop)',
     versionLabel: '12 Bookworm · X11',
@@ -129,6 +138,7 @@ export const launchProfiles = [
     },
     hardwareProfile: pcHardware('virtio'),
     readiness: desktopReadiness('debian-12-i386-xfce'),
+    displayMode: 'graphical',
     slug: 'debian-12-i386-xfce',
     displayName: 'Debian (XFCE)',
     versionLabel: '12 Bookworm · XFCE',
@@ -145,20 +155,84 @@ export const launchProfiles = [
     imageId: 'ubuntu-18-i386-image',
     engineId: 'v86',
     executionMode: 'browser',
-    minMemoryMiB: 256,
+    minMemoryMiB: 512,
+    configuration: {
+      memoryMiB: 512,
+      vgaMemoryMiB: 16,
+      bootDevice: 'disk',
+    },
+    // bionic 4.15 ships a native virtio-net driver.
+    hardwareProfile: pcHardware('virtio'),
+    // Software emulation: a measured CLI boot can exceed 120 s, so the proof
+    // threshold is 240 s like the graphical variants. Expiry is diagnostic only.
+    readiness: { ...guestReadiness('ubuntu-18-i386'), timeoutMs: 240_000 },
+    // CLI: systemd talks on ttyS0 only, so the serial console is the primary view.
+    displayMode: 'text',
+    slug: 'ubuntu-18-i386',
+    // Parent of the Ubuntu 18.04 group; CLI is the least promoted variant.
+    displayName: 'Ubuntu',
+    versionLabel: '18.04 LTS',
+    variantName: 'CLI',
+    variantOrder: 3,
+    // Real boot proven by the E2E suite, see tests/e2e/session-ubuntu.spec.ts.
+    validated: true,
+    description:
+      'A historical 32-bit release of Ubuntu, booted from a local rootfs by an x86 emulator in the browser.',
+  },
+  {
+    id: 'ubuntu-18-i386-desktop',
+    imageId: 'ubuntu-18-i386-desktop-image',
+    engineId: 'v86',
+    executionMode: 'browser',
+    // Xorg + minimal window manager: 1 GiB floor.
+    minMemoryMiB: 1024,
     configuration: {
       memoryMiB: 1024,
       vgaMemoryMiB: 16,
-      bootDevice: 'cdrom',
+      bootDevice: 'disk',
     },
-    // Kernel 4.15 has a native `virtio-net` driver.
+    // bionic 4.15 ships a native virtio-net driver.
     hardwareProfile: pcHardware('virtio'),
-    readiness: guestReadiness('ubuntu-18-i386'),
-    slug: 'ubuntu-18-i386',
-    displayName: 'Ubuntu',
-    versionLabel: '18.04 LTS',
-    validated: false,
-    description: 'A historical 32-bit release of Ubuntu, run by an x86 emulator in the browser.',
+    readiness: desktopReadiness('ubuntu-18-i386-desktop'),
+    displayMode: 'graphical',
+    slug: 'ubuntu-18-i386-desktop',
+    displayName: 'Ubuntu (Desktop)',
+    versionLabel: '18.04 LTS · X11',
+    variantGroupId: 'ubuntu-18-i386',
+    variantName: 'X11',
+    variantOrder: 2,
+    // Real graphical boot proven by the E2E suite, see tests/e2e/desktop-ubuntu.spec.ts.
+    validated: true,
+    description:
+      'The graphical variant of Ubuntu 18.04 LTS: an Xorg session right in the browser, from a locally built rootfs.',
+  },
+  {
+    id: 'ubuntu-18-i386-xfce',
+    imageId: 'ubuntu-18-i386-xfce-image',
+    engineId: 'v86',
+    executionMode: 'browser',
+    // Xorg + XFCE: 1 GiB floor.
+    minMemoryMiB: 1024,
+    configuration: {
+      memoryMiB: 1024,
+      vgaMemoryMiB: 16,
+      bootDevice: 'disk',
+    },
+    // bionic 4.15 ships a native virtio-net driver.
+    hardwareProfile: pcHardware('virtio'),
+    readiness: desktopReadiness('ubuntu-18-i386-xfce'),
+    displayMode: 'graphical',
+    slug: 'ubuntu-18-i386-xfce',
+    displayName: 'Ubuntu (XFCE)',
+    versionLabel: '18.04 LTS · XFCE',
+    variantGroupId: 'ubuntu-18-i386',
+    variantName: 'XFCE',
+    // Best Ubuntu variant: smallest `variantOrder`.
+    variantOrder: 1,
+    // Real graphical boot proven by the E2E suite, see tests/e2e/xfce-ubuntu.spec.ts.
+    validated: true,
+    description:
+      'The Ubuntu 18.04 LTS variant with the full XFCE desktop environment: an Xorg + XFCE session right in the browser, from a locally built rootfs.',
   },
   {
     id: 'fedora-workstation',
@@ -211,6 +285,7 @@ export const launchProfiles = [
     // NT guest: no virtio drivers, so `ne2k`; Vista+ requires ACPI.
     hardwareProfile: { ...pcHardware('ne2k'), acpi: true },
     readiness: diskBootReadiness('windows-7-x86'),
+    displayMode: 'graphical',
     slug: 'windows-7-x86',
     // Parent of the Windows 7 group; Lite is the least promoted variant.
     displayName: 'Windows 7',
@@ -239,6 +314,7 @@ export const launchProfiles = [
     // NT guest: no virtio drivers, so `ne2k`; Vista+ requires ACPI.
     hardwareProfile: { ...pcHardware('ne2k'), acpi: true },
     readiness: diskBootReadiness('windows-7-pro-sp1-x86'),
+    displayMode: 'graphical',
     slug: 'windows-7-pro-sp1-x86',
     displayName: 'Windows 7 (Professional)',
     versionLabel: 'SP1 · x86',
@@ -268,6 +344,7 @@ export const launchProfiles = [
     // The image embeds the x86 VirtIO NetKVM driver; Vista+ requires ACPI.
     hardwareProfile: { ...pcHardware('virtio'), acpi: true },
     readiness: diskBootReadiness('windows-10-x86'),
+    displayMode: 'graphical',
     slug: 'windows-10-x86',
     // Standalone system: no variant group.
     displayName: 'Windows 10',

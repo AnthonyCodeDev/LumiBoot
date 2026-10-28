@@ -179,6 +179,9 @@ describe('V86Provider', () => {
     expect(options?.hda).toMatchObject({ async: true, size: 2_000_000_000 });
     expect(options?.autostart).toBe(false);
     expect(options?.cmdline).toContain('root=/dev/sda');
+    // The disk is async: the default cmdline must make the initramfs wait.
+    expect(options?.cmdline).toContain('rootwait');
+    expect(options?.cmdline).toContain('rootdelay=5');
   });
 
   it('rejects a mount target that is not a DOM element', async () => {

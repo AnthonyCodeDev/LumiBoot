@@ -103,9 +103,26 @@ describe('SystemPage — variant selector', () => {
     expect(options).toEqual(['Windows 7 Professional', 'Windows 7 Lite']);
   });
 
-  it('shows no selector for a standalone system (Ubuntu 18.04)', () => {
-    renderSystemPage('ubuntu-18-i386');
+  it('shows no selector for a standalone system (Windows 10 x86)', () => {
+    renderSystemPage('windows-10-x86');
     expect(screen.queryByRole('button', { name: 'Choose variant' })).toBeNull();
+  });
+
+  it('shows the Ubuntu 18.04 selector, XFCE as the default variant', async () => {
+    const user = userEvent.setup();
+    // XFCE is the best variant of the group, so it is preselected.
+    renderSystemPage('ubuntu-18-i386');
+
+    const trigger = screen.getByRole('button', { name: 'Choose variant' });
+    expect(trigger.textContent).toBe('Ubuntu XFCE');
+    // The hero shows the base, not the selected variant.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Ubuntu');
+    expect(screen.getByRole('heading', { level: 1 }).textContent).not.toContain('XFCE');
+
+    await user.click(trigger);
+    const options = screen.getAllByRole('option').map((option) => option.textContent);
+    // Order comes from `variantOrder`: the best variant first.
+    expect(options).toEqual(['Ubuntu XFCE', 'Ubuntu X11', 'Ubuntu CLI']);
   });
 
   it('reflects the selected variant in the spec table', async () => {

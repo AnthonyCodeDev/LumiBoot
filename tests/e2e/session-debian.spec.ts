@@ -35,9 +35,16 @@ test.describe('Debian 12 i386 session (v86, real boot)', () => {
     // The console container stays mounted during the whole boot.
     await expect(page.locator('.session-console')).toBeVisible();
 
-    // Serial logs are hidden by default: show them so `.v86-serial` can be
-    // read/typed into during the rest of the test.
-    await page.getByRole('button', { name: 'Logs' }).click();
+    // The CLI profile (`displayMode: 'text'`) opens the serial console by
+    // default: the VGA text screen freezes while systemd only writes on ttyS0.
+    // The button is a toggle, so it is only clicked when the panel is closed.
+    const logsButton = page.getByRole('button', { name: 'Logs' });
+    if ((await logsButton.getAttribute('aria-pressed')) !== 'true') {
+      await logsButton.click();
+    }
+    // Whatever the initial state, the panel must end up open: `logs-hidden`
+    // is what hides `textarea.v86-serial` (and breaks click/pressSequentially).
+    await expect(page.locator('.session-console')).not.toHaveClass(/logs-hidden/);
 
     const state = page.locator('.session-toolbar');
     // `running` = marker emitted by the guest Debian on ttyS0, not a timer.

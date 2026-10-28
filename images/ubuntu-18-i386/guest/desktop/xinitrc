@@ -1,0 +1,17 @@
+#!/bin/sh
+# ~/.xinitrc: Openbox session on tty1, started by startx after the autologin.
+
+# Session D-Bus, required by many X clients.
+if command -v dbus-launch >/dev/null 2>&1 && [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+  eval "$(dbus-launch --sh-syntax --exit-with-session)"
+fi
+
+# French keyboard.
+setxkbmap fr 2>/dev/null || true
+
+xsetroot -solid '#101418' 2>/dev/null || true
+
+xterm -geometry 100x28+40+40 -fa 'DejaVu Sans Mono' -fs 11 -title 'LumiBoot' &
+
+# Replaces the shell: end of Openbox means end of the session.
+exec openbox
