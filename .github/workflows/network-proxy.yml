@@ -1,8 +1,8 @@
 name: Network Proxy
 
-# Pipeline for the "LumiBoot Network Proxy" (standalone Go application in
+# Pipeline for the "LumiBoot Network Proxy", a standalone Go application in
 # `apps/network-proxy/`, module `github.com/lumiboot/network-proxy`,
-# entry point `./cmd/lumiboot-network`). Native binary, no CGO.
+# entry point `./cmd/lumiboot-network`. Native binary, no CGO.
 #
 # Principle: tests are MANDATORY before any build (`build` and `smoke`
 # depend on `test`). Cross-compilation is never considered
@@ -148,7 +148,8 @@ jobs:
   smoke:
     # Answer to "do not treat cross-compilation as proof that it works":
     # each binary is built NATIVELY on its OS and then
-    # actually EXECUTED (--version / --help). Fails if the binary does not start.
+    # actually EXECUTED with `--version` and `--help`. Fails if the binary does
+    # not start.
     name: smoke (${{ matrix.os }})
     needs: test
     strategy:
@@ -180,8 +181,8 @@ jobs:
           ./smoke-bin${{ matrix.ext }} --help
 
   package-macos:
-    # V1: UNIVERSAL macOS binary (Intel + Apple Silicon) packaged as
-    # `.tar.gz` (no DMG). Built with `lipo -create` from the two
+    # V1: UNIVERSAL macOS binary covering Intel and Apple Silicon, packaged as
+    # a `.tar.gz` archive, no DMG. Built with `lipo -create` from the two
     # darwin binaries produced by `build`. The web app must NEVER advertise a
     # file that is not produced: `macos` points to this universal build.
     name: package universal macOS (lipo)
@@ -217,15 +218,16 @@ jobs:
           if-no-files-found: error
 
   release:
-    # Automatic publication: on every `network-v*` tag or every
-    # `workflow_dispatch` (optional forced version; empty = auto-increment from
-    # the last `network-v*` tag, or 1.0.0 if there is none), CI creates a
-    # GitHub Release IN THIS REPO containing a SINGLE ZIP: all binaries +
-    # `manifest.json` + `SHA256SUMS`.
+    # Automatic publication: CI creates a GitHub Release IN THIS REPO containing
+    # a SINGLE ZIP with all binaries, `manifest.json` and `SHA256SUMS`. It runs
+    # on every `network-v*` tag and on every `workflow_dispatch`, whose optional
+    # forced version defaults to an auto-increment from the last `network-v*`
+    # tag, or 1.0.0 if there is none.
     # The ZIP is the official distribution channel: its assets are NEVER
     # committed to Git. `apps/web/public/downloads/` only tracks
     # `manifest.json` and `SHA256SUMS`; for local development, download the
-    # release ZIP and extract it there (the manifest points to `/downloads/...`).
+    # release ZIP and extract it there, because the manifest points to
+    # `/downloads/...`.
     # `actions/checkout` is REQUIRED: without it, `gh release create` fails
     # with "fatal: not a git repository".
     name: release (full zip)
@@ -244,11 +246,13 @@ jobs:
         with:
           merge-multiple: true
           path: dist
-      - name: Generate SHA256SUMS
-        run: |
-          cd dist
-          sha256sum LumiBoot-Network-* > SHA256SUMS
-          cat SHA256SUMS
+      # After `merge-multiple`, `dist/` also holds the per-architecture darwin
+      # archives that `package-macos` composed into the universal macOS build.
+      # They are NOT published, so a `sha256sum LumiBoot-Network-*` glob would
+      # add two entries that `sha256sum -c SHA256SUMS` can never resolve for a
+      # user. `manifest.json` is the single source of truth for what is
+      # published: it is written FIRST, then `SHA256SUMS` is derived from it,
+      # file by file, in manifest order, so the output is deterministic.
       - name: Generate manifest.json
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
@@ -296,6 +300,22 @@ jobs:
               json.dump(manifest, handle, indent=2)
               handle.write("\n")
           PY
+      - name: Generate SHA256SUMS
+        run: |
+          set -euo pipefail
+          cd dist
+          python3 - > "$RUNNER_TEMP/published-files.txt" <<'PY'
+          import json
+
+          with open("manifest.json", encoding="utf-8") as handle:
+              manifest = json.load(handle)
+
+          for entry in manifest["platforms"].values():
+              print(entry["file"])
+          PY
+          mapfile -t files < "$RUNNER_TEMP/published-files.txt"
+          sha256sum -- "${files[@]}" > SHA256SUMS
+          cat SHA256SUMS
       - name: Create the full ZIP
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
@@ -317,7 +337,7 @@ jobs:
 
   sign-windows:
     # OPTIONAL Authenticode signing: skipped when the secrets are absent.
-    # Never blocks the initial publication (no `needs` pointing to this job).
+    # Never blocks the initial publication: no `needs` points to this job.
     name: Windows signing (optional)
     needs: [build]
     if: startsWith(github.ref, 'refs/tags/network-v') && vars.ENABLE_SIGNING == 'true'

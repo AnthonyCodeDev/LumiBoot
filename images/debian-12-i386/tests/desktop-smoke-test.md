@@ -11,4 +11,4 @@
 - [ ] On an X failure, `LUMIBOOT_DESKTOP_START_FAILED` appears and no fake `running` is emitted.
 - [ ] Stop then a second boot works, without an orphaned worker.
 
-Real E2E: `VM_E2E_ASSETS=1 pnpm test:e2e --grep "Desktop"` (port `5200`).
+Real E2E: `VM_E2E_ASSETS=1 pnpm test:e2e --grep "Desktop"`, on port `5200`.

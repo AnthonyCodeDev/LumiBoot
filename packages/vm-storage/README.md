@@ -34,8 +34,8 @@ storage.read('session-1'); // '{"state":"running"}'
 
 ## Status
 
-Covered by unit tests (`src/storage.test.ts`), not wired to the sessions yet. Nothing survives a
+Covered by unit tests in `src/storage.test.ts`, not wired to the sessions yet. Nothing survives a
 page reload: the default backend lives in memory, persisting sessions needs a `localStorage` or
 IndexedDB backend.
 
-Integration is covered by `pnpm test:e2e` (port 5200), not by the unit tests.
+Integration is covered by `pnpm test:e2e` on port 5200, not by the unit tests.

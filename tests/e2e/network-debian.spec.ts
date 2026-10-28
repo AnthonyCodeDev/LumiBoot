@@ -1,14 +1,14 @@
 import { expect, test, type Locator } from '@playwright/test';
 
 /**
- * **Real** guest network of Debian 12 i386 (v86), `browser-fetch` mode.
+ * **Real** guest network of Debian 12 i386 in v86, `browser-fetch` mode.
  *
- * This file is only enabled when the Debian image is really published
- * (`rootfs.img`, `vmlinuz-686`, `initrd.img`, `manifest.json`):
+ * This file is only enabled when the Debian image is really published, with
+ * `rootfs.img`, `vmlinuz-686`, `initrd.img` and `manifest.json`:
  *
  *   $env:VM_E2E_ASSETS='1'; pnpm test:e2e
  *
- * Without that variable, the tests are **skipped** (not "passed"): no image, so
+ * Without that variable, the tests are **skipped**, not "passed": no image, so
  * no possible proof.
  *
  * What these tests deliberately document are the **effective limits** of
@@ -30,15 +30,15 @@ const assetsPresent = process.env.VM_E2E_ASSETS === '1';
  *
  * v86's serial console copies into the *value* of the `<textarea>` everything
  * the guest emits, **including the tty echo**. A marker placed on the same line
- * as the command can therefore be split by a tty line wrap (80-column terminal)
- * and only appear once. The command is thus framed by **two dedicated, short
+ * as the command can therefore be split by a tty line wrap at 80 columns and
+ * only appear once. The command is thus framed by **two dedicated, short
  * marker lines**:
  *
  *     echo <begin>
  *     <command>; echo <end>
  *
- * Each printed marker occupies its **own line** (`\n<marker>\n`), which
- * distinguishes it from the echo of the typed line (`... echo <marker>`) and
+ * Each printed marker occupies its **own line**, `\n<marker>\n`, which
+ * distinguishes it from the echo of the typed line, `... echo <marker>`, and
  * delimits the output unambiguously. Both steps are typed separately: sending
  * the lines in one block saturates the emulated tty and scrambles the echo.
  */
@@ -104,7 +104,7 @@ test.describe('Debian guest network (browser-fetch, real boot)', () => {
     const serial = await bootDebianAndWaitForPrompt(page);
 
     // Debian virtio NIC: the `enp0s10` interface is UP and carries an RFC1918
-    // address (`192.168.x.y`) assigned by DHCP.
+    // address `192.168.x.y` assigned by DHCP.
     const addr = await probe(serial, 'ip -br addr', 'NET_ADDR', 30_000);
     expect(addr).toMatch(/enp0s10\s+UP/);
     expect(addr).toMatch(/192\.168\.\d+\.\d+/);
@@ -131,8 +131,8 @@ test.describe('Debian guest network (browser-fetch, real boot)', () => {
     expect(http).not.toMatch(/curl: \(\d+\)/);
 
     // HTTPS (443): no TCP connection is registered for 443 by v86 0.5.471, so
-    // curl fails (`000` code and/or `curl: (...)` error). Any 2xx/3xx code is
-    // explicitly refused: a success would be a lie.
+    // curl fails with a `000` code, a `curl: (...)` error, or both. Any 2xx/3xx
+    // code is explicitly refused: a success would be a lie.
     const https = await probe(
       serial,
       "curl -sS --max-time 15 -o /dev/null -w '%{http_code}' https://deb.debian.org/",
@@ -160,11 +160,11 @@ test.describe('Debian guest network (browser-fetch, real boot)', () => {
   }) => {
     test.setTimeout(900_000);
 
-    // A `user-relay` mode pointing to a **deliberately unreachable** relay
-    // (`127.0.0.1:9`, discard port) is forced. v86 opens the WebSocket
+    // A `user-relay` mode pointing to a **deliberately unreachable** relay,
+    // `127.0.0.1:9` on the discard port, is forced. v86 opens the WebSocket
     // asynchronously: its failure must not prevent the emulator from booting.
     // The config is intercepted at the Playwright network level: the public file
-    // is NOT modified (isolated from the other specs running in parallel).
+    // is NOT modified, so the other specs running in parallel stay isolated.
     await page.route('**/lumiboot.config.json', (route) =>
       route.fulfill({
         status: 200,
@@ -187,7 +187,7 @@ test.describe('Debian guest network (browser-fetch, real boot)', () => {
     const state = page.locator('.session-toolbar');
 
     // Stop then restart: the lifecycle stays functional despite the unreachable
-    // relay (no hang, no blocking resource).
+    // relay, with no hang and no blocking resource.
     await page.getByRole('button', { name: 'Stop' }).click();
     await expect(state).toHaveAttribute('data-state', 'stopped', { timeout: 60_000 });
 

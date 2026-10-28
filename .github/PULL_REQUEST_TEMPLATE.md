@@ -17,6 +17,6 @@ Steps to reproduce the behaviour and confirm the fix, plus any asset or disk nee
 - [ ] `pnpm typecheck` passes
 - [ ] `pnpm lint` passes
 - [ ] `pnpm format:check` passes
-- [ ] `pnpm test` passes (and `pnpm test:e2e` when UI or boot paths change)
+- [ ] `pnpm test` passes, and `pnpm test:e2e` too when UI or boot paths change
 - [ ] No VM disk, proprietary media, release binary or secret committed
-- [ ] Contributions are offered under the LumiBoot Source-Available License (`LICENSE`)
+- [ ] Contributions are offered under the LumiBoot Source-Available License, see `LICENSE`

@@ -12,26 +12,26 @@
 
 Guest and network data are untrusted. An XSS reads every secret in the JS context of the LumiBoot origin.
 
-- **Pairing bearer**: `sessionStorage` only (`lumiboot.proxy.session`), scoped to the tab and lost on close. The legacy `localStorage` key is purged without migration. Execution never reads storage: in-memory copy in `getProxyRuntimeCredentials`, inside the authenticated state (`apps/web/src/features/proxy/persistence.ts`).
+- **Pairing bearer**: `sessionStorage` only (`lumiboot.proxy.session`), scoped to the tab and lost on close. The legacy `localStorage` key is purged without migration. Execution never reads storage: the in-memory copy lives in `getProxyRuntimeCredentials`, inside the authenticated state in `apps/web/src/features/proxy/persistence.ts`.
 - **WISP URL**: token in the query string (`…/wisp/?token=…`), a v86 0.5.471 limitation. WISP URLs and tokens never reach `console.*` or an error report; `tests/security-config.test.ts` fails on `token`, `wisp`, `relay_url` or `proxyToken` in a frontend log.
 - **Sourcemaps**: disabled in production. Opt-in with `LUMIBOOT_SOURCEMAP=1`, or `hidden`, which keeps the `.map` unpublished.
-- **CSP**: `connect-src` lists exact origins, never `*` or a scheme-wide rule (`infra/nginx/security-headers.conf`).
+- **CSP**: `connect-src` lists exact origins, never `*` or a scheme-wide rule; set in `infra/nginx/security-headers.conf`.
 
 ## Network
 
 - `browser-fetch`: CORS, no raw TCP.
 - `user-relay`: WISP relay administered or approved by the user.
-- Local proxy: loopback, origin and token verified, private networks and cloud metadata blocked after DNS resolution, quotas and timeouts (`apps/network-proxy/internal/security/policy.go`).
+- Local proxy: loopback, origin and token verified, private networks and cloud metadata blocked after DNS resolution, quotas and timeouts, all in `apps/network-proxy/internal/security/policy.go`.
 - `allowPrivateNetworks` and `allowNonLoopback` weaken isolation; enable them after review.
 - The WISP token is visible in the URL: limited lifetime, revocation available.
 
-### DEV / PROD origin allowlist (network proxy)
+### DEV / PROD origin allowlist for the network proxy
 
-The allowlist depends on the environment (`apps/network-proxy/internal/config/config.go`):
+The allowlist depends on the environment; see `apps/network-proxy/internal/config/config.go`:
 
-- **Production (default)**: `https://lumiboot.app`, `https://www.lumiboot.app`; no generic `localhost` origin.
+- **Production, the default**: `https://lumiboot.example.com`, `https://www.lumiboot.example.com`; no generic `localhost` origin.
 - **Development**: `LUMIBOOT_PROXY_ENV=development` adds 5173, 5200, 3000, 4173, 8080 on `127.0.0.1` and `localhost`.
-- **Explicit local pairing**: `allowLocalOrigins` (`LUMIBOOT_PROXY_ALLOW_LOCAL_ORIGINS=true`) or exact origins. A loopback origin in production without opt-in is refused at validation.
+- **Explicit local pairing**: `allowLocalOrigins`, set with `LUMIBOOT_PROXY_ALLOW_LOCAL_ORIGINS=true`, or exact origins. A loopback origin in production without opt-in is refused at validation.
 
 Revocation `POST /api/session/revoke` disconnects: the proxy drops the session and the local storage is purged.
 
@@ -41,14 +41,9 @@ Security headers come from `infra/nginx/security-headers.conf`. COOP/COEP are op
 
 `infra/nginx/site.conf`:
 
-- `/downloads/`: strict static files, no SPA fallback (real 404); `Accept-Ranges`, compression off to preserve `206`; `/downloads/manifest.json` as `application/json` (`no-store`).
+- `/downloads/`: strict static files, no SPA fallback, so a missing file is a real 404; `Accept-Ranges`, compression off to preserve `206`; `/downloads/manifest.json` as `application/json` with `no-store`.
 - v86 WASM as `application/wasm`, no fallback under `/v86/`.
-- `/images/`: free disks (Debian) over HTTP Range, no index and no fallback. Proprietary and user media are forbidden in the webroot: Nginx 404 block (`^/images/.*(windows|winxp|winvista|win[0-9])`) plus `tests/webroot-assets.test.ts` on `apps/web/public/` and `apps/web/dist/`.
-
-## Source export / release bundle
-
-- **Source** (`python export_project_zip.py`): an oversized artifact is **omitted**, never replaced by a fake `.img`/`.exe`. `EXPORT-MANIFEST.json` records its path, size and SHA-256; `images/` stays untouched.
-- **Release** (`--profile release`): `apps/web/dist` and `apps/web/public/downloads` only, non-free media refused.
+- `/images/`: the free Debian disks over HTTP Range, no index and no fallback. Proprietary and user media are forbidden in the webroot: Nginx 404 block on `^/images/.*(windows|winxp|winvista|win[0-9])`, plus `tests/webroot-assets.test.ts` on `apps/web/public/` and `apps/web/dist/`.
 
 ## Reporting a vulnerability
 

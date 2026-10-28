@@ -3,17 +3,18 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Nginx configuration guardrail (P2 security).
+ * Nginx configuration guardrail for P2 security.
  *
  * Checks that the production configuration honors the invariants:
- * - `/downloads/` is strictly static, without an SPA fallback (a 404 is a real 404);
+ * - `/downloads/` is strictly static, without an SPA fallback: a 404 is a real
+ *   404;
  * - the download manifest is JSON, not HTML;
  * - WASM is served with the right MIME type;
  * - `/images/` only serves files, with no SPA fallback and no index;
  * - proprietary system media are explicitly refused.
  *
- * Blocks are extracted by brace matching (`location` blocks may contain nested
- * blocks such as `types { ... }`).
+ * Blocks are extracted by brace matching, since `location` blocks may contain
+ * nested blocks such as `types { ... }`.
  */
 
 const repoRoot = process.cwd();
@@ -42,7 +43,7 @@ describe('nginx site.conf', () => {
     const downloads = extractBlock(siteConf, 'location /downloads/');
     expect(downloads).toContain('try_files $uri =404;');
     expect(downloads).not.toContain('index.html');
-    // Resumption of interrupted downloads (Range) without compression.
+    // Resumption of interrupted downloads over Range, without compression.
     expect(downloads).toContain('Accept-Ranges');
     expect(downloads).toContain('gzip off;');
   });

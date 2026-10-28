@@ -3,10 +3,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Web configuration guardrails (P2 security):
+ * Web configuration guardrails for P2 security:
  * - production sourcemaps are disabled by default;
  * - the pairing bearer is only persisted in `sessionStorage`;
- * - no WISP URL (which carries the token in the query) is ever logged.
+ * - no WISP URL, which carries the token in the query, is ever logged.
  */
 
 const repoRoot = process.cwd();

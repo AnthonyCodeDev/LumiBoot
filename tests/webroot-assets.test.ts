@@ -3,12 +3,12 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
 
 /**
- * Build/CI guardrail for the public webroot (P2 security).
+ * Build/CI guardrail for the public webroot, for P2 security.
  *
- * The published webroot (`apps/web/public/` then `apps/web/dist/`) must NEVER
- * contain a proprietary system image (Windows...) nor user media. Free
- * distribution disks (Debian) stay allowed: this guardrail must not break free
- * Linux images.
+ * The published webroot, `apps/web/public/` then `apps/web/dist/`, must NEVER
+ * contain a proprietary system image such as Windows media, nor user media. Free
+ * distribution disks such as Debian stay allowed: this guardrail must not break
+ * free Linux images.
  */
 
 const repoRoot = process.cwd();

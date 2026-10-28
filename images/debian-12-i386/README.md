@@ -1,6 +1,6 @@
 # Debian 12 i386 images
 
-One script builds three Bookworm variants; all three carry `validated: true` (`packages/catalog/src/profiles.ts`).
+One script builds three Bookworm variants; all three carry `validated: true` in `packages/catalog/src/profiles.ts`.
 
 | Flavor | Reference | RAM | Disk | Readiness |
 |---|---|---:|---:|---|
@@ -10,7 +10,7 @@ One script builds three Bookworm variants; all three carry `validated: true` (`p
 
 ## Build
 
-Linux/WSL2 prerequisites: `debootstrap`, `e2fsprogs`, `util-linux`, `coreutils` (`chroot`, `sha256sum`), `node`, root. Never native Windows.
+Linux/WSL2 prerequisites: `debootstrap`, `e2fsprogs`, `util-linux`, `coreutils` with `chroot` and `sha256sum`, `node`, root. Never native Windows.
 
 ```bash
 sudo ./images/debian-12-i386/build.sh
@@ -34,7 +34,7 @@ Assets are Git-ignored; `validated: true` requires a valid published manifest an
 
 After a rebuild: check the manifest SHA-256 values, then rerun the E2E suite with `VM_E2E_ASSETS=1`.
 
-## Desktop (X11 + Openbox)
+## Desktop: X11 + Openbox
 
 `debian-12-i386-desktop`: Debian CLI base + Xorg, Openbox, xterm. Published locally, `validated: true`.
 
@@ -43,10 +43,10 @@ After a rebuild: check the manifest SHA-256 values, then rerun the E2E suite wit
 | RAM / VGA | 1024 MiB / 16 MiB |
 | Disk | ext4 RAW, 3 GiB |
 | Session | `lumiboot` autologin → `startx` → Openbox + xterm |
-| Video | `vga=0x318`, `fbdev` (`modesetting` fallback) on `/dev/fb0` |
+| Video | `vga=0x318`, `fbdev` on `/dev/fb0`, with `modesetting` as fallback |
 | Readiness | `LUMIBOOT_DESKTOP_READY:debian-12-i386-desktop` |
 
-The marker needs a live X socket, `xdpyinfo` and `openbox`; otherwise the guest emits `LUMIBOOT_DESKTOP_START_FAILED`. `LUMIBOOT_GUEST_READY` only attests `multi-user.target`. Xorg runs through the setuid `Xorg.wrap` (`needs_root_rights=yes`) inside an unprivileged session; guest script 300 s, profile 240 s.
+The marker needs a live X socket, `xdpyinfo` and `openbox`; otherwise the guest emits `LUMIBOOT_DESKTOP_START_FAILED`. `LUMIBOOT_GUEST_READY` only attests `multi-user.target`. Xorg runs through the setuid `Xorg.wrap` wrapper, configured with `needs_root_rights=yes`, inside an unprivileged session; guest script 300 s, profile 240 s.
 
 ### Build and publish
 

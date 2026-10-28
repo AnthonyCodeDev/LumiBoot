@@ -7,14 +7,14 @@ import { expect, test } from '@playwright/test';
  * gestures (`page.mouse.click`), which is required for the browser to accept
  * `requestPointerLock`.
  *
- * Proofs: a click captures (a single cursor, the guest one), releasing (native
- * Escape = `pointerlockchange`, triggered here through `exitPointerLock` because
- * headless Chromium does not intercept Escape) restores the host cursor, a click
- * recaptures, and `dispose` releases.
+ * Proofs: a click captures, with a single cursor, the guest one; releasing
+ * restores the host cursor, since native Escape becomes a `pointerlockchange`,
+ * triggered here through `exitPointerLock` because headless Chromium does not
+ * intercept Escape; a click recaptures, and `dispose` releases.
  *
- * The "native Escape" sequence is covered by the unit tests
- * (`pointerlockchange` + removed class); this test proves the behavior in a real
- * rendering engine.
+ * The "native Escape" sequence is covered by the unit tests, `pointerlockchange`
+ * plus the removed class; this test proves the behavior in a real rendering
+ * engine.
  */
 test.describe('Mouse capture (Pointer Lock) - real module in Chromium', () => {
   test('captures on click, releases (simulated native Escape), recaptures, then releases on dispose', async ({
@@ -72,12 +72,13 @@ test.describe('Mouse capture (Pointer Lock) - real module in Chromium', () => {
     expect(await isLockedToScreen()).toBe(false);
     expect(await hasLockedClass()).toBe(false);
 
-    // Real click (user gesture): capture + host cursor hidden (class).
+    // Real click from a user gesture: capture, with the host cursor hidden by a
+    // class.
     await page.mouse.click(cx, cy);
     await expect.poll(isLockedToScreen).toBe(true);
     await expect.poll(hasLockedClass).toBe(true);
 
-    // Release (native browser Escape => `pointerlockchange`).
+    // Release from the native browser Escape, which yields a `pointerlockchange`.
     await page.evaluate(() => document.exitPointerLock());
     await expect.poll(isLockedToScreen).toBe(false);
     await expect.poll(hasLockedClass).toBe(false);
@@ -85,10 +86,11 @@ test.describe('Mouse capture (Pointer Lock) - real module in Chromium', () => {
     // New explicit click: recapture.
     await page.mouse.click(cx, cy);
     await expect.poll(isLockedToScreen).toBe(true);
-    // The synchronization through `pointerlockchange` is awaited (class applied).
+    // The synchronization through `pointerlockchange` is awaited, until the class
+    // is applied.
     await expect.poll(hasLockedClass).toBe(true);
 
-    // `dispose` (session stop/unmount): releases the lock.
+    // `dispose`, called on session stop or unmount, releases the lock.
     await page.evaluate(() =>
       (window as unknown as { __plHandle?: { dispose: () => void } }).__plHandle?.dispose(),
     );

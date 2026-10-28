@@ -9,7 +9,7 @@
 
 ## Decision
 
-The browser loads WebAssembly engines on demand, behind `VMEngine` and `VMRegistry` (`packages/vm-core/src/`). No remote hypervisor, VNC/RDP or orchestration API is involved. Downloadable assets and a local network helper are allowed; a server-side VM is not.
+The browser loads WebAssembly engines on demand, behind `VMEngine` and `VMRegistry` in `packages/vm-core/src/`. No remote hypervisor, VNC/RDP or orchestration API is involved. Downloadable assets and a local network helper are allowed; a server-side VM is not.
 
 ## Consequences
 

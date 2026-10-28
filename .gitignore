@@ -105,6 +105,9 @@ LumiBoot-source.zip
 *.backup
 *.old
 *.orig
+# Local export tool (not published)
+/scripts/export_project_zip.py
+/tests/export-project-zip.test.ts
 # Keep files
 !*.keep
 # Secrets: only examples are tracked, including nested ones

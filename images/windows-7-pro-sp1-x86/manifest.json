@@ -17,8 +17,7 @@
     "format": "raw",
     "url": "/images/windows-7-pro-sp1-x86/disk.img",
     "size": 34359738368,
-    "mtimeMs": 1792174985497,
-    "sha256": "3bf540512fe036a05b3a1fa895a0674d52685ee26a290d16641269e2e1359d30"
+    "mtimeMs": 1792174985497
   },
   "engine": {
     "id": "v86",

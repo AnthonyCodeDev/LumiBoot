@@ -318,7 +318,7 @@
   font-size: 28px;
 }
 
-/* System detail page (/systems/:slug) */
+/* System detail page, route /systems/:slug */
 .icon-button {
   width: 34px;
   height: 34px;
@@ -428,8 +428,8 @@
 
 /* Session */
 /* Height bounded to the space under the header bar (64px), with clipped
-   overflow: the session screen can never push the page below the window (no
-   stray vertical scroll), whatever the guest resolution. */
+   overflow: the session screen can never push the page below the window, which
+   would leave a stray vertical scroll, whatever the guest resolution. */
 .session-screen {
   width: 100%;
   margin: 0;
@@ -480,12 +480,12 @@
   flex-wrap: wrap;
 }
 /* Absolute cap: never more than 80% of the window height. Height is resolved
-   through flex (the session container is bounded), which lets the canvas and the
-   text mode use `max-height: 100%`. Deliberate fallback to `width: 100%`: a
-   `width: fit-content` on the shell is based on the canvas INTRINSIC size (guest
-   resolution, e.g. 1024px) and not on its final height-constrained size (see E2E
-   screen-sizing). The black `.v86-screen` surface hugs the rendered content and is
-   centered. */
+   through flex, since the session container is bounded, which lets the canvas and
+   the text mode use `max-height: 100%`. Deliberate fallback to `width: 100%`: a
+   `width: fit-content` on the shell is based on the canvas INTRINSIC size, the
+   guest resolution, e.g. 1024px, and not on its final height-constrained size as
+   measured by the E2E screen-sizing test. The black `.v86-screen` surface hugs the
+   rendered content and is centered. */
 .session-viewport {
   position: relative;
   display: flex;
@@ -514,8 +514,8 @@
 .session-console.logs-hidden .v86-serial {
   display: none !important;
 }
-/* v86 console injected into .session-console by the provider (classes kept as-is:
-   the E2E suite hooks onto .v86-serial). */
+/* v86 console injected into .session-console by the provider; the classes are kept
+   as-is because the E2E suite hooks onto .v86-serial. */
 .v86-console {
   display: flex;
   flex-direction: column;
@@ -525,9 +525,9 @@
   min-height: 0;
   height: 100%;
 }
-/* VGA screen: the output, dominant. Its width fits its content (guest ratio
-   preserved) and it is centered; the height is shared with the logs through flex,
-   under the viewport's 80dvh cap. */
+/* VGA screen: the output, dominant. Its width fits its content, preserving the
+   guest ratio, and it is centered; the height is shared with the logs through
+   flex, under the viewport's 80dvh cap. */
 .v86-screen {
   flex: 1 1 auto;
   min-height: 0;
@@ -565,8 +565,8 @@
   overflow: hidden;
   box-sizing: border-box;
 }
-/* Host cursor hidden ONLY when the screen really holds the lock (class set in
-   sync with `document.pointerLockElement`). */
+/* Host cursor hidden ONLY when the screen really holds the lock: the class is set
+   in sync with `document.pointerLockElement`. */
 .v86-screen.is-pointer-locked {
   cursor: none;
 }
@@ -720,7 +720,7 @@
   font-size: 13px;
   line-height: 1.75;
 }
-/* Route error (React Router ErrorBoundary) */
+/* Route error, rendered by the React Router ErrorBoundary */
 .route-error {
   max-width: 620px;
   margin: 0 auto;

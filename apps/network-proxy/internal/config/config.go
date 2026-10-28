@@ -79,12 +79,13 @@ type Config struct {
 // ErrNonLoopback reports a refused listen on a non-loopback address.
 var ErrNonLoopback = errors.New("config: non-loopback listen refused without explicit allowNonLoopback")
 
-// ProdOrigins lists the production origins; a local deployment must add its own
-// origin or enable `allowLocalOrigins`.
+// ProdOrigins lists the default production origins; a local deployment must add
+// its own origin or enable `allowLocalOrigins`.
+// Example origins only: replace with the origins you actually serve.
 func ProdOrigins() []string {
 	return []string{
-		"https://lumiboot.app",
-		"https://www.lumiboot.app",
+		"https://lumiboot.example.com",
+		"https://www.lumiboot.example.com",
 	}
 }
 
@@ -313,7 +314,8 @@ func isLoopbackHost(host string) bool {
 	return ip.IsLoopback()
 }
 
-// isLoopbackOrigin reports whether an HTTP(S) origin targets a loopback address.
+// isLoopbackOrigin reports whether an HTTP or HTTPS origin targets a loopback
+// address.
 func isLoopbackOrigin(origin string) bool {
 	parsed, err := url.Parse(origin)
 	if err != nil {

@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * The "Windows 7" catalog card (group mother) opens the mother page; its
- * default variant (Professional) boots straight from the local RAW disk of the
+ * The "Windows 7" catalog card, the group mother, opens the mother page; its
+ * default Professional variant boots straight from the local RAW disk of the
  * codebase: no media import and no "Required media" card. When that private
- * disk is not published (the CI case), the runtime check must nevertheless
- * block the launch and explain the missing manifest.
+ * disk is not published, as in CI, the runtime check must nevertheless block the
+ * launch and explain the missing manifest.
  */
 test.describe('Windows 7: local disk missing', () => {
   test('blocks the launch without asking for a user import', async ({ page }) => {

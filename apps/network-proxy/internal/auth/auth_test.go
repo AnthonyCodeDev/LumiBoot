@@ -11,7 +11,7 @@ import (
 
 func testAuth(now *time.Time) *Authenticator {
 	return NewAuthenticatorWithClock(
-		[]string{"http://localhost:5200", "https://lumiboot.app"},
+		[]string{"http://localhost:5200", "https://lumiboot.example.com"},
 		10*time.Minute,
 		time.Hour,
 		rand.Reader,
@@ -26,7 +26,7 @@ func TestOriginMatching(t *testing.T) {
 		"http://localhost:5200",
 		"http://localhost:5200/",          // trailing slash tolerated
 		"HTTP://LOCALHOST:5200/some/path", // case + path tolerated
-		"https://lumiboot.app",
+		"https://lumiboot.example.com",
 	}
 	for _, o := range allowed {
 		if !a.IsOriginAllowed(o) {
@@ -77,7 +77,7 @@ func TestPairingFlow(t *testing.T) {
 	if !a.Verify(token, "http://localhost:5200") {
 		t.Fatal("valid token refused")
 	}
-	if a.Verify(token, "https://lumiboot.app") {
+	if a.Verify(token, "https://lumiboot.example.com") {
 		t.Fatal("token accepted from another origin")
 	}
 	if a.Verify("", "http://localhost:5200") {
@@ -129,7 +129,7 @@ func TestPairingBadOrigin(t *testing.T) {
 	if err := a.Approve(p.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := a.Exchange(p.ID, "https://lumiboot.app"); !errors.Is(err, ErrOriginMismatch) {
+	if _, _, err := a.Exchange(p.ID, "https://lumiboot.example.com"); !errors.Is(err, ErrOriginMismatch) {
 		t.Fatalf("different origin accepted: %v", err)
 	}
 }
@@ -234,7 +234,7 @@ func TestTransportClosedOnRevoke(t *testing.T) {
 	if _, _, ok := a.AttachSession("wrong", "http://localhost:5200", func() {}); ok {
 		t.Fatal("attachment of an invalid token accepted")
 	}
-	if _, _, ok := a.AttachSession(token, "https://lumiboot.app", func() {}); ok {
+	if _, _, ok := a.AttachSession(token, "https://lumiboot.example.com", func() {}); ok {
 		t.Fatal("attachment from another origin accepted")
 	}
 
@@ -316,7 +316,7 @@ func TestPairingFloodLimit(t *testing.T) {
 	if _, err := a.RequestPairing("http://localhost:5200"); !errors.Is(err, ErrPairingLimit) {
 		t.Fatalf("per-origin cap not applied: %v", err)
 	}
-	if _, err := a.RequestPairing("https://lumiboot.app"); err != nil {
+	if _, err := a.RequestPairing("https://lumiboot.example.com"); err != nil {
 		t.Fatalf("other origin wrongly blocked: %v", err)
 	}
 	now = now.Add(11 * time.Minute)

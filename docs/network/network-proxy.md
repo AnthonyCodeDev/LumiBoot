@@ -29,15 +29,15 @@ Config: `<UserConfigDir>/LumiBoot/Network Proxy/config.json`, absent on first la
 - Exact origin and token bound together.
 - Random token hashed with SHA-256, 24 h TTL, 10 min pairing.
 - Private networks, loopback, multicast, link-local and cloud metadata blocked after DNS resolution.
-- Connection to the validated IP (anti-rebinding).
+- Connection to the validated IP, which defeats rebinding.
 - 64 global connections, 16 per session.
 - No UDP, no inbound listening, no ICMP.
 
-`allowPrivateNetworks` never allows cloud metadata. The token sits in the query string (v86 client limitation): do not log query strings and revoke unused sessions.
+`allowPrivateNetworks` never allows cloud metadata. The v86 client forces the token into the query string: do not log query strings and revoke unused sessions.
 
 ## Console
 
-`help`, `list`/`status`, `approve <id|code>`, `deny <id|code>` (alias `refuse`), `revoke <id|all>`, `quit`/`exit`.
+`help`, `list`/`status`, `approve <id|code>`, `deny <id|code>` with `refuse` as an alias, `revoke <id|all>`, `quit`/`exit`.
 
 ## Validation
 

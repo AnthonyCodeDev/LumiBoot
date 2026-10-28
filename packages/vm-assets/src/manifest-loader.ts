@@ -47,7 +47,7 @@ export const imageManifestSchema = z
 interface SharedRequestEntry<V> {
   readonly promise: Promise<V>;
   readonly controller: AbortController;
-  /** Number of consumers still interested (ref-count). */
+  /** Number of consumers still interested. */
   consumers: number;
 }
 

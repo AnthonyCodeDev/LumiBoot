@@ -16,7 +16,7 @@ import { parseLocalDiskManifest } from '../packages/vm-assets/src/local-disk';
 
 /**
  * Integration test of the real `scripts/prepare-windows7-asset.mjs` pipeline:
- * the script runs against a small temporary image (never the real 32 GiB disk)
+ * the script runs against a small temporary image, never the real 32 GiB disk,
  * and its output is validated with the `@lumiboot/vm-assets` schema. Proof that
  * the tool is reusable and that its output is valid.
  */

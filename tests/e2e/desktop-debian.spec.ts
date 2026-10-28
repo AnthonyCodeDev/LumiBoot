@@ -1,22 +1,22 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
- * REAL boot of Debian 12 i386 "Desktop" (Xorg + Openbox) in v86.
+ * REAL boot of Debian 12 i386 "Desktop" with Xorg and Openbox in v86.
  *
- * This test is only enabled when the desktop image is really published
- * (`rootfs.img`, `vmlinuz-686`, `initrd.img`, `manifest.json`):
+ * This test is only enabled when the desktop image is really published, with
+ * `rootfs.img`, `vmlinuz-686`, `initrd.img` and `manifest.json`:
  *
  *   $env:VM_E2E_ASSETS='1'; pnpm exec playwright test tests/e2e/desktop-debian.spec.ts
  *
- * Without that variable, the test is **skipped** (not "passed"): no image, so
+ * Without that variable, the test is **skipped**, not "passed": no image, so
  * no possible proof.
  *
  * Proof sought: the `LUMIBOOT_DESKTOP_READY:debian-12-i386-desktop` marker
- * written by the guest on `ttyS0` **after** the X server answers (`xdpyinfo`)
+ * written by the guest on `ttyS0` **after** the X server answers `xdpyinfo`
  * and Openbox runs. No marker is produced on the JavaScript/React side.
  */
 
-/** Software emulation (no acceleration) is slow: wide wall-clock budget. */
+/** Software emulation without acceleration is slow: wide wall-clock budget. */
 const BOOT_MARKER_TIMEOUT_MS = 420_000;
 /** Short delay after the marker: `running` follows the marker very closely. */
 const RUNNING_TIMEOUT_MS = 60_000;
@@ -31,9 +31,9 @@ const assetsPresent = process.env.VM_E2E_ASSETS === '1';
 /**
  * Waits for the graphical session proof and returns a readable status.
  *
- * The `.v86-serial` `<textarea>` is watched (the guest output lives in its
- * *value*, not in its text content) along with the session state. The wait
- * stops as soon as a marker (READY or START_FAILED) shows up, or when the
+ * The `.v86-serial` `<textarea>` is watched, since the guest output lives in its
+ * *value* and not in its text content, along with the session state. The wait
+ * stops as soon as a READY or START_FAILED marker shows up, or when the
  * session moves to `error`. None of these signals is simulated: they all come
  * from v86 or from the guest. If nothing arrives in time, `timeout` is returned
  * and the test fails while printing the full serial output for diagnosis.
@@ -63,7 +63,7 @@ async function waitForDesktopProof(page: Page): Promise<'ready' | 'failed' | 'er
 async function openDesktopSession(page: Page): Promise<{ serial: Locator; state: Locator }> {
   await page.goto('/');
   await page.getByLabel('Search for a system').fill('debian');
-  // The Debian card opens the MOTHER; XFCE is preselected, so the Desktop (X11)
+  // The Debian card opens the MOTHER; XFCE is preselected, so the Desktop X11
   // variant is selected through the custom dropdown WITHOUT changing the URL,
   // then launched.
   await page.locator('.os-card[data-id="debian-12-i386"]').click();
@@ -83,7 +83,7 @@ async function openDesktopSession(page: Page): Promise<{ serial: Locator; state:
   return { serial: page.locator('.v86-serial'), state: page.locator('.session-toolbar') };
 }
 
-/** Dumps the full serial output into the test output (diagnostic). */
+/** Dumps the full serial output into the test output for diagnosis. */
 async function dumpSerial(page: Page, serial: Locator, reason: string): Promise<string> {
   const value = (await serial.inputValue().catch(() => '')) || '';
   console.log(`\n=== FULL SERIAL OUTPUT (${reason}) ===\n${value}\n=== END SERIAL OUTPUT ===\n`);
@@ -98,17 +98,17 @@ test.describe('Debian 12 i386 Desktop session (Xorg + Openbox, real boot)', () =
     page,
   }) => {
     // Two complete graphical boots under slow software emulation: explicit and
-    // wide wall-clock budget (marker up to 420 s per boot).
+    // wide wall-clock budget, since the marker can take up to 420 s per boot.
     test.setTimeout(1_200_000);
 
     const { serial, state } = await openDesktopSession(page);
 
-    // 1. Graphical session proof (guest marker on ttyS0, never simulated).
+    // 1. Graphical session proof from the guest marker on ttyS0, never simulated.
     const proof = await waitForDesktopProof(page);
     if (proof !== 'ready') {
       const value = await dumpSerial(page, serial, proof);
       // An explicit failure marker is reported as is; otherwise the full serial
-      // output is attached for diagnosis (X, vesa, dbus, startx...).
+      // output is attached for diagnosis: X, vesa, dbus, startx.
       expect(
         proof,
         `Graphical session not proven (status=${proof}). ` +
@@ -116,11 +116,11 @@ test.describe('Debian 12 i386 Desktop session (Xorg + Openbox, real boot)', () =
       ).toBe('ready');
     }
 
-    // 2. `running` is only emitted AFTER `DESKTOP_READY` (see V86Instance).
+    // 2. `running` is only emitted AFTER `DESKTOP_READY`, see V86Instance.
     await expect(state).toHaveAttribute('data-state', 'running', { timeout: RUNNING_TIMEOUT_MS });
 
-    // 3. Real graphical rendering: the VGA canvas is displayed (graphical mode)
-    //    and sized. In text mode, v86 hides the canvas (`display:none`).
+    // 3. Real graphical rendering: the VGA canvas is displayed in graphical mode
+    //    and sized. In text mode, v86 hides the canvas with `display:none`.
     const screen = page.locator('.v86-screen');
     const canvas = page.locator('.v86-screen-canvas');
     await expect(screen).toBeVisible();
@@ -137,9 +137,9 @@ test.describe('Debian 12 i386 Desktop session (Xorg + Openbox, real boot)', () =
     await page.locator('.session-console').screenshot({ path: 'test-results/desktop-vga.png' });
 
     // 5. No blocking `login:`: the tty1 VGA console was replaced by the
-    //    graphical session (canvas in graphical mode). No *pending* login prompt
-    //    may be visible. NO command is typed in the GUI (unreliable under
-    //    software emulation).
+    //    graphical session, with the canvas in graphical mode. No *pending*
+    //    login prompt may be visible. NO command is typed in the GUI, since it
+    //    is unreliable under software emulation.
     const vgaText = (await page.locator('.v86-screen-text').textContent()) ?? '';
     expect(vgaText.trim()).not.toMatch(/login:\s*$/);
 
@@ -163,9 +163,9 @@ test.describe('Debian 12 i386 Desktop session (Xorg + Openbox, real boot)', () =
 });
 
 /**
- * Restart recreates a fresh session: the locators stay valid (same classes) but
- * the serial output starts from scratch. The logs are shown again and the
- * graphical proof is awaited once more.
+ * Restart recreates a fresh session: the locators stay valid because the classes
+ * are unchanged, but the serial output starts from scratch. The logs are shown
+ * again and the graphical proof is awaited once more.
  */
 async function openRestartProof(page: Page): Promise<'ready' | 'failed' | 'error' | 'timeout'> {
   await expect(page.locator('.session-console')).toBeVisible();

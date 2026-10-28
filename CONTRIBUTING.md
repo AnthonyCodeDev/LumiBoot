@@ -1,10 +1,10 @@
 # Contributing to LumiBoot
 
-React/TypeScript UI, Go network proxy, small Python export tool. Keep changes small, focused and verifiable.
+React/TypeScript UI, Go network proxy. Keep changes small, focused and verifiable.
 
 ## Requirements
 
-- Node >= 20, pnpm 9.14.2 (`corepack enable`), Go stable (1.22+) for `apps/network-proxy`, recent Chrome, Edge or Firefox.
+- Node >= 20, pnpm 9.14.2 (`corepack enable`), Go stable 1.22+ for `apps/network-proxy`, recent Chrome, Edge or Firefox.
 
 ## Setup
 
@@ -14,7 +14,7 @@ pnpm assets:prepare
 pnpm dev
 ```
 
-Dev server: `http://127.0.0.1:5173`, strict port. Windows 7/10 disks are not in Git; the app asks for a local RAW disk. Debian images need Linux or WSL2; the boot test is opt-in (`VM_E2E_ASSETS=1`).
+Dev server: `http://127.0.0.1:5173`, strict port. Windows 7/10 disks are not in Git; the app asks for a local RAW disk. Debian images need Linux or WSL2; the boot test is opt-in through `VM_E2E_ASSETS=1`.
 
 ## Checks before opening a pull request
 
@@ -43,14 +43,14 @@ pnpm test:e2e   # Playwright, port 5200
 ## Licensing of contributions
 
 By submitting a contribution you agree that it is licensed under the LumiBoot Source-Available
-License 1.0 (see [`LICENSE`](LICENSE)), and that the author may integrate it under the same terms,
+License 1.0, see [`LICENSE`](LICENSE), and that the author may integrate it under the same terms,
 including commercially, while you keep your copyright. Re-publication under another name and
 commercial use still require the author's permission.
 
 ## Never commit
 
 - Disk or ISO images: `.img`, `.iso`, `.qcow2`, `.vhd`, `.vmdk`, `.vdi`, `.ext*`; `apps/web/public/images/`, `apps/web/public/v86/`.
-- Release binaries of `apps/web/public/downloads/` (`*.exe`, `*.tar.gz`, `*.zip`); publish as
+- Release binaries of `apps/web/public/downloads/`: `*.exe`, `*.tar.gz` and `*.zip`; publish as
   GitHub Release assets, keep only `manifest.json` and `SHA256SUMS`.
-- Playwright reports and traces (`playwright-report/`, `test-results/`); caches, build output and
-  logs (`node_modules/`, `dist/`, `*.log`, `.env*`).
+- Playwright reports and traces: `playwright-report/` and `test-results/`; caches, build output and
+  logs: `node_modules/`, `dist/`, `*.log`, `.env*`.

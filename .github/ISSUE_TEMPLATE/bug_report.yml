@@ -47,8 +47,8 @@ body:
         - Debian 12 CLI
         - Windows 7
         - Windows 10
-        - Other (describe below)
-        - Not applicable (UI or tooling)
+        - Other, described below
+        - Not applicable, UI or tooling
     validations:
       required: true
   - type: textarea

@@ -6,10 +6,10 @@ import { expect, test } from '@playwright/test';
  * These tests verify three facts observable in the served application:
  *  1. `/settings` no longer exists: no network page is rendered, the
  *     "not found" state is displayed instead.
- *  2. Catalog availability stays DERIVED: Debian (proven real boot) carries
- *     the "Available" badge.
- *  3. `public/lumiboot.config.json` is deployed and served as JSON (never the
- *     HTML SPA fallback), with version 1 and a default network profile.
+ *  2. Catalog availability stays DERIVED: Debian, whose real boot is proven,
+ *     carries the "Available" badge.
+ *  3. `public/lumiboot.config.json` is deployed and served as JSON, never as the
+ *     HTML SPA fallback, with version 1 and a default network profile.
  */
 test.describe('Global configuration and removal of Settings', () => {
   test('no longer exposes a Settings page (not found state)', async ({ page }) => {
