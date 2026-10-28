@@ -2,8 +2,6 @@
 
 <img src="apps/web/public/assets/banniere.svg" alt="Cornelius, le miroir intelligent de la famille" width="100%" />
 
-# LumiBoot
-
 <h3>A universal platform for booting real operating systems directly in a browser tab.</h3>
 
 LumiBoot is a browser-based operating system emulation platform designed to run a wide range of real operating systems, from legacy 32-bit environments to modern 64-bit systems. Powered by WebAssembly, it emulates hardware directly on the user's device, allowing operating systems to boot and run entirely inside a browser tab, without installation, server-side virtualization, or dedicated software.
