@@ -253,7 +253,7 @@ class ManualEngine implements VMEngine {
   }
 }
 
-/** Instance whose `stop()` and `dispose()` reject (destroy failure). */
+/** Instance whose `stop()` and `dispose()` reject. */
 class FailingCleanupInstance implements VMInstance {
   readonly id = 'failing-cleanup';
   readonly providerId = 'failing';

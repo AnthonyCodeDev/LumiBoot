@@ -1,11 +1,11 @@
 import { expect, test, type Locator } from '@playwright/test';
 
 /**
- * Real guest network through a personal **WISP relay** (`user-relay` mode).
+ * Real guest network through a personal **WISP relay**, `user-relay` mode.
  *
  * This test is **opt-in**: it is never run, nor reported as passed, without a
  * real v86-compatible WISP relay provided by the user. The relay address is
- * **never** hard-coded (neither in the sources nor in CI): it only comes from
+ * **never** hard-coded, neither in the sources nor in CI: it only comes from
  * the `LUMIBOOT_WISP_RELAY_URL` environment variable.
  *
  * Enabling it:
@@ -17,7 +17,7 @@ import { expect, test, type Locator } from '@playwright/test';
  * Without both variables, every case is **skipped**.
  *
  * The `user-relay` profile is injected through **Playwright request
- * interception** (`page.route` on `lumiboot.config.json`), as
+ * interception**, with `page.route` on `lumiboot.config.json`, as
  * `network-debian.spec.ts` already does for the unreachable relay. The public
  * `apps/web/public/lumiboot.config.json` file is **never** modified: no parallel
  * run or interruption can leave the repository altered.
@@ -25,7 +25,7 @@ import { expect, test, type Locator } from '@playwright/test';
 const relay = process.env.LUMIBOOT_WISP_RELAY_URL;
 const assetsPresent = process.env.VM_E2E_ASSETS === '1';
 
-/** Same helper as `network-debian.spec.ts` (output isolated by markers). */
+/** Same helper as `network-debian.spec.ts`, with the output isolated by markers. */
 async function probe(
   serial: Locator,
   command: string,
@@ -65,7 +65,7 @@ test.describe('WISP network (user-relay, opt-in)', () => {
     expect(relayUrl).toMatch(/^wss:\/\//);
 
     // Injection of the `user-relay` profile at the Playwright network level: the
-    // public file is NOT modified (isolated from the other parallel specs).
+    // public file is NOT modified, so the other parallel specs stay isolated.
     await page.route('**/lumiboot.config.json', (route) =>
       route.fulfill({
         status: 200,

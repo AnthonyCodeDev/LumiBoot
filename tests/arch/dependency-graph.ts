@@ -5,16 +5,16 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
  * Workspace dependency graph analysis tool.
  *
  * It is deliberately free of external dependencies: it reads the `package.json`
- * files and the TypeScript sources, then exposes pure primitives (graph, cycles,
- * forbidden imports) that the architecture tests assemble into rules.
+ * files and the TypeScript sources, then exposes pure primitives such as graphs,
+ * cycles and forbidden imports, which the architecture tests assemble into rules.
  *
  * Two levels are distinguished:
- * - the DECLARED graph (`package.json` -> `@lumiboot/*` dependencies);
- * - the ACTUAL graph (imports present in the sources), which must be a subset of
- *   the former (no phantom dependency).
+ * - the DECLARED graph, from `package.json` to the `@lumiboot/*` dependencies;
+ * - the ACTUAL graph, the imports present in the sources, which must be a subset
+ *   of the former: no phantom dependency.
  */
 
-/** Workspace folders that are analyzed (pnpm-workspace.yaml). */
+/** Workspace folders that are analyzed by `pnpm-workspace.yaml`. */
 export const WORKSPACE_DIRS = ['apps', 'packages'] as const;
 
 /** Scope of the internal packages. */
@@ -39,11 +39,11 @@ export interface WorkspacePackage {
   readonly relDir: string;
   /** Declared internal dependencies, sorted and deduplicated. */
   readonly internalDeps: readonly string[];
-  /** All declared dependencies (internal + external), for diagnostics. */
+  /** All declared dependencies, internal and external, for diagnostics. */
   readonly declaredDeps: readonly string[];
 }
 
-/** Converts a Windows path to POSIX (readable comparisons). */
+/** Converts a Windows path to POSIX, so that it reads evenly in comparisons. */
 export function toPosix(path: string): string {
   return path.split(sep).join('/');
 }
@@ -66,8 +66,8 @@ export function internalPackageFromSpecifier(specifier: string): string | null {
 }
 
 /**
- * True when the specifier is a forbidden deep import
- * (`@lumiboot/contracts/src/...`), which would bypass the public surface.
+ * True when the specifier is a forbidden deep import such as
+ * `@lumiboot/contracts/src/...`, which would bypass the public surface.
  */
 export function isDeepInternalSpecifier(specifier: string): boolean {
   const pkg = internalPackageFromSpecifier(specifier);

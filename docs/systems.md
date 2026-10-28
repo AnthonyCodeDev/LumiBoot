@@ -27,7 +27,7 @@ Build details, package lists, profile measurements and smoke tests: [`images/deb
 
 ## Windows 7
 
-Requires an installed 32-bit RAW disk, bootable in BIOS/MBR (not UEFI/GPT), with your own license. Place it at `images/windows-7-pro-sp1-x86/disk.img`:
+Requires an installed 32-bit RAW disk, bootable in BIOS/MBR, with your own license; a UEFI/GPT installation does not boot. Place it at `images/windows-7-pro-sp1-x86/disk.img`:
 
 ```bash
 pnpm assets:windows7:prepare --source images/windows-7-pro-sp1-x86/disk.img --ref windows-7-pro-sp1-x86 --display-name "Windows 7 Professional SP1 x86" --architecture i386 --memory-mib 1536 --vga-mib 16 --out images/windows-7-pro-sp1-x86
@@ -36,7 +36,7 @@ pnpm assets:windows7:check
 
 The Lite variant reads `images/windows-7-x86/disk.img` with 1024 MiB of guest RAM. Register it with `--ref windows-7-x86 --memory-mib 1024`.
 
-Guest networking needs an NE2000 driver installed inside the disk, offline under QEMU. Disk preparation, driver install, readiness, HTTP Range transport and network modes: [`images/windows-7-pro-sp1-x86/README.md`](../images/windows-7-pro-sp1-x86/README.md) (Lite: [`images/windows-7-x86/README.md`](../images/windows-7-x86/README.md)).
+Guest networking needs an NE2000 driver installed inside the disk, offline under QEMU. Disk preparation, driver install, readiness, HTTP Range transport and network modes: [`images/windows-7-pro-sp1-x86/README.md`](../images/windows-7-pro-sp1-x86/README.md). The Lite variant has its own page: [`images/windows-7-x86/README.md`](../images/windows-7-x86/README.md).
 
 ## Windows 10 x86
 
@@ -71,9 +71,9 @@ Current groups:
 | Debian (`debian-12-i386`) | XFCE, X11, CLI | XFCE |
 | Windows 7 (`windows-7-x86`) | Professional, Lite | Professional |
 
-Helpers in `packages/catalog/src/systems.ts`: `getDisplaySystems()` (parents and standalone systems), `getVariantGroup()` (members sorted by `variantOrder`), `getDefaultVariant()` (first member), `getVariantParent()` / `getVariantParentId()` (parent resolution), `hasVariants()` (group with several entries).
+Helpers in `packages/catalog/src/systems.ts`: `getDisplaySystems()` returns the parents and standalone systems, `getVariantGroup()` the members sorted by `variantOrder`, `getDefaultVariant()` the first member, `getVariantParent()` and `getVariantParentId()` resolve the parent, and `hasVariants()` tells whether a group holds several entries.
 
-Adding one: image (`images.ts`), profile (`profiles.ts`), `variantGroupId`, `variantName`, `variantOrder`, catalogue/UI/E2E tests. No React component to change.
+Adding one: the image in `images.ts`, the profile in `profiles.ts`, then `variantGroupId`, `variantName`, `variantOrder` and the catalogue/UI/E2E tests. No React component to change.
 
 ## Availability
 

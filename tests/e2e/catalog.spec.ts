@@ -47,9 +47,10 @@ test.describe('Library', () => {
 });
 
 /**
- * Windows 10 x86: standalone system (no more variant group), validated and
- * therefore `ready` like Windows 7. Availability relies on the same real boot
- * pipeline as Windows 7 (see tests/e2e/windows10-desktop.spec.ts).
+ * Windows 10 x86 is a standalone system, with no more variant group; it is
+ * validated and therefore `ready` like Windows 7. Availability relies on the
+ * same real boot pipeline as Windows 7, as proven in
+ * `tests/e2e/windows10-desktop.spec.ts`.
  */
 test.describe('Windows 10 x86 (standalone system)', () => {
   test('exposes a single `ready` card and opens the page', async ({ page }) => {
@@ -60,7 +61,8 @@ test.describe('Windows 10 x86 (standalone system)', () => {
     await expect(card).toHaveCount(1);
     // No phantom card anymore: the x64 variant does not exist.
     await expect(page.locator('.os-card[data-id="windows-10-x64"]')).toHaveCount(0);
-    // Validated (same pipeline as Windows 7): advertised as "Available" (`ready`).
+    // Validated through the same pipeline as Windows 7: advertised as `ready`,
+    // hence "Available".
     await expect(card.locator('.card-status')).toHaveAttribute('data-state', 'ready');
 
     await card.click();

@@ -3,15 +3,15 @@ import { expect, test, type Page } from '@playwright/test';
 /**
  * Validation of the sizing of the generic "screen" component, without starting a
  * VM: the real app/CSS is loaded from `/`, then the real structure produced by
- * the v86 provider is injected (`.session-screen` > `.session-toolbar` +
+ * the v86 provider is injected: `.session-screen` > `.session-toolbar` +
  * `.session-viewport` > `.session-console` > `.v86-console` > `.v86-screen` >
- * `.v86-screen-text` + `canvas.v86-screen-canvas`, with `.v86-serial`).
+ * `.v86-screen-text` + `canvas.v86-screen-canvas`, plus `.v86-serial`.
  *
  * Required proofs:
- *  (a) no parasitic vertical page scroll;
- *  (b) the session viewport never exceeds 80 % of the window height;
- *  (c) in graphical mode, the canvas keeps its intrinsic ratio (not stretched);
- *  (d) no horizontal overflow.
+ *  1. no parasitic vertical page scroll;
+ *  2. the session viewport never exceeds 80 % of the window height;
+ *  3. in graphical mode, the canvas keeps its intrinsic ratio, unstretched;
+ *  4. no horizontal overflow.
  */
 
 type ScreenMode = 'graphical' | 'text';
@@ -131,11 +131,11 @@ async function measure(page: Page): Promise<SizingMeasure> {
 }
 
 function expectNoOverflow(measurement: SizingMeasure): void {
-  // (a) no parasitic vertical scroll.
+  // 1. no parasitic vertical scroll.
   expect(measurement.scrollHeight).toBeLessThanOrEqual(measurement.innerHeight + 1);
-  // (b) cap: the viewport never exceeds 80 % of the window.
+  // 2. cap: the viewport never exceeds 80 % of the window.
   expect(measurement.viewportHeight).toBeLessThanOrEqual(measurement.innerHeight * 0.8 + 1);
-  // (d) no horizontal overflow.
+  // 4. no horizontal overflow.
   expect(measurement.scrollWidth).toBeLessThanOrEqual(measurement.innerWidth + 1);
 }
 
@@ -155,12 +155,12 @@ test.describe('Sizing of the screen component - real CSS in Chromium', () => {
 
       const m = await measure(page);
       expectNoOverflow(m);
-      // (c) intrinsic ratio preserved (neither stretched nor squashed).
+      // 3. intrinsic ratio preserved, neither stretched nor squashed.
       const expectedRatio = 1024 / 768;
       const actualRatio = m.canvasWidth / m.canvasHeight;
       expect(Math.abs(actualRatio - expectedRatio)).toBeLessThan(0.02);
       expect(m.canvasWidth).toBeLessThanOrEqual(m.viewportWidth + 1);
-      // Black surface fitted to the rendered content (no side black bars).
+      // Black surface fitted to the rendered content, with no side black bars.
       expect(Math.abs(m.screenWidth - m.canvasWidth)).toBeLessThanOrEqual(2);
       // Fallback: the shell stays full width (a `fit-content` on the container
       // would rely on the intrinsic canvas size, not on its height-constrained

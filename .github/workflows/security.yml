@@ -1,9 +1,9 @@
 name: Security
 
-# Supply-chain security scan, in a SINGLE job to limit the number of
-# checks: committed secrets (gitleaks, full history), vulnerabilities in
-# shipped dependencies (pnpm audit) and reachable Go vulnerabilities
-# (govulncheck). Complements `ci.yml` without duplicating it.
+# Supply-chain security scan, in a SINGLE job to limit the number of checks:
+# committed secrets with gitleaks over the full history, vulnerabilities in
+# shipped dependencies with pnpm audit, and reachable Go vulnerabilities with
+# govulncheck. Complements `ci.yml` without duplicating it.
 on:
   push:
     branches: [main]

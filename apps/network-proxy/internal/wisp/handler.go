@@ -117,7 +117,7 @@ type Handler struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	send chan []byte // producers -> single writer (only closed by shutdown)
+	send chan []byte // producers -> single writer, closed only by shutdown
 
 	wgProducers sync.WaitGroup // watchdog, dials, pumps, stream writers
 	wgWriter    sync.WaitGroup // WebSocket writer

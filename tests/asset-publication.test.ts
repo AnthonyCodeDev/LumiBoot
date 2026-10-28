@@ -13,8 +13,8 @@ import { createDiskAssetMiddleware, toPublicDiskManifest } from '../scripts/lib/
 import { parseArgs, toPublicServedManifest } from '../scripts/serve-windows7-asset.mjs';
 
 /**
- * P1: a disk manifest served over HTTP must NEVER expose `source` (the real
- * machine path) nor `provenance` (internal). These tests cover the public
+ * P1: a disk manifest served over HTTP must NEVER expose `source`, the real
+ * machine path, nor `provenance`, which is internal. These tests cover the public
  * serialization of both local servers and check, against a real HTTP server,
  * that no source path leaks out of the development middleware.
  */

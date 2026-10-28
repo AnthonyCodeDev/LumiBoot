@@ -4,11 +4,11 @@
 
 ```text
 React UI
-  ├─ validated catalogue (@lumiboot/catalog + @lumiboot/contracts)
-  └─ SessionLifecycle / VMRegistry (@lumiboot/vm-core)
-       └─ lazy adapter → V86Provider (dynamic import)
-            ├─ assets and manifests (@lumiboot/vm-assets)
-            └─ network profile (@lumiboot/vm-network)
+  ├─ validated catalogue — @lumiboot/catalog + @lumiboot/contracts
+  └─ SessionLifecycle / VMRegistry — @lumiboot/vm-core
+       └─ lazy adapter → V86Provider, dynamic import
+            ├─ assets and manifests — @lumiboot/vm-assets
+            └─ network profile — @lumiboot/vm-network
                  ├─ v86 Fetch
                  ├─ WISP local proxy
                  └─ user WISP relay
@@ -34,7 +34,7 @@ VM, CPU and RAM run in the browser; the local proxy and the WISP relay carry net
 
 ## Architecture guardrails
 
-`tests/architecture.test.ts` runs these rules from `tests/arch/dependency-graph.ts`, with no external dependency. A violation fails `pnpm test`, locally and in CI. The declared graph (`package.json`) and the real import graph are acyclic; `findCycles` (Tarjan) reports a cycle and the suite fails.
+`tests/architecture.test.ts` runs these rules from `tests/arch/dependency-graph.ts`, with no external dependency. A violation fails `pnpm test`, locally and in CI. The declared graph in `package.json` and the real import graph are acyclic; `findCycles` runs Tarjan's algorithm, reports a cycle and the suite fails.
 
 ### Package boundaries
 
@@ -55,27 +55,27 @@ provider-v86            → {contracts, vm-assets, vm-core, vm-network}
 - An undeclared `@lumiboot/*` dependency is a phantom dependency and fails the test.
 - No package depends on `@lumiboot/web`, React or Zustand.
 - Deep imports `@lumiboot/<pkg>/…` and relative paths crossing a package are forbidden. The public surface is `src/index.ts`.
-- A new package declares its boundary (test "each workspace package declares its boundaries").
+- A new package declares its boundary; the test "each workspace package declares its boundaries" enforces it.
 
 ### Profile / `engineId` runtime compatibility
 
 - The profile `engineId` exists in the catalogue (`packages/catalog/src/engines.ts`).
-- The profile engine serves the system architecture (test table `ENGINE_ARCHITECTURES`).
+- The profile engine serves the system architecture, per the `ENGINE_ARCHITECTURES` test table.
 - A `validated` profile relies on an `integrated` engine.
-- `checkEngineCompatibility` (`packages/vm-core/src/compatibility/`) checks `canRun`, the architecture when the engine declares one, and WebAssembly for every `browser` profile.
+- `checkEngineCompatibility`, in `packages/vm-core/src/compatibility/`, checks `canRun`, the architecture when the engine declares one, and WebAssembly for every `browser` profile.
 
 ### Concurrency
 
 `SessionLifecycle` and `VMRegistry` run against a fake engine, without disk:
 
-- two concurrent `start()` calls create a single instance (single-flight);
+- two concurrent `start()` calls create a single instance; the start is single-flight;
 - two concurrent sessions stay isolated, with no shared state;
 - `dispose()` during an in-flight `start()` releases the instance, without orphan;
 - `register()` is idempotent for the same engine.
 
 ## Launch flow
 
-1. The catalogue builds and validates the `OSDefinition` objects (image + profile).
+1. The catalogue builds and validates the `OSDefinition` objects, an image plus a profile.
 2. The UI creates a session from the system or variant id.
 3. `VMRegistry` resolves the engine; the web adapter imports `@lumiboot/provider-v86` dynamically.
 4. `V86Provider` checks the manifest and builds the emulator for the profile.

@@ -11,7 +11,7 @@
 | `local-proxy` | WISP V1 to `127.0.0.1:37892` | pairing required, outbound TCP only |
 | `user-relay` | WISP over `wss://` | relay provided and administered by the user |
 
-The catalogue profile imposes the adapter. Windows 7 uses `ne2k` (RTL8029, driver to install in the image, [`windows-7-pro-sp1-x86/README.md`](../../images/windows-7-pro-sp1-x86/README.md)). Windows 10 x86 uses `virtio-net` (PCI `0x1AF4:0x1041`, VirtIO NetKVM driver required, guest connectivity untested, [`windows-10-x86/README.md`](../../images/windows-10-x86/README.md)). Debian uses `virtio-net` (6.x kernel).
+The catalogue profile imposes the adapter. Windows 7 uses `ne2k`, the RTL8029 chip, and the driver must be installed in the image; see [`windows-7-pro-sp1-x86/README.md`](../../images/windows-7-pro-sp1-x86/README.md). Windows 10 x86 uses `virtio-net`, PCI `0x1AF4:0x1041`, which requires the VirtIO NetKVM driver; guest connectivity is untested, see [`windows-10-x86/README.md`](../../images/windows-10-x86/README.md). Debian uses `virtio-net` on its 6.x kernel.
 
 ## Evidence level
 
@@ -50,7 +50,7 @@ The profile applies before v86 is created; a mode change requires a new session.
 
 ### Local proxy
 
-The frontend detects the proxy, requests pairing, verifies the token (`GET /api/session/verify`), then substitutes `local-proxy` for any base mode except `offline` and `user-relay` (`selectEffectiveNetworkProfile`, `packages/vm-network/src/proxy.ts`). A `local-proxy` without a proxy falls back to `browser-fetch`. See [`network-proxy.md`](network-proxy.md).
+The frontend detects the proxy, requests pairing, verifies the token with `GET /api/session/verify`, then substitutes `local-proxy` for any base mode except `offline` and `user-relay`; see `selectEffectiveNetworkProfile` in `packages/vm-network/src/proxy.ts`. A `local-proxy` without a proxy falls back to `browser-fetch`. See [`network-proxy.md`](network-proxy.md).
 
 ## Verification from Debian
 
@@ -65,6 +65,6 @@ curl -I https://deb.debian.org/
 
 ## Lifecycle
 
-One session, one controller: `start(signal?: AbortSignal)`, `stop()`, `dispose()` (idempotent). Disposal removes v86 listeners and closes the transport.
+One session, one controller: `start(signal?: AbortSignal)`, `stop()`, `dispose()`. Both `stop()` and `dispose()` are idempotent. Disposal removes v86 listeners and closes the transport.
 
 Decisions: [`adr/0005-network-universal.md`](../adr/0005-network-universal.md), [`adr/0007-network-proxy.md`](../adr/0007-network-proxy.md).

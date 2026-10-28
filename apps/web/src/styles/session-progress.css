@@ -1,4 +1,4 @@
-/* Session boot: heading + log journal (dark theme, shared tokens). */
+/* Session boot: heading + log journal on the dark theme, using the shared tokens. */
 
 .session-progress {
   display: flex;
@@ -128,7 +128,7 @@
   transition: color var(--duration) var(--ease);
 }
 
-/* The last line (most recent) is highlighted. */
+/* The last line, the most recent one, is highlighted. */
 .session-logs-line[data-current] {
   color: var(--text-secondary);
 }

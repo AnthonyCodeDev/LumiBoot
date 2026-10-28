@@ -2,7 +2,10 @@
 
 **The first launcher that boots real x86 operating systems in a browser tab.**
 
-A React catalogue and library for booting x86 systems in the browser. The CPU is emulated in WebAssembly (v86), the firmware is a real BIOS, disks are read over HTTP Range. No backend sits between the browser and the guest: the OS boots from BIOS to kernel to desktop, with network when the selected mode provides it. No system image is shipped, the catalogue boots the media you supply.
+LumiBoot boots x86 operating systems inside a browser tab. The CPU is emulated in WebAssembly by
+v86, the firmware is a real BIOS, and disks are read over HTTP Range. No backend sits between the
+browser and the guest: the machine boots from BIOS to kernel to desktop, with networking when the
+selected mode provides it. No system image is shipped; you supply the media.
 
 [![CI](https://github.com/AnthonyCodeDev/LumiBoot/actions/workflows/ci.yml/badge.svg)](https://github.com/AnthonyCodeDev/LumiBoot/actions/workflows/ci.yml)
 [![Hygiene](https://github.com/AnthonyCodeDev/LumiBoot/actions/workflows/hygiene.yml/badge.svg)](https://github.com/AnthonyCodeDev/LumiBoot/actions/workflows/hygiene.yml)
@@ -63,7 +66,7 @@ Per-system instructions: [`docs/systems.md`](docs/systems.md).
 pnpm build                 # recursive build + Vite bundle
 pnpm typecheck             # tsc --noEmit
 pnpm lint                  # ESLint
-pnpm format:check          # Prettier (pnpm format rewrites)
+pnpm format:check          # Prettier check; pnpm format rewrites
 pnpm test                  # Vitest
 pnpm test:e2e              # Playwright, port 5200
 pnpm assets:check          # v86 binary integrity
@@ -71,13 +74,13 @@ pnpm assets:windows7:prepare|check
 pnpm assets:windows10:prepare|check
 ```
 
-Real boot tests need the images and stay opt-in: `VM_E2E_ASSETS=1 pnpm test:e2e` (several GiB of media; those tests are skipped otherwise).
+The real boot tests need several GiB of media and stay opt-in: `VM_E2E_ASSETS=1 pnpm test:e2e`. They are skipped otherwise.
 
 ## Architecture
 
 | Path                    | Role                                                                            |
 | ----------------------- | ------------------------------------------------------------------------------- |
-| `apps/web`              | React/Vite, catalogue, sessions, dynamic provider import                        |
+| `apps/web`              | web interface, sessions, dynamic provider loading                               |
 | `apps/network-proxy`    | local WISP V1 proxy in Go (`127.0.0.1:37892`)                                   |
 | `packages/contracts`    | types and Zod schemas                                                           |
 | `packages/catalog`      | images, profiles, engines, variants, availability                               |
@@ -103,7 +106,7 @@ The profile is fixed before v86 starts; changing it requires a new session. `loc
 ## Security
 
 - Proprietary images are never distributed by this repository.
-- In production, the nginx configuration ([`infra/nginx/site.conf`](infra/nginx/site.conf)) returns 404 for any Windows image under `/images/`; the development middleware that serves disks in place exists locally only.
+- In production, the nginx configuration in [`infra/nginx/site.conf`](infra/nginx/site.conf) returns 404 for any Windows image under `/images/`; the development middleware that serves disks in place exists locally only.
 - Origins and response headers are set in `infra/nginx`.
 - Secrets are supplied only through environment variables.
 - Report vulnerabilities privately, as described in [`docs/SECURITY.md`](docs/SECURITY.md) or through GitHub Security Advisories.

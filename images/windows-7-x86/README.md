@@ -4,7 +4,7 @@
 
 ## What you must provide
 
-An installed 32-bit Windows 7 RAW disk, bootable in BIOS/MBR (not UEFI/GPT), and your own licence. No disk, ISO or key is shipped: `disk.img` is Git-ignored, `manifest.json` stores no absolute path.
+An installed 32-bit Windows 7 RAW disk, bootable in BIOS/MBR, and your own licence; a UEFI/GPT disk does not boot. No disk, ISO or key is shipped: `disk.img` is Git-ignored, `manifest.json` stores no absolute path.
 
 1. Put the RAW disk here: `disk.img`.
 2. Regenerate the manifest with the Lite options:

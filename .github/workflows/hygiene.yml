@@ -1,9 +1,9 @@
 name: Hygiene
 
 # Hygiene guardrails, in a SINGLE job to limit the number of checks:
-# Prettier formatting, v86 binary integrity (pinned SHA-256), no committed
-# media/large files and no committed network client release binaries (those
-# are published as GitHub Release assets). Complements `ci.yml` without
+# Prettier formatting, v86 binary integrity pinned by SHA-256, no committed
+# media/large files and no committed network client release binaries, which
+# are published as GitHub Release assets. Complements `ci.yml` without
 # duplicating it.
 on:
   push:

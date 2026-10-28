@@ -3,9 +3,9 @@ import { expect, test } from '@playwright/test';
 /**
  * Real boot of Debian 12 i386 in v86.
  *
- * This test is only enabled when the Debian artifacts are really published
- * (rootfs.img, vmlinuz-686, initrd.img, manifest.json) and the image is marked
- * as available. It NEVER replaces a mocked test with proof of operation:
+ * This test is only enabled when the Debian artifacts are really published,
+ * namely rootfs.img, vmlinuz-686, initrd.img and manifest.json, and the image is
+ * marked as available. It NEVER replaces a mocked test with proof of operation:
  * without artifacts it is explicitly skipped, not "passed".
  *
  *   VM_E2E_ASSETS=1 pnpm test:e2e
@@ -23,10 +23,10 @@ test.describe('Debian 12 i386 session (v86, real boot)', () => {
     await page.getByLabel('Search for a system').fill('debian');
     await page.locator('.os-card').first().click();
     await expect(page).toHaveURL(/\/systems\//);
-    // The mother page preselects the BEST Debian variant (XFCE, which starts
-    // Xorg and switches the screen to graphical mode). This test targets the
-    // console variant: it is selected EXPLICITLY to guarantee a text-mode boot
-    // (VGA/tty1 login, no X session).
+    // The mother page preselects the BEST Debian variant, XFCE, which starts Xorg
+    // and switches the screen to graphical mode. This test targets the console
+    // variant: it is selected EXPLICITLY to guarantee a text-mode boot with
+    // VGA/tty1 login and no X session.
     await page.getByRole('button', { name: 'Choose variant' }).click();
     await page.getByRole('button', { name: 'Debian CLI', exact: true }).click();
     await page.getByRole('button', { name: 'Start session' }).click();
@@ -57,15 +57,15 @@ test.describe('Debian 12 i386 session (v86, real boot)', () => {
     await expect(serial).toHaveValue(/Debian GNU\/Linux 12 \(bookworm\)/, { timeout: 30_000 });
     await expect(serial).toHaveValue(/LumiBootOK/, { timeout: 30_000 });
 
-    // VGA autologin (tty1): the user must never type their login.
-    // The VGA console in text mode (vgacon, no bochs-drm framebuffer) must show
-    // a logged-in `lumiboot@lumiboot` shell with the `automatic login` banner,
-    // and must NOT stay blocked on a pending `login:` prompt waiting for input
-    // (generous timeout: software emulation needs ~1-2 min to stabilize the
-    // text screen).
+    // VGA autologin on tty1: the user must never type their login.
+    // The VGA console in text mode, with vgacon and no bochs-drm framebuffer,
+    // must show a logged-in `lumiboot@lumiboot` shell with the `automatic login`
+    // banner, and must NOT stay blocked on a pending `login:` prompt waiting for
+    // input. The timeout is generous, since software emulation needs ~1-2 min to
+    // stabilize the text screen.
     // Note: the autologin banner itself contains the `login:` string, so the
-    // absence of a *pending* prompt is checked (screen ending with `login:`)
-    // rather than a naive absence of the substring.
+    // absence of a *pending* prompt is checked, meaning a screen ending with
+    // `login:`, rather than a naive absence of the substring.
     const vga = page.locator('.v86-screen-text');
     await expect(vga).toContainText(/lumiboot@lumiboot/, { timeout: 180_000 });
     const vgaText = (await vga.textContent()) ?? '';

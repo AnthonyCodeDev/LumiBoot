@@ -8,11 +8,11 @@ import { parseLocalDiskManifest } from '../packages/vm-assets/src/local-disk';
 
 /**
  * Integration test of the `scripts/prepare-windows10-asset.mjs` wrapper: it
- * must DELEGATE to the proven generator while pinning the Windows 10 x86 values
- * (ref, display-name, architecture, memory, VGA), forward the CLI options
- * (--check/--force/--skip-hash/--json) and REFUSE non-bootable `hda` media (ISO
- * only, QCOW2) without ever writing a bogus manifest. A small temporary image is
- * used, never the real disk.
+ * must DELEGATE to the proven generator while pinning the Windows 10 x86 values,
+ * namely ref, display-name, architecture, memory and VGA; forward the CLI options
+ * --check, --force, --skip-hash and --json; and REFUSE non-bootable `hda` media
+ * such as an ISO or a QCOW2 without ever writing a bogus manifest. A small
+ * temporary image is used, never the real disk.
  */
 
 const repoRoot = process.cwd();
@@ -62,7 +62,7 @@ describe('prepare-windows10-asset.mjs', () => {
       size: sourceBytes.length,
     });
     expect(manifest.engine.wasm.sha256).toHaveLength(64);
-    // The default notes (Windows 7) are replaced by the Windows 10 ones.
+    // The default notes, written for Windows 7, are replaced by the Windows 10 ones.
     expect(manifest.notes?.join(' ')).toContain('Windows 10');
     expect(manifest.notes?.join(' ')).not.toContain('Windows 7');
   });

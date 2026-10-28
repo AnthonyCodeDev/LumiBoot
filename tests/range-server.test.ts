@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { createAssetServer, parseRangeHeader } from '../scripts/lib/range-server.mjs';
 
 /**
- * Real tests of the local Range HTTP server (no network mock): a server starts
- * on an ephemeral port and the exact returned bytes are read. This proves that
- * v86 (`Range: bytes=...`) really gets compliant 206 responses.
+ * Real tests of the local Range HTTP server, with no network mock: a server
+ * starts on an ephemeral port and the exact returned bytes are read. This proves
+ * that v86 really gets compliant 206 responses to `Range: bytes=...`.
  */
 
 const SIZE = 1000;

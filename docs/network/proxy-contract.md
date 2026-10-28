@@ -36,8 +36,8 @@ Frame: `[type:u8][stream_id:u32 little-endian][payload]`. The CONNECT payload is
 | CLOSE | `0x04` | yes |
 | INFO V2 | `0x05` | ignored |
 
-UDP closes with code `0x41`. The proxy advertises `wispVersion: 1`; any other version is refused (`PROXY_WISP_VERSION`).
+UDP closes with code `0x41`. The proxy advertises `wispVersion: 1`; any other version is refused with `PROXY_WISP_VERSION`.
 
 ## Web persistence
 
-The token lives in `sessionStorage` (`lumiboot.proxy.session`: `{token, expiresAt, proxyUrl}`). A tab reload keeps it, a tab close drops it. It is purged on expiry, on revocation, if `proxyUrl` differs or if the JSON is invalid (`apps/web/src/features/proxy/persistence.ts`), and the inherited `localStorage` entry is removed.
+The token lives in `sessionStorage` under the `lumiboot.proxy.session` key, as `{token, expiresAt, proxyUrl}`. A tab reload keeps it, a tab close drops it. It is purged on expiry, on revocation, if `proxyUrl` differs or if the JSON is invalid, all handled in `apps/web/src/features/proxy/persistence.ts`, and the inherited `localStorage` entry is removed.

@@ -1,24 +1,24 @@
 # Remote WISP relay
 
-Docker Compose WISP relay (`wisp-python` 0.9.0, pinned in the `Dockerfile` `pip install` step) behind Caddy: `wisp` (internal only, compose `expose: 8080`, read-only) and `caddy:2` (80/443), no VM.
+Docker Compose WISP relay built on `wisp-python` 0.9.0, pinned in the `Dockerfile` `pip install` step, behind Caddy: `wisp`, internal only, with compose `expose: 8080` and read-only, and `caddy:2` on ports 80 and 443. No VM.
 
 ## Start
 
 Prerequisites: Linux, Docker Compose, a pointed subdomain, ports 80 and 443 free.
 
 ```bash
-cp .env.example .env   # WISP_DOMAIN + LUMIBOOT_ORIGIN (exact origin, no trailing slash)
+cp .env.example .env   # WISP_DOMAIN + LUMIBOOT_ORIGIN, exact origin without a trailing slash
 docker compose config
 docker compose up -d --build
 docker compose logs -f --tail=80
 curl -i https://relay.example.com/healthz
 ```
 
-`/healthz`: Caddy probe, not the WISP backend (the `handle /healthz` block of the `Caddyfile`). Caddy returns 403 if `Origin` differs from `LUMIBOOT_ORIGIN` or without a WebSocket upgrade: the `handle @allowed` block only reverse-proxies to `wisp:8080` when both headers match, the fallback `handle` responds 403.
+`/healthz` is a Caddy probe, not the WISP backend: it comes from the `handle /healthz` block of the `Caddyfile`. Caddy returns 403 if `Origin` differs from `LUMIBOOT_ORIGIN` or without a WebSocket upgrade: the `handle @allowed` block only reverse-proxies to `wisp:8080` when both headers match, and the fallback `handle` responds 403.
 
 ## LumiBoot configuration
 
-`network` section of `apps/web/public/lumiboot.config.json` (template: [`lumiboot.config.network.example.json`](lumiboot.config.network.example.json)):
+`network` section of `apps/web/public/lumiboot.config.json`; a template is provided in [`lumiboot.config.network.example.json`](lumiboot.config.network.example.json):
 
 ```json
 {
@@ -35,6 +35,6 @@ From the guest: `ip -br addr`, `getent hosts deb.debian.org`, `curl -I https://d
 
 ## Limitations
 
-Not a public relay: `Origin` does not authenticate a non-browser client; add authentication, quotas, egress filtering and monitoring before exposing it. Traffic leaves with the server IP. `wisp-python`: AGPL-3.0 ([`../../docs/LICENSES.md`](../../docs/LICENSES.md)).
+Not a public relay: `Origin` does not authenticate a non-browser client; add authentication, quotas, egress filtering and monitoring before exposing it. Traffic leaves with the server IP. `wisp-python` is under AGPL-3.0; see [`../../docs/LICENSES.md`](../../docs/LICENSES.md).
 
 Stop: `docker compose down`.
