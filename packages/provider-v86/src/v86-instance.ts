@@ -16,11 +16,10 @@ export interface V86InstanceDeps {
   readonly readiness: GuestReadiness;
   readonly id?: string;
   readonly onCleanupError?: (error: unknown) => void;
-  /** Diagnostics are relayed as `network` events. */
   readonly network?: NetworkController;
 }
 
-/** Ordered readiness stages; `unverified` never means `guest-ready`. */
+/** Ordered stages; `unverified` never means `guest-ready`. */
 export type V86ReadinessStage =
   'idle' | 'emulator-ready' | 'booting' | 'guest-ready' | 'unverified';
 
@@ -33,11 +32,7 @@ export const V86_PROGRESS = {
   bootTimeout: 'boot-timeout',
 } as const;
 
-/**
- * `running` is emitted once, only on the proof declared by the profile. A
- * timeout only publishes the `boot-timeout` diagnostic: it never stops the VM
- * and a late proof is still accepted.
- */
+/** `running` once, only on the profile's proof; a timeout never stops the VM. */
 export class V86Instance implements VMInstance {
   readonly id: string;
   readonly providerId: string;
@@ -60,10 +55,7 @@ export class V86Instance implements VMInstance {
   #stopSignalled = false;
   #disposed = false;
   #runningEmitted = false;
-  /**
-   * Diagnostic only: the delay for the boot proof expired. It never blocks a
-   * later proof and never issues a stop.
-   */
+  /** Diagnostic only: the delay expired, it never blocks a later proof. */
   #bootTimedOut = false;
   #readinessStage: V86ReadinessStage = 'idle';
   #readyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -144,10 +136,7 @@ export class V86Instance implements VMInstance {
     this.#pending = [];
   }
 
-  /**
-   * The lifecycle forbids `running -> stopped`; a spontaneous stop must pass
-   * through `stopping`.
-   */
+  /** The lifecycle forbids `running -> stopped`: go through `stopping`. */
   #signalStopped(): void {
     if (this.#stopSignalled) return;
     this.#stopSignalled = true;
@@ -166,7 +155,6 @@ export class V86Instance implements VMInstance {
     for (const listener of this.#listeners) listener(event);
   }
 
-  /** Emits `running` once, for the profile-declared proof only. */
   #emitRunning(proof: 'guest-marker' | 'disk-boot'): void {
     if (this.#runningEmitted || this.#stopping || this.#disposed) return;
     this.#runningEmitted = true;
@@ -192,10 +180,7 @@ export class V86Instance implements VMInstance {
     });
   };
 
-  /**
-   * On expiry without proof, only the `boot-timeout` diagnostic is published:
-   * the VM and its console stay alive and the session stays `booting`.
-   */
+  /** Expiry publishes `boot-timeout` only: the VM stays alive and `booting`. */
   #armReadyTimeout(): void {
     if (this.#readyTimer !== null) return;
     this.#readyTimer = setTimeout(() => {
@@ -207,11 +192,7 @@ export class V86Instance implements VMInstance {
     }, this.#detector.timeoutMs);
   }
 
-  /**
-   * Diagnostic only: never fatal, never re-armed. The guest stays `unverified`
-   * but a proof arriving afterwards still triggers `running`, so no `running`
-   * is ever produced without a real proof.
-   */
+  /** Diagnostic only, never re-armed: a late proof still triggers `running`. */
   #publishBootTimeout(): void {
     if (this.#bootTimedOut) return;
     this.#bootTimedOut = true;
@@ -225,10 +206,7 @@ export class V86Instance implements VMInstance {
     this.#readyTimer = null;
   }
 
-  /**
-   * Uses `#cleanup()` rather than `dispose()` so pending replay events, this
-   * error included, still reach a late subscriber.
-   */
+  /** `#cleanup()`, not `dispose()`: pending events must reach a late subscriber. */
   #failBoot(code: string, message: string): void {
     this.#emit({ type: 'error', code, message });
     void this.#cleanup();
@@ -248,10 +226,7 @@ export class V86Instance implements VMInstance {
     }
   };
 
-  /**
-   * `disk-boot` proof: first real read of `hda`, a weak BIOS-level signal never
-   * treated as a guest marker.
-   */
+  /** `disk-boot` proof: first real read of `hda`, a weak BIOS-level signal. */
   readonly #onDiskRead = (arg: V86Event['ide-read-end']): void => {
     if (this.#disposed || this.#stopping) return;
     const [channelNr, byteCount] = arg;

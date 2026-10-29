@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lumiboot/network-proxy/internal/auth"
+	"github.com/lumiboot/network-proxy/internal/testutil"
 )
 
 type approveCall struct {
@@ -82,7 +83,7 @@ func pendingFixture() []auth.Pairing {
 	return []auth.Pairing{{
 		ID:        "pair-1",
 		UserCode:  "123456",
-		Origin:    "http://localhost:5173",
+		Origin:    testutil.WebDevOrigin(),
 		ExpiresAt: time.Now().Add(10 * time.Minute),
 	}}
 }
@@ -110,15 +111,20 @@ func TestParseCommand(t *testing.T) {
 	}
 }
 
-func TestIsAffirmative(t *testing.T) {
+func TestClassifyAnswer(t *testing.T) {
 	for _, s := range []string{"y", "Y", "yes", "YES", "o", "O", "oui", "Oui", "  oui "} {
-		if !isAffirmative(s) {
-			t.Errorf("%q should be affirmative", s)
+		if got := classifyAnswer(s); got != answerYes {
+			t.Errorf("%q should be a yes, got %v", s, got)
 		}
 	}
-	for _, s := range []string{"n", "no", "non", "", "maybe", "yesx", "approve"} {
-		if isAffirmative(s) {
-			t.Errorf("%q should not be affirmative", s)
+	for _, s := range []string{"n", "N", "no", "NO", "non", "Non", " non "} {
+		if got := classifyAnswer(s); got != answerNo {
+			t.Errorf("%q should be a no, got %v", s, got)
+		}
+	}
+	for _, s := range []string{"", "  ", "maybe", "yesx", "approve", "0", "quit"} {
+		if got := classifyAnswer(s); got != answerUnclear {
+			t.Errorf("%q should be unclear, got %v", s, got)
 		}
 	}
 }
@@ -162,6 +168,55 @@ func TestRunDeniesPairingOnOtherInput(t *testing.T) {
 	}
 }
 
+func TestEmptyLineKeepsPairingPendingThenApproves(t *testing.T) {
+	fc := &fakeController{pending: pendingFixture()}
+	var out bytes.Buffer
+	// A bare Enter must not count as a refusal: the console asks again.
+	c := New(fc, strings.NewReader("\ny\n"), &out)
+	c.pollInterval = 5 * time.Millisecond
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := c.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	calls := fc.approvals()
+	if len(calls) != 1 || calls[0].id != "pair-1" || !calls[0].approve {
+		t.Fatalf("empty line must not deny the pairing: %+v", calls)
+	}
+	if !strings.Contains(out.String(), `Answer "y"`) {
+		t.Fatalf("missing re-prompt on empty line: %q", out.String())
+	}
+	if strings.Contains(out.String(), "Denied:") {
+		t.Fatalf("empty line denied the pairing: %q", out.String())
+	}
+}
+
+func TestUnknownAnswerKeepsPairingPendingThenDenies(t *testing.T) {
+	fc := &fakeController{pending: pendingFixture()}
+	var out bytes.Buffer
+	c := New(fc, strings.NewReader("maybe\nn\n"), &out)
+	c.pollInterval = 5 * time.Millisecond
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := c.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	calls := fc.approvals()
+	if len(calls) != 1 || calls[0].id != "pair-1" || calls[0].approve {
+		t.Fatalf("unknown answer must be ignored, then denial: %+v", calls)
+	}
+	if !strings.Contains(out.String(), `Answer "y"`) {
+		t.Fatalf("missing re-prompt on unknown answer: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "Denied:") {
+		t.Fatalf("final denial missing: %q", out.String())
+	}
+}
+
 func TestRunReturnsOnEOF(t *testing.T) {
 	c := New(&fakeController{}, strings.NewReader(""), io.Discard)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -191,7 +246,7 @@ func TestCommandApproveByCodeAndRevoke(t *testing.T) {
 		pending: pendingFixture(),
 		sessions: []auth.SessionInfo{{
 			ID:        "deadbeef",
-			Origin:    "http://localhost:5173",
+			Origin:    testutil.WebDevOrigin(),
 			ExpiresAt: time.Now().Add(time.Hour),
 		}},
 	}

@@ -5,7 +5,6 @@ import { engineShortLabels, getPrimaryLaunchProfile, systemVersionLabel } from '
 import { resolveNetworkProfile } from '../../config/runtime';
 import { useSessionsStore } from '../../features/sessions/sessions.store';
 
-/** States during which a stop request makes sense. */
 const STOPPABLE: readonly VMState[] = ['preparing', 'downloading', 'booting', 'running'];
 
 export interface SessionToolbarProps {

@@ -1,12 +1,24 @@
 # Web app only: running local Debian through v86 needs no backend.
+#
+# Values come from the repository `.env`. Compose only reads `.env` from this
+# directory, so point it at the root file explicitly (from `infra/dev`):
+#
+#   docker compose --env-file ../../.env up
+#
+# On the host, WEB_DEV_HOST decides the published interface (loopback by
+# default); inside the container, WEB_DEV_HOST is forced to 0.0.0.0 so Vite is
+# reachable through the published port.
 
 services:
   web:
     image: node:22-bookworm
     working_dir: /work
-    command: sh -lc "corepack enable && pnpm install && pnpm --filter @lumiboot/web dev --host 0.0.0.0"
+    command: sh -lc "corepack enable && pnpm install && pnpm --filter @lumiboot/web dev"
     ports:
-      - '5173:5173'
+      - '${WEB_DEV_HOST:-127.0.0.1}:${WEB_DEV_PORT:-5173}:${WEB_DEV_PORT:-5173}'
+    environment:
+      WEB_DEV_HOST: 0.0.0.0
+      WEB_DEV_PORT: ${WEB_DEV_PORT:-5173}
     volumes:
       - ../..:/work
       - lumiboot_node_modules:/work/node_modules

@@ -49,7 +49,6 @@ describe('StatusOverlay — boot log', () => {
         <StatusOverlay session={makeSession('booting')} system={system} consoleRef={consoleRef} />,
       );
 
-      // The terminal fills up after mount: polling must pick it up.
       const textarea = document.createElement('textarea');
       textarea.className = 'v86-serial';
       textarea.value = 'boot\n\nline 1\nline 2\nline 3\nline 4';
@@ -93,15 +92,13 @@ describe('StatusOverlay — 5 s boot veil', () => {
       expect(readLines(container)).toEqual(['Starting the system…']);
 
       advance(BOOT_VEIL_MS - 1);
-      // Still inside the window: the veil holds.
       expect(container.querySelector('.status-overlay')).not.toBeNull();
 
       advance(1);
-      // Window closed: the real UI (console or screen) is shown instead.
       expect(container.querySelector('.status-overlay')).toBeNull();
       expect(container.textContent).toBe('');
 
-      // The veil never comes back, even if the boot is still not finished.
+      // The veil never comes back, even if the boot is still unfinished.
       advance(60_000);
       expect(container.querySelector('.status-overlay')).toBeNull();
     } finally {

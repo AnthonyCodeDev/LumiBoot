@@ -4,22 +4,17 @@ test.describe('Library', () => {
   test('shows the eleven displayed catalog systems (mothers + standalone)', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible();
-    // Child variants are folded onto their mother card. With Alpine x86-64
-    // and Windows 8.1 x64 integrated, the grid exposes 11 mother/standalone
-    // cards, the generic "Custom image" closing the first,
-    // playable group.
+    // Child variants fold onto their mother card: 11 mother/standalone cards.
     await expect(page.locator('.os-card')).toHaveCount(11);
   });
 
   test('searches for a system and filters by family', async ({ page }) => {
     await page.goto('/');
     await page.getByLabel('Search for a system').fill('debian');
-    // "debian" matches the console, the Desktop AND the XFCE variant, but the
-    // grid only shows the mother card: a single card.
+    // "debian" matches console/Desktop/XFCE, but only the mother card is shown.
     await expect(page.locator('.os-card')).toHaveCount(1);
     await expect(page.locator('.os-card[data-id="debian-12-i386"]')).toHaveCount(1);
-    // The search matches child variants, but they are not displayed as
-    // standalone cards.
+    // Child variants are never displayed as standalone cards.
     await expect(page.locator('.os-card[data-id="debian-12-i386-desktop"]')).toHaveCount(0);
     await expect(page.locator('.os-card[data-id="debian-12-i386-xfce"]')).toHaveCount(0);
 
@@ -52,12 +47,7 @@ test.describe('Library', () => {
   });
 });
 
-/**
- * Windows 11 is not developed: no x86-64 engine and no image, hence "Not ready",
- * with no media to import. The generic "Custom image" is the only
- * `resource-required` entry: it reuses the user-import path of v86, so its card
- * stays playable (first group, full opacity) even though it needs user media.
- */
+// Windows 11 is "Not ready"; the generic "Custom image" needs user media.
 test.describe('Windows 11 and the generic custom image', () => {
   test('Windows 11 is "Not ready", without an import card', async ({ page }) => {
     await page.goto('/');
@@ -100,12 +90,7 @@ test.describe('Windows 11 and the generic custom image', () => {
   });
 });
 
-/**
- * Windows 10 x86 is a standalone system, with no more variant group; it is
- * validated and therefore `ready` like Windows 7. Availability relies on the
- * same real boot pipeline as Windows 7, as proven in
- * `tests/e2e/windows10-desktop.spec.ts`.
- */
+// Windows 10 x86 is standalone and validated: `ready` like Windows 7.
 test.describe('Windows 10 x86 (standalone system)', () => {
   test('exposes a single `ready` card and opens the page', async ({ page }) => {
     await page.goto('/');
@@ -115,8 +100,7 @@ test.describe('Windows 10 x86 (standalone system)', () => {
     await expect(card).toHaveCount(1);
     // No phantom card anymore: the x64 variant does not exist.
     await expect(page.locator('.os-card[data-id="windows-10-x64"]')).toHaveCount(0);
-    // Validated through the same pipeline as Windows 7: advertised as `ready`,
-    // hence "Available".
+    // Validated through the Windows 7 pipeline: advertised as "Available".
     await expect(card.locator('.card-status')).toHaveAttribute('data-state', 'ready');
 
     await card.click();

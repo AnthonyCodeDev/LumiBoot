@@ -171,7 +171,6 @@ describe('SessionScreen — voile de boot et note de preuve tardive', () => {
     expect(note.tagName).toBe('P');
     expect(note.getAttribute('role')).toBe('status');
     expect(note.textContent).toContain('not verified');
-    // Under the viewport, never an overlay: the console stays clickable.
     expect(container.querySelector('.session-viewport .session-boot-note')).toBeNull();
     expect(container.querySelector('.session-screen > .session-boot-note')).toBe(note);
   });
@@ -227,7 +226,7 @@ describe('SessionScreen — visibilité des logs', () => {
   }
 
   function expectOpen(console: HTMLElement | null, logs: HTMLElement): void {
-    // `logs-hidden` is what really hides `textarea.v86-serial`: the panel is open.
+    // `logs-hidden` is what really hides `textarea.v86-serial`, not `open` alone.
     expect(console?.classList.contains('logs-hidden')).toBe(false);
     expect(logs.getAttribute('aria-pressed')).toBe('true');
   }

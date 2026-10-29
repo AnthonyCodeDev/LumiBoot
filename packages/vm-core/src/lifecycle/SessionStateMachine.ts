@@ -4,7 +4,6 @@ import { allowedTransitions } from './SessionState';
 
 export type StateListener = (state: VMState) => void;
 
-/** Deterministic state machine: any unauthorized transition throws an error. */
 export class SessionStateMachine {
   #state: VMState = 'idle';
   readonly #listeners = new Set<StateListener>();

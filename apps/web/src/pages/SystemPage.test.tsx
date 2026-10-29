@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { SystemPage } from './SystemPage';
 
-/** Neutralized: its network probes are unrelated to variant selection. */
+/** Network probes are unrelated to variant selection. */
 vi.mock('../components/network/NetworkProxyCard', () => ({
   NetworkProxyCard: () => null,
 }));
@@ -28,16 +28,13 @@ function renderSystemPage(slug: string) {
 describe('SystemPage — variant selector', () => {
   it('shows the parent content (Debian) and opens the best variant (XFCE)', async () => {
     const user = userEvent.setup();
-    // The card opens the parent; the dropdown picks the variant to launch.
     renderSystemPage('debian-12-i386');
 
     const trigger = screen.getByRole('button', { name: 'Choose variant' });
-    // Only the name is shown, never a "Variant" label.
     expect(trigger.textContent).toBe('Debian XFCE · 32 bits');
     expect(screen.queryByText('Variant')).toBeNull();
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
 
-    // The hero shows the base, not the selected variant.
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Debian');
     expect(screen.getByRole('heading', { level: 1 }).textContent).not.toContain('XFCE');
 
@@ -45,7 +42,6 @@ describe('SystemPage — variant selector', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
 
     const options = screen.getAllByRole('option').map((option) => option.textContent);
-    // Order comes from `variantOrder`: the best variant first.
     expect(options).toEqual([
       'Debian XFCE · 32 bits',
       'Debian X11 · 32 bits',
@@ -60,13 +56,10 @@ describe('SystemPage — variant selector', () => {
     await user.click(screen.getByRole('button', { name: 'Choose variant' }));
     await user.click(screen.getByRole('button', { name: 'Debian X11 · 32 bits' }));
 
-    // No navigation: we stay on the parent page.
     expect(screen.getByTestId('location').textContent).toBe('/systems/debian-12-i386');
-    // The trigger reflects the variant to launch…
     expect(screen.getByRole('button', { name: 'Choose variant' }).textContent).toBe(
       'Debian X11 · 32 bits',
     );
-    // …but the page content stays the base one.
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Debian');
     expect(screen.getByRole('heading', { level: 1 }).textContent).not.toContain('Bureau');
   });
@@ -74,13 +67,12 @@ describe('SystemPage — variant selector', () => {
   it('a direct link to a child preselects its variant without changing the content', async () => {
     renderSystemPage('debian-12-i386-desktop');
 
-    // Wait for the effect that syncs the selection onto the child.
+    // The selection is synced to the child by an effect.
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Choose variant' }).textContent).toBe(
         'Debian X11 · 32 bits',
       );
     });
-    // The displayed content stays the parent one.
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Debian');
     expect(screen.getByTestId('location').textContent).toBe('/systems/debian-12-i386-desktop');
   });
@@ -100,7 +92,6 @@ describe('SystemPage — variant selector', () => {
 
   it('shows the Windows 7 parent selector, Professional as the default variant', async () => {
     const user = userEvent.setup();
-    // Professional is the best variant of the group, so it is preselected.
     renderSystemPage('windows-7-x86');
 
     const trigger = screen.getByRole('button', { name: 'Choose variant' });
@@ -118,18 +109,15 @@ describe('SystemPage — variant selector', () => {
 
   it('shows the Ubuntu 18.04 selector, XFCE as the default variant', async () => {
     const user = userEvent.setup();
-    // XFCE is the best variant of the group, so it is preselected.
     renderSystemPage('ubuntu-18-i386');
 
     const trigger = screen.getByRole('button', { name: 'Choose variant' });
     expect(trigger.textContent).toBe('Ubuntu XFCE · 32 bits');
-    // The hero shows the base, not the selected variant.
     expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Ubuntu');
     expect(screen.getByRole('heading', { level: 1 }).textContent).not.toContain('XFCE');
 
     await user.click(trigger);
     const options = screen.getAllByRole('option').map((option) => option.textContent);
-    // Order comes from `variantOrder`: the best variant first.
     expect(options).toEqual([
       'Ubuntu XFCE · 32 bits',
       'Ubuntu X11 · 32 bits',
@@ -147,7 +135,6 @@ describe('SystemPage — variant selector', () => {
     expect(screen.getByText('VirtIO')).toBeTruthy();
     expect(screen.getByText('Disk (hda)')).toBeTruthy();
 
-    // The console CLI variant reduces memory to 512 MiB.
     await user.click(screen.getByRole('button', { name: 'Choose variant' }));
     await user.click(screen.getByRole('button', { name: 'Debian CLI · 32 bits' }));
     expect(screen.getByText('512 MiB')).toBeTruthy();
@@ -157,7 +144,6 @@ describe('SystemPage — variant selector', () => {
   it('shows the Windows 7 variant specs (NE2000, 1536 MiB)', () => {
     renderSystemPage('windows-7-x86');
 
-    // Windows 7 Professional is the default variant of the group.
     expect(screen.getByText('Windows 7 Professional · 32 bits')).toBeTruthy();
     expect(screen.getByText('1536 MiB')).toBeTruthy();
     expect(screen.getByText('NE2000')).toBeTruthy();
@@ -169,10 +155,8 @@ describe('SystemPage — user media import', () => {
     renderSystemPage('custom-image');
 
     expect(screen.getByText('Required media (provided by you)')).toBeTruthy();
-    // v86 is integrated, but nothing is distributed: the user must import a media.
     const launch = screen.getByRole('button', { name: 'Start session' });
     expect((launch as HTMLButtonElement).disabled).toBe(true);
-    // The refusal comes from the missing media, not from a missing engine.
     expect(screen.getByRole('status').textContent).toMatch(
       /resource required.*import a disk media/i,
     );
@@ -181,7 +165,6 @@ describe('SystemPage — user media import', () => {
   it('shows no import card for a system that is not developed (Windows 11)', () => {
     renderSystemPage('windows-11-x64');
 
-    // Not developed: neither media to import nor a launchable session.
     expect(screen.queryByText('Required media (provided by you)')).toBeNull();
     const launch = screen.getByRole('button', { name: 'Start session' });
     expect((launch as HTMLButtonElement).disabled).toBe(true);
@@ -200,7 +183,7 @@ describe('SystemPage — user media import', () => {
       '.media-file-field input[type=file]',
     ) as HTMLInputElement;
     expect(mediaInput.getAttribute('accept')).toBe('.iso,.img,.raw');
-    // The input stays inside the clickable tile (clipped, not `display: none`).
+    // Clipped, not `display: none`, so the input stays inside the clickable tile.
     const tile = mediaInput.closest('label.media-file-field') as HTMLElement;
     expect(tile).toBeTruthy();
     expect(tile.getAttribute('data-state')).toBe('empty');
@@ -208,7 +191,6 @@ describe('SystemPage — user media import', () => {
 
     await user.upload(mediaInput, new File(['payload'], 'custom.iso'));
 
-    // The tile switches to its selected state and shows the file name and size.
     expect(tile.getAttribute('data-state')).toBe('selected');
     expect(screen.getByText('custom.iso')).toBeTruthy();
     expect(screen.getByText('7 bytes')).toBeTruthy();

@@ -36,8 +36,6 @@ export function SessionScreen({
   const running = session.state === 'running';
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(true);
-  // The guest display is always the primary surface. Serial logs stay collapsed
-  // for every VM until the visitor explicitly opens them from the toolbar.
   const [logsOpen, setLogsOpen] = useState(false);
   // Single visible cursor: a click inside the screen captures, Escape releases.
   const {
@@ -115,10 +113,7 @@ export function SessionScreen({
         logsOpen={logsOpen}
         onToggleLogs={() => setLogsOpen((open) => !open)}
       />
-      {/*
-        The console container stays mounted through every phase: remounting it would
-        break the running VM.
-      */}
+      {/* The console container stays mounted through every phase: remounting breaks the VM. */}
       <div className="session-viewport">
         <div className={`session-console${logsOpen ? '' : ' logs-hidden'}`} ref={consoleRef} />
         {!running ? (
@@ -147,10 +142,6 @@ export function SessionScreen({
       </div>
       {/* Collapsed by default: a failed boot must be diagnosable without DevTools. */}
       <DiskDiagnosticsPanel />
-      {/*
-        Late-proof note: the diagnostic timeout never stops the VM, so the
-        console stays live; the note must never block the interaction.
-      */}
       {session.state === 'booting' && session.phase === 'boot-timeout' ? (
         <p className="session-boot-note" role="status" data-testid="boot-timeout-note">
           Guest boot not verified yet — still booting, the console stays live.

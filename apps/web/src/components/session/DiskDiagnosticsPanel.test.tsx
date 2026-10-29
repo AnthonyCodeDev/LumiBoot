@@ -57,7 +57,6 @@ describe('DiskDiagnosticsPanel', () => {
     expect(screen.getByTestId('disk-diagnostics-statuses').textContent).toContain('206 × 1');
     expect(screen.getByTestId('disk-diagnostics-all-zero').textContent).toContain('1');
     expect(screen.getByTestId('disk-diagnostics-service-worker').textContent).toContain('none');
-    // A single empty block is legitimate: no purge advice.
     const health = screen.getByTestId('disk-diagnostics-health');
     expect(health.textContent).toBe('All disk reads served as ranged content.');
     expect(health.getAttribute('data-state')).toBe('healthy');
@@ -92,7 +91,6 @@ describe('DiskDiagnosticsPanel', () => {
       expect(details.hasAttribute('open')).toBe(false);
       expect(details.textContent).toContain('Disk diagnostics · 0 read(s) · unknown');
 
-      // A boot reads disk blocks while the panel stays folded.
       await seedRead(new Uint8Array([0xde, 0xad, 0xbe, 0xef]));
 
       // Still the mount snapshot: nothing was polled yet.
@@ -168,7 +166,6 @@ describe('DiskDiagnosticsPanel', () => {
       const button = screen.getByRole('button', { name: 'Repair browser storage' });
       await userEvent.click(button);
 
-      // Busy: the button is disabled while the asynchronous repair runs.
       expect((button as HTMLButtonElement).disabled).toBe(true);
       expect(screen.getByRole('button', { name: 'Repairing…' })).toBeTruthy();
 

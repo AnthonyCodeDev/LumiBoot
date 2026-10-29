@@ -12,7 +12,9 @@ import { getUserMediaStore } from './user-media.storage';
 /** Maximum accepted size for an imported disk media: 64 GiB. */
 export const MAX_USER_MEDIA_BYTES = 64 * 1024 * 1024 * 1024;
 
-/** Recognized extensions, mapped to the disk format v86 expects. */
+/** A blocked IndexedDB open never resolves: the UI must not stay on `loading`. */
+export const USER_MEDIA_LOAD_TIMEOUT_MS = 10_000;
+
 export const USER_MEDIA_EXTENSIONS = ['.iso', '.img', '.raw'] as const;
 
 const EXTENSION_FORMATS: ReadonlyArray<{ extension: string; format: VMMediaFormat }> = [
@@ -26,12 +28,11 @@ interface FileLike {
   readonly size: number;
 }
 
-/** Infers the media format from the extension. */
 export function detectMediaFormat(fileName: string): VMMediaFormat {
   return fileName.toLowerCase().endsWith('.iso') ? 'iso' : 'raw';
 }
 
-/** Format actually accepted for this file name, or `null` when unknown. */
+/** `null` when the extension is unknown. */
 export function mediaFormatForFile(fileName: string): VMMediaFormat | null {
   const lower = fileName.toLowerCase();
   return EXTENSION_FORMATS.find((entry) => lower.endsWith(entry.extension))?.format ?? null;
@@ -44,7 +45,6 @@ function formatBytes(bytes: number): string {
   return `${bytes} bytes`;
 }
 
-/** Validates a media file before any import. Throws an `AssetError` with a user message. */
 export function validateUserMediaFile(file: FileLike): { format: VMMediaFormat } {
   const format = mediaFormatForFile(file.name);
   if (format === null) {
@@ -91,7 +91,6 @@ async function getRemainingQuotaBytes(): Promise<number | null> {
   }
 }
 
-/** Rejects with an actionable message when the media does not fit the quota. */
 export async function assertUserMediaFitsQuota(file: FileLike): Promise<void> {
   const remaining = await getRemainingQuotaBytes();
   if (remaining === null) return;
@@ -114,13 +113,12 @@ function parseManifestJson(text: string): unknown {
 }
 
 export interface UserMediaState {
-  /** Imported media, indexed by system ID. */
+  /** Indexed by system ID. */
   records: Record<string, UserMediaDescriptor>;
   loading: boolean;
   importing: boolean;
   error: string | undefined;
   load: () => Promise<void>;
-  /** `licenseAcknowledged` is forwarded as-is to `vm-assets`. */
   importFor: (
     system: OSDefinition,
     media: File,
@@ -130,7 +128,26 @@ export interface UserMediaState {
   remove: (ref: string) => Promise<void>;
 }
 
-/** Front-end store for imported media: relays `vm-assets` and the persistence store. */
+function withTimeout<T>(
+  promise: Promise<T>,
+  message: string,
+  timeoutMs = USER_MEDIA_LOAD_TIMEOUT_MS,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
+
 export const useUserMediaStore = create<UserMediaState>((set) => ({
   records: {},
   loading: false,
@@ -139,8 +156,13 @@ export const useUserMediaStore = create<UserMediaState>((set) => ({
   load: async () => {
     set({ loading: true, error: undefined });
     try {
-      const store = await getUserMediaStore();
-      const descriptors = await store.list();
+      const descriptors = await withTimeout(
+        (async () => {
+          const store = await getUserMediaStore();
+          return store.list();
+        })(),
+        'Reading local media storage timed out. Close other LumiBoot tabs and retry.',
+      );
       const records: Record<string, UserMediaDescriptor> = {};
       for (const descriptor of descriptors) records[descriptor.ref] = descriptor;
       set({ records, loading: false });

@@ -1,12 +1,6 @@
 const VERSION_LENGTH = 12;
 
-/**
- * Adds a hash-derived `v` parameter to a boot media URL. Its only purpose is to
- * give a different cache key per build: a browser HTTP cache can otherwise answer
- * a Range request for the same path with bytes from an earlier version of the
- * file, which an initramfs then reads as a corrupt disk or initrd.
- * URLs without `sha256` (imported blob media, OPFS disks) are returned untouched.
- */
+/** Hash-derived `v` param: a distinct cache key, so no stale range serves old bytes. */
 export function versionedMediaUrl(url: string, sha256?: string): string {
   if (!sha256) return url;
   const version = sha256.slice(0, VERSION_LENGTH).toLowerCase();

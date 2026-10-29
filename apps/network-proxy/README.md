@@ -15,9 +15,11 @@ go run ./cmd/lumiboot-network
 
 Options in `cmd/lumiboot-network`: `--config PATH`, `--listen ADDR`, which must stay loopback, `--version`.
 
+From the repository root, `pnpm proxy:dev` applies the `LUMIBOOT_PROXY_*` values of `.env` and runs `go run ./cmd/lumiboot-network` from this directory, passing its arguments through (`pnpm proxy:dev -- --version`). Without it, export the same variables yourself before running the binary.
+
 ## Configuration
 
-Default file: `<UserConfigDir>/LumiBoot/Network Proxy/config.json`, resolved by `platform.ConfigFilePath`.
+Default file: `<UserConfigDir>/LumiBoot/Network Proxy/config.json`, resolved by `platform.ConfigFilePath`. The file is decoded strictly: unknown fields and trailing data are refused (`DisallowUnknownFields`), so a typo such as `allowPrivateNetwork` fails at startup instead of leaving a sensitive permission at its default.
 
 | Field | Default |
 |---|---:|
@@ -34,9 +36,11 @@ Default file: `<UserConfigDir>/LumiBoot/Network Proxy/config.json`, resolved by 
 | `pairingTTL` | `10m` |
 | `sessionTokenTTL` | `24h` |
 
+Bounds: `maxConnections` 1..1024, `initialBufferPackets` 1..256, `maxDataChunk` 1..1048576 bytes, 1 MiB maximum; `maxConnectionsPerSession` and the durations must be greater than zero, `bandwidthLimitBytesPerSecond` at least zero. `Config.Validate` refuses an out-of-range value instead of clamping it.
+
 Booleans: `allowLocalOrigins`, `allowPrivateNetworks`, `allowNonLoopback`; `bandwidthLimitBytesPerSecond`, where `0` means unlimited. Defaults live in `config.DefaultFor`.
 
-`LUMIBOOT_PROXY_<FIELD>` overrides, applied by `Config.ApplyEnv`, including `LISTEN_ADDR`, `ENV`, `ALLOWED_ORIGINS`, `BANDWIDTH_LIMIT_BPS`, `PAIRING_TTL`, `SESSION_TOKEN_TTL`. Durations: `10s` or seconds.
+`LUMIBOOT_PROXY_<FIELD>` overrides, applied by `Config.ApplyEnv`, including `LISTEN_ADDR`, `ENV`, `ALLOWED_ORIGINS`, `BANDWIDTH_LIMIT_BPS`, `PAIRING_TTL`, `SESSION_TOKEN_TTL`. Durations: `10s` or seconds. `ApplyEnv` returns an error when a non-empty variable cannot be parsed, and the `Config.Validate` pass that `Load` runs right after rejects an out-of-range value: an invalid environment fails startup instead of silently falling back to the default.
 
 ## Endpoints
 

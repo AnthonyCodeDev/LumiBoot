@@ -130,19 +130,16 @@ describe('getLaunchReadiness', () => {
   });
 
   it('blocks 64-bit Windows 11 while the wasm-x86_64 engine is not integrated', () => {
-    // v86 only emulates 32-bit x86; `wasm-x86_64` is not integrated.
     const windows = system('windows-11-x64');
     expect(isEngineIntegrated(windows.launchProfiles[0]!.engineId)).toBe(false);
     const readiness = getLaunchReadiness(windows);
     expect(readiness.canLaunch).toBe(false);
-    // Not developed: refused as not ready, with no media to import.
     expect(readiness.reason).toMatch(/not ready/i);
   });
 
   it('allows the generic custom image once a user media is imported', () => {
     const custom = system('custom-image');
     expect(custom.mediaStrategy).toBe('user-import');
-    // Integrated v86 engine, but nothing is distributed.
     expect(isEngineIntegrated(custom.launchProfiles[0]!.engineId)).toBe(true);
 
     const withoutMedia = getLaunchReadiness(custom, { userMediaReady: false });

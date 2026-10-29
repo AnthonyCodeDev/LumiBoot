@@ -25,10 +25,7 @@ export interface SessionSnapshot {
 
 export type SessionListener = (snapshot: SessionSnapshot) => void;
 
-/**
- * Supervises start, stop and dispose; `running` is only reached on a real guest
- * proof and a fatal error actually releases the VM.
- */
+/** `running` is only reached on a real guest proof. */
 export class SessionLifecycle {
   readonly id: string;
   readonly system: OSDefinition;
@@ -87,7 +84,6 @@ export class SessionLifecycle {
   }
 
   async start(mountTarget: unknown, configuration?: VMConfiguration): Promise<void> {
-    // A disposed session is terminal.
     if (this.#disposed) return;
     const current = this.#machine.state;
     if (this.#starting && this.#startPromise !== null) return this.#startPromise;
@@ -97,7 +93,7 @@ export class SessionLifecycle {
     const startToken = ++this.#runToken;
     this.#starting = true;
     this.#halted = false;
-    // New generation: a stale cleanup promise must not short-circuit this one.
+    // A stale cleanup promise must not short-circuit this start.
     this.#cleanupPromise = null;
     this.#error = undefined;
     this.#phase = undefined;
@@ -148,7 +144,6 @@ export class SessionLifecycle {
           ? error
           : new VMError('START_FAILED', 'Startup failed.', { systemId: this.system.id });
         this.#fail(vmError.code, vmError.message);
-        // Wait for the cleanup so the instance is never orphaned on return.
         await this.#cleanupPromise;
       } finally {
         cleanupAbortRelay();
@@ -174,7 +169,6 @@ export class SessionLifecycle {
     }
     const state = this.#machine.state;
     if (state === 'idle' || state === 'stopped' || state === 'error') {
-      // Wait for a cleanup already started, so no release stays in flight.
       if (this.#cleanupPromise !== null) await this.#cleanupPromise;
       return;
     }
@@ -226,7 +220,6 @@ export class SessionLifecycle {
   }
 
   #onEvent(event: SessionEvent): void {
-    // Late events after disposal or a terminal stop have no effect.
     if (this.#disposed || this.#halted) return;
     if (event.type === 'state') {
       // `stopped` means a spontaneous stop that must traverse `stopping`.
@@ -260,7 +253,6 @@ export class SessionLifecycle {
       return;
     }
     if (event.type === 'network') {
-      // Purely observable: no state transition, no session failure.
       this.#network = event.network;
       this.#emit();
       return;
@@ -268,10 +260,7 @@ export class SessionLifecycle {
     this.#fail(event.code, event.message);
   }
 
-  /**
-   * `running` without an explicit `booting` traverses `booting` to respect the
-   * state machine invariant.
-   */
+  /** A `running` without explicit `booting` must still traverse `booting`. */
   #applyState(state: VMState): void {
     if (this.#machine.canTransition(state)) {
       this.#machine.transition(state);
@@ -281,10 +270,6 @@ export class SessionLifecycle {
     }
   }
 
-  /**
-   * The direct `running -> stopped` transition does not exist, so the stop
-   * traverses `stopping` and releases the resources.
-   */
   #reconcileSpontaneousStop(): void {
     const state = this.#machine.state;
     if (state === 'stopped' || state === 'idle' || state === 'error') return;
@@ -305,17 +290,13 @@ export class SessionLifecycle {
   #fail(code: string, message: string): void {
     this.#error = { code, message };
     if (this.#machine.canTransition('error')) this.#machine.transition('error');
-    // Invalidates any start in flight.
     this.#invalidateStart();
     this.#emit();
-    // Not awaited here: `#onEvent` is synchronous, the promise stays observable.
+    // Not awaited: `#onEvent` is synchronous.
     void this.#releaseResources('error');
   }
 
-  /**
-   * Concurrent operations share one effective cleanup; the promise never
-   * rejects, failures go to `onCleanupError`.
-   */
+  /** Concurrent callers share one cleanup; the promise never rejects. */
   #releaseResources(context: string): Promise<void> {
     if (this.#cleanupPromise !== null) return this.#cleanupPromise;
 
@@ -338,7 +319,6 @@ export class SessionLifecycle {
         this.#reportCleanupError(error, 'dispose');
       }
     })().catch((error) => {
-      // Safety belt: no unhandled exception if the supervision itself fails.
       this.#reportCleanupError(error, context);
     });
 
@@ -393,7 +373,13 @@ export class SessionLifecycle {
   }
 
   #reportCleanupError(error: unknown, context: string): void {
-    this.#onCleanupError?.(error, context);
+    try {
+      this.#onCleanupError?.(error, context);
+    } catch (callbackError) {
+      if (typeof console !== 'undefined') {
+        console.warn(`[SessionLifecycle ${this.id}] cleanup reporter failed.`, callbackError);
+      }
+    }
     if (typeof console !== 'undefined') {
       console.warn(`[SessionLifecycle ${this.id}] cleanup failed (${context}).`, error);
     }
@@ -420,6 +406,12 @@ export class SessionLifecycle {
 
   #emit(): void {
     const snapshot = this.snapshot;
-    for (const listener of this.#listeners) listener(snapshot);
+    for (const listener of [...this.#listeners]) {
+      try {
+        listener(snapshot);
+      } catch {
+        // An observer must not leave the lifecycle half-started or half-stopped.
+      }
+    }
   }
 }

@@ -89,34 +89,13 @@ export class VmStorage {
     for (const key of this.#keys()) {
       const raw = this.getItem(key);
       if (raw === null) continue;
-      try {
-        const parsed = JSON.parse(raw) as StoredRecord;
-        if (typeof parsed.key !== 'string' || typeof parsed.value !== 'string') {
-          throw new Error('record format');
-        }
-        records.push(parsed);
-      } catch (error) {
-        throw new StorageError('STORAGE_CORRUPTED', `Corrupted record for "${key}".`, {
-          key,
-          cause: error,
-        });
-      }
+      records.push(parseRecord(raw, key));
     }
     return records.sort((left, right) => left.key.localeCompare(right.key));
   }
 
   read(key: string): string | null {
-    const raw = this.getItem(key);
-    if (raw === null) return null;
-    try {
-      const record = JSON.parse(raw) as StoredRecord;
-      return typeof record.value === 'string' ? record.value : null;
-    } catch (error) {
-      throw new StorageError('STORAGE_CORRUPTED', `Corrupted value for "${key}".`, {
-        key,
-        cause: error,
-      });
-    }
+    return this.readRecord(key)?.value ?? null;
   }
 
   write(key: string, value: string): StoredRecord<string> {
@@ -142,24 +121,7 @@ export class VmStorage {
   readRecord(key: string): StoredRecord<string> | null {
     const raw = this.getItem(key);
     if (raw === null) return null;
-    try {
-      const parsed = JSON.parse(raw) as StoredRecord<string>;
-      if (
-        typeof parsed.key !== 'string' ||
-        typeof parsed.value !== 'string' ||
-        typeof parsed.createdAt !== 'number' ||
-        typeof parsed.updatedAt !== 'number' ||
-        typeof parsed.sizeBytes !== 'number'
-      ) {
-        throw new Error('record format');
-      }
-      return parsed;
-    } catch (error) {
-      throw new StorageError('STORAGE_CORRUPTED', `Corrupted record for "${key}".`, {
-        key,
-        cause: error,
-      });
-    }
+    return parseRecord(raw, key);
   }
 
   exportSnapshot(): StorageSnapshot<string> {
@@ -173,20 +135,48 @@ export class VmStorage {
   }
 
   importSnapshot(snapshot: StorageSnapshot<string>): void {
-    if (snapshot.version !== SNAPSHOT_VERSION) {
+    if (snapshot?.version !== SNAPSHOT_VERSION) {
       throw new StorageError('STORAGE_VERSION_MISMATCH', 'Unsupported snapshot version.');
     }
-    const previous = this.exportSnapshot();
+    if (
+      snapshot.namespace !== this.#namespace ||
+      snapshot.kind !== this.#kind ||
+      !Array.isArray(snapshot.records)
+    ) {
+      throw new StorageError('STORAGE_CORRUPTED', 'Snapshot does not match this storage.');
+    }
+    const keys = new Set<string>();
+    const records: StoredRecord<string>[] = [];
+    for (const record of snapshot.records) {
+      const parsed = validateRecord(record);
+      if (keys.has(parsed.key)) {
+        throw new StorageError('STORAGE_CORRUPTED', `Duplicate snapshot key "${parsed.key}".`, {
+          key: parsed.key,
+        });
+      }
+      keys.add(parsed.key);
+      records.push(parsed);
+    }
+
+    const previous = this.#keys().map((key) => ({ key, raw: this.getItem(key) }));
     try {
       this.clear();
-      for (const record of snapshot.records) {
-        this.write(record.key, record.value);
+      for (const record of records) {
+        this.setItem(record.key, JSON.stringify(record));
       }
     } catch (error) {
-      this.clear();
-      for (const record of previous.records) {
-        this.write(record.key, record.value);
+      try {
+        this.clear();
+        for (const { key, raw } of previous) {
+          if (raw !== null) this.#backend?.setItem(this.#key(key), raw);
+        }
+      } catch (rollbackError) {
+        throw new StorageError('STORAGE_WRITE_FAILED', 'Import and rollback failed.', {
+          cause: new AggregateError([error, rollbackError]),
+        });
       }
+      // A `StorageError` already carries the real cause: do not mask it.
+      if (error instanceof StorageError) throw error;
       throw new StorageError('STORAGE_WRITE_FAILED', 'Transactional import failed.', {
         cause: error,
       });
@@ -195,7 +185,10 @@ export class VmStorage {
 
   estimateUsageBytes(): number {
     let total = 0;
-    for (const record of this.listRecords()) total += record.sizeBytes;
+    for (const key of this.#keys()) {
+      const raw = this.getItem(key);
+      if (raw !== null) total += byteLength(raw);
+    }
     return total;
   }
 
@@ -216,10 +209,65 @@ export class VmStorage {
   }
 
   #projectedUsage(key: string, value: string): number {
-    const existing = this.readRecord(key);
+    const existing = this.getItem(key);
     const current = this.estimateUsageBytes();
     const next = byteLength(value);
-    return current - (existing?.sizeBytes ?? 0) + next;
+    return current - (existing === null ? 0 : byteLength(existing)) + next;
+  }
+}
+
+function parseRecord(raw: string, key: string): StoredRecord<string> {
+  try {
+    return validateRecord(JSON.parse(raw), key);
+  } catch (error) {
+    if (error instanceof StorageError) throw error;
+    throw new StorageError('STORAGE_CORRUPTED', `Corrupted record for "${key}".`, {
+      key,
+      cause: error,
+    });
+  }
+}
+
+function validateRecord(value: unknown, expectedKey?: string): StoredRecord<string> {
+  let key = expectedKey ?? '';
+  try {
+    if (
+      expectedKey === undefined &&
+      value !== null &&
+      typeof value === 'object' &&
+      'key' in value &&
+      typeof value.key === 'string'
+    ) {
+      key = value.key;
+    }
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      !('key' in value) ||
+      value.key !== key ||
+      !('value' in value) ||
+      typeof value.value !== 'string' ||
+      !('createdAt' in value) ||
+      !Number.isSafeInteger(value.createdAt) ||
+      !('updatedAt' in value) ||
+      !Number.isSafeInteger(value.updatedAt) ||
+      !('sizeBytes' in value) ||
+      value.sizeBytes !== byteLength(value.value)
+    ) {
+      throw new Error('record format');
+    }
+    return {
+      key: value.key,
+      value: value.value,
+      createdAt: value.createdAt as number,
+      updatedAt: value.updatedAt as number,
+      sizeBytes: value.sizeBytes as number,
+    };
+  } catch (error) {
+    throw new StorageError('STORAGE_CORRUPTED', `Corrupted record for "${key}".`, {
+      key,
+      cause: error,
+    });
   }
 }
 

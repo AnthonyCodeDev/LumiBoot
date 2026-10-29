@@ -1,20 +1,8 @@
-/**
- * "Repair browser storage": removes the two things that can intercept a disk
- * range read from another project sharing the origin (`localhost:5173`):
- *
- * - every service worker registration for this origin (LumiBoot declares none,
- *   so any registration belongs to an intruder);
- * - every Cache Storage bucket for this origin.
- *
- * Nothing else is touched: no `localStorage`, no cookies, no IndexedDB, no
- * history. Each API is optional and every failure is reported as text, so the
- * action can never throw into React.
- */
+/** Removes service workers and Cache Storage of this origin: another project on the same
+ * dev origin can intercept disk range reads. No localStorage, cookies or IndexedDB. */
 
 export interface RepairOutcome {
-  /** Registrations actually unregistered. */
   readonly serviceWorkers: number;
-  /** Cache Storage buckets actually deleted. */
   readonly caches: number;
   /** Short, user-readable problems; empty when everything went cleanly. */
   readonly problems: readonly string[];
@@ -42,10 +30,7 @@ function cacheStorage(): CacheStorage | null {
   return caches;
 }
 
-/**
- * Never rejects: an unavailable API or a throwing call is folded into the
- * returned outcome, which the panel renders as-is.
- */
+/** Never rejects: failures are folded into the returned outcome. */
 export async function repairBrowserStorage(): Promise<RepairOutcome> {
   let serviceWorkers = 0;
   let clearedCaches = 0;

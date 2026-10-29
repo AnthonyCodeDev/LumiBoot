@@ -3,6 +3,9 @@ import { getSystemById } from '@lumiboot/catalog';
 
 /** Engine, runtime config, proxy credentials and media storage are doubles. */
 
+/** A proxy port nothing listens on: every request there fails fast. */
+const UNREACHABLE_PROXY_URL = 'http://127.0.0.1:1';
+
 const mocks = vi.hoisted(() => {
   interface FakeInstance {
     id: string;
@@ -59,11 +62,11 @@ vi.mock('./registry', () => ({
 
 vi.mock('../../config/runtime', () => ({
   resolveNetworkProfile: () => ({ mode: 'browser-fetch' }),
-  resolveProxyConfig: () => ({ enabled: false, url: 'http://127.0.0.1:1' }),
+  resolveProxyConfig: () => ({ enabled: false, url: UNREACHABLE_PROXY_URL }),
 }));
 
 vi.mock('../proxy/store', () => ({
-  getProxyRuntimeCredentials: () => ({ proxyToken: null, proxyUrl: 'http://127.0.0.1:1' }),
+  getProxyRuntimeCredentials: () => ({ proxyToken: null, proxyUrl: UNREACHABLE_PROXY_URL }),
 }));
 
 vi.mock('../media/user-media.storage', () => ({
@@ -190,7 +193,6 @@ describe('useSessionsStore — media ownership', () => {
 
     await useSessionsStore.getState().dispose(a);
 
-    // Only the A URL is revoked.
     expect(revoked).toEqual([urlA]);
     expect(revoked).not.toContain(urlB);
     expect(useSessionsStore.getState().sessions[a]).toBeUndefined();
@@ -225,7 +227,6 @@ describe('useSessionsStore — media ownership', () => {
     resolveBytes?.(mediaStore.bytes.get(system.id) ?? null);
     await bootPromise;
 
-    // Any URL created here was revoked and no VM started.
     expect(revoked).toEqual(created);
     expect(mocks.instances).toHaveLength(0);
     expect(useSessionsStore.getState().sessions[sessionId]).toBeUndefined();
@@ -295,7 +296,6 @@ describe('useSessionsStore — media ownership', () => {
     const secondUrl = created[1];
 
     expect(secondUrl).not.toBe(firstUrl);
-    // The previous URL of this session is revoked on republish.
     expect(revoked).toContain(firstUrl);
     expect(revoked).not.toContain(secondUrl);
   });
@@ -315,7 +315,6 @@ describe('useSessionsStore — normalized errors', () => {
     const mount = document.createElement('div');
     const sessionId = useSessionsStore.getState().create(system.id);
 
-    // The boot never rejects: the failure becomes an `error` snapshot.
     await expect(useSessionsStore.getState().boot(sessionId, mount)).resolves.toBeUndefined();
     const snapshot = useSessionsStore.getState().sessions[sessionId];
     expect(snapshot?.state).toBe('error');
@@ -342,7 +341,6 @@ describe('useSessionsStore — normalized errors', () => {
     const bootPromise = useSessionsStore.getState().boot(sessionId, mount);
     await flushMicrotasks();
 
-    // The session is destroyed before the failure: the late error is ignored.
     await useSessionsStore.getState().dispose(sessionId);
     rejectGet?.(new Error('late IndexedDB'));
     await bootPromise;

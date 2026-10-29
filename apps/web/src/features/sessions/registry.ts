@@ -7,10 +7,7 @@ import {
 } from '@lumiboot/vm-core';
 import type { OSDefinition } from '@lumiboot/contracts';
 
-/**
- * v86 capabilities mirrored for the UI, because the real provider is lazily
- * imported. A dedicated test keeps both definitions aligned.
- */
+/** Mirrors the v86 capabilities for the UI; the real provider is lazily imported. */
 export const V86_LAZY_CAPABILITIES: VMCapabilities = {
   runtime: 'browser',
   architectures: ['i386'],
@@ -99,10 +96,7 @@ export function createRegistry(): VMRegistry {
 
 const compatibilityRegistry = createRegistry();
 
-/**
- * Explains whether a system can run on this device: architecture served by the
- * engine and browser prerequisites satisfied. An empty reason list means yes.
- */
+/** Whether a system can run on this device: engine architecture and browser prerequisites. */
 export function explainSystemCompatibility(os: OSDefinition): EngineCompatibilityResult {
   return compatibilityRegistry.explain(os);
 }

@@ -12,11 +12,7 @@ if (!container) throw new Error('Root element #root not found in index.html.');
 
 const root = createRoot(container);
 
-/**
- * Global public config is loaded **before** the React render.
- * A failure shows a readable error message instead of a silently broken
- * application.
- */
+/** Config is loaded **before** the React render; a failure shows a readable error. */
 async function bootstrap(): Promise<void> {
   try {
     const config = await loadConfig();

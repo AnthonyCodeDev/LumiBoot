@@ -12,7 +12,6 @@ export interface ProxyHealth {
   uncertain?: boolean;
 }
 
-/** Probe timeout in ms; the proxy is local. */
 export const PROXY_HEALTH_TIMEOUT_MS = 1500;
 
 function trimBaseUrl(baseUrl: string): string {
@@ -52,11 +51,7 @@ function isSecureContextActive(): boolean {
   return false;
 }
 
-/**
- * Probes `GET {baseUrl}/health`. A successful probe means reached, not paired.
- * A Chromium `TypeError` in a secure context is ambiguous between an LNA refusal
- * and a stopped proxy, so it returns `uncertain`.
- */
+/** Reached ≠ paired; a secure-context `TypeError` may be an LNA refusal. */
 export async function checkProxy(
   baseUrl: string,
   fetchImpl: FetchLike = fetch,
@@ -76,7 +71,6 @@ export async function checkProxy(
       if (isAbortError(error)) return { state: 'not-running' };
       if (error instanceof TypeError) {
         if (isSecureContextActive() && supportsLocalNetworkAccess()) {
-          // Chromium: cannot decide between an LNA refusal and a stopped proxy.
           return {
             state: 'error',
             uncertain: true,

@@ -67,7 +67,7 @@ interface V64Module {
 let runtimePromise: Promise<V64Module> | null = null;
 let webGpuPromise: Promise<void> | null = null;
 
-/** The public runtime stays out of the initial application bundle. */
+/** Kept out of the initial application bundle. */
 export function loadV64Runtime(): Promise<V64Module> {
   if (runtimePromise !== null) return runtimePromise;
   runtimePromise = new Promise((resolve, reject) => {

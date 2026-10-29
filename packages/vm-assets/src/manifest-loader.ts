@@ -5,13 +5,12 @@ import { versionedMediaUrl } from './media-url';
 
 const HEX64 = /^[0-9a-f]{64}$/i;
 const IMAGE_REF = /^[a-z0-9-]+$/;
+const IMAGE_FILE_URL = /^\/images\/[a-z0-9-]+\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const ENGINE_FILE_URL = /^\/v86\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** Rejects absolute URLs, non-hex SHAs and incomplete manifests. */
 export const imageFileRefSchema = z.object({
-  url: z
-    .string()
-    .min(1)
-    .regex(/^\/images\//, 'relative URL expected under "/images/"'),
+  url: z.string().regex(IMAGE_FILE_URL, 'plain file URL expected under "/images/<ref>/"'),
   sha256: z.string().regex(HEX64, '64-character hexadecimal SHA-256 expected'),
   size: z.number().int().positive(),
   version: z.string().min(1).optional(),
@@ -20,9 +19,9 @@ export const imageFileRefSchema = z.object({
 export const imageBootOptionsSchema = z
   .object({
     cmdline: z.string().min(1).optional(),
-    wasmPath: z.string().min(1).optional(),
-    biosUrl: z.string().min(1).optional(),
-    vgaBiosUrl: z.string().min(1).optional(),
+    wasmPath: z.string().regex(ENGINE_FILE_URL).optional(),
+    biosUrl: z.string().regex(ENGINE_FILE_URL).optional(),
+    vgaBiosUrl: z.string().regex(ENGINE_FILE_URL).optional(),
   })
   .strict();
 
@@ -42,39 +41,43 @@ export const imageManifestSchema = z
       .catchall(imageFileRefSchema),
     boot: imageBootOptionsSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((manifest, context) => {
+    for (const [name, file] of Object.entries(manifest.files)) {
+      if (!file.url.startsWith(`/images/${manifest.ref}/`)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['files', name, 'url'],
+          message: 'file URL must belong to the manifest reference',
+        });
+      }
+    }
+  });
 
 /** One request per key; the request never receives a consumer signal. */
 interface SharedRequestEntry<V> {
   readonly promise: Promise<V>;
   readonly controller: AbortController;
-  /** Number of consumers still interested. */
   consumers: number;
 }
 
 export interface SharedRequestRegistry<V> {
-  /**
-   * Canceling a consumer only rejects its own promise; the request stops when
-   * all consumers cancel. Failures are never cached.
-   */
+  /** A consumer cancel only rejects its own promise; failures are never cached. */
   run(
     key: string,
     signal: AbortSignal | undefined,
     load: (signal: AbortSignal) => Promise<V>,
   ): Promise<V>;
-  /** Requests currently in flight. */
   pending(): number;
-  /** Interrupts and forgets all in-flight requests. */
   clear(): void;
 }
 
-/** @param createAbortError error returned to a canceled consumer. */
 export function createSharedRequestRegistry<V>(
   createAbortError: (cause?: unknown) => Error,
 ): SharedRequestRegistry<V> {
   const entries = new Map<string, SharedRequestEntry<V>>();
 
-  /** Releases a consumer, aborting the request when nobody waits. */
+  /** Aborts the request when no consumer still waits. */
   function release(key: string, entry: SharedRequestEntry<V>): void {
     entry.consumers -= 1;
     if (entry.consumers <= 0 && !entry.controller.signal.aborted) {
@@ -97,10 +100,9 @@ export function createSharedRequestRegistry<V>(
         const created: SharedRequestEntry<V> = {
           controller,
           consumers: 0,
-          // The request never receives a consumer signal.
           promise: Promise.resolve().then(() => load(controller.signal)),
         };
-        // A failure is never kept: the entry disappears once settled.
+        // Never keep a failure: the entry disappears once settled.
         void created.promise
           .finally(() => {
             if (entries.get(key) === created) entries.delete(key);
@@ -119,7 +121,7 @@ export function createSharedRequestRegistry<V>(
 
       return new Promise<V>((resolve, reject) => {
         let settled = false;
-        // Every exit removes the listener: no `AbortSignal` leaks.
+        // Every exit removes the listener: no `AbortSignal` leak.
         const onAbort = (): void => {
           if (settled) return;
           settled = true;
@@ -154,15 +156,11 @@ export function createSharedRequestRegistry<V>(
   };
 }
 
-/** Shared registry of image manifests. */
 const imageManifestRequests = createSharedRequestRegistry<ImageManifest>(
   () => new AssetError('ASSET_ABORTED', 'Manifest load canceled.'),
 );
 
-/**
- * An already registered manifest is not reloaded; only the JSON is fetched, the
- * disk is read by v86 through HTTP Range.
- */
+/** The JSON is fetched once; v86 reads the disk itself over HTTP Range. */
 export async function ensureImageManifest(
   ref: string,
   signal?: AbortSignal,
@@ -267,7 +265,6 @@ export type AssetUnavailableReason =
   | 'network'
   | 'aborted';
 
-/** Result of an asset availability check. */
 export interface AssetAvailability {
   readonly ref: string;
   readonly available: boolean;
@@ -279,7 +276,7 @@ export interface AssetAvailability {
 
 export interface AssetAvailabilityOptions {
   readonly signal?: AbortSignal;
-  /** Injectable `fetch` implementation (tests); `globalThis.fetch` by default. */
+  /** Injectable `fetch` (tests); `globalThis.fetch` by default. */
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -287,7 +284,7 @@ interface RangeProbeOptions extends AssetAvailabilityOptions {
   readonly expectedSize?: number;
 }
 
-/** Reads a header whatever the implementation (`Headers` or plain object). */
+/** Tolerates `Headers` and plain-object test doubles. */
 function readHeader(response: Response, name: string): string {
   const headers = response.headers as unknown;
   if (headers === null || typeof headers !== 'object') return '';
@@ -299,7 +296,7 @@ function readHeader(response: Response, name: string): string {
   return value === undefined ? '' : String(value);
 }
 
-/** Cancels the body of an unread response (avoids downloading a whole disk). */
+/** Cancels an unread body so the whole disk is not downloaded. */
 function discardBody(response: Response): void {
   const body = response.body as ReadableStream<Uint8Array> | null | undefined;
   if (body !== null && body !== undefined && typeof body.cancel === 'function') {
@@ -346,7 +343,6 @@ type JsonDocumentResult =
       readonly message: string;
     };
 
-/** Distinguishes 404, SPA HTML fallback, unreadable JSON and network error. */
 export async function fetchJsonDocument(
   url: string,
   options: AssetAvailabilityOptions = {},
@@ -406,10 +402,7 @@ export async function fetchJsonDocument(
   }
 }
 
-/**
- * v86 requires HTTP Range: a server answering 200 sends the whole file, whose
- * body is canceled at once.
- */
+/** v86 needs HTTP Range; a 200 answer's body is canceled at once. */
 export async function probeRangeAvailability(
   url: string,
   options: RangeProbeOptions = {},
@@ -482,12 +475,7 @@ export async function probeRangeAvailability(
   return unavailable('network', `Unexpected disk response (HTTP ${response.status}).`);
 }
 
-/**
- * The subset of `XMLHttpRequest` the v86-compatible probe needs. v86 reads disks
- * with `XMLHttpRequest` and a `Range` header, so this probe must use the same
- * transport: `fetch` may succeed through a path (cache, service worker) that v86
- * never sees.
- */
+/** Minimal XHR surface: v86 reads disks with XHR, so the probe must too. */
 export interface RangeRequest {
   timeout: number;
   responseType: XMLHttpRequestResponseType;
@@ -504,7 +492,7 @@ export interface RangeRequest {
   onabort: (() => void) | null;
 }
 
-/** Injectable constructor-like factory (tests); `XMLHttpRequest` by default. */
+/** Injectable for tests; `XMLHttpRequest` by default. */
 export type RangeRequestFactory = () => RangeRequest;
 
 export interface RangeReadProbeOptions {
@@ -531,12 +519,8 @@ export interface ImageManifestLoadOptions {
     size: number,
     options?: RangeReadProbeOptions,
   ) => Promise<RangeReadProbeOutcome>;
-  /** Forwarded to the range probe (tests). */
   readonly rangeProbeOptions?: RangeReadProbeOptions;
-  /**
-   * Control transport of the byte cross-check; `globalThis.fetch` by default.
-   * `null` disables the comparison (tests, and environments without fetch).
-   */
+  /** Byte cross-check transport; `null` disables it (tests). */
   readonly controlFetch?: typeof fetch | null;
 }
 
@@ -552,7 +536,6 @@ type RangeAttempt =
       readonly status: number;
       readonly byteLength: number;
       readonly contentRange: string;
-      /** Body bytes, kept for the cross-transport comparison. */
       readonly bytes: Uint8Array | null;
     }
   | { readonly kind: 'timeout' }
@@ -566,7 +549,7 @@ function defaultRangeRequestFactory(): RangeRequestFactory | undefined {
   return () => new constructor();
 }
 
-/** Resolves once, whatever the callback order or the abort signal. */
+/** Resolves once, whatever the callback order or abort signal. */
 function sendRangeRequest(
   request: RangeRequest,
   url: string,
@@ -610,7 +593,7 @@ function sendRangeRequest(
             ? body.byteLength
             : -1,
         contentRange,
-        // Only an `ArrayBuffer` body is comparable; an unexpected type is ignored.
+        // Only an `ArrayBuffer` body is comparable.
         bytes: body instanceof ArrayBuffer ? new Uint8Array(body) : null,
       });
     };
@@ -629,20 +612,19 @@ function sendRangeRequest(
       request.open('GET', url);
       // v86 compares an `ArrayBuffer` body, and decompression must not alter the range.
       request.responseType = 'arraybuffer';
-      // Same headers as v86, and deliberately no cache directive: the probe must
-      // go through whatever the browser would use for the real disk reads.
+      // Same headers as v86, and no cache directive: the probe must follow the
+      // browser's real disk path.
       request.setRequestHeader('Range', `bytes=${offset}-${offset + length - 1}`);
       request.setRequestHeader('X-Accept-Encoding', 'identity');
       request.send();
     } catch {
-      // A synchronous throw means the request never left the browser (invalid
-      // base URL, detached document): nothing to compare against, not a boot blocker.
+      // A synchronous throw means the request never left the browser: not a boot blocker.
       finish({ kind: 'unavailable' });
     }
   });
 }
 
-/** Probe outcome plus the bytes and range it used, for the cross-check. */
+/** Outcome plus the bytes actually read, for the cross-check. */
 interface RangeProbeRead {
   readonly outcome: RangeReadProbeOutcome;
   readonly bytes: Uint8Array | null;
@@ -651,11 +633,7 @@ interface RangeProbeRead {
   readonly length: number;
 }
 
-/**
- * Reads one non-zero 4 KiB block the way v86 does. A server or cache answering
- * 200 leaves v86's read unresolved (it aborts the request), and the guest then
- * reads zeros forever: detecting it here turns a silent stall into an error.
- */
+/** A 200 answer leaves v86's read unresolved and the guest reads zeros forever. */
 export async function probeRangeRead(
   url: string,
   size: number,
@@ -689,7 +667,7 @@ async function readRangeProbe(
   try {
     request = createRequest();
   } catch {
-    // The environment refuses to build a request: nothing to compare against.
+    // Nothing to compare against.
     return skipped();
   }
 
@@ -850,12 +828,11 @@ async function readRangeProbe(
   return read({ ok: true }, attempt.bytes, attempt.status);
 }
 
-/** Header bag accepted from a real `Response` and from test doubles. */
 interface HeaderBagLike {
   get(name: string): string | null;
 }
 
-/** A stub `fetch` (tests) has no byte body: nothing to compare with. */
+/** A stub `fetch` (tests) has no body: nothing to compare with. */
 function canCompareBytes(response: Response): boolean {
   const headers = (response as { headers?: unknown }).headers;
   return (
@@ -876,13 +853,12 @@ function isAllZero(bytes: Uint8Array): boolean {
 /** `null` means the two ranged bodies agree. */
 export type RangeByteDivergence = 'length' | 'all-zero' | 'content';
 
-/** Compares the XHR body with the `fetch` body for the very same range. */
 export function detectRangeByteDivergence(
   browserBytes: Uint8Array,
   controlBytes: Uint8Array,
 ): RangeByteDivergence | null {
   if (browserBytes.length !== controlBytes.length) return 'length';
-  // Zeros on both sides mean nothing is actually served: a distinct failure.
+  // Zeros on both sides mean nothing is served: a distinct failure.
   if (isAllZero(browserBytes) && isAllZero(controlBytes)) return 'all-zero';
   for (let index = 0; index < browserBytes.length; index += 1) {
     if (browserBytes[index] !== controlBytes[index]) return 'content';
@@ -895,7 +871,6 @@ const RANGE_INTERCEPTED_HINT =
   "Clear this site's data (DevTools > Application > Clear site data), unregister the " +
   'service worker for this origin, then reload.';
 
-/** Human-readable, actionable message for a divergence. */
 export function describeRangeDivergence(
   url: string,
   divergence: RangeByteDivergence,
@@ -916,14 +891,7 @@ export function describeRangeDivergence(
   );
 }
 
-/**
- * Same range, second transport: `fetch` with `cache: 'no-store'`. Identical bytes
- * prove the duplex path healthy; different bytes prove a cache, a service worker
- * or an antivirus rewrites the disk without changing the status.
- *
- * Never blocks a boot whose v86 path already worked when the control request
- * cannot run at all (no fetch, network error, non-Response stub in tests).
- */
+/** Control `fetch` no-store; divergent bytes prove a cache rewrites the disk. */
 async function assertRangeBytesMatch(
   url: string,
   read: RangeProbeRead,
@@ -934,7 +902,7 @@ async function assertRangeBytesMatch(
   const browserBytes = read.bytes;
   if (browserBytes === null || read.length <= 0) return;
   // A zeroed browser block is accepted: the legacy probe cannot tell an empty
-  // FAT region from a cache; the transport diagnostics report the pattern.
+  // FAT region from a cache.
   if (isAllZero(browserBytes)) return;
 
   const fetchImpl = controlFetch === null ? undefined : (controlFetch ?? globalThis.fetch);
@@ -984,10 +952,7 @@ async function assertRangeBytesMatch(
   );
 }
 
-/**
- * The `disk` file is the one v86 keeps reading by ranges for the whole boot; an
- * unsatisfied range read there never resolves, so the boot is refused early.
- */
+/** The disk is read by ranges for the whole boot: refuse a stalled boot early. */
 async function assertDiskServedByRanges(
   manifest: ImageManifest,
   signal: AbortSignal | undefined,
@@ -1024,7 +989,6 @@ async function assertDiskServedByRanges(
   await assertRangeBytesMatch(url, read, signal, manifest.ref, options.controlFetch);
 }
 
-/** Valid manifest, matching reference, then disk served over HTTP Range. */
 export async function checkImageAvailability(
   ref: string,
   options: AssetAvailabilityOptions = {},

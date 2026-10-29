@@ -1,4 +1,3 @@
-/* Buttons */
 .btn {
   min-height: 42px;
   display: inline-flex;
@@ -77,7 +76,6 @@
   transform: none;
 }
 
-/* Search and controls */
 .search {
   min-width: min(290px, 34vw);
   height: 42px;
@@ -127,7 +125,6 @@
     sans-serif;
   box-shadow: 0 1px 0 #050609;
 }
-/* Filter tabs */
 .filter-row {
   display: flex;
   flex-wrap: wrap;
@@ -163,7 +160,6 @@
   color: #b9c5ff;
 }
 
-/* Catalogue cards */
 .cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -291,7 +287,6 @@
   color: var(--text-secondary);
   font-size: 11px;
 }
-/* Empty and error states */
 .empty-state {
   padding: 72px 20px;
   border: 1px dashed var(--line-strong);
@@ -318,7 +313,6 @@
   font-size: 28px;
 }
 
-/* System detail page, route /systems/:slug */
 .icon-button {
   width: 34px;
   height: 34px;
@@ -399,7 +393,6 @@
   font-size: 12px;
   line-height: 1.7;
 }
-/* Toast */
 .toast {
   position: fixed;
   z-index: 60;
@@ -426,10 +419,7 @@
   transform: translate(-50%, 0);
 }
 
-/* Session */
-/* Height bounded to the space under the header bar (64px), with clipped
-   overflow: the session screen can never push the page below the window, which
-   would leave a stray vertical scroll, whatever the guest resolution. */
+/* Height bounded under the 64px header, overflow clipped: no stray page scroll. */
 .session-screen {
   width: 100%;
   margin: 0;
@@ -479,13 +469,9 @@
   gap: 8px;
   flex-wrap: wrap;
 }
-/* Absolute cap: never more than 80% of the window height. Height is resolved
-   through flex, since the session container is bounded, which lets the canvas and
-   the text mode use `max-height: 100%`. Deliberate fallback to `width: 100%`: a
-   `width: fit-content` on the shell is based on the canvas INTRINSIC size, the
-   guest resolution, e.g. 1024px, and not on its final height-constrained size as
-   measured by the E2E screen-sizing test. The black `.v86-screen` surface hugs the
-   rendered content and is centered. */
+/* Never above 80dvh. Height is resolved through flex, so the canvas and the text mode
+   can use `max-height: 100%`. `width: fit-content` would size on the canvas INTRINSIC
+   width (the guest resolution), not the height-constrained one the E2E test measures. */
 .session-viewport {
   position: relative;
   display: flex;
@@ -510,8 +496,7 @@
   min-width: 0;
   min-height: 0;
 }
-/* Late-proof diagnostic: the boot marker is missing but the VM is still alive.
-   Inline under the viewport, never full screen, never clickable-blocking. */
+/* Late-proof diagnostic: the boot marker is missing but the VM is still alive. */
 .session-boot-note {
   flex: 0 0 auto;
   margin: 10px 0 0;
@@ -521,12 +506,10 @@
   text-align: center;
   user-select: none;
 }
-/* Logs hidden by default: the VGA screen then uses all the space. */
 .session-console.logs-hidden .v86-serial {
   display: none !important;
 }
-/* v86 console injected into .session-console by the provider; the classes are kept
-   as-is because the E2E suite hooks onto .v86-serial. */
+/* Classes kept as-is: the E2E suite hooks onto `.v86-serial`. */
 .v86-console {
   display: flex;
   flex-direction: column;
@@ -536,9 +519,7 @@
   min-height: 0;
   height: 100%;
 }
-/* VGA screen: the output, dominant. Its width fits its content, preserving the
-   guest ratio, and it is centered; the height is shared with the logs through
-   flex, under the viewport's 80dvh cap. */
+/* Fits its content to preserve the guest ratio; height shared with the logs. */
 .v86-screen {
   flex: 1 1 auto;
   min-height: 0;
@@ -548,14 +529,12 @@
   align-self: center;
   background: #000;
   border-bottom: 1px solid #282c33;
-  display: flex; /* au lieu de grid/place-items */
+  display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
 }
-/* v86 sets inline `width`/`height` px styles on the canvas: neutralized with
-   !important. With `auto`, the canvas is a replaced element: its
-   `max-width`/`max-height` shrink it WITHOUT distorting its intrinsic ratio. */
+/* v86 sets inline px sizes on the canvas: `auto` + max-* shrinks it without distortion. */
 .v86-screen canvas {
   display: block;
   width: auto !important;
@@ -576,13 +555,11 @@
   overflow: hidden;
   box-sizing: border-box;
 }
-/* Host cursor hidden ONLY when the screen really holds the lock: the class is set
-   in sync with `document.pointerLockElement`. */
+/* Host cursor hidden only when the screen really holds the lock. */
 .v86-screen.is-pointer-locked {
   cursor: none;
 }
-/* Discreet mouse capture indicator: never clickable, never overlays a fake
-   cursor. */
+/* Discreet indicator: never clickable, never paints a fake cursor. */
 .session-pointer-hint {
   position: absolute;
   top: 12px;
@@ -610,8 +587,7 @@
   border-color: #5e3434;
   color: #f0b4ae;
 }
-/* Disk diagnostics: one collapsed line under the viewport. It must stay
-   reachable when the guest reads zeros, so it never depends on the console. */
+/* Must stay reachable when the guest reads zeros, so it never depends on the console. */
 .session-disk-diagnostics {
   flex: 0 0 auto;
   margin: 8px 0 0;
@@ -731,7 +707,6 @@
   border-color: #3a4452;
   color: #d5dbe3;
 }
-/* Serial logs: smaller, below the screen, terminal style. */
 .v86-serial {
   display: block;
   visibility: visible;
@@ -825,7 +800,6 @@
   background: #2b171b;
   color: #f0bac2;
 }
-/* Detail and 404 pages */
 .not-found {
   max-width: 620px;
   margin: 0 auto;
@@ -853,7 +827,6 @@
   font-size: 13px;
   line-height: 1.75;
 }
-/* Route error, rendered by the React Router ErrorBoundary */
 .route-error {
   max-width: 620px;
   margin: 0 auto;
@@ -959,7 +932,6 @@
   padding-top: 22px;
   border-top: 1px solid var(--line-soft);
 }
-/* Variant dropdown: to the left of the "Start session" button. */
 .variant-dropdown {
   position: relative;
   display: inline-flex;
@@ -1043,7 +1015,6 @@
   outline-offset: 2px;
 }
 
-/* Footer */
 .footer {
   display: flex;
   align-items: center;
@@ -1168,7 +1139,6 @@
   }
 }
 
-/* Topbar navigation */
 .topbar-menu {
   display: flex;
   align-items: center;
@@ -1234,7 +1204,6 @@
   }
 }
 
-/* Network proxy */
 .proxy-card {
   margin-top: 24px;
   padding: 22px;
@@ -1294,7 +1263,6 @@
 .proxy-note a:hover {
   color: var(--text);
 }
-/* "Install" line + "show all versions", on a single line. */
 .proxy-install-row {
   display: inline-flex;
   align-items: center;
@@ -1314,7 +1282,6 @@
 .proxy-versions-toggle:hover {
   color: var(--text);
 }
-/* Expandable list of every platform in the manifest. */
 .proxy-targets {
   display: flex;
   flex-direction: column;
@@ -1343,7 +1310,6 @@
   text-transform: uppercase;
   white-space: nowrap;
 }
-/* User media import (custom image): the user drops their own disk media. */
 .media-import {
   margin-top: 16px;
   padding: 14px;
@@ -1370,7 +1336,6 @@
   margin-top: 9px;
 }
 
-/* Two selectable tiles: the media and its optional manifest. */
 .media-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1484,7 +1449,6 @@
   line-height: 15px;
 }
 
-/* Licence acknowledgement. */
 .media-license {
   display: flex;
   align-items: center;
@@ -1537,7 +1501,6 @@
   background-size: 11px 11px;
 }
 
-/* Actions: import on the left, privacy hint on the right. */
 .media-import-actions {
   display: flex;
   align-items: center;
@@ -1564,7 +1527,6 @@
   height: 12px;
 }
 
-/* Import error. */
 .media-alert {
   display: flex;
   align-items: flex-start;
@@ -1593,7 +1555,6 @@
   line-height: 1;
 }
 
-/* Already imported media. */
 .media-file-card {
   display: flex;
   align-items: center;

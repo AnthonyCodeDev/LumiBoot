@@ -66,6 +66,23 @@ describe('parseLocalDiskManifest', () => {
     expect(manifest.provenance).toBeUndefined();
   });
 
+  it('accepts the encoded token added by the loopback disk server', () => {
+    const raw = validManifest();
+    const suffix = '?token=a%20b%26c';
+    (raw.disk as Record<string, unknown>).url += suffix;
+    (raw.boot as Record<string, unknown>).url += suffix;
+    const engine = raw.engine as Record<string, unknown>;
+    (engine.wasm as Record<string, unknown>).url += suffix;
+    const bios = engine.bios as Record<string, unknown>;
+    (bios.seabios as Record<string, unknown>).url += suffix;
+    (bios.vgabios as Record<string, unknown>).url += suffix;
+
+    expect(parseLocalDiskManifest(raw).boot.url).toContain(suffix);
+    delete raw.source;
+    delete raw.provenance;
+    expect(parseLocalDiskPublicManifest(raw).boot.url).toContain(suffix);
+  });
+
   it('accepts a manifest without SHA-256 (size + mtime documented)', () => {
     const raw = validManifest();
     delete (raw.disk as Record<string, unknown>).sha256;
@@ -82,6 +99,36 @@ describe('parseLocalDiskManifest', () => {
   it('rejects a disk URL outside /images/', () => {
     const raw = validManifest();
     (raw.disk as Record<string, unknown>).url = 'https://exemple.test/disk.img';
+    expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+  });
+
+  it.each(['/images/../other/disk.img', '/images/windows-7-x86/%2e%2e', '/images/other/disk.img'])(
+    'rejects an unsafe or unrelated disk URL: %s',
+    (url) => {
+      const raw = validManifest();
+      (raw.disk as Record<string, unknown>).url = url;
+      (raw.boot as Record<string, unknown>).url = url;
+      expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+    },
+  );
+
+  it.each(['?token=a&other=b', '#fragment', '?token=%2e%2e/other'])(
+    'rejects an unsafe disk URL suffix: %s',
+    (suffix) => {
+      const raw = validManifest();
+      const url = `/images/windows-7-x86/disk.img${suffix}`;
+      (raw.disk as Record<string, unknown>).url = url;
+      (raw.boot as Record<string, unknown>).url = url;
+      expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+    },
+  );
+
+  it('rejects a boot URL or size that differs from the disk', () => {
+    const raw = validManifest();
+    (raw.boot as Record<string, unknown>).url = '/images/windows-7-x86/other.img';
+    expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+    (raw.boot as Record<string, unknown>).url = '/images/windows-7-x86/disk.img';
+    (raw.boot as Record<string, unknown>).size = SIZE - 1;
     expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
   });
 

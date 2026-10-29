@@ -2,13 +2,12 @@ import type { Architecture } from '@lumiboot/contracts';
 
 export type RuntimeTarget = 'browser';
 
-/** Consult `capabilities()` before offering snapshots, resume or partial download. */
+/** Check before offering snapshots, resume or partial download. */
 export interface VMCapabilities {
   readonly runtime: RuntimeTarget;
   readonly architectures: readonly Architecture[];
   readonly ramSnapshots: boolean;
   readonly diskSnapshots: boolean;
-  /** HTTP Range requests. */
   readonly partialDownload: boolean;
   readonly resumable: boolean;
   readonly configurableMemory: boolean;

@@ -30,13 +30,26 @@ export async function downloadAsset(
   descriptor: AssetDescriptor,
   options: DownloadAssetOptions = {},
 ): Promise<Uint8Array> {
+  if (!Number.isSafeInteger(descriptor.size) || descriptor.size < 0) {
+    throw new AssetError('ASSET_DOWNLOAD_FAILED', 'Invalid asset size.', {
+      ref: descriptor.ref,
+    });
+  }
+  const chunkSizeBytes = options.chunkSizeBytes ?? 4 * 1024 * 1024;
+  if (!Number.isSafeInteger(chunkSizeBytes) || chunkSizeBytes <= 0) {
+    throw new AssetError('ASSET_DOWNLOAD_FAILED', 'Chunk size must be a positive integer.', {
+      ref: descriptor.ref,
+    });
+  }
+
   const cached = options.cache ? await options.cache.get(descriptor.ref) : null;
   const cacheVersionMatches =
     cached !== null && cached.size === descriptor.size && cached.version === descriptor.version;
   if (
     cacheVersionMatches &&
     cached.sha256 === descriptor.sha256 &&
-    cached.bytes.byteLength === descriptor.size
+    cached.bytes.byteLength === descriptor.size &&
+    (await sha256Hex(cached.bytes)) === descriptor.sha256
   ) {
     options.onProgress?.({
       ref: descriptor.ref,
@@ -54,7 +67,6 @@ export async function downloadAsset(
     });
   }
 
-  const chunkSizeBytes = options.chunkSizeBytes ?? 4 * 1024 * 1024;
   const canResume =
     options.allowResume &&
     cacheVersionMatches &&
@@ -89,6 +101,7 @@ export async function downloadAsset(
       options.onProgress,
       options.signal,
       0,
+      undefined,
     );
   }
 
@@ -137,10 +150,26 @@ async function readResponseBytes(
   onProgress: DownloadAssetOptions['onProgress'],
   signal: AbortSignal | undefined,
   offset: number,
+  maxBytes: number | undefined,
+  totalBytes?: number,
 ): Promise<Uint8Array> {
   if (!response.body) {
     const bytes = new Uint8Array(await response.arrayBuffer());
-    onProgress?.({ ref, phase: 'download', loadedBytes: offset + bytes.byteLength });
+    if (maxBytes !== undefined && bytes.byteLength > maxBytes) {
+      throw new AssetError(
+        'ASSET_SIZE_MISMATCH',
+        `Response exceeds the expected size for "${ref}".`,
+        {
+          ref,
+        },
+      );
+    }
+    onProgress?.({
+      ref,
+      phase: 'download',
+      loadedBytes: offset + bytes.byteLength,
+      ...(totalBytes === undefined ? {} : { totalBytes }),
+    });
     return bytes;
   }
 
@@ -159,7 +188,22 @@ async function readResponseBytes(
     if (value) {
       chunks.push(value);
       loadedBytes += value.byteLength;
-      onProgress?.({ ref, phase: 'download', loadedBytes });
+      if (maxBytes !== undefined && loadedBytes - offset > maxBytes) {
+        void reader.cancel().catch(() => undefined);
+        throw new AssetError(
+          'ASSET_SIZE_MISMATCH',
+          `Response exceeds the expected size for "${ref}".`,
+          {
+            ref,
+          },
+        );
+      }
+      onProgress?.({
+        ref,
+        phase: 'download',
+        loadedBytes,
+        ...(totalBytes === undefined ? {} : { totalBytes }),
+      });
     }
   }
 
@@ -248,14 +292,15 @@ async function readRangeChunk(
   onProgress: DownloadAssetOptions['onProgress'],
 ): Promise<Uint8Array> {
   if (start === 0 && response.status === 200) {
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    onProgress?.({
-      ref: descriptor.ref,
-      phase: 'download',
-      loadedBytes: bytes.byteLength,
-      totalBytes: descriptor.size,
-    });
-    return bytes;
+    return readResponseBytes(
+      response,
+      descriptor.ref,
+      onProgress,
+      signal,
+      0,
+      descriptor.size,
+      descriptor.size,
+    );
   }
 
   if (response.status !== 206) {
@@ -304,7 +349,21 @@ async function readRangeChunk(
     );
   }
 
-  return readResponseBytes(response, descriptor.ref, onProgress, signal, start);
+  const bytes = await readResponseBytes(
+    response,
+    descriptor.ref,
+    onProgress,
+    signal,
+    start,
+    end - start + 1,
+    descriptor.size,
+  );
+  if (bytes.byteLength !== end - start + 1) {
+    throw new AssetError('ASSET_SIZE_MISMATCH', `Short range response for "${descriptor.ref}".`, {
+      ref: descriptor.ref,
+    });
+  }
+  return bytes;
 }
 
 function concatBytes(...chunks: Uint8Array[]): Uint8Array {

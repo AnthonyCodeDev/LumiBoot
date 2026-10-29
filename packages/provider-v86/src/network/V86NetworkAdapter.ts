@@ -9,17 +9,13 @@ import {
 } from '@lumiboot/vm-network';
 import type { Event as V86Event, V86Options } from 'v86';
 
-/** Single point of contact between `@lumiboot/vm-network` and `v86`. */
-
 export type V86NetworkDevice = NonNullable<V86Options['net_device']>;
 
 export type V86NetworkDeviceType = NonNullable<V86NetworkDevice['type']>;
 
 export type V86NetworkEventName = 'eth-transmit-end' | 'eth-receive-end' | 'net0-send';
 
-/**
- * Minimal event source; `V86` satisfies it structurally.
- */
+/** Minimal event source; `V86` satisfies it structurally. */
 export interface NetworkEventSource {
   add_listener<T extends V86NetworkEventName>(
     event: T,
@@ -31,19 +27,12 @@ export interface NetworkEventSource {
   ): void;
 }
 
-/**
- * v86 only treats `wisp://` and `wisps://` as Wisp relays; a raw `wss://` URL
- * falls back to the legacy WebSocket relay.
- */
+/** v86 only treats `wisp://`/`wisps://` as Wisp relays; a raw `wss://` is legacy. */
 function toWispRelayUrl(relayUrl: string): string {
   return relayUrl.replace(/^wss:/i, 'wisps:').replace(/^ws:/i, 'wisp:');
 }
 
-/**
- * The NIC type is merged separately from the hardware profile.
- *
- * @throws NetworkError on invalid relay or proxy address, or unsupported mode.
- */
+/** @throws NetworkError on invalid relay/proxy address, or unsupported mode. */
 export function toV86NetworkDevice(profile: NetworkProfile): V86NetworkDevice | undefined {
   switch (profile.mode) {
     case 'offline':
@@ -85,7 +74,7 @@ const DEVICE_TYPE_BY_NETWORK: Readonly<
 > = {
   virtio: 'virtio',
   ne2k: 'ne2k',
-  // The pinned v86 provider does not expose v64's Intel E1000 plugin.
+  // The pinned v86 has no Intel E1000 plugin (v64 only).
   e1000: undefined,
   none: undefined,
 };
@@ -97,10 +86,7 @@ export function toV86NetworkDeviceType(
   return DEVICE_TYPE_BY_NETWORK[network];
 }
 
-/**
- * v86 emits both `net0-send` and `eth-transmit-end` per frame; counting both
- * would double the traffic. Returns a detach function.
- */
+/** v86 emits both `net0-send` and `eth-transmit-end` per frame: count one only. */
 export function attachNetworkDiagnostics(
   emulator: NetworkEventSource,
   controller: NetworkController,

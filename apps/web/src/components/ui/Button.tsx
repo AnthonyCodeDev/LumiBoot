@@ -16,8 +16,9 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 export function Button({ variant = 'primary', className = '', children, ...rest }: ButtonProps) {
   const classes = ['btn', variantClass[variant], className].filter(Boolean).join(' ');
+  // `type` defaults to "button": a bare button inside a form submits it.
   return (
-    <button className={classes} {...rest}>
+    <button className={classes} {...rest} type={rest.type ?? 'button'}>
       {children}
     </button>
   );

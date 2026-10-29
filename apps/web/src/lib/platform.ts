@@ -1,8 +1,4 @@
-/**
- * Host platform detection for the local network proxy download.
- * When nothing proves the architecture, `arch` stays `'unknown'` and `key` is
- * `null`; a Mac is never assumed ARM64 nor Intel.
- */
+/** Host platform detection for the proxy download; `arch`/`key` stay unknown when unproven. */
 
 export type HostOS = 'windows' | 'macos' | 'linux' | 'unknown';
 export type HostArch = 'x64' | 'arm64' | 'unknown';
@@ -73,10 +69,7 @@ export function detectHostPlatform(nav?: HostNavigator): HostPlatform {
   return { os, arch, key: keyFor(os, arch) };
 }
 
-/**
- * Uses `userAgentData.getHighEntropyValues` when available, otherwise the
- * synchronous fallback. Chromium reports `x86` even on x86_64.
- */
+/** Prefers `userAgentData`; Chromium reports `x86` even on x86_64. */
 export async function detectHostPlatformAsync(nav?: HostNavigator): Promise<HostPlatform> {
   const resolved = resolveNavigator(nav);
   const getValues = resolved?.userAgentData?.getHighEntropyValues;

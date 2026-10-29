@@ -2,11 +2,9 @@ import { useEffect, useState, type RefObject } from 'react';
 import { attachPointerLockCapture } from './pointer-lock';
 
 export interface PointerLockCaptureState {
-  /** True when the screen really holds the pointer lock. */
   readonly captured: boolean;
-  /** True when Pointer Lock is usable in this browser. */
+  /** Pointer Lock is usable in this browser. */
   readonly supported: boolean;
-  /** Readable error message on refusal, otherwise `null`. */
   readonly error: string | null;
 }
 
@@ -15,7 +13,6 @@ function describePointerLockError(error: unknown): string {
   return 'Unable to capture the mouse on the screen.';
 }
 
-/** Attaches the capture while the session is active; dispose releases the lock. */
 export function usePointerLockCapture(
   containerRef: RefObject<HTMLElement>,
   enabled: boolean,

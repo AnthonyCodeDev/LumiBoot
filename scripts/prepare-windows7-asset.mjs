@@ -1,14 +1,5 @@
 #!/usr/bin/env node
-// Builds the manifest of a system disk supplied locally so it can be streamed to
-// v86 over HTTP Range.
-//
-//   node scripts/prepare-windows7-asset.mjs --source <disk> [--ref <ref>]
-//   node scripts/prepare-windows7-asset.mjs --check [--source <disk>]
-//   node scripts/prepare-windows7-asset.mjs --source <disk> --skip-hash
-//
-// Reads the source disk and scripts/v86-assets.lock.json; writes manifest.json and
-// provenance.txt in the output directory. The source is opened read-only and the
-// disk is served in place, never copied into the repository.
+// Builds the manifest of a local RAW disk so v86 can stream it over HTTP Range.
 
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
@@ -61,8 +52,7 @@ function parseArgs(argv) {
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    // A lone `--` injected by `pnpm <script> -- <opts>` is skipped, never treated
-    // as an unknown option, but still accepted as the value of a `--note`.
+    // A lone `--` injected by pnpm is skipped, never treated as an unknown option.
     if (arg === '--') continue;
     const [name, inline] =
       arg.startsWith('--') && arg.includes('=')
@@ -313,8 +303,7 @@ async function main() {
   const outputDir = resolve(outDir ?? join(repoRoot, 'images', options.ref));
   const manifestPath = join(outputDir, 'manifest.json');
 
-  // Without an explicit --source, --check follows the path recorded in the manifest;
-  // a disk outside the repository requires --source.
+  // Without --source, --check follows the recorded path (external disks need it).
   let sourcePath = resolve(options.source);
   if (flags.check && !flags.sourceProvided) {
     const recorded = await readExistingManifest(outputDir);
@@ -480,7 +469,6 @@ async function main() {
     join(outputDir, 'provenance.txt'),
     [
       `ref            : ${options.ref}`,
-      // Path relative to the repository only: never publish an absolute path.
       `source         : ${sourceRelative ?? '(external disk — no path recorded)'}`,
       `size           : ${sourceInfo.size} bytes (${(sourceInfo.size / GIB).toFixed(3)} GiB)`,
       `mtime (ms)     : ${diskMtimeMs}`,

@@ -18,7 +18,7 @@ sudo FLAVOR=desktop ./images/debian-12-i386/build.sh
 sudo FLAVOR=xfce ./images/debian-12-i386/build.sh
 ```
 
-Outputs in `build/`, `build-desktop/` or `build-xfce/`: `rootfs.img`, `vmlinuz-686`, `initrd.img`, `manifest.json`, `packages.tsv`, `provenance.txt`. Variables: `SNAPSHOT=20240101T000000Z`, `DISK_SIZE`, `LUMIBOOT_BUILD_DIR`.
+Outputs in `build/`, `build-desktop/` or `build-xfce/`: `rootfs.img`, `vmlinuz-686`, `initrd.img`, `manifest.json`, `packages.tsv`, `provenance.txt`. Variables: `SNAPSHOT=20240101T000000Z`, `DISK_SIZE`, `LUMIBOOT_BUILD_DIR`. A custom build directory may be erased on rebuild only when it is empty or contains the `.lumiboot-build` marker created by a previous run.
 
 ## Publishing
 

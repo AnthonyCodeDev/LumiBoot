@@ -20,10 +20,13 @@ import (
 
 	"github.com/lumiboot/network-proxy/internal/config"
 	"github.com/lumiboot/network-proxy/internal/server"
+	"github.com/lumiboot/network-proxy/internal/testutil"
 	"github.com/lumiboot/network-proxy/internal/wisp"
 )
 
-const itOrigin = "http://localhost:5200"
+// itOrigin is the deployment origin the integration tests allow and send,
+// derived from `E2E_HOST` / `E2E_PORT` (`http://127.0.0.1:5200` by default).
+var itOrigin = testutil.TestOrigin()
 
 func echoServer(t *testing.T) (host string, port int) {
 	t.Helper()
@@ -116,7 +119,7 @@ func pair(t *testing.T, srv *server.Server, ts *httptest.Server) string {
 
 func dialWISP(t *testing.T, ts *httptest.Server, token, origin string) *websocket.Conn {
 	t.Helper()
-	wsURL := "ws://" + strings.TrimPrefix(ts.URL, "http://") + "/wisp/?token=" + token
+	wsURL := testutil.WispURL(ts, token)
 	header := http.Header{}
 	if origin != "" {
 		header.Set("Origin", origin)
@@ -200,11 +203,11 @@ func TestFullSession(t *testing.T) {
 func TestWispRejectsBadOriginAndMissingToken(t *testing.T) {
 	srv, ts := proxyFixture(t, nil)
 	token := pair(t, srv, ts)
-	wsBase := "ws://" + strings.TrimPrefix(ts.URL, "http://") + "/wisp/?token="
+	wsURL := testutil.WispURL(ts, token)
 
 	// Disallowed origin.
-	header := http.Header{"Origin": []string{"http://evil.com"}}
-	if c, resp, err := websocket.DefaultDialer.Dial(wsBase+token, header); err == nil {
+	header := http.Header{"Origin": []string{testutil.HostileOrigin()}}
+	if c, resp, err := websocket.DefaultDialer.Dial(wsURL, header); err == nil {
 		_ = c.Close()
 		t.Fatal("hostile origin accepted")
 	} else if resp != nil {
@@ -216,7 +219,7 @@ func TestWispRejectsBadOriginAndMissingToken(t *testing.T) {
 
 	// Missing token.
 	header = http.Header{"Origin": []string{itOrigin}}
-	if c, resp, err := websocket.DefaultDialer.Dial(wsBase, header); err == nil {
+	if c, resp, err := websocket.DefaultDialer.Dial(testutil.WispURL(ts, ""), header); err == nil {
 		_ = c.Close()
 		t.Fatal("missing token accepted")
 	} else if resp != nil {
@@ -320,7 +323,7 @@ func TestExpectTransportClosedToleratesWispCloseFrame(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(ts.URL, "http"), nil)
+	conn, _, err := websocket.DefaultDialer.Dial(testutil.WispURL(ts, ""), nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}

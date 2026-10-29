@@ -35,6 +35,11 @@ const (
 	maxPendingPerOrigin = 8
 )
 
+// MaxTransportsPerToken caps the number of simultaneous WebSocket transports
+// that may share one session token. A leaked token must not be able to open an
+// unbounded number of long-lived connections.
+const MaxTransportsPerToken = 4
+
 const (
 	StatusPending  = "pending"
 	StatusApproved = "approved"
@@ -215,7 +220,26 @@ func (a *Authenticator) RequestPairing(origin string) (Pairing, error) {
 	return *p, nil
 }
 
+// Status returns a pairing without any origin check. It is reserved for
+// internal callers (console, tests); HTTP handlers must use StatusFor so an
+// allowed origin cannot read another origin's pairing.
 func (a *Authenticator) Status(pairingID string) (Pairing, bool) {
+	return a.status("", pairingID)
+}
+
+// StatusFor returns a pairing only when it was requested by this origin. An
+// empty or unparsable origin never matches, so callers cannot opt out by
+// omitting the origin.
+func (a *Authenticator) StatusFor(pairingID, origin string) (Pairing, bool) {
+	n := NormalizeOrigin(origin)
+	if n == "" {
+		return Pairing{}, false
+	}
+	return a.status(n, pairingID)
+}
+
+// status implements Status and StatusFor; wantOrigin == "" skips the binding.
+func (a *Authenticator) status(wantOrigin, pairingID string) (Pairing, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	p, ok := a.pairings[pairingID]
@@ -224,6 +248,9 @@ func (a *Authenticator) Status(pairingID string) (Pairing, bool) {
 	}
 	if a.now().After(p.ExpiresAt) {
 		delete(a.pairings, pairingID)
+		return Pairing{}, false
+	}
+	if wantOrigin != "" && p.Origin != wantOrigin {
 		return Pairing{}, false
 	}
 	return *p, true
@@ -275,7 +302,8 @@ func (a *Authenticator) Exchange(pairingID, origin string) (token string, expire
 		return "", time.Time{}, err
 	}
 	expiresAt = a.now().Add(a.sessionTTL)
-	a.sessions[hashToken(raw)] = &session{hash: hashToken(raw), origin: p.Origin, expiresAt: expiresAt}
+	hash := hashToken(raw)
+	a.sessions[hash] = &session{hash: hash, origin: p.Origin, expiresAt: expiresAt}
 	delete(a.pairings, pairingID) // single use
 	return raw, expiresAt, nil
 }
@@ -296,13 +324,18 @@ func (a *Authenticator) VerifySession(token, origin string) (SessionInfo, bool) 
 }
 
 // AttachSession verifies the token and registers a close transport for it,
-// atomically, so a concurrent revocation is never missed.
+// atomically, so a concurrent revocation is never missed. It refuses more than
+// MaxTransportsPerToken simultaneous transports for the same token.
 func (a *Authenticator) AttachSession(token, origin string, onClose CloseFunc) (SessionInfo, string, bool) {
 	a.mu.Lock()
 	id, s, expired, ok := a.lookupLocked(token, origin)
 	if !ok {
 		a.mu.Unlock()
 		closeAll(expired)
+		return SessionInfo{}, "", false
+	}
+	if len(s.closes) >= MaxTransportsPerToken {
+		a.mu.Unlock()
 		return SessionInfo{}, "", false
 	}
 	tid, err := randomString(a.randSource, 8)

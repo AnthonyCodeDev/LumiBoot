@@ -39,7 +39,6 @@ export function createErrorHandle(
   };
 }
 
-/** Fallback engine: never renders a fake VM. */
 export class UnavailableProvider implements VMEngine {
   readonly id = UNAVAILABLE_PROVIDER_ID;
 

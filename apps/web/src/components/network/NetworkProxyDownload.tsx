@@ -9,13 +9,12 @@ import {
 } from '../../lib/platform';
 
 export interface NetworkProxyDownloadProps {
-  /** Platform injected in tests. */
+  /** Injected in tests. */
   platform?: HostPlatform | undefined;
-  /** Manifest injected in tests. */
+  /** Injected in tests. */
   manifest?: DownloadsManifest | undefined;
 }
 
-/** Labels for the targets, in manifest order. */
 const TARGET_LABELS: Record<PlatformKey, string> = {
   'windows-x64': 'Windows x64',
   'windows-arm64': 'Windows ARM64',
@@ -62,7 +61,13 @@ export function NetworkProxyDownload(props: NetworkProxyDownloadProps) {
     <>
       <div className="proxy-install-row">
         {primary?.url ? (
-          <a href={primary.url} target="_blank" rel="noopener noreferrer">
+          <a
+            href={primary.url}
+            download={primary.entry.file}
+            title={primary.entry.sha256 ? `SHA-256: ${primary.entry.sha256}` : undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             Install
           </a>
         ) : null}
@@ -80,7 +85,13 @@ export function NetworkProxyDownload(props: NetworkProxyDownloadProps) {
           {targets.map((target) => (
             <li key={target.key}>
               {target.url ? (
-                <a href={target.url} target="_blank" rel="noopener noreferrer">
+                <a
+                  href={target.url}
+                  download={target.entry.file}
+                  title={target.entry.sha256 ? `SHA-256: ${target.entry.sha256}` : undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   {TARGET_LABELS[target.key]}
                 </a>
               ) : (

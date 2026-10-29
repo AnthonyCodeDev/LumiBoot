@@ -21,10 +21,7 @@ export interface LaunchReadinessOptions {
   userMediaReady?: boolean;
 }
 
-/**
- * Stable user message per runtime unavailability cause; a raw technical reason is
- * never shown. Published-file causes reuse the canonical `@lumiboot/vm-assets` strings.
- */
+/** Stable user message per cause; a raw technical reason is never shown. */
 const RUNTIME_REASON_MESSAGES: Record<AssetUnavailableReason, string> = {
   'ref-invalid': 'The system media reference is invalid.',
   'manifest-missing': ASSET_UNAVAILABLE_MESSAGES['manifest-missing'],
@@ -45,10 +42,7 @@ const RUNTIME_REASON_MESSAGES: Record<AssetUnavailableReason, string> = {
   aborted: 'The media availability check was aborted.',
 };
 
-/**
- * Declared-side source of truth for the "Start session" button.
- * Refuses an unserved architecture or a missing engine before any boot.
- */
+/** Declared-side source of truth for the "Start session" button. */
 export function getLaunchReadiness(
   system: OSDefinition,
   options: LaunchReadinessOptions = {},
@@ -60,7 +54,6 @@ export function getLaunchReadiness(
   const profile = getPrimaryLaunchProfile(system);
   const declared = getDeclaredReadiness(system);
 
-  // 1. Checks tied to the media source.
   if (declared.mediaSource === 'user-import') {
     if (!isEngineIntegrated(profile.engineId)) {
       return {
@@ -104,11 +97,9 @@ export function getLaunchReadiness(
     }
   }
 
-  // 2. Declared memory constraint.
   const memoryReason = getMemoryConstraintReason(system, profile);
   if (memoryReason !== null) return { canLaunch: false, reason: memoryReason };
 
-  // 3. Architecture/CPU compatibility and browser prerequisites.
   const compatibility = explainSystemCompatibility(system);
   if (!compatibility.compatible) {
     return { canLaunch: false, reason: compatibility.reasons.join(' ') };
@@ -117,7 +108,7 @@ export function getLaunchReadiness(
   return { canLaunch: true };
 }
 
-/** Static memory constraint: configured memory must reach the declared minimum. */
+/** Configured memory must reach the declared minimum. */
 function getMemoryConstraintReason(system: OSDefinition, profile: LaunchProfile): string | null {
   const configured = profile.configuration?.memoryMiB ?? system.minMemoryMiB;
   if (configured === undefined || configured <= 0) {
@@ -143,11 +134,7 @@ export interface RuntimeAvailability {
   readonly size?: number;
 }
 
-/**
- * Checks that the declared media is really servable now: valid manifest,
- * consistent reference, disk served over HTTP Range. A `user-import` system is
- * skipped: its media is local.
- */
+/** A `user-import` system is skipped: its media is local. */
 export async function checkSystemRuntimeAvailability(
   system: OSDefinition,
   options: RuntimeCheckOptions = {},
@@ -180,7 +167,6 @@ export async function checkSystemRuntimeAvailability(
   return { available: false, reason };
 }
 
-/** Full readiness: declared constraints first, then runtime availability. */
 export async function resolveLaunchReadiness(
   system: OSDefinition,
   options: LaunchReadinessOptions & RuntimeCheckOptions = {},

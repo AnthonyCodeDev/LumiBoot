@@ -26,11 +26,13 @@ function purgeLegacyStorage(): void {
   }
 }
 
-/** Persists the pairing session. Never throws. */
+/** Never throws. An unparsable or past deadline is not written: `loadProxySession` would discard it. */
 export function saveProxySession(session: PersistedProxySession): void {
   purgeLegacyStorage();
   const store = storage();
   if (store === null) return;
+  const expiry = Date.parse(session.expiresAt);
+  if (Number.isNaN(expiry) || expiry <= Date.now()) return;
   try {
     store.setItem(STORAGE_KEY, JSON.stringify(session));
   } catch {
@@ -38,12 +40,8 @@ export function saveProxySession(session: PersistedProxySession): void {
   }
 }
 
-/**
- * Re-reads the persisted session for the given proxy URL. Returns `null` and clears
- * the storage on missing, corrupted, foreign or expired entries.
- */
+/** Returns `null` and clears storage on missing, corrupted, foreign or expired entries. */
 export function loadProxySession(proxyUrl: string): PersistedProxySession | null {
-  // Purge the legacy persistent bearer before any re-read.
   purgeLegacyStorage();
   const store = storage();
   if (store === null) return null;

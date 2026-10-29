@@ -1,7 +1,4 @@
-/**
- * The proxy is a local WISP server on loopback; the VM reaches it through a
- * `ws(s)://…/wisp/` URL derived from its HTTP(S) URL.
- */
+/** Local WISP server on loopback; the VM uses its derived `ws(s)://…/wisp/` URL. */
 
 import type { NetworkMode } from './modes';
 import type { NetworkProfile } from './profile';
@@ -10,7 +7,6 @@ export const DEFAULT_PROXY_HOST = '127.0.0.1';
 export const DEFAULT_PROXY_PORT = 37892;
 export const DEFAULT_PROXY_URL = `http://${DEFAULT_PROXY_HOST}:${DEFAULT_PROXY_PORT}`;
 
-/** WISP protocol version required by the v86 client. */
 export const PROXY_WISP_VERSION = 1;
 
 export const PROXY_STATES = [
@@ -37,11 +33,7 @@ function isLoopbackHostname(hostname: string): boolean {
   return host === '127.0.0.1' || host === '::1' || host === '[::1]' || host === 'localhost';
 }
 
-/**
- * Loopback `http:`/`https:` only, no userinfo and no fragment.
- *
- * @returns the normalized URL in `url` on success.
- */
+/** Loopback `http:`/`https:` only, no userinfo and no fragment. */
 export function validateProxyUrl(raw: unknown): ProxyValidation {
   if (typeof raw !== 'string') {
     return {
@@ -88,7 +80,6 @@ export function validateProxyUrl(raw: unknown): ProxyValidation {
   return { ok: true, url: url.href };
 }
 
-/** @throws Error when the local network proxy URL is invalid. */
 export function buildProxyWispUrl(proxyUrl: string, token?: string): string {
   const validation = validateProxyUrl(proxyUrl);
   if (!validation.ok || validation.url === undefined) {
@@ -109,7 +100,7 @@ export function buildProxyWispUrl(proxyUrl: string, token?: string): string {
   return url.href;
 }
 
-/** `local-proxy` falls back to it when the proxy is absent. */
+/** Fallback when `local-proxy` finds no proxy. */
 export const DEFAULT_NETWORK_FALLBACK_MODE: NetworkMode = 'browser-fetch';
 
 export interface ProxyAvailability {
@@ -121,10 +112,7 @@ export interface ProxyAvailability {
   proxyToken?: string;
 }
 
-/**
- * A connected and paired proxy wins over the base mode; a `local-proxy` base
- * without proxy falls back to `browser-fetch`.
- */
+/** A connected, paired proxy wins; `local-proxy` without proxy falls back. */
 export function selectEffectiveNetworkProfile(
   base: NetworkProfile,
   proxy: ProxyAvailability,

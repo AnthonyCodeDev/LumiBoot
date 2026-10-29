@@ -1,7 +1,4 @@
-/**
- * v86 requires a `<div>` child followed by a `<canvas>` for the screen; the
- * screen carries `data-vm-display="screen"` for the generic UI.
- */
+/** v86 requires a `<div>` child followed by a `<canvas>` for the screen. */
 import {
   STANDARD_VM_DISPLAY,
   STANDARD_VM_INPUT,
@@ -12,14 +9,11 @@ import {
 } from '@lumiboot/vm-core';
 
 export interface V86ConsoleMount {
-  /** Passed as `V86Options.screen.container`. */
   readonly screenContainer: HTMLElement;
-  /** Passed as `V86Options.serial_console.container`. */
   readonly serialTextarea: HTMLTextAreaElement;
 }
 
 export interface V86ConsoleAdapter {
-  /** Exposed for the wheel scrollback. */
   readonly screen: HTMLElement | null;
   readonly display?: VMDisplay;
   readonly input?: VMInput;

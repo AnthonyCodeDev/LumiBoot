@@ -29,7 +29,6 @@ import {
 } from '../lib/labels';
 import { NotFoundPage } from './NotFoundPage';
 
-/** Human-readable size. */
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
@@ -37,12 +36,14 @@ function formatBytes(bytes: number): string {
   return `${bytes} bytes`;
 }
 
+/** A hung server must not block the button. */
+export const SYSTEM_RUNTIME_CHECK_TIMEOUT_MS = 10_000;
+
 export function SystemPage() {
   const { slug } = useParams<{ slug: string }>();
   const system = slug ? getSystemBySlug(slug) : null;
   const createSession = useSessionsStore((state) => state.create);
   const navigate = useNavigate();
-  // Variant to launch; the page content stays the base one.
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const mediaRecords = useUserMediaStore((state) => state.records);
@@ -52,18 +53,17 @@ export function SystemPage() {
   const loadMedia = useUserMediaStore((state) => state.load);
   const importMedia = useUserMediaStore((state) => state.importFor);
   const removeMedia = useUserMediaStore((state) => state.remove);
-  // Import form fields.
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaManifest, setMediaManifest] = useState<File | null>(null);
   const [licenseAcknowledged, setLicenseAcknowledged] = useState(false);
 
-  // Runtime availability of the variant to launch.
   type RuntimeState =
-    { status: 'checking' } | { status: 'available' } | { status: 'unavailable'; reason: string };
+    | { key: string; status: 'checking' }
+    | { key: string; status: 'available' }
+    | { key: string; status: 'unavailable'; reason: string };
   const [runtime, setRuntime] = useState<RuntimeState | null>(null);
 
-  // Sync the selection when the resolved system changes: parent selects its best
-  // variant, a direct link to a child selects that child.
+  // A parent selects its best variant; a direct link to a child selects that child.
   useEffect(() => {
     if (!system) {
       setSelectedId(null);
@@ -73,15 +73,12 @@ export function SystemPage() {
     setSelectedId(system.id === parent.id ? getDefaultVariant(parent).id : system.id);
   }, [system]);
 
-  // Reload persisted media once on mount.
   useEffect(() => {
     void loadMedia();
   }, [loadMedia]);
 
-  // Displayed content is always the base variant, whatever is picked.
   const base = system ? getVariantParent(system) : null;
   const variants = base ? getVariantGroup(base) : [];
-  // Falls back to the default variant on the first render, before the effect runs.
   const selected = base
     ? (variants.find((variant) => variant.id === selectedId) ?? getDefaultVariant(base))
     : null;
@@ -89,44 +86,67 @@ export function SystemPage() {
   const mediaRecord = selected ? mediaRecords[selected.id] : undefined;
   const userMediaReady = mediaRecord !== undefined;
   const isUserImport = selected?.mediaStrategy === 'user-import';
+  const runtimeKey = selected ? `${selected.id}:${mediaRecord?.importedAt ?? 'no-media'}` : null;
 
-  // Declared readiness: catalogue, engine, architecture, memory and imported media.
   const declaredReadiness = selected
     ? getLaunchReadiness(selected, { userMediaReady })
     : { canLaunch: false };
 
-  // Re-check runtime availability when the variant changes.
   useEffect(() => {
-    if (!selected || !declaredReadiness.canLaunch) {
+    if (!selected || !declaredReadiness.canLaunch || runtimeKey === null) {
       setRuntime(null);
       return;
     }
     let cancelled = false;
-    setRuntime({ status: 'checking' });
-    checkSystemRuntimeAvailability(selected)
+    const controller = new AbortController();
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stopTimer = (): void => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+    };
+    timer = setTimeout(() => {
+      timer = undefined;
+      timedOut = true;
+      setRuntime({ key: runtimeKey, status: 'unavailable', reason: 'The media check timed out.' });
+      controller.abort();
+    }, SYSTEM_RUNTIME_CHECK_TIMEOUT_MS);
+    setRuntime({ key: runtimeKey, status: 'checking' });
+    checkSystemRuntimeAvailability(selected, { signal: controller.signal })
       .then((result) => {
-        if (cancelled) return;
+        stopTimer();
+        if (cancelled || timedOut) return;
         setRuntime(
           result.available
-            ? { status: 'available' }
+            ? { key: runtimeKey, status: 'available' }
             : {
+                key: runtimeKey,
                 status: 'unavailable',
                 reason: result.reason ?? 'The system media is unavailable.',
               },
         );
       })
       .catch((error: unknown) => {
+        stopTimer();
         if (cancelled) return;
         setRuntime({
+          key: runtimeKey,
           status: 'unavailable',
-          reason:
-            error instanceof Error && error.message ? error.message : 'The media check failed.',
+          reason: timedOut
+            ? 'The media check timed out.'
+            : error instanceof Error && error.message
+              ? error.message
+              : 'The media check failed.',
         });
       });
     return () => {
       cancelled = true;
+      stopTimer();
+      controller.abort();
     };
-  }, [selected, declaredReadiness.canLaunch, userMediaReady]);
+  }, [selected, declaredReadiness.canLaunch, runtimeKey]);
 
   if (!system || !base || !selected) return <NotFoundPage />;
 
@@ -134,19 +154,18 @@ export function SystemPage() {
     '--accent': base.accent,
     '--accent-rgb': base.accentRgb,
   } as CSSProperties;
-  // Spec table reflects the variant to launch, not the displayed parent.
   const profile = getPrimaryLaunchProfile(selected);
   const memoryMiB = profile.configuration?.memoryMiB ?? selected.minMemoryMiB;
   const bootDevice = profile.configuration?.bootDevice;
   const network = profile.hardwareProfile?.network;
 
-  // Launch requires both the declared readiness and a runtime availability check.
+  const checkedRuntime = runtime?.key === runtimeKey ? runtime : null;
   const readiness: LaunchReadiness = !declaredReadiness.canLaunch
     ? declaredReadiness
-    : runtime?.status === 'available'
+    : checkedRuntime?.status === 'available'
       ? { canLaunch: true }
-      : runtime?.status === 'unavailable'
-        ? { canLaunch: false, reason: runtime.reason }
+      : checkedRuntime?.status === 'unavailable'
+        ? { canLaunch: false, reason: checkedRuntime.reason }
         : { canLaunch: false, reason: 'Checking media availability…' };
 
   async function handleImport(): Promise<void> {
@@ -392,7 +411,6 @@ export function SystemPage() {
                 }))}
                 value={selected.id}
                 onSelect={(variantSlug) => {
-                  // Only the variant to launch changes; no navigation.
                   const next = variants.find((variant) => variant.slug === variantSlug);
                   if (next) setSelectedId(next.id);
                 }}

@@ -4,6 +4,7 @@ import {
   diagnosticsHealth,
   formatDiskDiagnostics,
   healthMessage,
+  redactDiagnosticsUrl,
   statusesLabel,
   type DiagnosticsHealth,
   type DiagnosticsReport,
@@ -19,12 +20,10 @@ export interface DiskDiagnosticsPanelProps {
   defaultOpen?: boolean;
 }
 
-/** The last 10 reads are enough to spot a systematic pattern. */
 const VISIBLE_ENTRIES = 10;
 
-/** Collapsed: only the header must stay honest, so 2 s is plenty. */
+/** Collapsed: the header must stay honest, 2 s is plenty. */
 const COLLAPSED_POLL_MS = 2000;
-/** Open: the counters and the log should follow a boot closely. */
 const OPEN_POLL_MS = 1000;
 
 function readReport(): DiagnosticsReport {
@@ -34,12 +33,7 @@ function readReport(): DiagnosticsReport {
   };
 }
 
-/**
- * Compact fingerprint of what the panel actually renders. Polling copies the
- * ring buffer (≤ 200 entries) every tick, but a tick only re-renders when this
- * signature changes: `requests`, `allZero`, the status histogram, the failure
- * count, the health verdict and the service-worker controller.
- */
+/** Fingerprint of what the panel renders: a tick re-renders only when it changes. */
 function reportSignature(report: DiagnosticsReport): string {
   const { summary, entries } = report;
   const statuses = Object.keys(summary.byStatus)
@@ -60,10 +54,7 @@ function healthClass(health: DiagnosticsHealth): string {
   return `session-disk-diagnostics__health session-disk-diagnostics__health--${health}`;
 }
 
-/**
- * Collapsed by default so it never competes with the guest screen, but always
- * present: a failed boot is diagnosed without opening DevTools.
- */
+/** Collapsed by default so it never competes with the guest screen. */
 export function DiskDiagnosticsPanel({ defaultOpen = false }: DiskDiagnosticsPanelProps) {
   const [open, setOpen] = useState(defaultOpen);
   const [report, setReport] = useState<DiagnosticsReport>(readReport);
@@ -81,9 +72,7 @@ export function DiskDiagnosticsPanel({ defaultOpen = false }: DiskDiagnosticsPan
     setReport(next);
   }, []);
 
-  // Poll while mounted (collapsed or not) so the header never lies: a boot that
-  // reads 200+ blocks must show that even with the panel closed. Polling stops
-  // with the component, and opening still refreshes immediately.
+  // Poll even when collapsed so the header never lies.
   useEffect(() => {
     refresh();
     const timer = window.setInterval(refresh, open ? OPEN_POLL_MS : COLLAPSED_POLL_MS);
@@ -111,7 +100,6 @@ export function DiskDiagnosticsPanel({ defaultOpen = false }: DiskDiagnosticsPan
   const repairStorage = useCallback(async (): Promise<void> => {
     setRepairing(true);
     try {
-      // Never rejects; problems come back as text.
       setRepair(await repairBrowserStorage());
     } finally {
       setRepairing(false);
@@ -173,7 +161,7 @@ export function DiskDiagnosticsPanel({ defaultOpen = false }: DiskDiagnosticsPan
         {entries.length > 0 ? (
           <ul className="session-disk-diagnostics__log">
             {entries.map((entry, index) => (
-              <li key={`${entry.at}-${index}`} title={entry.url}>
+              <li key={`${entry.at}-${index}`} title={redactDiagnosticsUrl(entry.url)}>
                 <code>{entry.range ?? 'no range'}</code> → {entry.status ?? 'pending'} / allZero=
                 {entry.allZero === null ? 'n/a' : String(entry.allZero)} / {entry.durationMs} ms
               </li>

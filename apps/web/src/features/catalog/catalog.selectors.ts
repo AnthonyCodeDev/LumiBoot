@@ -3,10 +3,7 @@ import { filterSystems, getVariantParent } from '@lumiboot/catalog';
 import type { OSDefinition } from '@lumiboot/contracts';
 import { useCatalogStore } from './catalog.store';
 
-/**
- * One card per group: the flat catalogue is filtered first so search matches child
- * variants, then each result is folded back to its parent.
- */
+/** One card per group: filter the flat catalogue (so search matches variants), then fold to parents. */
 export function useVisibleSystems(): OSDefinition[] {
   const systems = useCatalogStore((state) => state.systems);
   const family = useCatalogStore((state) => state.family);

@@ -6,6 +6,7 @@ import {
   normalizeNetworkProfile,
   validateNetworkProfile,
 } from './profile';
+import { RELAY_WSS, TEST_PROXY_URL } from './testing/fixtures';
 
 describe('defaultNetworkProfile', () => {
   it('is offline and without a public relay', () => {
@@ -26,40 +27,41 @@ describe('networkProfileSchema', () => {
 
 describe('normalizeNetworkProfile', () => {
   it('keeps relayUrl only in user-relay mode', () => {
-    expect(
-      normalizeNetworkProfile({ mode: 'user-relay', relayUrl: 'wss://relay.example' }),
-    ).toEqual({ mode: 'user-relay', relayUrl: 'wss://relay.example' });
+    expect(normalizeNetworkProfile({ mode: 'user-relay', relayUrl: RELAY_WSS })).toEqual({
+      mode: 'user-relay',
+      relayUrl: RELAY_WSS,
+    });
 
-    expect(normalizeNetworkProfile({ mode: 'offline', relayUrl: 'wss://relay.example' })).toEqual({
+    expect(normalizeNetworkProfile({ mode: 'offline', relayUrl: RELAY_WSS })).toEqual({
       mode: 'offline',
     });
 
-    expect(
-      normalizeNetworkProfile({ mode: 'browser-fetch', relayUrl: 'wss://relay.example' }),
-    ).toEqual({ mode: 'browser-fetch' });
+    expect(normalizeNetworkProfile({ mode: 'browser-fetch', relayUrl: RELAY_WSS })).toEqual({
+      mode: 'browser-fetch',
+    });
   });
 
   it('keeps proxyUrl/proxyToken only in local-proxy mode', () => {
     expect(
       normalizeNetworkProfile({
         mode: 'local-proxy',
-        proxyUrl: 'http://127.0.0.1:37892',
+        proxyUrl: TEST_PROXY_URL,
         proxyToken: 'abc',
       }),
     ).toEqual({
       mode: 'local-proxy',
-      proxyUrl: 'http://127.0.0.1:37892',
+      proxyUrl: TEST_PROXY_URL,
       proxyToken: 'abc',
     });
 
-    expect(
-      normalizeNetworkProfile({ mode: 'local-proxy', relayUrl: 'wss://relay.example' }),
-    ).toEqual({ mode: 'local-proxy' });
+    expect(normalizeNetworkProfile({ mode: 'local-proxy', relayUrl: RELAY_WSS })).toEqual({
+      mode: 'local-proxy',
+    });
 
     expect(
       normalizeNetworkProfile({
         mode: 'offline',
-        proxyUrl: 'http://127.0.0.1:37892',
+        proxyUrl: TEST_PROXY_URL,
         proxyToken: 'abc',
       }),
     ).toEqual({ mode: 'offline' });
@@ -67,10 +69,10 @@ describe('normalizeNetworkProfile', () => {
     expect(
       normalizeNetworkProfile({
         mode: 'user-relay',
-        relayUrl: 'wss://relay.example',
-        proxyUrl: 'http://127.0.0.1:37892',
+        relayUrl: RELAY_WSS,
+        proxyUrl: TEST_PROXY_URL,
       }),
-    ).toEqual({ mode: 'user-relay', relayUrl: 'wss://relay.example' });
+    ).toEqual({ mode: 'user-relay', relayUrl: RELAY_WSS });
   });
 
   it('throws a NetworkError on invalid input', () => {
@@ -81,10 +83,10 @@ describe('normalizeNetworkProfile', () => {
 
 describe('validateNetworkProfile', () => {
   it('accepts and cleans a valid profile', () => {
-    const result = validateNetworkProfile({ mode: 'user-relay', relayUrl: 'wss://relay.example' });
+    const result = validateNetworkProfile({ mode: 'user-relay', relayUrl: RELAY_WSS });
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
-    expect(result.profile).toEqual({ mode: 'user-relay', relayUrl: 'wss://relay.example' });
+    expect(result.profile).toEqual({ mode: 'user-relay', relayUrl: RELAY_WSS });
   });
 
   it('returns the errors without throwing', () => {

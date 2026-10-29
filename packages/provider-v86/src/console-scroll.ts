@@ -3,16 +3,11 @@ import type { V86 } from 'v86';
 /** `Shift+PageUp` make/break sequence; `0x2a` is left Shift, `0xaa` its break. */
 const SHIFT_PAGE_UP = [0x2a, 0xe0, 0x49, 0xe0, 0xc9, 0xaa];
 
-/** `Shift+PageDown` make/break sequence; scrolls back down. */
 const SHIFT_PAGE_DOWN = [0x2a, 0xe0, 0x51, 0xe0, 0xd1, 0xaa];
 
-/** Minimum delay between two injections, in ms. */
 const WHEEL_THROTTLE_MS = 35;
 
-/**
- * Text mode only: wheel becomes `Shift+PageUp/PageDown`; graphics mode lets v86
- * relay it to the PS/2 mouse. Returns a detach function.
- */
+/** Text mode: wheel becomes Shift+PageUp/PageDown; graphics mode keeps the PS/2 mouse. */
 export function attachConsoleWheelScroll(screen: HTMLElement, emulator: V86): () => void {
   let lastSentAt = 0;
 

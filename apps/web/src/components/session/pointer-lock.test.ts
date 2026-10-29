@@ -12,7 +12,6 @@ import {
 interface PointerLockMock {
   requestCalls: number;
   exitCalls: number;
-  /** Forces a native release plus a `pointerlockchange` event. */
   releaseExternally(): void;
   restore(): void;
 }
@@ -139,7 +138,6 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
       onCaptureChange: (captured) => states.push(captured),
     });
 
-    // Before any click: no lock, no hidden cursor.
     expect(document.pointerLockElement).toBeNull();
     expect(screen.classList.contains(POINTER_LOCKED_CLASS)).toBe(false);
 
@@ -189,7 +187,6 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     expect(screen.classList.contains(POINTER_LOCKED_CLASS)).toBe(false);
     expect(states).toEqual([true, false]);
 
-    // New explicit click recaptures.
     pointerDownOn(screen);
     expect(handle.isCaptured()).toBe(true);
     expect(document.pointerLockElement).toBe(screen);
@@ -253,7 +250,6 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     expect(document.pointerLockElement).toBeNull();
     expect(handle.isCaptured()).toBe(false);
 
-    // After dispose no listener is active anymore.
     const callsAfterDispose = mock.requestCalls;
     pointerDownOn(canvas);
     expect(mock.requestCalls).toBe(callsAfterDispose);
@@ -298,7 +294,6 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
   it('exposes a provider-agnostic screen selector (standard contract)', () => {
     expect(DEFAULT_SCREEN_SELECTOR).toBe(STANDARD_VM_DISPLAY.screenSelector);
     expect(DEFAULT_SCREEN_SELECTOR).toBe('[data-vm-display="screen"]');
-    // No v86-specific selector leaks into the generic UI.
     expect(DEFAULT_SCREEN_SELECTOR).not.toContain('v86');
   });
 
@@ -306,7 +301,7 @@ describe('pointer-lock — orchestration Pointer Lock', () => {
     mock = installPointerLock();
     const container = document.createElement('div');
     container.className = 'session-console';
-    // Legacy screen: v86 class only, no contract marker.
+    // v86 class only, no contract marker.
     const legacy = document.createElement('div');
     legacy.className = 'v86-screen';
     const canvas = document.createElement('canvas');
@@ -355,7 +350,7 @@ describe('pointer-lock — unsupported', () => {
 
     expect(handle.isSupported()).toBe(false);
     pointerDownOn(canvas);
-    expect(onError).not.toHaveBeenCalled(); // the click is simply ignored
+    expect(onError).not.toHaveBeenCalled();
 
     handle.requestCapture();
     expect(onError).toHaveBeenCalledTimes(1);

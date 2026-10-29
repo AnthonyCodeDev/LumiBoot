@@ -1,8 +1,6 @@
 import type { V86, V86Options } from 'v86';
 
-/**
- * The import is dynamic so v86 and its WASM stay out of the initial bundle.
- */
+/** Dynamic import: v86 and its WASM stay out of the initial bundle. */
 export type V86Constructor = new (options: V86Options) => V86;
 
 export type V86ModuleLoader = () => Promise<V86Constructor>;

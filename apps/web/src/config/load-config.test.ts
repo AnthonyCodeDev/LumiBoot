@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CONFIG_URL, ConfigLoadError, loadConfig, type FetchLike } from './load-config';
 import { resolveNetworkProfile, setRuntimeConfig } from './runtime';
 import type { LumibootConfig } from './schema';
+import { RELAY_WSS_PORT, TEST_PROXY_URL } from '../test/fixtures';
 
 interface FakeResponseInit {
   ok?: boolean;
@@ -57,14 +58,14 @@ describe('loadConfig', () => {
     expect(config.network.defaultProfile).toEqual({ mode: 'browser-fetch' });
     expect(config.network.systems?.['debian-12-i386']).toEqual({ mode: 'browser-fetch' });
     expect(config.proxy.enabled).toBe(true);
-    expect(config.proxy.url).toContain('127.0.0.1:37892');
+    expect(config.proxy.url).toContain(TEST_PROXY_URL);
   });
 
   it('applies the local network proxy defaults when the section is absent', async () => {
     const config = await loadConfig(fetchReturningJson(VALID_CONFIG));
     expect(config.proxy).toEqual({
       enabled: true,
-      url: 'http://127.0.0.1:37892/',
+      url: `${TEST_PROXY_URL}/`,
     });
   });
 
@@ -104,7 +105,7 @@ describe('loadConfig', () => {
     const error = await loadAndCatch(
       fetchReturningJson({
         ...VALID_CONFIG,
-        proxy: { enabled: true, url: 'http://127.0.0.1:37892', proxyToken: 'x' },
+        proxy: { enabled: true, url: TEST_PROXY_URL, proxyToken: 'x' },
       }),
     );
     expect(error.code).toBe('CONFIG_FORBIDDEN_TOKEN');
@@ -148,7 +149,7 @@ describe('loadConfig', () => {
       fetchReturningJson({
         version: 1,
         network: {
-          defaultProfile: { mode: 'user-relay', relayUrl: 'ws://relay.example:4000' },
+          defaultProfile: { mode: 'user-relay', relayUrl: RELAY_WSS_PORT.replace('wss:', 'ws:') },
         },
       }),
     );
@@ -160,12 +161,12 @@ describe('loadConfig', () => {
       fetchReturningJson({
         version: 1,
         network: {
-          defaultProfile: { mode: 'user-relay', relayUrl: 'wss://relay.example:4000' },
+          defaultProfile: { mode: 'user-relay', relayUrl: RELAY_WSS_PORT },
         },
       }),
     );
     expect(config.network.defaultProfile.mode).toBe('user-relay');
-    expect(config.network.defaultProfile.relayUrl).toContain('wss://relay.example:4000');
+    expect(config.network.defaultProfile.relayUrl).toContain(RELAY_WSS_PORT);
   });
 
   it('rejects a missing configuration (404)', async () => {
@@ -216,13 +217,13 @@ describe('resolveNetworkProfile', () => {
   it('applies the default profile when no system matches', () => {
     const config: LumibootConfig = {
       version: 1,
-      network: { defaultProfile: { mode: 'user-relay', relayUrl: 'wss://relay.example:4000' } },
-      proxy: { enabled: true, url: 'http://127.0.0.1:37892/' },
+      network: { defaultProfile: { mode: 'user-relay', relayUrl: RELAY_WSS_PORT } },
+      proxy: { enabled: true, url: `${TEST_PROXY_URL}/` },
     };
     setRuntimeConfig(config);
     expect(resolveNetworkProfile('other')).toEqual({
       mode: 'user-relay',
-      relayUrl: 'wss://relay.example:4000',
+      relayUrl: RELAY_WSS_PORT,
     });
   });
 });

@@ -61,7 +61,7 @@ func run() error {
 		return err
 	}
 
-	printBanner(cfg.ListenAddr)
+	printBanner(cfg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -98,14 +98,28 @@ func run() error {
 	return nil
 }
 
-func printBanner(listenAddr string) {
+// printBanner reports the effective configuration: the exposure and destination
+// policy lines are derived from the configuration, never hard-coded, so a
+// widened permission is always visible at startup.
+func printBanner(cfg config.Config) {
 	rule := strings.Repeat("─", 60)
 	fmt.Println(rule)
 	fmt.Printf(" LumiBoot Network Proxy — v%s\n", server.Version)
 	fmt.Println(rule)
-	fmt.Printf(" Local WISP endpoint : ws://%s/wisp/\n", listenAddr)
-	fmt.Printf(" Listening           : %s (loopback only)\n", listenAddr)
-	fmt.Println(" Security            : private networks / loopback / metadata blocked")
+	fmt.Printf(" Local WISP endpoint : ws://%s/wisp/\n", cfg.ListenAddr)
+	if cfg.AllowNonLoopback {
+		fmt.Printf(" Listening           : %s (allowNonLoopback: reachable from the network)\n", cfg.ListenAddr)
+		fmt.Println("                       WARNING: the session token travels in clear text over the LAN;")
+		fmt.Println("                       terminate TLS in front of this endpoint before exposing it.")
+	} else {
+		fmt.Printf(" Listening           : %s (loopback only)\n", cfg.ListenAddr)
+	}
+	if cfg.AllowPrivateNetworks {
+		fmt.Println(" Security            : allowPrivateNetworks: private/loopback/link-local destinations allowed")
+		fmt.Println("                       cloud metadata, reserved and IPv6 transition ranges still blocked")
+	} else {
+		fmt.Println(" Security            : private networks / loopback / metadata blocked")
+	}
 	fmt.Println(" Authorization       : automatic on the LumiBoot side; approve below")
 	fmt.Println(rule)
 	fmt.Println(` Type "help" for commands — Ctrl+C to stop.`)

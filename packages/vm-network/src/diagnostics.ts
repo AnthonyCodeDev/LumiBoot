@@ -8,7 +8,6 @@ export type NetworkStatus =
 
 export type NetworkProbeKind = 'dns' | 'http' | 'https' | 'tcp';
 
-/** `at` is the measurement timestamp in ms. */
 export interface NetworkProbeResult {
   ok: boolean;
   at: number;

@@ -8,10 +8,7 @@ import {
   isRangeFetchTransportInstalled,
   type XhrScope,
 } from './range-fetch-transport';
-
-/* --------------------------------------------------------------------------
- * Test doubles
- * ------------------------------------------------------------------------ */
+import { CDN_DISK_URL, CDN_DISK_URL_2 } from './testing/fixtures';
 
 /** Minimal stand-in for the browser's `XMLHttpRequest`, never sent. */
 class FakeOriginalXhr {
@@ -168,10 +165,6 @@ function prepare(request: TestXhr, url = '/images/debian/rootfs.img?v=abcdef1234
   return request;
 }
 
-/* --------------------------------------------------------------------------
- * Tests
- * ------------------------------------------------------------------------ */
-
 let uninstall: (() => void) | null = null;
 
 function install(options: Parameters<typeof installRangeFetchTransport>[0]): () => void {
@@ -264,7 +257,7 @@ describe('passthrough', () => {
     install({ scope, fetchImpl });
 
     const request = createRequest(scope);
-    request.open('GET', 'https://cdn.example.com/disk.img', true);
+    request.open('GET', CDN_DISK_URL, true);
     request.setRequestHeader('Range', 'bytes=0-3');
     request.send(null);
 
@@ -339,8 +332,7 @@ describe('fetch transport', () => {
     await loaded;
 
     expect(request.status).toBe(200);
-    // v86 aborts from `onreadystatechange` when it sees 200: the status must be
-    // readable at DONE, before the load event.
+    // v86 aborts on 200 from `onreadystatechange`: status must be readable at DONE.
     expect(seenStatus).toBe(200);
     expect(getDiskLog().at(-1)).toMatchObject({
       status: 200,
@@ -516,8 +508,6 @@ describe('defaultShouldHandleUrl', () => {
     expect(defaultShouldHandleUrl('/images/a.img', 'get', { Range: 'bytes=0-3' })).toBe(true);
     expect(defaultShouldHandleUrl('/images/a.img', 'GET', {})).toBe(false);
     expect(defaultShouldHandleUrl('/images/a.img', 'POST', { Range: 'bytes=0-3' })).toBe(false);
-    expect(
-      defaultShouldHandleUrl('https://cdn.example.com/a.img', 'GET', { Range: 'bytes=0-3' }),
-    ).toBe(false);
+    expect(defaultShouldHandleUrl(CDN_DISK_URL_2, 'GET', { Range: 'bytes=0-3' })).toBe(false);
   });
 });

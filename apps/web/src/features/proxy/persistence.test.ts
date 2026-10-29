@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearProxySession, loadProxySession, saveProxySession } from './persistence';
+import { TEST_PROXY_URL } from '../../test/fixtures';
 
 const STORAGE_KEY = 'lumiboot.proxy.session';
-const URL = 'http://127.0.0.1:37892';
+const URL = TEST_PROXY_URL;
 
 function futureIso(offsetMs = 60_000): string {
   return new Date(Date.now() + offsetMs).toISOString();
@@ -60,9 +61,23 @@ describe('proxy persistence', () => {
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
+  it('does not write an unreadable expiry at all', () => {
+    saveProxySession({ token: 'tok', expiresAt: 'not-a-date', proxyUrl: URL });
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it('does not write an expiry that is already past', () => {
+    saveProxySession({
+      token: 'tok',
+      expiresAt: new Date(Date.now() - 1000).toISOString(),
+      proxyUrl: URL,
+    });
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
   it('different proxyUrl → null and cleanup', () => {
     saveProxySession({ token: 'tok', expiresAt: futureIso(), proxyUrl: URL });
-    expect(loadProxySession('http://127.0.0.1:9999')).toBeNull();
+    expect(loadProxySession(TEST_PROXY_URL.replace(':37892', ':9999'))).toBeNull();
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 

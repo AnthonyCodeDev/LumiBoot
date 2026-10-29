@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createNetworkController } from './controller';
 import { NetworkError, isNetworkError } from './errors';
+import { RELAY_PUBLIC, RELAY_WSS } from './testing/fixtures';
 
 describe('createNetworkController', () => {
   it('offline: start switches to offline without a transport', async () => {
@@ -31,7 +32,7 @@ describe('createNetworkController', () => {
 
   it('user-relay: a valid URL only configures, it does not connect', async () => {
     const controller = createNetworkController({
-      profile: { mode: 'user-relay', relayUrl: 'wss://relay.example' },
+      profile: { mode: 'user-relay', relayUrl: RELAY_WSS },
     });
     await controller.start();
     const diagnostics = controller.snapshot();
@@ -51,7 +52,7 @@ describe('createNetworkController', () => {
 
   it('local-proxy: an invalid proxyUrl rejects with NETWORK_INVALID_PROXY_URL', async () => {
     const controller = createNetworkController({
-      profile: { mode: 'local-proxy', proxyUrl: 'https://relay.example' },
+      profile: { mode: 'local-proxy', proxyUrl: RELAY_PUBLIC },
     });
     await expect(controller.start()).rejects.toMatchObject({
       code: 'NETWORK_INVALID_PROXY_URL',

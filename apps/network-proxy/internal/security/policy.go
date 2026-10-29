@@ -46,6 +46,36 @@ var reservedNets = mustParseCIDRs([]string{
 	"255.255.255.255/32",
 })
 
+// These shared-use ranges can route to services on the host's local network,
+// even though net.IP.IsPrivate does not classify them as private.
+var sharedNets = mustParseCIDRs([]string{
+	"100.64.0.0/10", // carrier-grade NAT, including overlay networks
+	"198.18.0.0/15", // benchmarking and local network simulators
+})
+
+// IPv6 transition prefixes and IETF assignments are blocked unconditionally,
+// like multicast or unspecified addresses: each one can carry an IPv4
+// destination that the loopback/private checks never see. Behind NAT64,
+// 64:ff9b::7f00:1 is routed to 127.0.0.1; 6to4 and Teredo embed the same kind
+// of IPv4 address.
+var transitionNets = mustParseCIDRs([]string{
+	"64:ff9b::/96",   // NAT64 well-known prefix (RFC 6052)
+	"64:ff9b:1::/48", // NAT64 local-use prefix (RFC 8215)
+	"2002::/16",      // 6to4 (RFC 3056), embeds an IPv4 address
+	"2001::/32",      // Teredo (RFC 4380), embeds an IPv4 address
+	"192.0.0.0/24",   // IETF protocol assignments (RFC 6890)
+})
+
+// blockedPorts lists services that must never be reached through the proxy:
+// local infrastructure (NetBIOS/SMB/SSDP) or relay-abused mail submission.
+var blockedPorts = map[int]string{
+	25:   "SMTP",
+	137:  "NetBIOS name service",
+	139:  "NetBIOS session service",
+	445:  "SMB",
+	1900: "SSDP",
+}
+
 func mustParseCIDRs(cidrs []string) []*net.IPNet {
 	out := make([]*net.IPNet, 0, len(cidrs))
 	for _, c := range cidrs {
@@ -71,8 +101,8 @@ func isMetadataEndpoint(ip net.IP) bool {
 	return inNets(ip, metadataNets)
 }
 
-// allowPrivate also permits loopback/private/link-local, but never metadata or
-// reserved ranges.
+// allowPrivate also permits loopback/private/link-local, but never metadata,
+// reserved ranges or IPv6 transition prefixes.
 func forbiddenIP(ip net.IP, allowPrivate bool) bool {
 	if ip == nil {
 		return true
@@ -83,8 +113,13 @@ func forbiddenIP(ip net.IP, allowPrivate bool) bool {
 	if inNets(ip, reservedNets) {
 		return true
 	}
-	if ip.IsUnspecified() || ip.IsLoopback() || ip.IsMulticast() ||
-		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+	if inNets(ip, transitionNets) {
+		return true
+	}
+	if ip.IsUnspecified() || ip.IsMulticast() {
+		return true
+	}
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || inNets(ip, sharedNets) {
 		return !allowPrivate
 	}
 	if ip.IsPrivate() {
@@ -95,6 +130,7 @@ func forbiddenIP(ip net.IP, allowPrivate bool) bool {
 
 // ValidateDestination resolves the host, then validates every resolved IP and
 // returns the one to dial: the caller must dial that IP, never the hostname.
+// Sensitive ports (SMTP, NetBIOS, SMB, SSDP) are refused before the DNS lookup.
 func ValidateDestination(ctx context.Context, lookup LookupFunc, host string, port int, allowPrivate bool) (net.IP, error) {
 	trimmed := strings.TrimSuffix(strings.TrimSpace(host), ".")
 	if trimmed == "" {
@@ -102,6 +138,12 @@ func ValidateDestination(ctx context.Context, lookup LookupFunc, host string, po
 	}
 	if port <= 0 || port > 65535 {
 		return nil, &BlockError{Reason: ReasonInvalidInfo, Message: fmt.Sprintf("invalid port: %d", port)}
+	}
+	if service, ok := blockedPorts[port]; ok {
+		return nil, &BlockError{
+			Reason:  ReasonDestinationBlocked,
+			Message: fmt.Sprintf("forbidden port %d (%s)", port, service),
+		}
 	}
 	for _, mh := range metadataHostnames {
 		if strings.EqualFold(trimmed, mh) {

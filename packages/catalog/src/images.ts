@@ -6,9 +6,7 @@ export interface SystemImageDefinition {
   readonly familyId: string;
   readonly architecture: Architecture;
   readonly imageRef?: string;
-  /** `bundled` by default; `user-import` for media supplied by the user. */
   readonly mediaStrategy?: MediaStrategy;
-  /** Keeps the state `resource-required` as long as the media is absent. */
   readonly requiresUserMedia?: boolean;
   readonly requirements: readonly string[];
   readonly integrationNote: string;
@@ -33,7 +31,6 @@ export const images = [
     id: 'debian-12-i386-image',
     familyId: 'debian',
     architecture: 'i386',
-    // Image manifest reference; the engine is chosen by the profile.
     imageRef: 'debian-12-i386',
     requirements: ['Modern browser', 'WebAssembly', 'Enough memory'],
     integrationNote: 'First system of the MVP. The Linux image ships in the first batch.',
@@ -71,7 +68,6 @@ export const images = [
     id: 'ubuntu-18-i386-image',
     familyId: 'ubuntu',
     architecture: 'i386',
-    // CLI variant: same locally built rootfs, text console only.
     imageRef: 'ubuntu-18-i386',
     requirements: [
       'Modern browser with WebAssembly (v86)',
@@ -90,7 +86,6 @@ export const images = [
     id: 'ubuntu-18-i386-desktop-image',
     familyId: 'ubuntu',
     architecture: 'i386',
-    // Xorg + minimal window manager, 3 GiB ext4 rootfs built locally.
     imageRef: 'ubuntu-18-i386-desktop',
     requirements: [
       'Modern browser with WebAssembly (v86)',
@@ -111,7 +106,6 @@ export const images = [
     id: 'ubuntu-18-i386-xfce-image',
     familyId: 'ubuntu',
     architecture: 'i386',
-    // Xorg + XFCE, 4 GiB ext4 rootfs built locally.
     imageRef: 'ubuntu-18-i386-xfce',
     requirements: [
       'Modern browser with WebAssembly (v86)',
@@ -147,7 +141,6 @@ export const images = [
     id: 'windows-7-x86-image',
     familyId: 'windows',
     architecture: 'i386',
-    // 16 GiB RAW disk served over HTTP Range and booted directly by BIOS.
     imageRef: 'windows-7-x86',
     requirements: [
       'Modern browser with WebAssembly (v86)',
@@ -180,7 +173,6 @@ export const images = [
     id: 'windows-7-pro-sp1-x86-image',
     familyId: 'windows',
     architecture: 'i386',
-    // 32 GiB RAW disk served over HTTP Range and booted directly by BIOS.
     imageRef: 'windows-7-pro-sp1-x86',
     requirements: [
       'Modern browser with WebAssembly (v86)',
@@ -197,7 +189,6 @@ export const images = [
     id: 'windows-10-x86-image',
     familyId: 'windows',
     architecture: 'i386',
-    // Installed RAW disk, same BIOS pipeline as Windows 7; standalone system.
     imageRef: 'windows-10-x86',
     requirements: [
       'Modern browser with WebAssembly (v86, 32-bit)',
@@ -214,7 +205,6 @@ export const images = [
     id: 'windows-11-x64-image',
     familyId: 'windows',
     architecture: 'x86_64',
-    // Not developed: no engine, no image, no media accepted; listed for information.
     requirements: ['x86-64 browser engine (not integrated yet)', 'Windows license'],
     integrationNote:
       'Not developed yet: no x86-64 browser engine is integrated and no image is ' +
@@ -231,7 +221,6 @@ export const images = [
     id: 'custom-image-i386',
     familyId: 'custom',
     architecture: 'i386',
-    // Nothing is distributed: the user imports their own disk media.
     mediaStrategy: 'user-import',
     requiresUserMedia: true,
     requirements: [

@@ -8,9 +8,7 @@ export interface VariantOption {
 
 export interface VariantDropdownProps {
   readonly variants: readonly VariantOption[];
-  /** ID of the currently selected variant. */
   readonly value: string;
-  /** Called when a variant is picked, with its slug. */
   readonly onSelect: (slug: string) => void;
 }
 
@@ -23,17 +21,13 @@ function ChevronIcon() {
   );
 }
 
-/**
- * Presentational variant dropdown. It knows neither the router nor the catalogue:
- * it shows the selected name and reports the chosen slug.
- */
+/** Presentational: shows the selected name and reports the chosen slug. */
 export function VariantDropdown({ variants, value, onSelect }: VariantDropdownProps) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  // Index to focus once the menu mounts.
   const pendingFocusRef = useRef<number | null>(null);
 
   const selectedIndex = Math.max(
@@ -42,20 +36,17 @@ export function VariantDropdown({ variants, value, onSelect }: VariantDropdownPr
   );
   const selected = variants[selectedIndex] ?? variants[0];
 
-  /** Opens the menu and positions the active option. */
   function openMenu(index: number, focusOption = false) {
     setActiveIndex(index);
     if (focusOption) pendingFocusRef.current = index;
     setOpen(true);
   }
 
-  /** Closes the menu and optionally returns focus to the trigger. */
   function closeMenu(returnFocus = false) {
     setOpen(false);
     if (returnFocus) triggerRef.current?.focus();
   }
 
-  /** Commits the variant at `index`, then closes and restores focus. */
   function selectAt(index: number) {
     const option = variants[index];
     if (!option) return;
@@ -63,7 +54,6 @@ export function VariantDropdown({ variants, value, onSelect }: VariantDropdownPr
     closeMenu(true);
   }
 
-  /** Moves focus to an option, wrapping around. */
   function focusOption(index: number) {
     const count = variants.length;
     if (count === 0) return;
@@ -72,7 +62,6 @@ export function VariantDropdown({ variants, value, onSelect }: VariantDropdownPr
     optionRefs.current[next]?.focus();
   }
 
-  // Close on click outside the component.
   useEffect(() => {
     if (!open) return;
     function handlePointerDown(event: MouseEvent) {
@@ -84,7 +73,7 @@ export function VariantDropdown({ variants, value, onSelect }: VariantDropdownPr
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, [open]);
 
-  // Deferred focus once the options exist in the DOM.
+  // Options do not exist in the DOM until the menu opens.
   useEffect(() => {
     if (!open || pendingFocusRef.current === null) return;
     const index = pendingFocusRef.current;

@@ -32,7 +32,6 @@ export const architectureSchema = z.enum([
 /** `bundled` is served by LumiBoot; `user-import` is supplied by the user. */
 export const mediaStrategySchema = z.enum(['bundled', 'user-import']);
 
-/** Disk media format accepted for a user import. */
 export const vmMediaFormatSchema = z.enum(['raw', 'iso']);
 
 /** `url` is a local blob URL, never a remote one. */
@@ -58,13 +57,9 @@ export const vmConfigurationSchema = z.object({
   extra: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
 });
 
-/** `none` means no card. */
 export const hardwareNetworkSchema = z.enum(['virtio', 'ne2k', 'e1000', 'none']);
 
-/**
- * Hardware seen by the guest; each provider only translates it into engine
- * options. Absent fields fall back to `DEFAULT_HARDWARE_PROFILE`.
- */
+/** Guest-visible hardware; providers only translate it into engine options. */
 export const hardwareProfileSchema = z.object({
   network: hardwareNetworkSchema,
   machine: z.string().min(1).optional(),
@@ -76,21 +71,12 @@ export const hardwareProfileSchema = z.object({
   acpi: z.boolean().optional(),
 });
 
-/** Channel where the guest proves its boot: serial by default. */
 export const guestReadinessChannelSchema = z.enum(['serial', 'vga']);
 
-/**
- * `guest-marker` is a strong proof; `disk-boot` is a real but weaker disk read
- * that never proves a fully operational OS.
- */
+/** `disk-boot` is a real but weaker proof than `guest-marker`. */
 export const guestReadinessModeSchema = z.enum(['guest-marker', 'disk-boot']);
 
-/**
- * `marker` comes from the real guest, never from JavaScript. `timeoutMs` is a
- * diagnostic threshold only: expiry publishes the `boot-timeout` progress
- * phase, it never stops the VM, and a late marker is still a valid proof for
- * `running`.
- */
+/** `timeoutMs` is diagnostic only: expiry never stops the VM. */
 export const guestReadinessSchema = z.object({
   marker: z.string().min(1),
   mode: guestReadinessModeSchema.optional(),
@@ -98,10 +84,6 @@ export const guestReadinessSchema = z.object({
   timeoutMs: z.number().int().positive().optional(),
 });
 
-/**
- * Which surface is the primary view of a session: `text` for a CLI guest whose
- * only output is the serial console, `graphical` for a VGA/framebuffer guest.
- */
 export const displayModeSchema = z.enum(['text', 'graphical']);
 
 export const launchProfileSchema = z.object({
@@ -115,10 +97,7 @@ export const launchProfileSchema = z.object({
   hardwareProfile: hardwareProfileSchema.optional(),
   /** Absent entries fall back to `DEFAULT_GUEST_READINESS`. */
   readiness: guestReadinessSchema.optional(),
-  /**
-   * `text` = the serial console is the primary view (CLI); `graphical`/absent =
-   * the VGA/framebuffer screen is.
-   */
+  /** `text` = the serial console is the primary view (CLI); absent = graphical. */
   displayMode: displayModeSchema.optional(),
 });
 
@@ -139,7 +118,6 @@ export const osDefinitionSchema = z.object({
   iconUrl: z.string().min(1),
   minMemoryMiB: z.number().int().positive().optional(),
   imageRef: z.string().min(1).optional(),
-  /** `bundled` by default; `user-import` systems declare no `imageRef`. */
   mediaStrategy: mediaStrategySchema.optional(),
   launchProfiles: z.array(launchProfileSchema).min(1),
   requirements: z.array(z.string().min(1)).min(1),
@@ -149,7 +127,6 @@ export const osDefinitionSchema = z.object({
   integrationNote: z.string().min(1),
   /** Parent system id; absent for a parent or standalone system. */
   variantGroupId: z.string().min(1).optional(),
-  /** Shown in the variant selector. */
   variantName: z.string().min(1).optional(),
   /** Ascending; the smallest value is selected by default. */
   variantOrder: z.number().int().optional(),
@@ -175,7 +152,6 @@ export type DisplayMode = z.infer<typeof displayModeSchema>;
 export type LaunchProfile = z.infer<typeof launchProfileSchema>;
 export type OSDefinition = z.infer<typeof osDefinitionSchema>;
 
-/** Applied by providers when a profile omits `hardwareProfile`. */
 export const DEFAULT_HARDWARE_PROFILE: HardwareProfile = {
   network: 'virtio',
   machine: 'pc',
@@ -185,7 +161,6 @@ export const DEFAULT_HARDWARE_PROFILE: HardwareProfile = {
   audio: false,
 };
 
-/** Applied when a profile omits `readiness`. */
 export const DEFAULT_GUEST_READINESS: GuestReadiness = {
   marker: 'LUMIBOOT_GUEST_READY',
   channel: 'serial',

@@ -47,7 +47,6 @@ function accumulate(current: number, delta: number): number {
   return Math.min(total, MAX_COUNTER);
 }
 
-/** Purely descriptive. */
 function transportForMode(mode: NetworkMode): NetworkTransportKind {
   switch (mode) {
     case 'browser-fetch':
@@ -121,10 +120,7 @@ class DefaultNetworkController implements NetworkController {
     };
   }
 
-  /**
-   * Only configures the transport: an accepted profile never proves the
-   * connection is established.
-   */
+  /** Configures the transport only: it never proves the link is up. */
   async start(signal?: AbortSignal): Promise<void> {
     if (this.#disposed) return;
     if (signal?.aborted === true) {

@@ -42,12 +42,31 @@ services:
       WISP_DOMAIN: ${WISP_DOMAIN:?Set WISP_DOMAIN in .env}
       LUMIBOOT_ORIGIN: ${LUMIBOOT_ORIGIN:?Set LUMIBOOT_ORIGIN in .env}
     ports:
-      - '80:80'
-      - '443:443'
+      # Opt-in exposure: loopback by default, because the relay has no
+      # authentication of its own (the `Origin` header is forgeable) and would
+      # otherwise be an open TCP proxy on the server's network. Set
+      # WISP_BIND_ADDRESS=0.0.0.0 to publish on every interface, and only behind
+      # an authenticating, egress-filtered front end.
+      - '${WISP_BIND_ADDRESS:-127.0.0.1}:80:80'
+      - '${WISP_BIND_ADDRESS:-127.0.0.1}:443:443'
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # `/data` holds certificates and `/config` autosaved JSON: both stay
+      # writable volumes even with a read-only root filesystem.
       - caddy_data:/data
       - caddy_config:/config
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # Bind 80/443 as a non-root user; no other capability is granted.
+      - NET_BIND_SERVICE
+    pids_limit: 128
+    mem_limit: 256m
     depends_on:
       - wisp
     restart: unless-stopped

@@ -1,0 +1,95 @@
+server {
+    listen ${LUMIBOOT_HTTP_PORT};
+    server_name ${LUMIBOOT_DOMAIN};
+
+    # Do not advertise the nginx version in `Server` / error pages.
+    server_tokens off;
+
+    root /usr/share/nginx/html/lumiboot;
+    index index.html;
+
+    include /etc/nginx/conf.d/security-headers.conf;
+
+    location / {
+        # `add_header` is only inherited when the block declares none.
+        include /etc/nginx/conf.d/security-headers.conf;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # The SPA fallback above redirects internally to /index.html, so this block
+    # applies to every navigation: never let a deploy be served stale.
+    location = /index.html {
+        include /etc/nginx/conf.d/security-headers.conf;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri =404;
+    }
+
+    location = /lumiboot.config.json {
+        include /etc/nginx/conf.d/security-headers.conf;
+        add_header Cache-Control "no-store" always;
+        default_type application/json;
+        try_files $uri =404;
+    }
+
+    location /assets/ {
+        include /etc/nginx/conf.d/security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    location /icons/ {
+        include /etc/nginx/conf.d/security-headers.conf;
+        add_header Cache-Control "public, max-age=604800";
+        try_files $uri =404;
+    }
+
+    # Never fall back to the SPA here, otherwise v86 receives index.html.
+    location /v86/ {
+        include /etc/nginx/conf.d/security-headers.conf;
+        types {
+            application/wasm wasm;
+            application/octet-stream bin;
+        }
+        default_type application/octet-stream;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header Accept-Ranges "bytes" always;
+        gzip off;
+        try_files $uri =404;
+    }
+
+    # Real 404, `Accept-Ranges` for resume, gzip off so 206 responses stay intact.
+    location /downloads/ {
+        include /etc/nginx/conf.d/security-headers.conf;
+        default_type application/octet-stream;
+        add_header Cache-Control "public, max-age=3600";
+        add_header Accept-Ranges "bytes" always;
+        gzip off;
+        autoindex off;
+        try_files $uri =404;
+    }
+
+    location = /downloads/manifest.json {
+        include /etc/nginx/conf.d/security-headers.conf;
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        try_files $uri =404;
+    }
+
+    # Free disks read by v86 over HTTP Range: gzip off, no fallback, no autoindex.
+    location /images/ {
+        include /etc/nginx/conf.d/security-headers.conf;
+        default_type application/octet-stream;
+        add_header Cache-Control "public, max-age=86400";
+        add_header Accept-Ranges "bytes" always;
+        gzip off;
+        autoindex off;
+        try_files $uri =404;
+    }
+
+    # 404 for proprietary Windows media under /images/, even if copied into the webroot.
+    # Covers `windows`, `winxp`, `winvista`, and versioned names written as
+    # `win7`, `win-7`, `win_10` or `win 8`.
+    location ~* "^/images/.*(windows|winxp|winvista|win[-_ ]?[0-9])" {
+        return 404;
+    }
+}

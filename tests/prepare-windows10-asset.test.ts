@@ -6,14 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseLocalDiskManifest } from '../packages/vm-assets/src/local-disk';
 
-/**
- * Integration test of the `scripts/prepare-windows10-asset.mjs` wrapper: it
- * must DELEGATE to the proven generator while pinning the Windows 10 x86 values,
- * namely ref, display-name, architecture, memory and VGA; forward the CLI options
- * --check, --force, --skip-hash and --json; and REFUSE non-bootable `hda` media
- * such as an ISO or a QCOW2 without ever writing a bogus manifest. A small
- * temporary image is used, never the real disk.
- */
+// Integration test of the prepare-windows10-asset.mjs wrapper (delegation + guards).
 
 const repoRoot = process.cwd();
 const SCRIPT = join(repoRoot, 'scripts', 'prepare-windows10-asset.mjs');
@@ -106,8 +99,7 @@ describe('prepare-windows10-asset.mjs', () => {
   });
 
   it('explains --check without --source when the disk is external', () => {
-    // A disk outside the repository records no path: the check cannot find it
-    // on its own and must explicitly ask for --source.
+    // A disk outside the repo records no path: --check then requires --source.
     const outDir = join(tempDir, 'out-check-external');
     expect(run(['--source', source, '--out', outDir, '--json']).status).toBe(0);
     const result = run(['--out', outDir, '--check']);

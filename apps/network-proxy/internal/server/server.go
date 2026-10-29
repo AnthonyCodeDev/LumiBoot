@@ -14,7 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strings"
+	"regexp"
 	"sync"
 	"time"
 
@@ -35,6 +35,16 @@ const WispVersion = 1
 
 // maxBody bounds JSON request bodies to 64 KiB.
 const maxBody = 64 * 1024
+
+// HTTP server deadlines. WriteTimeout does not affect upgraded WebSockets:
+// gorilla/websocket clears the deadlines set by net/http after hijacking.
+const (
+	readHeaderTimeout = 10 * time.Second
+	readTimeout       = 15 * time.Second
+	writeTimeout      = 30 * time.Second
+	idleTimeout       = 120 * time.Second
+	maxHeaderBytes    = 16 << 10
+)
 
 type Server struct {
 	cfg       config.Config
@@ -81,31 +91,37 @@ func New(cfg config.Config) (*Server, error) {
 	s.mux = mux
 	s.httpSrv = &http.Server{
 		Handler:           securityHeaders(s.preflightMiddleware(mux)),
-		ReadHeaderTimeout: 10 * time.Second,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+		MaxHeaderBytes:    maxHeaderBytes,
 		// Filtered so a session token in a query string can never leak.
 		ErrorLog: log.New(redactingWriter{os.Stderr}, "", 0),
 	}
 	return s, nil
 }
 
+// tokenQueryPattern matches a session token in a query string. It is compiled
+// once and applied to raw bytes: a case-folding pass such as strings.ToLower can
+// change the byte length of a non-ASCII character before "token=", which would
+// shift every offset and split the output mid-rune. \s covers the space, tab,
+// CR and LF terminators, & ends the parameter.
+var tokenQueryPattern = regexp.MustCompile(`(?i)token=[^&\s]*`)
+
 // redactingWriter redacts any "token=<value>" before writing.
 type redactingWriter struct{ w io.Writer }
 
 func (rw redactingWriter) Write(p []byte) (int, error) {
-	s := string(p)
-	for {
-		i := strings.Index(strings.ToLower(s), "token=")
-		if i < 0 {
-			break
-		}
-		start := i + len("token=")
-		end := start
-		for end < len(s) && s[end] != ' ' && s[end] != '&' && s[end] != '\n' && s[end] != '\r' {
-			end++
-		}
-		s = s[:start] + "REDACTED" + s[end:]
+	redacted := tokenQueryPattern.ReplaceAll(p, []byte("token=REDACTED"))
+	n, err := rw.w.Write(redacted)
+	if err != nil {
+		return 0, err
 	}
-	return rw.w.Write([]byte(s))
+	if n != len(redacted) {
+		return 0, io.ErrShortWrite
+	}
+	return len(p), nil
 }
 
 // Handler exposes the mux for tests.
@@ -191,14 +207,22 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
+		// The proxy only serves JSON and WebSocket upgrades: nothing may load.
 		w.Header().Set("Content-Security-Policy",
-			"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "+
-				"img-src 'none'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
+			"default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		// No Strict-Transport-Security on purpose: the proxy listens on plain
+		// HTTP over loopback, and a browser would then force HTTPS on that host.
 		next.ServeHTTP(w, r)
 	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
+	// Some bodies carry secrets (session tokens, user codes): never cache them.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
@@ -213,6 +237,10 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return false
+	}
+	if err := dec.Decode(new(any)); err != io.EOF {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return false
 	}
@@ -284,15 +312,18 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePairRequest(w http.ResponseWriter, r *http.Request) {
 	s.setCORS(w, r)
+	// The origin must come from the header, which the browser controls; a body
+	// field would let any caller claim someone else's origin.
 	origin := r.Header.Get("Origin")
 	if origin == "" {
-		var body struct {
-			Origin string `json:"origin"`
-		}
-		if !decodeBody(w, r, &body) {
-			return
-		}
-		origin = body.Origin
+		s.stats.IncRejectedAuth()
+		writeError(w, http.StatusBadRequest, "missing Origin header")
+		return
+	}
+	if !s.auth.IsOriginAllowed(origin) {
+		s.stats.IncRejectedAuth()
+		writeError(w, http.StatusForbidden, "origin not allowed")
+		return
 	}
 	p, err := s.auth.RequestPairing(origin)
 	if err != nil {
@@ -313,10 +344,13 @@ func (s *Server) handlePairRequest(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePairStatus(w http.ResponseWriter, r *http.Request) {
 	s.setCORS(w, r)
-	if s.requireAllowedOrigin(w, r) == "" {
+	origin := s.requireAllowedOrigin(w, r)
+	if origin == "" {
 		return
 	}
-	p, ok := s.auth.Status(r.URL.Query().Get("id"))
+	// The pairing is bound to the origin that requested it: another allowed
+	// origin must not be able to read its status.
+	p, ok := s.auth.StatusFor(r.URL.Query().Get("id"), origin)
 	if !ok {
 		writeError(w, http.StatusNotFound, "pairing not found or expired")
 		return
@@ -353,6 +387,11 @@ func (s *Server) handlePairExchange(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSessionRevoke(w http.ResponseWriter, r *http.Request) {
 	s.setCORS(w, r)
+	// Same origin gate as the other sensitive routes: a token alone is not
+	// enough if the caller is not an allowed browser origin.
+	if s.requireAllowedOrigin(w, r) == "" {
+		return
+	}
 	var body struct {
 		Token string `json:"token"`
 	}
@@ -405,6 +444,29 @@ func (s *Server) handleWisp(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "invalid or expired session token")
 		return
 	}
+
+	// Counted before the attachment and the upgrade: Shutdown must never miss a
+	// connection that is already hijacked.
+	s.ws.Add(1)
+	defer s.ws.Done()
+
+	// The transport is attached before the handshake so the per-token cap is
+	// reported as a clean JSON error instead of a failed upgrade. The closer is
+	// bound to the handler once the connection exists.
+	closer := &wsCloser{}
+	_, transportID, ok := s.auth.AttachSession(token, origin, closer.Close)
+	if !ok {
+		s.stats.IncRejectedAuth()
+		if !s.auth.Verify(token, origin) {
+			// Revoked between the check and the attachment.
+			writeError(w, http.StatusForbidden, "invalid or expired session token")
+			return
+		}
+		writeError(w, http.StatusTooManyRequests, "too many active connections for this session")
+		return
+	}
+	defer s.auth.DetachSession(token, transportID)
+
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -425,20 +487,48 @@ func (s *Server) handleWisp(w http.ResponseWriter, r *http.Request) {
 		Stats:                s.stats,
 		SessionID:            sessionID,
 	})
-
-	// Atomic registration: if the session was revoked between the check and the
-	// upgrade, the attachment fails and the connection is closed.
-	_, transportID, ok := s.auth.AttachSession(token, origin, h.Close)
-	if !ok {
+	if !closer.bind(conn, h) {
+		// The session was revoked between the attachment and the handshake.
 		_ = conn.Close()
-		s.stats.IncRejectedAuth()
 		return
 	}
-	defer s.auth.DetachSession(token, transportID)
-
-	s.ws.Add(1)
-	defer s.ws.Done()
 	_ = h.Run(r.Context())
+}
+
+// wsCloser bridges the transport registered before the WebSocket handshake with
+// the WISP handler created after it. Close is idempotent through auth's
+// transport wrapper, but remains safe when called before bind.
+type wsCloser struct {
+	mu      sync.Mutex
+	conn    *websocket.Conn
+	handler *wisp.Handler
+	closed  bool
+}
+
+func (c *wsCloser) Close() {
+	c.mu.Lock()
+	c.closed = true
+	h, conn := c.handler, c.conn
+	c.mu.Unlock()
+	if h != nil {
+		h.Close()
+	}
+	if conn != nil {
+		_ = conn.Close()
+	}
+}
+
+// bind attaches the live connection and handler. It reports false when a
+// revocation already fired, so the caller closes the fresh connection.
+func (c *wsCloser) bind(conn *websocket.Conn, h *wisp.Handler) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return false
+	}
+	c.conn = conn
+	c.handler = h
+	return true
 }
 
 func randomToken(nBytes int) (string, error) {

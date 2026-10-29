@@ -95,7 +95,6 @@ class ControlledEngine implements VMEngine {
   }
 }
 
-/** Instance that replays a fixed event script as soon as it is subscribed. */
 class ScriptedInstance implements VMInstance {
   readonly id = 'scripted-instance';
   readonly providerId = 'scripted';
@@ -138,7 +137,6 @@ class ScriptedEngine implements VMEngine {
   }
 }
 
-/** Fails on the first start, succeeds afterwards. */
 class FlakyEngine implements VMEngine {
   readonly id = 'flaky';
   readonly instances: ControlledInstance[] = [];
@@ -161,7 +159,6 @@ class FlakyEngine implements VMEngine {
   }
 }
 
-/** Faulty engine keeping its listener after release. */
 class LeakyInstance implements VMInstance {
   readonly id = 'leaky-instance';
   readonly providerId = 'leaky';
@@ -199,9 +196,6 @@ class FixedEngine implements VMEngine {
   }
 }
 
-/**
- * Replays an initial state on subscribe; `leaky` ignores the unsubscribe.
- */
 class ManualInstance implements VMInstance {
   readonly id = 'manual-instance';
   readonly providerId = 'manual';
@@ -253,7 +247,6 @@ class ManualEngine implements VMEngine {
   }
 }
 
-/** Instance whose `stop()` and `dispose()` reject. */
 class FailingCleanupInstance implements VMInstance {
   readonly id = 'failing-cleanup';
   readonly providerId = 'failing';
@@ -585,10 +578,8 @@ describe('SessionLifecycle', () => {
     expect(lifecycle.snapshot.state).toBe('running');
 
     const instance = engine.instances[0]!;
-    // Both the direct `stopped` signal and `stopping -> stopped` must reconcile.
     instance.emit({ type: 'state', state: 'stopping' });
     instance.emit({ type: 'state', state: 'stopped' });
-    // The terminal `stop()` waits for the cleanup in flight.
     await lifecycle.stop();
 
     expect(lifecycle.snapshot.state).toBe('stopped');
@@ -596,7 +587,6 @@ describe('SessionLifecycle', () => {
     expect(instance.stop).toHaveBeenCalledTimes(1);
     expect(instance.dispose).toHaveBeenCalledTimes(1);
 
-    // No zombie VM: the released instance no longer prevents a restart.
     await lifecycle.start(document.createElement('div'));
     expect(lifecycle.snapshot.state).toBe('running');
     expect(engine.instances).toHaveLength(2);
@@ -641,7 +631,6 @@ describe('SessionLifecycle', () => {
     const instance = engine.instances[0]!;
 
     instance.emit({ type: 'state', state: 'stopped' });
-    // Late events from a faulty engine are ignored.
     instance.emit({ type: 'state', state: 'stopped' });
     instance.emit({ type: 'state', state: 'running' });
     instance.emit({ type: 'progress', phase: 'booting', loadedBytes: 5, totalBytes: 10 });
@@ -670,11 +659,48 @@ describe('SessionLifecycle', () => {
     expect(lifecycle.snapshot.state).toBe('running');
 
     instance.emit({ type: 'state', state: 'stopped' });
-    // `stop()` only returns once the release is over, even if it fails.
     await lifecycle.stop();
 
     expect(lifecycle.snapshot.state).toBe('stopped');
     expect(errors).toContain('stop');
     expect(errors).toContain('dispose');
+  });
+
+  it('keeps starting and stopping when a snapshot listener throws', async () => {
+    const engine = new ManualEngine('running');
+    const lifecycle = new SessionLifecycle(makeOS(), new VMRegistry([engine]), 's-listener');
+    const states: VMState[] = [];
+    lifecycle.subscribe(() => {
+      throw new Error('Broken UI listener');
+    });
+    lifecycle.subscribe((snapshot) => states.push(snapshot.state));
+
+    await lifecycle.start(document.createElement('div'));
+    expect(lifecycle.snapshot.state).toBe('running');
+    await lifecycle.stop();
+
+    expect(lifecycle.snapshot.state).toBe('stopped');
+    expect(states).toContain('running');
+    expect(states).toContain('stopped');
+    expect(engine.instances[0]?.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('continues cleanup when the cleanup error reporter throws', async () => {
+    const instance = new FailingCleanupInstance();
+    const lifecycle = new SessionLifecycle(
+      makeOS(),
+      new VMRegistry([new FixedEngine(instance)]),
+      's-reporter',
+      () => {
+        throw new Error('Broken error reporter');
+      },
+    );
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await lifecycle.start(document.createElement('div'));
+    await expect(lifecycle.stop()).resolves.toBeUndefined();
+
+    expect(instance.dispose).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 });

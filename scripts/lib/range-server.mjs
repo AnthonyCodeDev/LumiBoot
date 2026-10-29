@@ -1,7 +1,4 @@
-// Local HTTP server streaming one file through Range requests.
-//
-// v86 requirements: a valid Range request MUST be answered with 206, and
-// `Content-Range` must always be present; no compression may be applied.
+// Local HTTP Range server: v86 requires 206 + `Content-Range`, never compression.
 
 import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -9,10 +6,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 const CRLF = '\r\n';
 
-/**
- * Parses a `Range` header: `none` when absent or unreadable, `unsatisfiable` on a
- * 416, `ranges` on satisfiable ranges sorted.
- */
+/** Parses a `Range` header into `none`, `unsatisfiable` or sorted `ranges`. */
 export function parseRangeHeader(headerValue, size) {
   if (headerValue === undefined || headerValue === null || headerValue === '') {
     return { kind: 'none' };
@@ -115,6 +109,7 @@ export function isAuthorized(req, token) {
   return false;
 }
 
+// No CORS by default: a wildcard would let any website read the local disk.
 function baseHeaders(corsOrigin, extraHeaders) {
   return {
     'Accept-Ranges': 'bytes',
@@ -155,7 +150,7 @@ export function createRangeHandler(options) {
     filePath,
     size,
     contentType = 'application/octet-stream',
-    corsOrigin = '*',
+    corsOrigin = null,
     extraHeaders = {},
     token = null,
     maxRanges = 32,
@@ -356,7 +351,7 @@ export function createJsonHandler(options) {
   const {
     body,
     contentType = 'application/json; charset=utf-8',
-    corsOrigin = '*',
+    corsOrigin = null,
     extraHeaders = {},
     token = null,
   } = options;
@@ -413,11 +408,9 @@ function resolveRoute(route) {
   throw new Error('Invalid route: provide "file" or "json".');
 }
 
-/**
- * Creates an HTTP server serving fixed routes; it does not listen until `listen()`.
- */
+/** Creates an HTTP server for fixed routes; it does not listen until `listen()`. */
 export function createAssetServer(options) {
-  const { routes, token = null, corsOrigin = '*', extraHeaders = {} } = options;
+  const { routes, token = null, corsOrigin = null, extraHeaders = {} } = options;
   if (token !== null && token.length < 8) {
     throw new Error('The token must be at least 8 characters long.');
   }

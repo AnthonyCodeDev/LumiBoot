@@ -8,6 +8,17 @@ interface PersistentDiskRecord {
   readonly sourceId: string;
   readonly size: number;
   readonly updatedAt: string;
+  readonly fileName?: string;
+}
+
+function diskFileName(name: string, record: PersistentDiskRecord): string {
+  return record.fileName ?? `${name}.img`;
+}
+
+function newDiskFileName(name: string): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const suffix = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${name}-${suffix}.img`;
 }
 
 function safeDiskId(value: string): string {
@@ -39,7 +50,13 @@ async function readRecord(
     if (
       typeof value.sourceId !== 'string' ||
       typeof value.size !== 'number' ||
-      typeof value.updatedAt !== 'string'
+      !Number.isSafeInteger(value.size) ||
+      value.size <= 0 ||
+      typeof value.updatedAt !== 'string' ||
+      (value.fileName !== undefined &&
+        (typeof value.fileName !== 'string' ||
+          !value.fileName.startsWith(`${name}-`) ||
+          !/^[a-z0-9_-]+-[0-9a-f]{32}\.img$/.test(value.fileName)))
     ) {
       return null;
     }
@@ -56,15 +73,16 @@ async function writeRecord(
 ): Promise<void> {
   const handle = await directory.getFileHandle(`${name}.json`, { create: true });
   const writable = await handle.createWritable();
-  await writable.write(JSON.stringify(record));
-  await writable.close();
+  try {
+    await writable.write(JSON.stringify(record));
+    await writable.close();
+  } catch (error) {
+    await writable.abort().catch(() => undefined);
+    throw error;
+  }
 }
 
-/**
- * Copies an imported RAW disk into OPFS once, then reuses the guest-modified
- * copy on every boot. A newly imported source gets a new `sourceId` and
- * replaces the old copy deliberately.
- */
+/** OPFS has no cross-file transaction: commit the record before deleting the old image. */
 export async function ensurePersistentV64Disk(
   id: string,
   media: VMMedia,
@@ -72,7 +90,7 @@ export async function ensurePersistentV64Disk(
 ): Promise<V64PersistentDisk> {
   if (media.format !== 'raw') throw new Error('Only RAW disks can be made writable in OPFS.');
   if (!media.sourceId) throw new Error('Persistent RAW media needs a stable source identity.');
-  if (media.size % 512 !== 0)
+  if (!Number.isSafeInteger(media.size) || media.size <= 0 || media.size % 512 !== 0)
     throw new Error('A persistent disk must contain whole 512-byte sectors.');
   if (signal?.aborted) throw new DOMException('Disk import canceled.', 'AbortError');
 
@@ -80,34 +98,60 @@ export async function ensurePersistentV64Disk(
   const directory = await diskDirectory();
   const current = await readRecord(directory, name);
   if (current !== null && current.sourceId === media.sourceId && current.size === media.size) {
-    const file = await (await directory.getFileHandle(`${name}.img`)).getFile();
-    if (file.size === media.size) return persistentDisk(name, file.size);
+    const fileName = diskFileName(name, current);
+    try {
+      const file = await (await directory.getFileHandle(fileName)).getFile();
+      if (file.size === media.size) return persistentDisk(fileName, file.size);
+    } catch (error) {
+      if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error;
+      // Metadata may survive an interrupted cleanup after the disk was removed.
+    }
   }
 
   const response = await fetch(media.url, signal === undefined ? {} : { signal });
   if (!response.ok || !response.body) {
     throw new Error(`Unable to read the imported disk (HTTP ${response.status}).`);
   }
-  const fileHandle = await directory.getFileHandle(`${name}.img`, { create: true });
-  const writable = await fileHandle.createWritable();
+  const fileName = newDiskFileName(name);
+  let metadataWriteStarted = false;
   try {
-    await response.body.pipeTo(writable, signal === undefined ? {} : { signal });
+    const fileHandle = await directory.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    try {
+      await response.body.pipeTo(writable, signal === undefined ? {} : { signal });
+    } catch (error) {
+      await writable.abort().catch(() => undefined);
+      throw error;
+    }
+    const file = await fileHandle.getFile();
+    if (file.size !== media.size) {
+      throw new Error(`The OPFS copy has ${file.size} bytes instead of ${media.size}.`);
+    }
+    if (signal?.aborted) throw new DOMException('Disk import canceled.', 'AbortError');
+
+    // createWritable() commits the record on close; on failure keep the staged copy.
+    metadataWriteStarted = true;
+    await writeRecord(directory, name, {
+      sourceId: media.sourceId,
+      size: file.size,
+      updatedAt: new Date().toISOString(),
+      fileName,
+    });
+    // The old generation is now unreachable: reclaim it; open readers keep their handle.
+    if (current !== null) {
+      const previousFileName = diskFileName(name, current);
+      if (previousFileName !== fileName) {
+        await directory.removeEntry(previousFileName).catch(() => undefined);
+      }
+    }
+    await navigator.storage.persist?.().catch(() => false);
+    return persistentDisk(fileName, file.size);
   } catch (error) {
-    await writable.abort().catch(() => undefined);
+    if (!metadataWriteStarted) {
+      await directory.removeEntry(fileName).catch(() => undefined);
+    }
     throw error;
   }
-  const file = await fileHandle.getFile();
-  if (file.size !== media.size) {
-    await directory.removeEntry(`${name}.img`).catch(() => undefined);
-    throw new Error(`The OPFS copy has ${file.size} bytes instead of ${media.size}.`);
-  }
-  await writeRecord(directory, name, {
-    sourceId: media.sourceId,
-    size: file.size,
-    updatedAt: new Date().toISOString(),
-  });
-  await navigator.storage.persist?.().catch(() => false);
-  return persistentDisk(name, file.size);
 }
 
 export interface V64PersistentDisk {
@@ -115,6 +159,6 @@ export interface V64PersistentDisk {
   readonly size: number;
 }
 
-function persistentDisk(name: string, size: number): V64PersistentDisk {
-  return { url: `opfs:${ROOT_DIRECTORY}/${ENGINE_DIRECTORY}/${DISK_DIRECTORY}/${name}.img`, size };
+function persistentDisk(fileName: string, size: number): V64PersistentDisk {
+  return { url: `opfs:${ROOT_DIRECTORY}/${ENGINE_DIRECTORY}/${DISK_DIRECTORY}/${fileName}`, size };
 }

@@ -7,19 +7,13 @@ import { statusMessageForSession, statusTextForSession } from './statusOverlay.h
 export interface StatusOverlayProps {
   session: SessionSnapshot;
   system: OSDefinition;
-  /** Reference to `.session-console`, which holds the `textarea.v86-serial`. */
+  /** `.session-console`, which holds the `textarea.v86-serial`. */
   consoleRef: RefObject<HTMLDivElement>;
 }
 
-/** Serial terminal re-read period in ms. */
 const SERIAL_POLL_MS = 400;
-/** Number of log lines kept on screen. */
 const LOG_LINE_COUNT = 3;
-/**
- * Loading veil window, measured from mount. Past it the real UI (CLI console or
- * graphical screen) is shown, whatever the boot state: a slow boot (software
- * emulation) must never hide a live console behind a blocked loading screen.
- */
+/** Loading veil window from mount; past it the real UI shows, whatever the boot state. */
 export const BOOT_VEIL_MS = 5_000;
 
 /** `true` during the first `BOOT_VEIL_MS` only; the window never reopens. */
@@ -86,7 +80,7 @@ function SessionLogs({ consoleRef, fallback }: SessionLogsProps) {
 
 export function StatusOverlay({ session, system, consoleRef }: StatusOverlayProps) {
   const launchProfile = getPrimaryLaunchProfile(system);
-  // Called before every early return so the hook order never changes.
+  // Before every early return so the hook order never changes.
   const veilVisible = useBootVeil();
 
   if (session.state === 'error') {
@@ -145,7 +139,6 @@ export function StatusOverlay({ session, system, consoleRef }: StatusOverlayProp
 
   const statusText = statusTextForSession(session);
 
-  // preparing / downloading / booting: only the time-boxed veil, then nothing.
   if (!veilVisible) return null;
 
   return (

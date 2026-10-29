@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { formatRepairReport, NOT_AVAILABLE, repairBrowserStorage } from './browser-storage-reset';
+import { DEV_ORIGIN } from '../../test/fixtures';
 
 const SW_KEY = 'serviceWorker';
 
@@ -21,7 +22,7 @@ function stubBrowserStorage(options: StubOptions = {}): {
   const deleted: string[] = [];
   const count = options.registrations ?? 0;
   const registrations = Array.from({ length: count }, (_value, index) => ({
-    scope: `http://localhost:5173/other-${index}/`,
+    scope: `${DEV_ORIGIN}/other-${index}/`,
     unregister: async (): Promise<boolean> => {
       if (options.unregisterRejectsAt === index) throw new Error(`unregister ${index} failed`);
       unregistered.push(String(index));

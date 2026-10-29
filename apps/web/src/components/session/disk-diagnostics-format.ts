@@ -5,19 +5,10 @@ export interface DiagnosticsReport {
   readonly entries: DiskRequestLogEntry[];
 }
 
-/**
- * Three-valued verdict, so a healthy profile never shows a purge advice.
- *
- * `healthy` is the normal case: on a real ext4 image a few percent of the
- * blocks are legitimately empty, so `allZero > 0` alone proves nothing.
- */
+/** Three-valued verdict, so a healthy profile never shows a purge advice. */
 export type DiagnosticsHealth = 'healthy' | 'suspect' | 'unknown';
 
-/**
- * A broken profile answers zeros to (almost) every read, while a healthy one
- * only returns a few percent of empty blocks: 50 % over at least 20 reads
- * separates the two profiles without flagging a small sample by accident.
- */
+/** A broken profile answers zeros to (almost) every read; a healthy one only a few percent. */
 export const ALL_ZERO_SUSPECT_SHARE = 0.5;
 export const ALL_ZERO_SUSPECT_MIN_READS = 20;
 
@@ -48,13 +39,7 @@ function zeroShareIsOverwhelming(summary: DiskDiagnosticsSummary): boolean {
   return summary.allZero / summary.requests >= ALL_ZERO_SUSPECT_SHARE;
 }
 
-/**
- * `suspect` only when the profile is really broken:
- * - a status that is neither `206` nor a still-pending read (`200`, `404`,
- *   `416`, `0`, unknown status, or an `error` entry);
- * - at least one read that failed;
- * - or an overwhelming share of all-zero reads (see the constants above).
- */
+/** `suspect` on a failed read, a non-ranged status, or an overwhelming all-zero share. */
 export function diagnosticsHealth(
   summary: DiskDiagnosticsSummary,
   entries: readonly DiskRequestLogEntry[] = [],
@@ -70,13 +55,32 @@ export function healthMessage(health: DiagnosticsHealth): string {
   return HEALTH_MESSAGES[health];
 }
 
-/** Full text pasted into the chat: no DevTools knowledge required. */
+/** Base used to parse relative disk URLs without touching the network. */
+const DIAGNOSTICS_BASE_URL = 'https://lumiboot.invalid';
+
+/** Strips query and fragment: disk requests carry an access token in `?token=`. */
+export function redactDiagnosticsUrl(value: string): string {
+  if (value === '') return value;
+  try {
+    const isAbsolute = /^[a-z][a-z0-9+.-]*:/i.test(value);
+    if (!isAbsolute && !value.startsWith('/')) return value;
+    const url = new URL(value, DIAGNOSTICS_BASE_URL);
+    url.search = '';
+    url.hash = '';
+    // The fake base must never reach a report.
+    return isAbsolute ? url.toString() : url.pathname;
+  } catch {
+    return value;
+  }
+}
+
 export function formatDiskDiagnostics(report: DiagnosticsReport): string {
   const { summary, entries } = report;
+  const page = typeof location === 'undefined' ? 'unknown' : redactDiagnosticsUrl(location.href);
   const lines = [
     'LumiBoot disk diagnostics',
     `generated: ${new Date().toISOString()}`,
-    `page: ${typeof location === 'undefined' ? 'unknown' : location.href}`,
+    `page: ${page}`,
     `userAgent: ${summary.userAgent}`,
     `serviceWorkerController: ${summary.serviceWorkerUrl ?? 'none'}`,
     `health: ${diagnosticsHealth(summary, entries)}`,
@@ -90,7 +94,7 @@ export function formatDiskDiagnostics(report: DiagnosticsReport): string {
       (entry) =>
         `${entry.range ?? 'no range'} → ${entry.status ?? 'pending'} / allZero=${
           entry.allZero === null ? 'n/a' : String(entry.allZero)
-        } / ${entry.durationMs} ms / ${entry.transport} / ${entry.url}`,
+        } / ${entry.durationMs} ms / ${entry.transport} / ${redactDiagnosticsUrl(entry.url)}`,
     ),
   ];
   return lines.join('\n');

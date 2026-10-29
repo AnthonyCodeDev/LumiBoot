@@ -2,42 +2,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-/**
- * Windows 10 x86 under v86 - standalone system and real boot from the local disk.
- *
- * This file covers two levels, deliberately separated:
- *
- * 1. **Without a disk**, always run: Windows 10 x86 is a STANDALONE system with no
- *    variant selector, validated and therefore advertised as `Available`; the
- *    launch is honestly blocked when the disk is not served and the manifest
- *    answers 404. No fake `ready`, no fake `passed`.
- *
- * 2. **With a real disk**, opt-in: only if `VM_E2E_ASSETS=1` AND
- *    an x86 Windows 10 disk is present, through `WIN10_DISK` or a
- *    `images/windows-10-x86/manifest.json` with `boot.mode === 'disk-boot'`.
- *    The test checks the JSON HTTP 200 manifest, the disk over HTTP Range 206,
- *    starts a REAL session with `data-state=running`, emitted after a disk read
- *    `ide-read-end`, and captures the VGA screen plus the logs. Without either
- *    guardrail, the test is **skipped**, never "passed".
- *
- * Windows 10 x86 is validated, like Windows 7: same local disk pipeline under
- * v86. The "no disk" case, with a 404 manifest, still blocks the launch. This
- * file NEVER presents the colored VGA screen as a guaranteed desktop proof. The
- * Windows 7 path (`windows7-desktop.spec.ts`) stays unchanged and is the
- * reference for Windows 7.
- *
- * Real boot command:
- *
- *   $env:VM_E2E_ASSETS='1'; $env:WIN10_DISK='1'; pnpm exec playwright test tests/e2e/windows10-desktop.spec.ts
- */
-
-// ---------------------------------------------------------------------------
-// Execution guardrails, whether a real disk is present or not
-// ---------------------------------------------------------------------------
+// Windows 10 x86 under v86: standalone card always tested, real boot opt-in.
 
 const assetsPresent = process.env.VM_E2E_ASSETS === '1';
 
-/** True when an environment variable is "enabled": non-empty, and not 0/false. */
 function envFlagEnabled(name: string): boolean {
   const value = process.env[name];
   if (value === undefined) return false;
@@ -67,12 +35,7 @@ interface PrivateDiskManifest {
   readonly boot?: { readonly mode?: unknown } | undefined;
 }
 
-/**
- * Detects an x86 Windows 10 disk present on the machine: either `WIN10_DISK` is
- * enabled, or a `disk-boot` manifest exists under `images/windows-10-x86/`. This
- * is a prerequisite of the real boot: without it, no boot test runs. The skip
- * is explicit, never a success.
- */
+/** True when WIN10_DISK is enabled or a `disk-boot` manifest exists under images/. */
 function detectWin10Disk(): boolean {
   if (envFlagEnabled('WIN10_DISK')) return true;
   const manifestPath = join(REPO_ROOT, 'images', WIN10_REF, 'manifest.json');
@@ -87,23 +50,16 @@ function detectWin10Disk(): boolean {
 
 const win10DiskPresent = detectWin10Disk();
 
-// ---------------------------------------------------------------------------
-// Time budgets: very wide under software emulation
-// ---------------------------------------------------------------------------
-
 const RUNNING_TIMEOUT_MS = 900_000;
 const SCREEN_TIMEOUT_MS = 600_000;
 const STOP_TIMEOUT_MS = 60_000;
 
-// Thresholds of the visual signal. They are NOT a desktop proof: they complement
-// the machine proof, the real disk read, with a colored AND stable screen. An
-// installer or an animated login screen does not hold the required stability, and
-// is therefore never counted as a desktop.
+// Visual signal only, never a desktop proof: a colored AND stable screen is required.
 const MIN_NON_BLACK_RATIO = 0.3;
 const MIN_DISTINCT_COLORS = 32;
 const REQUIRED_STABLE_POLLS = 4;
 const POLL_INTERVAL_MS = 1_500;
-/** Fingerprint points that may change without breaking stability, such as noise or the cursor. */
+/** Fingerprint points that may change without breaking stability (noise, cursor). */
 const MAX_CHANGED_SAMPLES = 6;
 
 interface CanvasSample {
@@ -195,13 +151,7 @@ interface ScreenProof {
   readonly canvasHeight: number | null;
 }
 
-/**
- * Waits for a colored AND STABLE VGA screen. Stability, meaning several
- * consecutive nearly identical polls, is what distinguishes a settled screen from
- * an installer animation or an animated login screen. It stays a visual signal,
- * never a "desktop" guarantee: the machine proof is the real disk read, `running`
- * in `disk-boot` plus the HTTP Range requests.
- */
+/** Waits for a colored AND stable screen: stability = near-identical consecutive polls. */
 async function waitForStableColorScreen(page: Page): Promise<ScreenProof> {
   const deadline = Date.now() + SCREEN_TIMEOUT_MS;
   let previous: CanvasSample | null = null;
@@ -248,12 +198,7 @@ async function waitForStableColorScreen(page: Page): Promise<ScreenProof> {
   };
 }
 
-/**
- * Counter of the disk bytes really served over HTTP Range. The real HTTP
- * responses, captured with `page.on('response')`, are counted with the sum of
- * their `Content-Length`, because `performance.transferSize` heavily under-counts
- * the range XHRs of v86.
- */
+/** Counts the disk bytes really served over HTTP Range (sum of `Content-Length`). */
 function createDiskByteCounter(
   page: Page,
   diskUrlFragment: string,
@@ -317,16 +262,11 @@ async function openWindows10Mother(page: Page): Promise<Locator> {
   return page.locator(`.os-card[data-id="${WIN10_SYSTEM_SLUG}"]`);
 }
 
-// ---------------------------------------------------------------------------
-// 1. Standalone system, without a disk - always run
-// ---------------------------------------------------------------------------
-
 test.describe('Windows 10 x86: standalone system and availability (without a disk)', () => {
   test('is standalone, available, and honestly blocks the launch without a disk', async ({
     page,
   }) => {
-    // Forces the absence of the disk, even if the operator has one locally: the
-    // tested case is "no fake availability without served media".
+    // Force the absence of the disk: no fake availability without served media.
     await page.route(new RegExp(`/images/${WIN10_REF}/manifest\\.json(?:\\?.*)?$`), (route) =>
       route.fulfill({ status: 404, contentType: 'application/json', body: '{}' }),
     );
@@ -345,8 +285,7 @@ test.describe('Windows 10 x86: standalone system and availability (without a dis
     // 1. Windows 10 x86 is a STANDALONE system: no variant selector.
     await expect(page.getByRole('button', { name: 'Choose variant' })).toHaveCount(0);
 
-    // 2. The system is validated through the same pipeline as Windows 7: it is
-    //    advertised as "Available" like Windows 7.
+    // 2. Validated like Windows 7: advertised as "Available".
     const stateValue = page
       .locator('.spec-box > div')
       .filter({ hasText: 'Status' })
@@ -354,8 +293,7 @@ test.describe('Windows 10 x86: standalone system and availability (without a dis
     await expect(stateValue).toBeVisible();
     await expect(stateValue).toHaveText('Available');
 
-    // 3. Without a served disk, with a 404 manifest, the launch is blocked with an
-    //    explicit reason: no fake availability.
+    // 3. With a 404 manifest the launch is blocked, with an explicit reason.
     const launch = page.getByRole('button', { name: 'Start session' });
     await expect(launch).toBeDisabled();
     await expect(
@@ -363,10 +301,6 @@ test.describe('Windows 10 x86: standalone system and availability (without a dis
     ).toBeVisible();
   });
 });
-
-// ---------------------------------------------------------------------------
-// 2. Real boot, opt-in with a disk present
-// ---------------------------------------------------------------------------
 
 test.describe('Windows 10 x86: real boot (v86)', () => {
   test.skip(!assetsPresent, 'Local disks missing: set VM_E2E_ASSETS=1.');
@@ -387,8 +321,7 @@ test.describe('Windows 10 x86: real boot (v86)', () => {
     page.on('pageerror', (error) => consoleLogs.push(`[pageerror] ${error.message}`));
 
     try {
-      // 0. Server proofs BEFORE any UI: valid JSON manifest + disk served over
-      //    HTTP Range (206), never a full 200 that v86 could not read.
+      // 0. Server proofs first: JSON manifest and 206 Range, never a full 200.
       const manifestResponse = await request.get(WIN10_MANIFEST_URL);
       expect(
         manifestResponse.status(),
@@ -439,15 +372,13 @@ test.describe('Windows 10 x86: real boot (v86)', () => {
       await expect(page).toHaveURL(/\/session\//);
       await expect(page.locator('.session-console')).toBeVisible();
 
-      // 3. `running` in `disk-boot` is only emitted after a REAL disk read
-      //    (`ide-read-end`), never simulated by a React timer.
+      // 3. `running` follows a real disk read (`ide-read-end`), never a timer.
       const state = page.locator('.session-toolbar');
       await expect(state).toHaveAttribute('data-state', 'running', {
         timeout: RUNNING_TIMEOUT_MS,
       });
 
-      // 4. Strengthened visual signal: colored AND STABLE screen (an installer
-      //    animation or an animated login screen does not hold stability).
+      // 4. Colored AND stable screen (an animation does not hold stability).
       const proof = await waitForStableColorScreen(page);
       const bootMs = Date.now() - bootStartedAt;
 
@@ -459,8 +390,7 @@ test.describe('Windows 10 x86: real boot (v86)', () => {
         `No HTTP Range request for ${WIN10_DISK_URL} (expected disk not read).`,
       ).toBeGreaterThan(0);
 
-      // Proof captures: the real VGA screen and the logs, for success as well as
-      // diagnosis.
+      // Proof captures: VGA screen and logs, for success as well as diagnosis.
       await test.info().attach('windows10-x86-vga-canvas', {
         body: await page.locator('.v86-screen').screenshot(),
         contentType: 'image/png',
@@ -495,9 +425,7 @@ test.describe('Windows 10 x86: real boot (v86)', () => {
           `=== end measurements ===\n`,
       );
 
-      // The visual signal is checked AFTER the measurements so the raw
-      // diagnostics from the catch block are attached on failure, without hiding
-      // the real cause.
+      // Checked last, so a failure still attaches the diagnostics from `catch`.
       expect(
         proof.proven,
         `No colored and stable VGA screen for Windows 10 x86: the canvas ` +

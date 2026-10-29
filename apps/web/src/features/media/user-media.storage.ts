@@ -4,19 +4,43 @@ import {
   type UserMediaStore,
 } from '@lumiboot/vm-assets';
 
-/**
- * Persistence for media imported by the user, in IndexedDB only: nothing is sent
- * to a server. Falls back to memory when IndexedDB is unavailable.
- */
+/** IndexedDB only, nothing is sent to a server; memory fallback when IndexedDB is unavailable. */
 
 const DB_NAME = 'lumiboot-user-media';
 const DB_VERSION = 1;
 const DESCRIPTORS = 'descriptors';
 const BLOBS = 'blobs';
 
+/** Raised when another tab holds a connection that prevents the schema upgrade. */
+export class UserMediaStorageBlockedError extends Error {
+  constructor() {
+    super('IndexedDB is blocked by another tab. Close other LumiBoot tabs and retry.');
+    this.name = 'UserMediaStorageBlockedError';
+  }
+}
+
+export function isUserMediaStorageBlockedError(
+  error: unknown,
+): error is UserMediaStorageBlockedError {
+  return error instanceof UserMediaStorageBlockedError;
+}
+
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    let settled = false;
+    const fail = (error: unknown): void => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+
+    let request: IDBOpenDBRequest;
+    try {
+      request = indexedDB.open(DB_NAME, DB_VERSION);
+    } catch (error) {
+      fail(error);
+      return;
+    }
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(DESCRIPTORS)) {
@@ -24,12 +48,53 @@ function openDatabase(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(BLOBS)) db.createObjectStore(BLOBS);
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('Unable to open IndexedDB.'));
+    request.onsuccess = () => {
+      const db = request.result;
+      // The result may arrive after `onblocked` rejected the promise.
+      if (settled) {
+        db.close();
+        return;
+      }
+      settled = true;
+      // Another tab asking for a migration must not be blocked by this one.
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
+    request.onerror = () => fail(request.error ?? new Error('Unable to open IndexedDB.'));
+    // `onblocked` never fires `onerror`: without this hook the promise hangs.
+    request.onblocked = () => fail(new UserMediaStorageBlockedError());
   });
 }
 
-/** Runs a transaction and resolves with the built request result. Rejects on error. */
+const MEDIA_FORMATS = new Set(['raw', 'iso']);
+const INTEGRITIES = new Set(['verified', 'unverified']);
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+/** Persisted descriptors are untrusted on read. */
+export function isUserMediaDescriptor(value: unknown): value is UserMediaDescriptor {
+  if (typeof value !== 'object' || value === null) return false;
+  const { ref, displayName, fileName, format, size, integrity, sha256, importedAt } =
+    value as Record<string, unknown>;
+  return (
+    isNonEmptyString(ref) &&
+    isNonEmptyString(displayName) &&
+    isNonEmptyString(fileName) &&
+    typeof format === 'string' &&
+    MEDIA_FORMATS.has(format) &&
+    typeof size === 'number' &&
+    Number.isInteger(size) &&
+    size > 0 &&
+    typeof integrity === 'string' &&
+    INTEGRITIES.has(integrity) &&
+    typeof importedAt === 'number' &&
+    Number.isFinite(importedAt) &&
+    (sha256 === undefined || typeof sha256 === 'string')
+  );
+}
+
 function runTransaction<T>(
   db: IDBDatabase,
   storeNames: string[],
@@ -83,26 +148,25 @@ function runTransaction<T>(
   });
 }
 
-/** IndexedDB store; blobs are stored as-is. */
 export function createIndexedDbUserMediaStore(db: IDBDatabase): UserMediaStore {
   return {
     async get(ref) {
-      const value = await runTransaction<UserMediaDescriptor>(
+      const value = await runTransaction<unknown>(
         db,
         [DESCRIPTORS],
         'readonly',
-        (tx) => tx.objectStore(DESCRIPTORS).get(ref) as IDBRequest<UserMediaDescriptor>,
+        (tx) => tx.objectStore(DESCRIPTORS).get(ref) as IDBRequest<unknown>,
       );
-      return value ?? null;
+      return isUserMediaDescriptor(value) ? value : null;
     },
     async list() {
-      const value = await runTransaction<UserMediaDescriptor[]>(
+      const value = await runTransaction<unknown[]>(
         db,
         [DESCRIPTORS],
         'readonly',
-        (tx) => tx.objectStore(DESCRIPTORS).getAll() as IDBRequest<UserMediaDescriptor[]>,
+        (tx) => tx.objectStore(DESCRIPTORS).getAll() as IDBRequest<unknown[]>,
       );
-      return value ?? [];
+      return (value ?? []).filter(isUserMediaDescriptor);
     },
     async put(descriptor, bytes) {
       await runTransaction(db, [DESCRIPTORS, BLOBS], 'readwrite', (tx) => {
@@ -140,10 +204,16 @@ export function getUserMediaStore(): Promise<UserMediaStore> {
     try {
       const db = await openDatabase();
       return createIndexedDbUserMediaStore(db);
-    } catch {
+    } catch (error) {
+      // A blocked database is transient: surface it so the caller can retry.
+      if (isUserMediaStorageBlockedError(error)) throw error;
       return createMemoryUserMediaStore();
     }
   })();
+  // Do not cache a rejection: closing the other tabs must let the next call retry.
+  storePromise.catch(() => {
+    storePromise = null;
+  });
   return storePromise;
 }
 

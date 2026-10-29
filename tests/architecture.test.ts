@@ -61,20 +61,7 @@ const VM_CORE_FORBIDDEN: ReadonlyArray<{ name: string; pattern: RegExp }> = [
 const workspacePackages = collectWorkspacePackages(repoRoot);
 const packageByName = new Map(workspacePackages.map((pkg) => [pkg.name, pkg] as const));
 
-/**
- * ALLOWED internal dependencies, per package. Any edge missing from this table is
- * forbidden: adding a cross-package dependency requires an explicit decision
- * (and updates this table + `docs/ARCHITECTURE.md`).
- *
- * Direction rules:
- * - `contracts` is a leaf (no `@lumiboot/*`);
- * - `catalog` only depends on the shared types;
- * - `vm-core` orchestrates (`vm-network` for the network profile) without
- *   knowing the providers;
- * - `provider-v86` depends on the orchestrator and the assets, never on the
- *   catalog;
- * - `apps/web` assembles, never the other way around.
- */
+/** Allowed internal dependencies per package: any other edge is forbidden. */
 const ALLOWED_INTERNAL_DEPS: Record<string, readonly string[]> = {
   '@lumiboot/contracts': [],
   '@lumiboot/catalog': ['@lumiboot/contracts'],
@@ -106,11 +93,7 @@ const ALLOWED_INTERNAL_DEPS: Record<string, readonly string[]> = {
   ],
 };
 
-/**
- * Architectures actually served by each catalog engine. This is the
- * `architecture x engineId` compatibility contract: a profile that pairs an
- * i386 system with an x86-64 engine breaks the runtime invariant.
- */
+/** Architectures served by each engine: the `architecture x engineId` contract. */
 const ENGINE_ARCHITECTURES: Record<EngineId, readonly Architecture[]> = {
   v86: ['i386', 'x86'],
   v64: ['x86_64'],

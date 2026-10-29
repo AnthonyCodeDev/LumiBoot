@@ -32,9 +32,7 @@ test.describe('Alpine 3.24 x86-64 session (v64, real boot)', () => {
     await expect(state).toHaveAttribute('data-state', 'running', { timeout: 30_000 });
     await expect(serial).toHaveValue(/lumiboot@lumiboot/, { timeout: 30_000 });
 
-    // The visible VGA getty emits this from the passwordless login wrapper. It
-    // catches a password-based tty0/tty1 getty even when the independent serial
-    // console has already autologged in.
+    // Catches a password-based VGA getty even when the serial console autologged in.
     await expect(serial).toHaveValue(/LUMIBOOT_VGA_AUTOLOGIN/, { timeout: 30_000 });
     await page.screenshot({ path: 'test-results/alpine-vga-autologin.png' });
 

@@ -12,7 +12,6 @@ export interface NetworkProxyCardProps {
   manifest?: DownloadsManifest | undefined;
 }
 
-/** Pairing card for the local network proxy. */
 export function NetworkProxyCard(props: NetworkProxyCardProps) {
   const state = useProxyStore((s) => s.state);
   const token = useProxyStore((s) => s.token);
@@ -33,7 +32,6 @@ export function NetworkProxyCard(props: NetworkProxyCardProps) {
   const connected = state === 'connected' && token !== null;
   const connecting = state === 'connecting';
 
-  // Shown while a session persists but the proxy is not connected.
   const alreadyPairedMessage =
     !connected && !connecting && hasSession
       ? 'You are already paired. Restart the proxy, or click the button above to start a new pairing.'

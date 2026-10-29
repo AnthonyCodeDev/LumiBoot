@@ -3,6 +3,7 @@ import { createMemoryUserMediaStore } from '@lumiboot/vm-assets';
 import { getSystemById } from '@lumiboot/catalog';
 import {
   MAX_USER_MEDIA_BYTES,
+  USER_MEDIA_LOAD_TIMEOUT_MS,
   detectMediaFormat,
   mediaFormatForFile,
   useUserMediaStore,
@@ -10,14 +11,14 @@ import {
 } from './user-media.store';
 import { getUserMediaStore } from './user-media.storage';
 
-/** `getUserMediaStore` is replaced by a real in-memory `vm-assets` store. */
+/** The storage module is mocked below: only its rejection message matters here. */
+const BLOCKED = 'IndexedDB is blocked by another tab. Close other LumiBoot tabs and retry.';
 
 vi.mock('./user-media.storage', () => ({
   getUserMediaStore: vi.fn(),
 }));
 
 const getStoreMock = vi.mocked(getUserMediaStore);
-// Generic entry point: any local disk media supplied by the user.
 const system = getSystemById('custom-image');
 if (!system) throw new Error('test system not found');
 
@@ -70,6 +71,33 @@ describe('validateUserMediaFile', () => {
     expect(() =>
       validateUserMediaFile({ name: 'huge.img', size: MAX_USER_MEDIA_BYTES + 1 }),
     ).toThrow(/maximum allowed size/);
+  });
+});
+
+describe('useUserMediaStore.load', () => {
+  it('surfaces a blocked IndexedDB instead of staying on loading', async () => {
+    getStoreMock.mockRejectedValue(new Error(BLOCKED));
+
+    await useUserMediaStore.getState().load();
+
+    expect(useUserMediaStore.getState().loading).toBe(false);
+    expect(useUserMediaStore.getState().error).toMatch(/blocked by another tab/i);
+  });
+
+  it('gives up after a bounded wait when storage never answers', async () => {
+    vi.useFakeTimers();
+    try {
+      getStoreMock.mockReturnValue(new Promise(() => undefined));
+
+      const pending = useUserMediaStore.getState().load();
+      await vi.advanceTimersByTimeAsync(USER_MEDIA_LOAD_TIMEOUT_MS);
+      await pending;
+
+      expect(useUserMediaStore.getState().loading).toBe(false);
+      expect(useUserMediaStore.getState().error).toMatch(/timed out/i);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -17,7 +17,6 @@ describe('getDeclaredReadiness — declared / runtime separation', () => {
       availability: 'ready',
       mediaSource: 'local-disk',
     });
-    // The runtime check knows what to probe.
     expect(windows.imageRef).toBeDefined();
   });
 
@@ -27,7 +26,6 @@ describe('getDeclaredReadiness — declared / runtime separation', () => {
       availability: 'resource-required',
       mediaSource: 'user-import',
     });
-    // Nothing is distributed: the media is the user's own file.
     expect(custom.imageRef).toBeUndefined();
   });
 
@@ -51,7 +49,6 @@ describe('getDeclaredReadiness — declared / runtime separation', () => {
   });
 });
 
-/** Windows 10 x86 reuses the validated Windows 7 disk pipeline. */
 describe('Windows 10 x86 — local disk pipeline under v86', () => {
   it('exposes the installed local RAW disk and the default "bundled" media', () => {
     const system = getSystemById('windows-10-x86')!;
@@ -83,7 +80,6 @@ describe('Windows 10 x86 — local disk pipeline under v86', () => {
   });
 });
 
-/** Generic entry point: any local disk media the user owns, through v86. */
 describe('Custom image — user-import under the integrated v86 engine', () => {
   it('is the last catalogue entry, with the neutral `custom` family', () => {
     const system = getSystemById('custom-image')!;
@@ -105,17 +101,13 @@ describe('Custom image — user-import under the integrated v86 engine', () => {
     expect(profile.executionMode).toBe('browser');
     expect(profile.minMemoryMiB).toBe(512);
     expect(profile.configuration?.memoryMiB).toBe(512);
-    // `bootDevice: 'disk'` would reject every ISO: the provider picks `hda` for a
-    // RAW/IMG and a CD-ROM with CD-first boot for an ISO.
+    // A fixed `disk` boot device would reject every ISO.
     expect(profile.configuration?.bootDevice).toBeUndefined();
     expect(profile.hardwareProfile?.network).toBe('virtio');
   });
 });
 
-/**
- * `displayMode` is an explicit catalog fact: a CLI guest only talks on ttyS0, so
- * the session must open on its serial console. Never inferred from a label.
- */
+/** A CLI guest only talks on ttyS0: the session opens on its serial console. */
 describe('displayMode — primary view declared per profile', () => {
   it('marks the two CLI profiles as `text`', () => {
     for (const systemId of ['debian-12-i386', 'ubuntu-18-i386']) {
@@ -148,7 +140,6 @@ describe('displayMode — primary view declared per profile', () => {
         }
       }
     }
-    // A user-import system has no image: it keeps the graphical default.
     const custom = getSystemById('custom-image')!.launchProfiles[0]!;
     expect('displayMode' in custom).toBe(false);
   });

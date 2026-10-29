@@ -21,11 +21,8 @@ interface SessionMediaResource {
   readonly controller: AbortController;
 }
 
-/** Blob URLs of imported media, indexed by session ID. */
 const mediaObjectUrls = new Map<string, SessionMediaResource>();
-/** Current boot generation per session. */
 const bootGenerations = new Map<string, number>();
-/** Controller of the running boot per session. */
 const bootControllers = new Map<string, AbortController>();
 
 function revokeUrl(url: string): void {
@@ -114,7 +111,6 @@ async function resolveUserMedia(
     revokeUrl(url);
     return { status: 'superseded' };
   }
-  // A restart of the same session replaces its own URL.
   releaseSessionMedia(sessionId);
   mediaObjectUrls.set(sessionId, { url, controller });
   return {
@@ -130,7 +126,6 @@ async function resolveUserMedia(
   };
 }
 
-/** Builds an error snapshot from any error. */
 function toErrorSnapshot(snapshot: SessionSnapshot, error: unknown): SessionSnapshot {
   const vmError = normalizeVMError(error, 'The session failed to start.');
   return {
@@ -164,7 +159,6 @@ export const useSessionsStore = create<SessionsState>((set) => ({
     const unsubscribe = lifecycle.subscribe((snapshot) => {
       // A kept listener must never re-insert a destroyed session.
       if (disposedIds.has(lifecycle.id)) return;
-      // A session in error will not reuse its media: release it.
       if (snapshot.state === 'error') releaseSessionMedia(lifecycle.id);
       set((state) => ({ sessions: { ...state.sessions, [lifecycle.id]: snapshot } }));
     });
@@ -192,10 +186,8 @@ export const useSessionsStore = create<SessionsState>((set) => ({
       });
       if (!isCurrent()) return;
 
-      // Record the effective mode before boot: the toolbar shows what really runs.
       set((s) => ({ networkModes: { ...s.networkModes, [id]: network.mode } }));
 
-      // Systems with imported media get the local disk provided by the user.
       let media: VMMedia | undefined;
       if (lifecycle.system.mediaStrategy === 'user-import') {
         const resolution = await resolveUserMedia(id, lifecycle.system.id, controller, isCurrent);
@@ -213,7 +205,6 @@ export const useSessionsStore = create<SessionsState>((set) => ({
       await lifecycle.start(mountElement, {
         network,
         ...(media === undefined ? {} : { media }),
-        // The external signal cancels the boot when it is superseded.
         signal: controller.signal,
       });
     } catch (error) {
@@ -234,7 +225,6 @@ export const useSessionsStore = create<SessionsState>((set) => ({
       releaseSessionMedia(id);
       return;
     }
-    // Invalidates any in-flight media resolution before the stop begins.
     invalidateBoot(id);
     try {
       await lifecycle.stop();

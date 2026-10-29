@@ -137,7 +137,6 @@ describe('Windows 7 variant group', () => {
   });
 
   it('exposes the neutral parent (Lite) and the child label', () => {
-    // The parent carries the group and has no `variantGroupId`.
     expect(windowsMother.variantGroupId).toBeUndefined();
     expect(windowsMother.variantName).toBe('Lite');
     expect(windowsPro.variantGroupId).toBe('windows-7-x86');
@@ -193,17 +192,13 @@ describe('getDisplaySystems', () => {
   it('keeps the Debian parent, the Windows 7 parent and the standalone systems', () => {
     const ids = getDisplaySystems().map((system) => system.id);
     expect(ids).toContain('debian-12-i386');
-    // The displayed Windows 7 card is the parent, not the Professional child.
     expect(ids).toContain('windows-7-x86');
     expect(ids).not.toContain('windows-7-pro-sp1-x86');
-    // Windows 10 x86 is standalone.
     expect(ids).toContain('windows-10-x86');
-    // The displayed Ubuntu card is the parent, not the desktop children.
     expect(ids).toContain('ubuntu-18-i386');
     expect(ids).not.toContain('ubuntu-18-i386-desktop');
     expect(ids).not.toContain('ubuntu-18-i386-xfce');
     expect(ids).toContain('macos-sequoia');
-    // Five children folded in: 2 Debian, 1 Windows 7, 2 Ubuntu.
     expect(getDisplaySystems()).toHaveLength(systems.length - 5);
   });
 });
