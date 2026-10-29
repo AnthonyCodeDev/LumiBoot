@@ -116,11 +116,11 @@ Fields in `packages/catalog/src/profiles.ts`, copied into `OSDefinition` by `sys
 | `variantGroupId` | parent id; absent on the parent |
 | `variantName` | short selector label |
 | `variantOrder` | ascending priority; lowest = default; absent = after the ordered variants |
-| `displayMode` | `text` for a CLI guest whose serial console is the primary view; `graphical` (or absent) for a VGA/framebuffer guest |
+| `displayMode` | `text` for a CLI guest; `graphical` (or absent) for a VGA/framebuffer guest |
 
 Each variant has its own image, profile, readiness and availability.
 
-`displayMode` is explicit, never inferred from the display name: the two CLI profiles (`debian-12-i386`, `ubuntu-18-i386`) open the serial terminal by default, since systemd writes on ttyS0 only while the VGA text screen appears frozen; every graphical profile opens on the screen, logs collapsed. The "Logs" button stays a toggle in both cases.
+`displayMode` is explicit, never inferred from the display name: `text` identifies a CLI guest and `graphical` a VGA/framebuffer guest. The guest screen is always the primary surface and serial logs start collapsed for every profile; the "Logs" button explicitly shows or hides them.
 
 Current groups:
 

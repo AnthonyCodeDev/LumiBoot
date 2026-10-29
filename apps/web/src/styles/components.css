@@ -585,8 +585,9 @@
    cursor. */
 .session-pointer-hint {
   position: absolute;
+  top: 12px;
   left: 12px;
-  bottom: 12px;
+  bottom: auto;
   z-index: 2;
   margin: 0;
   padding: 4px 10px;

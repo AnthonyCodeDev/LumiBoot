@@ -32,17 +32,32 @@ test.describe('Alpine 3.24 x86-64 session (v64, real boot)', () => {
     await expect(state).toHaveAttribute('data-state', 'running', { timeout: 30_000 });
     await expect(serial).toHaveValue(/lumiboot@lumiboot/, { timeout: 30_000 });
 
+    // The visible VGA getty emits this from the passwordless login wrapper. It
+    // catches a password-based tty0/tty1 getty even when the independent serial
+    // console has already autologged in.
+    await expect(serial).toHaveValue(/LUMIBOOT_VGA_AUTOLOGIN/, { timeout: 30_000 });
+    await page.screenshot({ path: 'test-results/alpine-vga-autologin.png' });
+
+    const logsButton = page.getByRole('button', { name: 'Logs' });
+    await expect(logsButton).toHaveAttribute('aria-pressed', 'false');
+    await logsButton.click();
+    await expect(logsButton).toHaveAttribute('aria-pressed', 'true');
+
     await serial.click();
     await serial.pressSequentially(
-      'uname -m; id -un; id -gn; tty; test -t 0 && echo LUMIBOOT_TTY_OK; doas -n whoami; echo LUMIBOOT_V64_OK\n',
+      'uname -m; id -un; id -gn; tty; test -t 0 && echo LUMIBOOT_TTY_OK; test -f /etc/lumiboot-azerty-ready && echo LUMIBOOT_AZERTY_OK; doas awk -F: \'$1 == "lumiboot" && $2 == "" { print "LUMIBOOT_PASSWORDLESS_OK" }\' /etc/shadow; ls -1 / && test -d /etc && test -d /home && echo LUMIBOOT_LS_OK; doas -n whoami; echo LUMIBOOT_V64_OK\n',
       { delay: 20 },
     );
     await expect(serial).toHaveValue(/\r?\nx86_64\r?\n/, { timeout: 30_000 });
     await expect(serial).toHaveValue(/\r?\nlumiboot\r?\n/, { timeout: 30_000 });
     await expect(serial).toHaveValue(/\/dev\/ttyS0/, { timeout: 30_000 });
     await expect(serial).toHaveValue(/LUMIBOOT_TTY_OK/, { timeout: 30_000 });
+    await expect(serial).toHaveValue(/LUMIBOOT_AZERTY_OK/, { timeout: 30_000 });
+    await expect(serial).toHaveValue(/LUMIBOOT_PASSWORDLESS_OK/, { timeout: 30_000 });
+    await expect(serial).toHaveValue(/LUMIBOOT_LS_OK/, { timeout: 30_000 });
     await expect(serial).toHaveValue(/\r?\nroot\r?\n/, { timeout: 30_000 });
     await expect(serial).toHaveValue(/LUMIBOOT_V64_OK/, { timeout: 30_000 });
+    expect((await serial.inputValue()).match(/LUMIBOOT_VGA_AUTOLOGIN/g)).toHaveLength(1);
     expect(await serial.inputValue()).not.toMatch(
       /can't access tty|job control turned off|unknown user\/group|can't find mount point/,
     );
