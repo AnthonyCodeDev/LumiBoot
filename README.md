@@ -19,13 +19,28 @@ LumiBoot is a browser-based operating system emulation platform designed to run 
 
 ## Systems
 
-| System         | Variants                 | Guest RAM               | Media                             |
-| -------------- | ------------------------ | ----------------------- | --------------------------------- |
-| Debian 12      | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | local ext4 image built by script  |
-| Ubuntu 18.04   | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | local ext4 image built by script  |
-| Windows 7      | Professional SP1 / Lite  | 1536 / 1024 MiB         | RAW disk provided by the operator |
-| Windows 10 x86 | 32-bit                   | 2048 MiB                | RAW disk provided by the operator |
-| Custom image   | ISO / IMG / RAW          | 512 MiB                 | disk media imported by the visitor |
+| System            | Variants                 | Guest RAM               | Media                                   | Register with                    |
+| ----------------- | ------------------------ | ----------------------- | --------------------------------------- | -------------------------------- |
+| Debian 12         | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | built ext4 rootfs, kernel and initrd    | `images/debian-12-i386/build.sh` |
+| Ubuntu 18.04      | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | built ext4 rootfs, kernel and initrd    | `images/ubuntu-18-i386/build.sh` |
+| Alpine Linux 3.24 | x86-64 (v64 JIT)         | 1024 MiB                | official `virt` ISO, kernel + initramfs | `pnpm assets:v64:alpine`         |
+| Windows 7         | Professional SP1 / Lite  | 1536 / 1024 MiB         | installed 32-bit BIOS/MBR RAW disk      | `pnpm assets:windows7:prepare`   |
+| Windows 10 x86    | 32-bit                   | 2048 MiB                | installed 32-bit BIOS/MBR RAW disk      | `pnpm assets:windows10:prepare`  |
+| Custom image      | ISO / IMG / RAW          | 512 MiB                 | `.iso`, `.img` or `.raw` you own        | the import card of its page      |
+
+No disk, ISO or license key ships with the repository: prepare or import your own media before starting a session.
+
+```bash
+sudo ./images/debian-12-i386/build.sh
+sudo ./images/ubuntu-18-i386/build.sh
+pnpm assets:v64:alpine
+pnpm assets:windows7:prepare --source images/windows-7-pro-sp1-x86/disk.img
+pnpm assets:windows10:prepare --source images/windows-10-x86/disk.img
+```
+
+Disks are read-only: guest writes stay in memory and are lost on stop.
+
+Per-system instructions: [`docs/systems.md`](docs/systems.md).
 
 ## Requirements
 
@@ -45,64 +60,6 @@ pnpm dev
 ```
 
 Open `http://127.0.0.1:5173`. `assets:prepare` fetches `v86.wasm` and the pinned BIOS files, verified by size and SHA-256 against `scripts/v86-assets.lock.json`.
-
-## Configuration (`.env`)
-
-`.env.example` is the tracked template; copy it to `.env` at the repository root:
-
-```bash
-cp .env.example .env
-```
-
-`.env` is ignored by Git. The shell always wins: an exported variable is never overridden by the file. Every value in the template is the built-in default, so an empty file changes nothing, and no secret belongs there.
-
-| Group                       | Variables                                                                                                                 |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Web client (`VITE_*`)       | `VITE_LUMIBOOT_CONFIG_URL`, `VITE_DOWNLOADS_MANIFEST_URL`, `VITE_PROXY_URL`                                               |
-| Vite dev server and preview | `WEB_DEV_HOST`, `WEB_DEV_PORT`, `WEB_PREVIEW_PORT`                                                                        |
-| Playwright end-to-end tests | `E2E_HOST`, `E2E_PORT`, `E2E_BASE_URL`; the suite keeps its own `5200`, never the `5173` dev server                       |
-| Local disk asset server     | `LUMIBOOT_ASSET_HOST`, `LUMIBOOT_ASSET_PORT`, plus the optional `LUMIBOOT_ASSET_*` overrides                              |
-| Go network proxy            | `LUMIBOOT_PROXY_LISTEN_ADDR`, `LUMIBOOT_PROXY_ALLOWED_ORIGINS`                                                            |
-| nginx deployment            | `LUMIBOOT_DOMAIN`, `LUMIBOOT_HTTP_PORT`, `LUMIBOOT_PROXY_PORT`                                                            |
-| WISP relay                  | `WISP_DOMAIN`, `LUMIBOOT_ORIGIN`, `WISP_BIND_ADDRESS`, optional `LUMIBOOT_WISP_RELAY_URL`                                 |
-| Behaviour flags             | `LUMIBOOT_COOP_COEP`, `LUMIBOOT_SOURCEMAP`, `LUMIBOOT_DISK_DEBUG`                                                         |
-| Tests                       | `VM_E2E_ASSETS`                                                                                                           |
-
-The optional `LUMIBOOT_PROXY_*` overrides (timeouts, connection caps, pairing TTL, bandwidth limit, private-network and non-loopback permissions) are detailed in `apps/network-proxy/README.md`; an unparsable value fails proxy startup instead of falling back silently.
-
-The nginx deployment files are rendered from `infra/nginx/*.template`. After changing `LUMIBOOT_DOMAIN`, `LUMIBOOT_HTTP_PORT` or `LUMIBOOT_PROXY_PORT`, run:
-
-```bash
-pnpm config:nginx        # rewrite infra/nginx/site.conf and security-headers.conf
-pnpm config:nginx:check  # report drift and exit 1 instead of writing
-```
-
-and commit the rendered files, which stay tracked so a plain clone still deploys. `tests/nginx-render.test.ts` fails when the tracked files no longer match the templates. The defaults (`lumiboot.example.com`, HTTP 80, proxy 37892) reproduce the historical behaviour; the CSP keeps the proxy origins explicit, never `*`.
-
-The Go proxy reads the same file: `pnpm proxy:dev` forwards the `LUMIBOOT_PROXY_*` variables to `go run` and passes its arguments through, for example `pnpm proxy:dev -- --version`.
-
-## Media
-
-No disk, ISO or license key is shipped or downloaded: register your own image before starting a session.
-
-| System         | Required media                     | Register with                    |
-| -------------- | ---------------------------------- | -------------------------------- |
-| Debian 12      | built rootfs, kernel and initrd    | `images/debian-12-i386/build.sh` |
-| Ubuntu 18.04   | built rootfs, kernel and initrd    | `images/ubuntu-18-i386/build.sh` |
-| Windows 7      | installed 32-bit BIOS/MBR RAW disk | `pnpm assets:windows7:prepare`   |
-| Windows 10 x86 | installed 32-bit BIOS/MBR RAW disk | `pnpm assets:windows10:prepare`  |
-| Custom image   | `.iso`, `.img` or `.raw` you own   | the import card of its page      |
-
-```bash
-sudo ./images/debian-12-i386/build.sh
-sudo ./images/ubuntu-18-i386/build.sh
-pnpm assets:windows7:prepare --source images/windows-7-pro-sp1-x86/disk.img
-pnpm assets:windows10:prepare --source images/windows-10-x86/disk.img
-```
-
-Disks are read-only: guest writes stay in memory and are lost on stop.
-
-Per-system instructions: [`docs/systems.md`](docs/systems.md).
 
 ## Commands
 
