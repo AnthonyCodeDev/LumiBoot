@@ -15,6 +15,7 @@ import {
 import {
   ensureImageManifest,
   ensureLocalDiskManifest,
+  versionedMediaUrl,
   type ImageManifest,
   type LocalDiskManifest,
 } from '@lumiboot/vm-assets';
@@ -26,6 +27,7 @@ import {
   toV86NetworkDeviceType,
   type V86NetworkDevice,
 } from './network/V86NetworkAdapter';
+import { installRangeFetchTransport } from './range-fetch-transport';
 import { V86Instance } from './v86-instance';
 
 export const V86_PROVIDER_ID = 'v86';
@@ -73,6 +75,11 @@ export interface V86ProviderOptions {
   resolveDiskManifest?: (ref: string, signal?: AbortSignal) => Promise<LocalDiskManifest>;
   /** Injectable in tests; DOM console by default. */
   createConsole?: () => V86ConsoleAdapter;
+  /**
+   * Installs the Range-aware `XMLHttpRequest` before v86 is imported. Injectable
+   * in tests; the real transport stays installed for the whole page.
+   */
+  installRangeTransport?: () => () => void;
 }
 
 /**
@@ -86,6 +93,7 @@ export class V86Provider implements VMEngine {
   readonly #resolveManifest: (ref: string, signal?: AbortSignal) => Promise<ImageManifest>;
   readonly #resolveDiskManifest: (ref: string, signal?: AbortSignal) => Promise<LocalDiskManifest>;
   readonly #createConsole: () => V86ConsoleAdapter;
+  readonly #installRangeTransport: () => () => void;
 
   constructor(options: V86ProviderOptions = {}) {
     this.#createEngine = options.createEngine ?? ((config) => createBrowserV86(config));
@@ -94,6 +102,8 @@ export class V86Provider implements VMEngine {
     this.#resolveDiskManifest =
       options.resolveDiskManifest ?? ((ref, signal) => ensureLocalDiskManifest(ref, signal));
     this.#createConsole = options.createConsole ?? (() => new DomConsoleAdapter());
+    this.#installRangeTransport =
+      options.installRangeTransport ?? (() => installRangeFetchTransport());
   }
 
   capabilities(): VMCapabilities {
@@ -219,22 +229,27 @@ export class V86Provider implements VMEngine {
     const bzimage = manifest?.files['bzimage'];
     const initrd = manifest?.files['initrd'];
     // RAW disks stay read-only through Range requests: guest writes live in memory
-    // and vanish on stop.
+    // and vanish on stop. Manifest media are versioned by their digest so a cached
+    // Range response for the same path cannot replay bytes from an earlier build.
     const bootMedia: V86Options = media
       ? resolveMediaBootOptions(media, launchProfile, configuration, os.id)
       : diskManifest
         ? {
             hda: {
-              url: diskManifest.boot.url,
+              url: versionedMediaUrl(diskManifest.boot.url, diskManifest.disk.sha256),
               async: true,
               size: diskManifest.disk.size,
             },
           }
         : {
-            bzimage: { url: bzimage!.url },
-            initrd: { url: initrd!.url },
+            bzimage: { url: versionedMediaUrl(bzimage!.url, bzimage!.sha256) },
+            initrd: { url: versionedMediaUrl(initrd!.url, initrd!.sha256) },
             cmdline: bootOptions.cmdline ?? DEFAULT_BOOT_CMDLINE,
-            hda: { url: kernelDisk!.url, async: true, size: kernelDisk!.size },
+            hda: {
+              url: versionedMediaUrl(kernelDisk!.url, kernelDisk!.sha256),
+              async: true,
+              size: kernelDisk!.size,
+            },
           };
     const options: V86Options = {
       wasm_path: bootOptions.wasmPath ?? V86_ASSET_PATHS.wasm,
@@ -255,6 +270,11 @@ export class V86Provider implements VMEngine {
 
     let emulator: Awaited<ReturnType<V86Factory>>;
     try {
+      // Before the dynamic import of v86: its disk reads are `XMLHttpRequest`
+      // with a `Range` header, and the constructor is the only injection point.
+      // The transport is idempotent and intentionally kept for the page: a
+      // session restart must not leave a window whose v86 reads hit the cache.
+      this.#installRangeTransport();
       emulator = await this.#createEngine(options);
     } catch (error) {
       consoleAdapter.detach();

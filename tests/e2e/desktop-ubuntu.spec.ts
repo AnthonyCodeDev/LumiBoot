@@ -116,6 +116,12 @@ test.describe('Ubuntu 18.04 i386 Desktop session (Xorg + Openbox, real boot)', (
 
     const { serial, state } = await openDesktopSession(page);
 
+    await expect(serial).toHaveValue(/LUMIBOOT_ROOT_DEVICE_READY:\/dev\/sda/, {
+      timeout: 60_000,
+    });
+    // No failed filesystem probe: the marker above must mean a readable root.
+    await expect(serial).not.toHaveValue(/LUMIBOOT_ROOT_DEVICE_FAILED/);
+
     // 1. Graphical session proof from the guest marker on ttyS0, never simulated.
     const proof = await waitForDesktopProof(page);
     if (proof !== 'ready') {

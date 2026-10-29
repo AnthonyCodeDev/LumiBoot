@@ -1,0 +1,222 @@
+#!/bin/sh
+# initramfs-tools local-premount guard for v86's asynchronously ranged RAW disk.
+#
+# Two very different v86 failures print the same console message, "ALERT! /dev/sda
+# does not exist", and only the first one used to be handled here:
+#
+#   1. the block node never appears: bionic registers sda in sysfs before
+#      initramfs-tools starts udev, the coldplug event is lost, /dev/sda stays
+#      absent and initramfs drops to BusyBox;
+#   2. the node exists but the disk cannot be read yet: a Range request is still
+#      in flight, or the image is truncated/zeroed. /scripts/local then fails on
+#      get_fstype() (klibc fstype, then blkid -o value -s TYPE), not on
+#      `[ -e "$DEV" ]`, and reports the very same message.
+#
+# So a block node proves nothing: this guard waits for a real filesystem, and
+# only then emits LUMIBOOT_ROOT_DEVICE_READY. There is no second chance after it:
+# the mountroot stage of /scripts/local gives the device one more try with
+# `wait-for-root /dev/sda 30` (which waits for udev's ID_FS_TYPE property), but
+# the retry loop that follows computes `time_elapsed` from the start of the
+# initramfs, so its single iteration is already expired; and scripts/local-block/
+# does not exist in this initrd, so local_block() is a no-op.
+#
+# POSIX sh, no `set -e`: this script must never fail the boot and always exits 0.
+
+PREREQ=""
+
+prereqs() {
+  echo "$PREREQ"
+}
+
+case "${1:-}" in
+  prereqs)
+    prereqs
+    exit 0
+    ;;
+esac
+
+# local-premount runs before the real root filesystem: only tty0 (VGA) and ttyS0
+# (v86 serial trace) are usable for diagnostics, stdout as a last resort.
+emit() {
+  delivered=0
+  for console in /dev/tty0 /dev/ttyS0; do
+    # `-c` keeps a missing tty from being created as a regular file in /dev.
+    if [ -c "$console" ] && printf '%s\n' "$1" >"$console" 2>/dev/null; then
+      delivered=1
+    fi
+  done
+  if [ "$delivered" -eq 0 ]; then
+    printf '%s\n' "$1"
+  fi
+  return 0
+}
+
+# Ask udev to re-emit the block coldplug events, in case the add event was lost
+# before udev was listening. udevadm may be absent: then this is a no-op.
+retrigger_udev() {
+  command -v udevadm >/dev/null 2>&1 || return 0
+  udevadm trigger --subsystem-match=block --action=add >/dev/null 2>&1 || true
+  udevadm settle --timeout=5 >/dev/null 2>&1 || true
+  return 0
+}
+
+# Deterministic fallback for the lost coldplug: recreate the node from sysfs.
+# Anything but a plain numeric `major:minor` pair is refused.
+ensure_node() {
+  if [ -b /dev/sda ]; then
+    return 0
+  fi
+  [ -r /sys/class/block/sda/dev ] || return 0
+  device_number=$(cat /sys/class/block/sda/dev 2>/dev/null) || return 0
+  case "$device_number" in
+    "" | *[!0-9:]* | :* | *: | *:*:*) return 0 ;;
+  esac
+  major=${device_number%%:*}
+  minor=${device_number#*:}
+  if [ -z "$major" ] || [ -z "$minor" ]; then
+    return 0
+  fi
+  mknod -m 0600 /dev/sda b "$major" "$minor" >/dev/null 2>&1 || true
+  [ -b /dev/sda ]
+}
+
+# Read the filesystem type straight from the device, without udev: the klibc
+# fstype binary (present in the initrd) first, blkid as a second opinion.
+# Prints the type on stdout and returns 0, or prints nothing and returns 1.
+FS_TYPE=""
+detect_fstype() {
+  FS_TYPE=""
+  if [ -b /dev/sda ] && command -v fstype >/dev/null 2>&1; then
+    fs_probe=$(fstype /dev/sda 2>/dev/null) || fs_probe=""
+    for fs_word in $fs_probe; do
+      case "$fs_word" in
+        FSTYPE=*) FS_TYPE=${fs_word#FSTYPE=} ;;
+      esac
+    done
+  fi
+  case "$FS_TYPE" in
+    "" | unknown | none) FS_TYPE="" ;;
+    *[!0-9A-Za-z]*) FS_TYPE="" ;;
+  esac
+  if [ -z "$FS_TYPE" ] && command -v blkid >/dev/null 2>&1; then
+    FS_TYPE=$(blkid -o value -s TYPE /dev/sda 2>/dev/null) || FS_TYPE=""
+    case "$FS_TYPE" in
+      *[!0-9A-Za-z]*) FS_TYPE="" ;;
+    esac
+  fi
+  if [ -z "$FS_TYPE" ]; then
+    return 1
+  fi
+  printf '%s\n' "$FS_TYPE"
+  return 0
+}
+
+# Sanitised probe of the ext4 superblock magic: 0x53 0xef at offset 0x38 of the
+# superblock, i.e. byte 1080 of the device (sector 2 is the second KiB).
+# Output stays textual: a binary dump on the serial line is useless and huge.
+probe_superblock() {
+  probe=""
+  if ! command -v dd >/dev/null 2>&1; then
+    printf '%s' "$probe"
+    return 0
+  fi
+  if command -v od >/dev/null 2>&1; then
+    probe=$(dd if=/dev/sda bs=1024 skip=1 count=1 2>/dev/null |
+      od -An -tx1 -N 8 -j 56 2>/dev/null)
+    probe=$(printf '%s' "$probe" | tr -c '0-9a-f' ' ' | tr -s ' ' | cut -c1-47)
+    probe=${probe# }
+    probe=${probe% }
+    if [ -n "$probe" ]; then
+      printf '%s' "$probe"
+      return 0
+    fi
+    probe=unreadable
+    printf '%s' "$probe"
+    return 0
+  fi
+  # This initrd ships no od (Ubuntu's busybox applet set lacks it): read the two
+  # bytes in a single 2-byte block, then let tr/wc classify them.
+  probe_dir=/run
+  if [ ! -d "$probe_dir" ] || [ ! -w "$probe_dir" ]; then
+    probe_dir=/dev
+  fi
+  probe_file=$probe_dir/lumiboot-superblock
+  rm -f "$probe_file" 2>/dev/null || true
+  dd if=/dev/sda bs=2 skip=540 count=1 2>/dev/null >"$probe_file" || true
+  probe_bytes=0
+  if [ -f "$probe_file" ]; then
+    probe_bytes=$(wc -c <"$probe_file" 2>/dev/null) || probe_bytes=0
+  fi
+  probe_bytes=$(printf '%s' "$probe_bytes" | tr -cd '0-9')
+  if [ -z "$probe_bytes" ] || [ "$probe_bytes" -lt 2 ]; then
+    probe=unreadable
+  elif [ "$(tr -d '\123\357' <"$probe_file" 2>/dev/null | wc -c)" = "0" ]; then
+    probe=53ef
+  elif [ "$(tr -d '\000' <"$probe_file" 2>/dev/null | wc -c)" = "0" ]; then
+    probe=zero
+  else
+    probe=other
+  fi
+  rm -f "$probe_file" 2>/dev/null || true
+  printf '%s' "$probe"
+}
+
+retrigger_udev
+
+fs_type=""
+attempt=0
+while [ "$attempt" -lt 60 ]; do
+  attempt=$((attempt + 1))
+  ensure_node
+  if fs_type=$(detect_fstype); then
+    break
+  fi
+  fs_type=""
+  # Re-triggering every second would only flood udev and delay the very events
+  # being waited for: every 5 attempts is enough.
+  if [ $((attempt % 5)) -eq 0 ]; then
+    retrigger_udev
+  fi
+  sleep 1
+done
+
+if [ -n "$fs_type" ]; then
+  echo "LUMIBOOT_ROOT_DEVICE_READY:/dev/sda fs=$fs_type"
+  exit 0
+fi
+
+# Factual diagnostics, one line per fact: these are the only evidence available
+# once initramfs has already spent its wait-for-root budget.
+node_state=no
+if [ -b /dev/sda ]; then
+  node_state=yes
+fi
+
+sysfs_value=none
+if [ -r /sys/class/block/sda/dev ]; then
+  sysfs_value=$(cat /sys/class/block/sda/dev 2>/dev/null) || sysfs_value=""
+  sysfs_value=$(printf '%s' "$sysfs_value" | tr -cd '0-9:')
+  if [ -z "$sysfs_value" ]; then
+    sysfs_value=none
+  fi
+fi
+
+uptime_value=unknown
+uptime_value=$(cut -d' ' -f1 /proc/uptime 2>/dev/null) || uptime_value=""
+case "$uptime_value" in
+  "" | *[!0-9.]*) uptime_value=unknown ;;
+esac
+
+emit "LUMIBOOT_ROOT_DEVICE_FAILED:node=$node_state"
+emit "LUMIBOOT_ROOT_DEVICE_FAILED:sysfs=$sysfs_value"
+emit "LUMIBOOT_ROOT_DEVICE_FAILED:uptime=$uptime_value"
+
+if [ "$node_state" = "yes" ]; then
+  probe=$(probe_superblock)
+  if [ -z "$probe" ]; then
+    probe=unreadable
+  fi
+  emit "LUMIBOOT_ROOT_DEVICE_FAILED:probe=$probe"
+fi
+
+exit 0

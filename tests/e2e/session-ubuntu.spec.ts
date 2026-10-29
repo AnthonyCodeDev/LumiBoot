@@ -58,6 +58,13 @@ test.describe('Ubuntu 18.04 LTS i386 session (v86, real boot)', () => {
     await expect(state).toHaveAttribute('data-state', 'running', { timeout: 180_000 });
 
     const serial = page.locator('.v86-serial');
+    // Marker emitted by the guest initramfs; software emulation can be slow,
+    // so the budget matches the desktop/XFCE specs.
+    await expect(serial).toHaveValue(/LUMIBOOT_ROOT_DEVICE_READY:\/dev\/sda/, {
+      timeout: 60_000,
+    });
+    // No failed filesystem probe: the marker above must mean a readable root.
+    await expect(serial).not.toHaveValue(/LUMIBOOT_ROOT_DEVICE_FAILED/);
     // The serial output lives in the *value* of the textarea (not its text
     // content): `toContainText` stays empty even when the guest talks.
     // The login prompt is awaited before typing (the shell needs a few seconds

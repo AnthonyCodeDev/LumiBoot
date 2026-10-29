@@ -6,7 +6,8 @@ export type AssetErrorCode =
   | 'ASSET_ABORTED'
   | 'ASSET_CACHE_QUOTA_EXCEEDED'
   | 'ASSET_INVALID_MANIFEST'
-  | 'ASSET_IMPORT_REJECTED';
+  | 'ASSET_IMPORT_REJECTED'
+  | 'ASSET_RANGE_UNAVAILABLE';
 
 export interface AssetErrorOptions {
   ref?: string;

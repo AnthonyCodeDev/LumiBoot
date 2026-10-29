@@ -184,6 +184,25 @@ describe('V86Provider', () => {
     expect(options?.cmdline).toContain('rootdelay=5');
   });
 
+  it('versions the manifest boot media by digest and keeps declared sizes', async () => {
+    const { provider, captured } = setup();
+    await provider.start(makeOS(), document.createElement('div'));
+
+    const options = captured[0];
+    // A cached Range response for the same path must not replay older bytes.
+    expect(options?.bzimage).toEqual({
+      url: '/images/debian-12-i386/vmlinuz-686?v=bbbbbbbbbbbb',
+    });
+    expect(options?.initrd).toEqual({
+      url: '/images/debian-12-i386/initrd.img?v=cccccccccccc',
+    });
+    expect(options?.hda).toEqual({
+      url: '/images/debian-12-i386/rootfs.img?v=aaaaaaaaaaaa',
+      async: true,
+      size: 2_000_000_000,
+    });
+  });
+
   it('rejects a mount target that is not a DOM element', async () => {
     const { provider, captured } = setup();
     await expect(provider.start(makeOS(), {})).rejects.toMatchObject({ code: 'START_FAILED' });
@@ -404,6 +423,34 @@ describe('V86Provider', () => {
     expect(createdControllers[0]?.snapshot().status).toBe('offline');
   });
 
+  it('installs the Range transport before the v86 engine is created', async () => {
+    const order: string[] = [];
+    const provider = new V86Provider({
+      installRangeTransport: () => {
+        order.push('install');
+        return () => {
+          order.push('uninstall');
+        };
+      },
+      createEngine: () => {
+        order.push('engine');
+        return new FakeV86() as unknown as V86;
+      },
+      resolveManifest: async () => makeManifest(),
+      createConsole: () => createConsoleStub(),
+    });
+
+    const instance = await provider.start(makeOS(), document.createElement('div'));
+
+    // v86 reads the disk with XMLHttpRequest: the patch must be in place before
+    // the dynamic import resolves, never after the first read.
+    expect(order).toEqual(['install', 'engine']);
+    await instance.dispose();
+    // The transport intentionally outlives the session: it is page-wide and
+    // idempotent, so a restart never falls back to the HTTP cache.
+    expect(order).toEqual(['install', 'engine']);
+  });
+
   it('does not advertise snapshots (absent from VMInstance)', () => {
     const { provider } = setup();
     const capabilities = provider.capabilities();
@@ -605,7 +652,7 @@ describe('V86Provider: bundled local RAW disk (Windows 7)', () => {
 
     const options = captured[0];
     expect(options?.hda).toMatchObject({
-      url: '/images/windows-7-pro-sp1-x86/disk.img',
+      url: '/images/windows-7-pro-sp1-x86/disk.img?v=dddddddddddd',
       async: true,
       size: 34_359_738_368,
     });
@@ -616,6 +663,19 @@ describe('V86Provider: bundled local RAW disk (Windows 7)', () => {
     // ACPI enabled by the hardware profile; required by the Vista+ family.
     expect(options?.acpi).toBe(true);
     expect(options?.memory_size).toBe(1536 * MiB);
+  });
+
+  it('keeps a disk URL untouched when its manifest carries no digest', async () => {
+    const undigested = makeDiskManifest();
+    delete undigested.disk.sha256;
+    const { provider, captured } = setup(makeManifest(), undigested);
+    await provider.start(makeDiskBootOS(), document.createElement('div'));
+
+    expect(captured[0]?.hda).toEqual({
+      url: '/images/windows-7-pro-sp1-x86/disk.img',
+      async: true,
+      size: 34_359_738_368,
+    });
   });
 });
 
@@ -689,7 +749,7 @@ describe('V86Provider: bundled local RAW disk (Windows 10 x86)', () => {
     const options = captured[0];
     // RAW disk read through HTTP Range, 2048 MiB memory.
     expect(options?.hda).toMatchObject({
-      url: '/images/windows-10-x86/disk.img',
+      url: '/images/windows-10-x86/disk.img?v=dddddddddddd',
       async: true,
       size: 20_000_000_000,
     });

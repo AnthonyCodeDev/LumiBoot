@@ -1,6 +1,6 @@
 import { DEFAULT_GUEST_READINESS, type OSDefinition, type VMMedia } from '@lumiboot/contracts';
 import { DomConsoleAdapter, V86Instance, toV86NetworkDevice } from '@lumiboot/provider-v86';
-import { ensureImageManifest, type ImageManifest } from '@lumiboot/vm-assets';
+import { ensureImageManifest, versionedMediaUrl, type ImageManifest } from '@lumiboot/vm-assets';
 import {
   VMError,
   type VMCapabilities,
@@ -236,9 +236,11 @@ async function resolveBootMedia(
     // synchronous buffer. Its ranged ATAPI path can otherwise complete a read
     // after Linux has advanced the IDE DMA state, producing an HSM violation
     // and preventing Alpine from mounting its boot media.
-    cdrom: { url: disk.url, size: disk.size },
-    bzimage: { url: bzimage.url, size: bzimage.size },
-    initrd: { url: initrd.url, size: initrd.size },
+    cdrom: { url: versionedMediaUrl(disk.url, disk.sha256), size: disk.size },
+    // Manifest media are versioned by their digest so a cached Range response
+    // for the same path can never replay bytes from an earlier build.
+    bzimage: { url: versionedMediaUrl(bzimage.url, bzimage.sha256), size: bzimage.size },
+    initrd: { url: versionedMediaUrl(initrd.url, initrd.sha256), size: initrd.size },
     cmdline:
       manifest?.boot?.cmdline ?? 'console=ttyS0,115200 modules=loop,squashfs,sd-mod,usb-storage',
     boot_order: BOOT_ORDER_CD_HARDDISK_FLOPPY,

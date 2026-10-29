@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { OSDefinition } from '@lumiboot/contracts';
 import { STANDARD_VM_DISPLAY, type SessionSnapshot } from '@lumiboot/vm-core';
+import { DiskDiagnosticsPanel } from './DiskDiagnosticsPanel';
 import { SessionToolbar } from './SessionToolbar';
 import { StatusOverlay } from './StatusOverlay';
 import { usePointerLockCapture } from './usePointerLockCapture';
@@ -144,6 +145,8 @@ export function SessionScreen({
           </p>
         ) : null}
       </div>
+      {/* Collapsed by default: a failed boot must be diagnosable without DevTools. */}
+      <DiskDiagnosticsPanel />
       {/*
         Late-proof note: the diagnostic timeout never stops the VM, so the
         console stays live; the note must never block the interaction.

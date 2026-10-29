@@ -6,3 +6,4 @@ export * from './local-disk';
 export * from './cache';
 export * from './downloader';
 export * from './user-media';
+export * from './media-url';
