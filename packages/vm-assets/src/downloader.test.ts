@@ -71,6 +71,59 @@ describe('downloadAsset', () => {
     expect(new TextDecoder().decode(result)).toBe('ok');
   });
 
+  it('redownloads a cached entry whose bytes no longer match its checksum', async () => {
+    const cache = new MemoryAssetCache();
+    await cache.set({
+      ref: 'asset-corrupted',
+      bytes: new TextEncoder().encode('no'),
+      sha256: 'sha-ok',
+      size: 2,
+      downloadedAt: Date.now(),
+    });
+    const fetchImpl = vi.fn(async () => responseFromBody('ok', { status: 200 }));
+
+    const onProgress = vi.fn();
+    const result = await downloadAsset(
+      { ref: 'asset-corrupted', url: '/asset-corrupted', sha256: 'sha-ok', size: 2 },
+      { cache, fetchImpl, onProgress },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(new TextDecoder().decode(result)).toBe('ok');
+    expect(onProgress).toHaveBeenCalledWith({
+      ref: 'asset-corrupted',
+      phase: 'download',
+      loadedBytes: 2,
+      totalBytes: 2,
+    });
+  });
+
+  it('rejects invalid chunk sizes before starting a download', async () => {
+    const fetchImpl = vi.fn();
+    await expect(
+      downloadAsset(
+        { ref: 'asset-invalid', url: '/asset-invalid', sha256: 'sha-ok', size: 2 },
+        { chunkSizeBytes: 0, fetchImpl },
+      ),
+    ).rejects.toMatchObject({ code: 'ASSET_DOWNLOAD_FAILED' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects an oversized body even when the response announces a valid range', async () => {
+    await expect(
+      downloadAsset(
+        { ref: 'asset-oversized', url: '/asset-oversized', sha256: 'sha-ok', size: 2 },
+        {
+          fetchImpl: async () =>
+            responseFromBody('bad', {
+              status: 206,
+              headers: { 'Content-Range': 'bytes 0-1/2' },
+            }),
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'ASSET_SIZE_MISMATCH' });
+  });
+
   it('resumes a chunked download with a valid Content-Range', async () => {
     const cache = new MemoryAssetCache();
     const cachedBytes = new TextEncoder().encode('hello ');

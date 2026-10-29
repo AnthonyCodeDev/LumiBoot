@@ -3,10 +3,7 @@ import { vmMediaFormatSchema, type VMMediaFormat } from '@lumiboot/contracts';
 import { AssetError } from './errors';
 import { sha256Hex } from './hash';
 
-/**
- * Media imported by the user; the bytes never leave their browser and LumiBoot
- * distributes no proprietary media.
- */
+/** User-imported media: the bytes never leave the browser. */
 
 const HEX64 = /^[0-9a-f]{64}$/i;
 const IMAGE_REF = /^[a-z0-9-]+$/;
@@ -48,11 +45,10 @@ export interface UserMediaInput {
   readonly displayName: string;
   readonly fileName: string;
   readonly format: VMMediaFormat;
-  /** The user certifies holding a legal license. */
   readonly licenseAcknowledged: boolean;
 }
 
-/** Storage is not prescribed: memory, IndexedDB or OPFS. */
+/** Backed by memory, IndexedDB or OPFS. */
 export interface UserMediaStore {
   get(ref: string): Promise<UserMediaDescriptor | null>;
   list(): Promise<UserMediaDescriptor[]>;
@@ -67,15 +63,11 @@ export const DEFAULT_MAX_HASH_BYTES = 256 * 1024 * 1024;
 export interface UserMediaImportOptions {
   /** Without an expected checksum, integrity stays `unverified`. */
   readonly expectedSha256?: string;
-  /** Import is rejected when different. */
   readonly expectedSize?: number;
-  /** Beyond this cap, integrity stays `unverified`. */
   readonly maxHashBytes?: number;
-  /** Injectable for tests. */
   readonly hash?: (bytes: Blob) => Promise<string>;
 }
 
-/** Throws `AssetError` on inconsistency, never an anonymous error. */
 export function parseUserMediaManifest(input: unknown): UserMediaManifest {
   const parsed = userMediaManifestSchema.safeParse(input);
   if (!parsed.success) {
@@ -87,10 +79,7 @@ export function parseUserMediaManifest(input: unknown): UserMediaManifest {
   return parsed.data;
 }
 
-/**
- * Without a license acknowledgement the import is rejected; without a reference
- * checksum the media stays `unverified`.
- */
+/** No license acknowledgement, no import; no reference checksum, no verification. */
 export async function importUserMedia(
   store: UserMediaStore,
   input: UserMediaInput,

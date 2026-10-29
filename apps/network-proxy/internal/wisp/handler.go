@@ -137,6 +137,10 @@ const writeTimeout = 10 * time.Second
 // the client ignores flow control.
 const streamQueueFactor = 8
 
+// maxConsecutiveEmptyReads bounds upstream reads that keep returning (0, nil):
+// a misbehaving net.Conn must not spin the pump goroutine forever.
+const maxConsecutiveEmptyReads = 100
+
 func NewHandler(conn *websocket.Conn, cfg HandlerConfig) *Handler {
 	h := &Handler{
 		conn:    conn,
@@ -195,9 +199,17 @@ func (h *Handler) watchdog() {
 }
 
 // readLoop decodes frames and dispatches them, with no blocking network operation.
+// An idle connection is closed after IdleTimeout; pongs (and every other frame)
+// push the deadline forward, so only a silent peer is torn down.
 func (h *Handler) readLoop() error {
 	h.conn.SetReadLimit(int64(h.cfg.MaxDataChunk) + HeaderLen + 1024)
+	h.conn.SetPongHandler(func(string) error {
+		return h.conn.SetReadDeadline(time.Now().Add(h.cfg.IdleTimeout))
+	})
 	for {
+		if err := h.conn.SetReadDeadline(time.Now().Add(h.cfg.IdleTimeout)); err != nil {
+			return err
+		}
 		msgType, msg, err := h.conn.ReadMessage()
 		if err != nil {
 			return err
@@ -296,8 +308,14 @@ func (h *Handler) handleConnect(streamID uint32, payload []byte) {
 func (h *Handler) serveStream(streamID uint32, st *streamState, req ConnectRequest) {
 	defer h.wgProducers.Done()
 
-	ip, err := security.ValidateDestination(h.ctx, h.cfg.Resolve, req.Host, int(req.Port), h.cfg.AllowPrivateNetworks)
+	connectCtx, cancel := context.WithTimeout(h.ctx, h.cfg.ConnectTimeout)
+	defer cancel()
+	ip, err := security.ValidateDestination(connectCtx, h.cfg.Resolve, req.Host, int(req.Port), h.cfg.AllowPrivateNetworks)
 	if err != nil {
+		if errors.Is(connectCtx.Err(), context.DeadlineExceeded) {
+			h.closeStream(streamID, CloseConnectTimeout, true)
+			return
+		}
 		var be *security.BlockError
 		if errors.As(err, &be) {
 			if be.Reason == security.ReasonDestinationBlocked {
@@ -318,13 +336,13 @@ func (h *Handler) serveStream(streamID uint32, st *streamState, req ConnectReque
 		dialer := &net.Dialer{Timeout: h.cfg.ConnectTimeout}
 		dial = dialer.DialContext
 	}
-	dialCtx, cancel := context.WithTimeout(h.ctx, h.cfg.ConnectTimeout)
 	target := net.JoinHostPort(ip.String(), strconv.Itoa(int(req.Port)))
-	upstream, err := dial(dialCtx, "tcp", target)
+	upstream, err := dial(connectCtx, "tcp", target)
+	connectErr := connectCtx.Err()
 	cancel()
 	if err != nil {
 		switch {
-		case errors.Is(err, context.DeadlineExceeded) || isTimeout(err):
+		case errors.Is(connectErr, context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) || isTimeout(err):
 			h.closeStream(streamID, CloseConnectTimeout, true)
 		case errors.Is(err, syscall.ECONNREFUSED):
 			h.closeStream(streamID, CloseConnectRefused, true)
@@ -336,6 +354,7 @@ func (h *Handler) serveStream(streamID uint32, st *streamState, req ConnectReque
 	}
 	if h.getStream(streamID) == nil || !h.cfg.Manager.SetConn(h.cfg.SessionID, streamID, upstream) {
 		_ = upstream.Close()
+		h.closeStream(streamID, CloseTransferTimeout, true)
 		return
 	}
 	st.setConn(upstream)
@@ -413,9 +432,24 @@ func (h *Handler) handleData(streamID uint32, payload []byte) {
 func (h *Handler) pump(streamID uint32, st *streamState, upstream net.Conn) {
 	defer h.wgProducers.Done()
 	buf := make([]byte, h.cfg.MaxDataChunk)
+	emptyReads := 0
 	for {
 		_ = upstream.SetReadDeadline(time.Now().Add(h.cfg.IdleTimeout))
 		n, err := upstream.Read(buf)
+		if n > 0 {
+			emptyReads = 0
+			// A net.Conn may return data and EOF in the same read. Deliver the
+			// data before closing the stream.
+			h.cfg.Manager.Throttle(h.ctx, n)
+			if h.ctx.Err() != nil {
+				return
+			}
+			h.cfg.Manager.AddBytesOut(h.cfg.SessionID, streamID, uint64(n))
+			h.cfg.Stats.AddTX(uint64(n))
+			if !h.emit(h.ctx, BuildData(streamID, buf[:n])) {
+				return
+			}
+		}
 		if err != nil {
 			if isTimeout(err) {
 				h.cfg.Stats.IncErrors()
@@ -426,35 +460,57 @@ func (h *Handler) pump(streamID uint32, st *streamState, upstream net.Conn) {
 			return
 		}
 		if n == 0 {
+			emptyReads++
+			if emptyReads >= maxConsecutiveEmptyReads {
+				h.cfg.Stats.IncErrors()
+				h.closeStream(streamID, CloseTransferTimeout, true)
+				return
+			}
 			continue
-		}
-		// Throttle before emitting, cancellable.
-		h.cfg.Manager.Throttle(h.ctx, n)
-		if h.ctx.Err() != nil {
-			return
-		}
-		h.cfg.Manager.AddBytesOut(h.cfg.SessionID, streamID, uint64(n))
-		h.cfg.Stats.AddTX(uint64(n))
-		if !h.emit(h.ctx, BuildData(streamID, buf[:n])) {
-			return
 		}
 	}
 }
 
 // writeLoop is the single WebSocket writer; any error cancels the session, and the
-// watchdog then unblocks ReadMessage.
+// watchdog then unblocks ReadMessage. It also pings an idle peer periodically:
+// WriteControl may run concurrently with a single writer, so no second writer is
+// introduced. A peer that stops answering pings (suspended tab, dropped network)
+// lets the read deadline expire.
 func (h *Handler) writeLoop() {
 	defer h.wgWriter.Done()
+
+	var ping <-chan time.Time
+	if interval := h.cfg.IdleTimeout / 3; interval > 0 {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		ping = ticker.C
+	}
+
 	failed := false
-	for msg := range h.send {
-		if failed {
-			continue // silent drain so producers are never blocked
-		}
-		_ = h.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-		if err := h.conn.WriteMessage(websocket.BinaryMessage, msg); err != nil {
-			failed = true
-			h.recordErr(err)
-			h.cancel()
+	for {
+		select {
+		case msg, ok := <-h.send:
+			if !ok {
+				return // shutdown closed the queue: every producer is done
+			}
+			if failed {
+				continue // silent drain so producers are never blocked
+			}
+			_ = h.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+			if err := h.conn.WriteMessage(websocket.BinaryMessage, msg); err != nil {
+				failed = true
+				h.recordErr(err)
+				h.cancel()
+			}
+		case <-ping:
+			if failed {
+				continue
+			}
+			if err := h.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeTimeout)); err != nil {
+				failed = true
+				h.recordErr(err)
+				h.cancel()
+			}
 		}
 	}
 }

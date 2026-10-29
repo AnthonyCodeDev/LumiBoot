@@ -81,7 +81,6 @@ describe('VMRegistry', () => {
   });
 });
 
-/** Engine whose architecture capabilities and `canRun` are chosen by the test. */
 function makeEngine(options: {
   id: string;
   architectures?: readonly Architecture[];

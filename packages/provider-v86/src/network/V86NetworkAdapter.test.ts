@@ -6,6 +6,14 @@ import {
   toV86NetworkDeviceType,
   type NetworkEventSource,
 } from './V86NetworkAdapter';
+import { RELAY_ORIGIN, RELAY_WSS, RELAY_WSS_PATH } from '../testing/fixtures';
+
+/** A non-default port and a path: the subject of the conversion test below. */
+const RELAY_CUSTOM_PORT_URL = `wss://${RELAY_ORIGIN}:9443/a/b?x=1`;
+/** `ws://` on loopback: the provider never enables insecure relays. */
+const LOCAL_INSECURE_RELAY = 'ws://localhost:8080';
+/** A loopback proxy on a non-default port: host and port must be preserved. */
+const CUSTOM_LOOPBACK_PROXY_URL = 'http://127.0.0.1:40000';
 
 type Listener = (arg: unknown) => void;
 
@@ -41,43 +49,40 @@ describe('toV86NetworkDevice', () => {
   });
 
   it('user-relay: converts the validated wss into a wisps:// understood by v86', () => {
-    const device = toV86NetworkDevice({
-      mode: 'user-relay',
-      relayUrl: 'wss://relay.example.com:8443/wisp',
-    });
-    expect(device).toEqual({ relay_url: 'wisps://relay.example.com:8443/wisp' });
+    const device = toV86NetworkDevice({ mode: 'user-relay', relayUrl: RELAY_WSS_PATH });
+    expect(device).toEqual({ relay_url: `wisps://${RELAY_ORIGIN}:8443/wisp` });
   });
 
   it('user-relay: preserves port and path during the wss->wisps conversion', () => {
     const device = toV86NetworkDevice({
       mode: 'user-relay',
-      relayUrl: 'wss://relay.example.com:9443/a/b?x=1',
+      relayUrl: RELAY_CUSTOM_PORT_URL,
     });
     expect(device).toEqual({
-      relay_url: 'wisps://relay.example.com:9443/a/b?x=1',
+      relay_url: `wisps://${RELAY_ORIGIN}:9443/a/b?x=1`,
     });
   });
 
   it('user-relay: without port or path, URL.href normalizes to "/" (wisps scheme)', () => {
     const device = toV86NetworkDevice({
       mode: 'user-relay',
-      relayUrl: 'wss://relay.example.com',
+      relayUrl: RELAY_WSS,
     });
-    expect(device).toEqual({ relay_url: 'wisps://relay.example.com/' });
+    expect(device).toEqual({ relay_url: `wisps://${RELAY_ORIGIN}/` });
   });
 
   it('user-relay: the resulting wisps:// scheme is never a raw wss://', () => {
     const device = toV86NetworkDevice({
       mode: 'user-relay',
-      relayUrl: 'wss://relay.example.com/wisp',
+      relayUrl: `${RELAY_WSS}/wisp`,
     });
-    expect(device?.relay_url).toBe('wisps://relay.example.com/wisp');
+    expect(device?.relay_url).toBe(`wisps://${RELAY_ORIGIN}/wisp`);
     expect(device?.relay_url?.startsWith('wss://')).toBe(false);
   });
 
   it('user-relay: ws:// localhost stays rejected (the provider does not enable insecure)', () => {
     expect(() =>
-      toV86NetworkDevice({ mode: 'user-relay', relayUrl: 'ws://localhost:8080' }),
+      toV86NetworkDevice({ mode: 'user-relay', relayUrl: LOCAL_INSECURE_RELAY }),
     ).toThrowError(expect.objectContaining({ code: 'NETWORK_INVALID_RELAY_URL' }));
   });
 
@@ -86,7 +91,7 @@ describe('toV86NetworkDevice', () => {
       expect.objectContaining({ code: 'NETWORK_INVALID_RELAY_URL' }),
     );
     expect(() =>
-      toV86NetworkDevice({ mode: 'user-relay', relayUrl: 'http://relay.example.com' }),
+      toV86NetworkDevice({ mode: 'user-relay', relayUrl: `http://${RELAY_ORIGIN}` }),
     ).toThrowError(expect.objectContaining({ code: 'NETWORK_INVALID_RELAY_URL' }));
   });
 
@@ -112,7 +117,7 @@ describe('toV86NetworkDevice', () => {
     expect(
       toV86NetworkDevice({
         mode: 'local-proxy',
-        proxyUrl: 'http://127.0.0.1:40000',
+        proxyUrl: CUSTOM_LOOPBACK_PROXY_URL,
         proxyToken: 'abc',
       }),
     ).toEqual({ relay_url: 'wisp://127.0.0.1:40000/wisp/?token=abc' });

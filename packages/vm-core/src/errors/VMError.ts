@@ -14,7 +14,6 @@ export interface VMErrorOptions {
   cause?: unknown;
 }
 
-/** Every failure carries a code usable by the UI. */
 export class VMError extends Error {
   readonly code: VMErrorCode;
   readonly systemId: string | undefined;

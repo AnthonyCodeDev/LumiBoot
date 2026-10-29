@@ -49,7 +49,6 @@ describe('getAggregatedAvailability (audit #19)', () => {
   });
 
   it('does not mix the validation of one profile with the engine of another', () => {
-    // A: validated without an integrated engine. B: the opposite.
     // Independent `some()` calls would produce a false `ready`.
     const candidates: SystemAvailabilityFacts[] = [
       { ...allFacts, engineIntegrated: false, validated: true },
@@ -81,8 +80,6 @@ describe('catalog: consistent effective availability', () => {
   });
 
   it('keeps the other systems at planned', () => {
-    // Every Ubuntu 18.04 variant (CLI, X11, XFCE) is now proven by a real boot;
-    // the systems below are still wired but not validated.
     expect(getSystemById('fedora-workstation')?.availability).toBe('planned');
     expect(getSystemById('macos-sequoia')?.availability).toBe('planned');
   });
@@ -95,7 +92,6 @@ describe('catalog: consistent effective availability', () => {
   });
 
   it('does not make a system without a referenced image available', () => {
-    // Linux Mint has no published media (`imageRef` undefined): it can never be ready.
     const mint = getSystemById('mint-x64');
     expect(mint?.imageRef).toBeUndefined();
     expect(mint?.availability).not.toBe('ready');
@@ -107,12 +103,10 @@ describe('catalog: Ubuntu 18.04 i386 (published image, CLI boot proven)', () => 
     const ubuntu = getSystemById('ubuntu-18-i386');
     expect(ubuntu?.imageRef).toBe('ubuntu-18-i386');
     expect(ubuntu?.mediaStrategy).toBe('bundled');
-    // The CLI profile was booted by the E2E suite: one valid candidate suffices.
     expect(ubuntu?.availability).toBe('ready');
   });
 
   it('keeps the CLI profile of the group validated', () => {
-    // `validated` lives on the catalog definitions: follow it, never declare.
     const cli = launchProfiles.find((candidate) => candidate.id === 'ubuntu-18-i386');
     expect(cli?.validated).toBe(true);
   });
@@ -132,7 +126,6 @@ describe('catalog: Ubuntu 18.04 i386 X11 flavor (published image + validated boo
   it('becomes available: published image (`imageRef`) + real validated graphical boot', () => {
     const desktop = getSystemById('ubuntu-18-i386-desktop');
     const profile = launchProfiles.find((candidate) => candidate.id === 'ubuntu-18-i386-desktop');
-    // Published image with a proven Xorg + Openbox boot.
     expect(desktop?.imageRef).toBe('ubuntu-18-i386-desktop');
     expect(profile?.validated).toBe(true);
     expect(desktop?.availability).toBe('ready');
@@ -153,7 +146,6 @@ describe('catalog: Ubuntu 18.04 i386 XFCE flavor (published image + validated bo
   it('becomes available: published image (`imageRef`) + real validated graphical boot', () => {
     const xfce = getSystemById('ubuntu-18-i386-xfce');
     const profile = launchProfiles.find((candidate) => candidate.id === 'ubuntu-18-i386-xfce');
-    // Published image with a proven Xorg + XFCE boot.
     expect(xfce?.imageRef).toBe('ubuntu-18-i386-xfce');
     expect(profile?.validated).toBe(true);
     expect(xfce?.availability).toBe('ready');
@@ -174,13 +166,11 @@ describe('catalog: Ubuntu 18.04 i386 group aggregate', () => {
         validated: definition?.validated === true,
       };
     });
-    // No candidate is missing a fact: the group is `ready`, not a false positive.
     expect(candidates.every((facts) => facts.validated && facts.hasImage)).toBe(true);
     expect(getAggregatedAvailability(candidates)).toBe('ready');
   });
 
   it('would drop to planned if a single variant were not proven', () => {
-    // Guards the aggregation: one unproven candidate alone is not enough.
     expect(getAggregatedAvailability([{ ...allFacts, validated: false }])).toBe('planned');
   });
 });
@@ -233,14 +223,11 @@ describe('catalog: Windows 7 Professional (validated child) under v86', () => {
     expect(windows?.architecture).toBe('i386');
     expect(profile?.engineId).toBe('v86');
     expect(profile && isEngineIntegrated(profile.engineId)).toBe(true);
-    // `validated` lives on the catalog definition, not on the contract.
     expect(definition?.validated).toBe(true);
-    // Availability follows `validated`; it is never hard-coded.
     expect(windows?.availability).toBe(definition?.validated ? 'ready' : 'planned');
   });
 
   it('references the local RAW disk of the codebase (no more media to import)', () => {
-    // The local disk is referenced: no more `resource-required`.
     expect(getSystemById('windows-7-pro-sp1-x86')?.imageRef).toBe('windows-7-pro-sp1-x86');
     expect(getSystemById('windows-7-pro-sp1-x86')?.mediaStrategy).toBe('bundled');
     expect(getSystemById('windows-7-pro-sp1-x86')?.availability).toBe('ready');
@@ -263,7 +250,6 @@ describe('catalog: Windows 7 Professional (validated child) under v86', () => {
     const profile = system?.launchProfiles[0];
     expect(system?.displayName).toBe('Windows 7 (Professional)');
     expect(system?.versionLabel).toBe('SP1 · x86');
-    // v86 accepts non-power-of-two memory; 1536 MiB is what the guest needs.
     expect(profile?.configuration?.memoryMiB).toBe(1536);
     expect(profile?.minMemoryMiB).toBe(1536);
   });
@@ -283,7 +269,6 @@ describe('catalog: Windows 7 Lite (group parent) under v86', () => {
     expect(lite).not.toBeNull();
     expect(lite?.family).toBe('windows');
     expect(lite?.architecture).toBe('i386');
-    // The parent carries the group: no `variantGroupId`.
     expect(lite?.variantGroupId).toBeUndefined();
     expect(lite?.variantName).toBe('Lite');
     expect(lite?.variantOrder).toBe(2);
@@ -295,10 +280,8 @@ describe('catalog: Windows 7 Lite (group parent) under v86', () => {
   it('derives availability from `validated` and is `ready` (real boot proven)', () => {
     const lite = getSystemById('windows-7-x86');
     const definition = launchProfiles.find((candidate) => candidate.id === 'windows-7-x86');
-    // `validated` lives on the catalog definition, follow it rather than declaring.
     expect(definition?.validated).toBe(true);
     expect(lite?.availability).toBe(definition?.validated ? 'ready' : 'planned');
-    // Real desktop boot proven by the E2E suite.
     expect(lite?.availability).toBe('ready');
   });
 
@@ -328,9 +311,7 @@ describe('catalog: Windows 10 x86 (parent) under v86', () => {
     expect(system?.imageRef).toBe('windows-10-x86');
     expect(profile?.engineId).toBe('v86');
     expect(profile && isEngineIntegrated(profile.engineId)).toBe(true);
-    // Availability follows `validated`, as for Professional.
     expect(definition?.validated).toBe(true);
-    // The derived availability is `ready`.
     expect(system?.availability).toBe('ready');
   });
 
@@ -346,7 +327,6 @@ describe('catalog: hardware profiles and boot proofs', () => {
     for (const system of systems) {
       for (const profile of system.launchProfiles) {
         expect(profile.hardwareProfile?.network).toBeDefined();
-        // Markers come from the real guest, both for OS and graphical proofs.
         expect(profile.readiness?.marker).toMatch(
           /^LUMIBOOT_(GUEST|DESKTOP)_READY:|^LUMIBOOT_DISK_BOOT:|^lumiboot@lumiboot$/,
         );
@@ -385,7 +365,6 @@ describe('catalog: Debian Desktop flavor (published image + validated boot)', ()
   it('becomes available: published image (`imageRef`) + real validated graphical boot', () => {
     const desktop = getSystemById('debian-12-i386-desktop');
     const profile = launchProfiles.find((candidate) => candidate.id === 'debian-12-i386-desktop');
-    // Published image with a proven Xorg + Openbox boot.
     expect(desktop?.imageRef).toBe('debian-12-i386-desktop');
     expect(profile?.validated).toBe(true);
     expect(desktop?.availability).toBe('ready');
@@ -414,7 +393,6 @@ describe('catalog: Debian XFCE flavor (published image + validated boot)', () =>
   it('becomes available: published image (`imageRef`) + real validated graphical boot', () => {
     const xfce = getSystemById('debian-12-i386-xfce');
     const profile = launchProfiles.find((candidate) => candidate.id === 'debian-12-i386-xfce');
-    // Published image with a proven Xorg + XFCE boot.
     expect(xfce?.imageRef).toBe('debian-12-i386-xfce');
     expect(profile?.validated).toBe(true);
     expect(xfce?.availability).toBe('ready');

@@ -1,46 +1,27 @@
-/**
- * v86 0.5.x reads every disk block with `XMLHttpRequest` + a `Range` header and
- * exposes no `FileStorage` injection point: replacing the request constructor
- * before v86 is imported is the only interception point.
- *
- * Disk ranges are replayed through `fetch(..., { cache: 'no-store' })`, so a
- * stale HTTP cache entry or a cached service-worker response cannot feed zeros
- * to the guest. Every other request is handed to the original constructor with
- * its state replayed unchanged.
- *
- * Known limit: `fetch` is still observable by a service worker for this origin.
- * A service worker that rewrites the ranged response can return wrong bytes
- * through this transport too; the diagnostics below make that case visible
- * (`status !== 206`, `allZero`, `Content-Range`) without DevTools.
- */
+/** v86 reads disks with `XMLHttpRequest` only: wrapping that constructor is the sole hook. */
 
-/** Transport that actually served one disk request. */
 export type DiskRequestTransport = 'fetch' | 'xhr';
 
-/** One ranged (or disk-shaped) request, kept for the UI diagnostics panel. */
+/** One disk request, for the UI diagnostics panel. */
 export interface DiskRequestLogEntry {
-  /** Wall-clock timestamp (`Date.now()`), so a pasted report is readable. */
+  /** Wall-clock time, so a pasted report stays readable. */
   readonly at: number;
   readonly url: string;
-  /** `Range` request header, verbatim. */
   readonly range: string | null;
-  /** HTTP status observed, or `null` before any response. */
   readonly status: number | null;
   readonly contentRange: string | null;
   readonly byteLength: number | null;
   readonly durationMs: number;
-  /** `true` when every byte of the body is zero; `null` when unknown/empty. */
+  /** `true` when every byte is zero; `null` when unknown. */
   readonly allZero: boolean | null;
   readonly transport: DiskRequestTransport;
-  /** `true` when the fetch transport was unavailable and XHR was used. */
+  /** `true` when fetch was unavailable and XHR served the request. */
   readonly fallback: boolean;
   readonly error?: string;
 }
 
-/** Counters exposed to the UI and to `window.__lumibootDiagnostics`. */
 export interface DiskDiagnosticsSummary {
   readonly requests: number;
-  /** `'206'`, `'200'`, `'error'`, `'pending'`... */
   readonly byStatus: Readonly<Record<string, number>>;
   readonly allZero: number;
   readonly fallbacks: number;
@@ -61,7 +42,7 @@ declare global {
   }
 }
 
-/** Ring buffer size: enough to spot a systematic pattern, cheap to copy. */
+/** Ring buffer size: enough to spot a pattern, cheap to copy. */
 const DISK_LOG_LIMIT = 200;
 
 interface MutableDiskEntry {
@@ -87,12 +68,11 @@ function recordDiskRequest(entry: MutableDiskEntry): void {
   }
 }
 
-/** Oldest first. Copies are returned so callers cannot mutate the buffer. */
+/** Oldest first; copies, so callers cannot mutate the buffer. */
 export function getDiskLog(): DiskRequestLogEntry[] {
   return diskLog.map((entry) => ({ ...entry }));
 }
 
-/** Clears the ring buffer (tests, and a fresh session if ever needed). */
 export function clearDiskLog(): void {
   diskLog.length = 0;
 }
@@ -133,7 +113,6 @@ export function getDiskSummary(): DiskDiagnosticsSummary {
   };
 }
 
-/** Exposes the buffer to the page; the session UI reads the module directly. */
 export function installDiagnosticsGlobal(): void {
   if (typeof window === 'undefined') return;
   window.__lumibootDiagnostics = {
@@ -142,13 +121,9 @@ export function installDiagnosticsGlobal(): void {
   };
 }
 
-/* --------------------------------------------------------------------------
- * Request decision
- * ------------------------------------------------------------------------ */
-
 export type HeaderRecord = Record<string, string>;
 
-/** Default policy: same-origin GET carrying a `Range` header — the header decides. */
+/** Same-origin GET carrying a `Range` header: the header decides. */
 export type ShouldHandleUrl = (url: string, method: string, headers: HeaderRecord) => boolean;
 
 function headerLookup(headers: HeaderRecord, name: string): string | null {
@@ -177,10 +152,6 @@ function isDiskMediaUrl(url: string): boolean {
 
 export const defaultShouldHandleUrl: ShouldHandleUrl = (url, method, headers) =>
   method.toUpperCase() === 'GET' && headerLookup(headers, 'Range') !== null && sameOrigin(url);
-
-/* --------------------------------------------------------------------------
- * XHR-compatible request surface
- * ------------------------------------------------------------------------ */
 
 const READY_STATE = {
   UNSENT: 0,
@@ -270,11 +241,7 @@ interface TransportEnvironment {
   readonly fetchImpl: typeof fetch | undefined;
 }
 
-/**
- * XHR-shaped facade. It answers through `fetch` for disk ranges and creates a
- * real `XMLHttpRequest` for everything else, replaying the recorded state so the
- * original behaviour is preserved.
- */
+/** XHR facade: disk ranges go through `fetch`, the rest is delegated unchanged. */
 class RangeFetchRequest {
   #env: TransportEnvironment;
 
@@ -303,10 +270,7 @@ class RangeFetchRequest {
   #entry: MutableDiskEntry | null = null;
   #startedAt = 0;
 
-  /**
-   * Handlers live in one record rather than in per-instance accessors: v86
-   * issues thousands of reads, so the facade must stay allocation-free.
-   */
+  /** One record, not accessors: v86 issues thousands of reads, keep it cheap. */
   #handlers: Record<TransportEventType, EventHandler> = {
     load: null,
     error: null,
@@ -537,8 +501,6 @@ class RangeFetchRequest {
     this.#finish('abort');
   }
 
-  /* ---------------------------------------------------------------------- */
-
   #headerRecord(): HeaderRecord {
     const headers: HeaderRecord = {};
     for (const [name, value] of this.#requestHeaders) headers[name] = value;
@@ -673,7 +635,7 @@ class RangeFetchRequest {
   #runFetch(): void {
     const fetchImpl = this.#env.fetchImpl ?? (typeof fetch === 'function' ? fetch : undefined);
     if (fetchImpl === undefined) {
-      // No fetch here (older environment): the original transport still works.
+      // No fetch (older environment): the original transport still works.
       this.#passthrough(true);
       return;
     }
@@ -731,7 +693,7 @@ class RangeFetchRequest {
       });
   }
 
-  /** Hands the request to the original constructor with no behaviour change. */
+  /** Hands the request to the original constructor, state replayed. */
   #passthrough(fallback: boolean): void {
     const started = this.#startedAt;
     const delegate = new this.#env.original();
@@ -831,11 +793,6 @@ function recordPassthroughRequest(
   });
 }
 
-/* --------------------------------------------------------------------------
- * Installation
- * ------------------------------------------------------------------------ */
-
-/** Only `XMLHttpRequest` is touched; everything else stays the page's own. */
 export interface XhrScope {
   XMLHttpRequest?: typeof XMLHttpRequest;
 }
@@ -845,7 +802,6 @@ export interface RangeFetchTransportOptions {
   readonly scope?: XhrScope;
   /** Injectable `fetch` (tests); `globalThis.fetch` at send time by default. */
   readonly fetchImpl?: typeof fetch;
-  /** Defaults to `defaultShouldHandleUrl`. */
   readonly shouldHandleUrl?: ShouldHandleUrl;
 }
 
@@ -880,12 +836,7 @@ function createTransportConstructor(env: TransportEnvironment): typeof XMLHttpRe
   return RangeFetchXMLHttpRequest as unknown as typeof XMLHttpRequest;
 }
 
-/**
- * Installs the transport once per page and returns an uninstall function.
- *
- * The installation is idempotent: a second call is a no-op returning the same
- * uninstall function, so a provider restarting a session never stacks wrappers.
- */
+/** Idempotent: a second call returns the same uninstall function. */
 export function installRangeFetchTransport(options: RangeFetchTransportOptions = {}): () => void {
   installDiagnosticsGlobal();
   if (installed !== null) return installed.uninstall;
@@ -920,7 +871,6 @@ export function installRangeFetchTransport(options: RangeFetchTransportOptions =
   return current.uninstall;
 }
 
-/** `true` while the transport wraps `XMLHttpRequest` for this page. */
 export function isRangeFetchTransportInstalled(): boolean {
   return installed !== null;
 }

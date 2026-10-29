@@ -1,9 +1,9 @@
 import { DEFAULT_PROXY_URL, type NetworkProfile } from '@lumiboot/vm-network';
 import type { ProxyConfig, LumibootConfig } from './schema';
+import { loopbackProxyUrl, readEnv } from './environment';
 
 let runtimeConfig: LumibootConfig | null = null;
 
-/** Recursively freezes the config. */
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
     for (const key of Object.keys(value as Record<string, unknown>)) {
@@ -14,12 +14,10 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-/** Stores the loaded config, frozen and immutable. */
 export function setRuntimeConfig(config: LumibootConfig): void {
   runtimeConfig = deepFreeze(config);
 }
 
-/** Returns the runtime config, or throws when none is loaded. */
 export function getRuntimeConfig(): LumibootConfig {
   if (runtimeConfig === null) {
     throw new Error(
@@ -29,13 +27,13 @@ export function getRuntimeConfig(): LumibootConfig {
   return runtimeConfig;
 }
 
-/** Default local network proxy config, used when no config is loaded. */
+/** Default local proxy config, used when no config is loaded. */
 export const DEFAULT_RUNTIME_PROXY: ProxyConfig = Object.freeze({
   enabled: true,
-  url: DEFAULT_PROXY_URL,
+  url: loopbackProxyUrl(readEnv('VITE_PROXY_URL', DEFAULT_PROXY_URL), DEFAULT_PROXY_URL),
 });
 
-/** Proxy config from the runtime, otherwise the defaults. Never throws. */
+/** Never throws. */
 export function resolveProxyConfig(): ProxyConfig {
   if (runtimeConfig === null) return { ...DEFAULT_RUNTIME_PROXY };
   return runtimeConfig.proxy;

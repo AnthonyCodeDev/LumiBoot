@@ -13,10 +13,7 @@ import {
 /** A function re-reads the device on every resolution. */
 export type RuntimeEnvironmentProvider = RuntimeEnvironment | (() => RuntimeEnvironment);
 
-/**
- * An engine is only selected when it is actually compatible; otherwise the
- * honest `UnavailableProvider` fallback is returned.
- */
+/** Incompatible engines are never selected; the honest fallback is used instead. */
 export class VMRegistry {
   readonly #engines: VMEngine[];
   readonly #fallback: VMEngine;
@@ -41,12 +38,10 @@ export class VMRegistry {
     return this.#engines;
   }
 
-  /** First compatible engine, or the fallback. */
   resolve(os: OSDefinition): VMEngine {
     return this.#firstCompatible(os) ?? this.#fallback;
   }
 
-  /** Empty `reasons` when compatible, otherwise the rejection reasons. */
   explain(os: OSDefinition): EngineCompatibilityResult {
     const env = this.#readEnvironment();
     const results = this.#engines.map((engine) => ({
@@ -74,7 +69,6 @@ export class VMRegistry {
     mountTarget: unknown,
     configuration?: VMConfiguration,
   ): Promise<VMInstance> {
-    // `resolve()` enforces compatibility, so no incompatible engine is launched.
     const engine = this.resolve(os);
     return configuration === undefined
       ? engine.start(os, mountTarget)

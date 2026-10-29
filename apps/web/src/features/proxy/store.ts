@@ -21,9 +21,7 @@ export interface ProxyStoreState {
   state: ProxyState;
   /** `/health` answered. Necessary, not sufficient. */
   reachable: boolean;
-  /** Token validated by the proxy. */
   authenticated: boolean;
-  /** Session token held in memory. */
   token: string | null;
   pairingId: string | null;
   userCode: string | null;
@@ -33,7 +31,6 @@ export interface ProxyStoreState {
   connect: (pairingId?: string, fetchImpl?: FetchLike) => Promise<void>;
   revoke: (fetchImpl?: FetchLike) => Promise<void>;
   dismissError: () => void;
-  /** Cancels any in-flight pairing watch. */
   cancelPairing: () => void;
 }
 
@@ -51,18 +48,16 @@ function isAbortError(error: unknown): boolean {
   );
 }
 
-/** Active pairing watch, at most one at a time. */
+/** Active pairing watch (at most one); generation counters discard stale responses. */
 let pairingPollTimer: ReturnType<typeof setInterval> | null = null;
-/** Prevents two status polls from overlapping. */
 let pairingPollInFlight = false;
-/** Incremented on every cancel: responses from an old generation are ignored. */
 let pairingPollGeneration = 0;
-/** Abort controller of the current poll. */
+let operationGeneration = 0;
 let pairingPollAbort: AbortController | null = null;
-/** URL the current poll targets. */
 let pairingPollUrl: string | null = null;
+/** Token whose server-side revocation failed: memory only, retried on next `revoke`. */
+let pendingRevocation: { url: string; token: string } | null = null;
 
-/** Stops the pairing watch when active. Idempotent. */
 function cancelPairingPolling(): void {
   pairingPollGeneration += 1;
   pairingPollInFlight = false;
@@ -87,12 +82,13 @@ async function completeConnection(
   pairingId: string,
   fetchImpl: FetchLike,
   generation: number,
+  operation: number,
 ): Promise<void> {
   const { token, expiresAt } = await exchangeToken(url, pairingId, fetchImpl);
-  if (generation !== pairingPollGeneration) return;
+  if (generation !== pairingPollGeneration || operation !== operationGeneration) return;
   // `/health` must answer before the token is trusted.
   const health = await checkProxy(url, fetchImpl);
-  if (generation !== pairingPollGeneration) return;
+  if (generation !== pairingPollGeneration || operation !== operationGeneration) return;
   if (health.state !== 'connected') {
     useProxyStore.setState({
       token,
@@ -103,11 +99,9 @@ async function completeConnection(
     });
     return;
   }
-  // Then the token must be validated.
   const verification = await verifyToken(url, token, fetchImpl);
-  if (generation !== pairingPollGeneration) return;
+  if (generation !== pairingPollGeneration || operation !== operationGeneration) return;
   if (!verification.ok) {
-    // Token refused: persist nothing and go back to pairing.
     clearProxySession();
     useProxyStore.setState({
       token: null,
@@ -118,7 +112,7 @@ async function completeConnection(
     });
     return;
   }
-  // The token is only persisted after authenticated validation.
+  pendingRevocation = null;
   saveProxySession({ token, expiresAt, proxyUrl: url });
   useProxyStore.setState({
     token,
@@ -131,8 +125,13 @@ async function completeConnection(
   });
 }
 
-/** Watches `getPairingStatus` until approval, then connects without a click. A new attempt cancels the previous one. */
-function beginPairingPolling(url: string, pairingId: string, fetchImpl: FetchLike): void {
+/** Polls `getPairingStatus` until approval, then connects; a new attempt cancels the previous one. */
+function beginPairingPolling(
+  url: string,
+  pairingId: string,
+  fetchImpl: FetchLike,
+  operation: number,
+): void {
   cancelPairingPolling();
   const generation = pairingPollGeneration;
   const controller = new AbortController();
@@ -144,7 +143,7 @@ function beginPairingPolling(url: string, pairingId: string, fetchImpl: FetchLik
     void (async () => {
       try {
         const status = await getPairingStatus(url, pairingId, fetchImpl, controller.signal);
-        if (generation !== pairingPollGeneration) return;
+        if (generation !== pairingPollGeneration || operation !== operationGeneration) return;
         if (status.status === 'approved') {
           // Freezes the watch without invalidating the generation.
           if (pairingPollTimer !== null) {
@@ -152,8 +151,8 @@ function beginPairingPolling(url: string, pairingId: string, fetchImpl: FetchLik
             pairingPollTimer = null;
           }
           pairingPollAbort = null;
-          pairingPollUrl = null;
-          await completeConnection(url, pairingId, fetchImpl, generation);
+          await completeConnection(url, pairingId, fetchImpl, generation, operation);
+          if (generation === pairingPollGeneration) pairingPollUrl = null;
           return;
         }
         if (status.status === 'denied') {
@@ -166,7 +165,7 @@ function beginPairingPolling(url: string, pairingId: string, fetchImpl: FetchLik
           });
         }
       } catch (error) {
-        if (generation !== pairingPollGeneration) return;
+        if (generation !== pairingPollGeneration || operation !== operationGeneration) return;
         if (isAbortError(error)) return;
         cancelPairingPolling();
         useProxyStore.setState({
@@ -182,10 +181,7 @@ function beginPairingPolling(url: string, pairingId: string, fetchImpl: FetchLik
   }, PAIRING_POLL_INTERVAL_MS);
 }
 
-/**
- * Local network proxy store: `connected` requires `/health` and `verifyToken`.
- * The token lives in `sessionStorage` and is revalidated before restore.
- */
+/** `connected` requires `/health` and `verifyToken`; the token is revalidated before restore. */
 export const useProxyStore = create<ProxyStoreState>((set, get) => ({
   state: 'not-running',
   reachable: false,
@@ -197,11 +193,13 @@ export const useProxyStore = create<ProxyStoreState>((set, get) => ({
 
   refresh: async (fetchImpl: FetchLike = fetch) => {
     const { url } = resolveProxyConfig();
-    // URL change: any in-flight pairing watch becomes stale.
-    if (pairingPollUrl !== null && pairingPollUrl !== url) {
-      cancelPairingPolling();
-    }
+    // A refresh must not interrupt pairing against the current proxy.
+    if (pairingPollUrl === url) return;
+    if (pairingPollUrl !== null) cancelPairingPolling();
+    const operation = ++operationGeneration;
+    set({ pairingId: null, userCode: null });
     const health = await checkProxy(url, fetchImpl);
+    if (operation !== operationGeneration) return;
     if (health.state !== 'connected') {
       set({
         state: health.state,
@@ -211,7 +209,6 @@ export const useProxyStore = create<ProxyStoreState>((set, get) => ({
       });
       return;
     }
-    // `/health` OK → reachable, but not authenticated yet.
     const currentToken = get().token ?? loadProxySession(url)?.token ?? null;
     if (currentToken === null) {
       set({
@@ -227,7 +224,8 @@ export const useProxyStore = create<ProxyStoreState>((set, get) => ({
     try {
       verification = await verifyToken(url, currentToken, fetchImpl);
     } catch (error) {
-      // Network error during the check: uncertain, never `connected`.
+      if (operation !== operationGeneration) return;
+      // Network error: uncertain, never `connected`.
       set({
         token: currentToken,
         state: 'error',
@@ -237,8 +235,8 @@ export const useProxyStore = create<ProxyStoreState>((set, get) => ({
       });
       return;
     }
+    if (operation !== operationGeneration) return;
     if (!verification.ok) {
-      // Token refused: clear it and go back to pairing.
       clearProxySession();
       set({
         token: null,
@@ -248,6 +246,10 @@ export const useProxyStore = create<ProxyStoreState>((set, get) => ({
         error: null,
       });
       return;
+    }
+    // Persist the renewed deadline so a reload keeps the still-valid token.
+    if (verification.expiresAt !== undefined) {
+      saveProxySession({ token: currentToken, expiresAt: verification.expiresAt, proxyUrl: url });
     }
     set({
       token: currentToken,
@@ -260,10 +262,21 @@ export const useProxyStore = create<ProxyStoreState>((set, get) => ({
 
   startPairing: async (fetchImpl: FetchLike = fetch) => {
     cancelPairingPolling();
-    set({ state: 'connecting', reachable: false, authenticated: false, error: null });
+    // A fresh pairing supersedes any revocation that could not be retried.
+    pendingRevocation = null;
+    const operation = ++operationGeneration;
+    set({
+      pairingId: null,
+      userCode: null,
+      state: 'connecting',
+      reachable: false,
+      authenticated: false,
+      error: null,
+    });
     const { url } = resolveProxyConfig();
     try {
       const { pairingId, userCode } = await requestPairing(url, fetchImpl);
+      if (operation !== operationGeneration) return;
       set({
         pairingId,
         userCode,
@@ -272,9 +285,9 @@ export const useProxyStore = create<ProxyStoreState>((set, get) => ({
         authenticated: false,
         error: null,
       });
-      // Auto-connect: watch for approval from the proxy console.
-      beginPairingPolling(url, pairingId, fetchImpl);
+      beginPairingPolling(url, pairingId, fetchImpl, operation);
     } catch (error) {
+      if (operation !== operationGeneration) return;
       cancelPairingPolling();
       set({ state: 'error', reachable: false, authenticated: false, error: messageOf(error) });
     }
@@ -291,12 +304,13 @@ export const useProxyStore = create<ProxyStoreState>((set, get) => ({
       });
       return;
     }
-    // Manual fallback: take over from the auto-connect.
     cancelPairingPolling();
+    const operation = ++operationGeneration;
     const generation = pairingPollGeneration;
     const { url } = resolveProxyConfig();
     try {
       const status = await getPairingStatus(url, id, fetchImpl);
+      if (operation !== operationGeneration) return;
       if (status.status === 'denied') {
         set({
           state: 'error',
@@ -313,37 +327,47 @@ export const useProxyStore = create<ProxyStoreState>((set, get) => ({
           authenticated: false,
           error: 'Waiting for authorization: validate the code from the proxy console.',
         });
-        // Resumes the watch to finish pairing without another click.
-        beginPairingPolling(url, id, fetchImpl);
+        beginPairingPolling(url, id, fetchImpl, operation);
         return;
       }
-      await completeConnection(url, id, fetchImpl, generation);
+      await completeConnection(url, id, fetchImpl, generation, operation);
     } catch (error) {
+      if (operation !== operationGeneration) return;
       set({ state: 'error', reachable: false, authenticated: false, error: messageOf(error) });
     }
   },
 
   revoke: async (fetchImpl: FetchLike = fetch) => {
     cancelPairingPolling();
-    const { token } = get();
+    const operation = ++operationGeneration;
     const { url } = resolveProxyConfig();
-    if (token) {
-      try {
-        await revokeSession(url, token, fetchImpl);
-      } catch (error) {
-        set({ state: 'error', reachable: false, authenticated: false, error: messageOf(error) });
-        return;
-      }
-    }
+    // Retry a failed revocation: that token is no longer stored but still valid remotely.
+    const token = get().token ?? (pendingRevocation?.url === url ? pendingRevocation.token : null);
+    // Disconnect locally first so a concurrent refresh cannot restore the token.
     clearProxySession();
     set({
       token: null,
       pairingId: null,
       userCode: null,
+      state: 'pairing-required',
       authenticated: false,
       error: null,
     });
+    if (token) {
+      try {
+        await revokeSession(url, token, fetchImpl);
+        pendingRevocation = null;
+      } catch (error) {
+        // Remember it in memory only, so a retry can still revoke it.
+        pendingRevocation = { url, token };
+        if (operation !== operationGeneration) return;
+        set({ state: 'error', reachable: false, authenticated: false, error: messageOf(error) });
+        return;
+      }
+    }
+    if (operation !== operationGeneration) return;
     const health = await checkProxy(url, fetchImpl);
+    if (operation !== operationGeneration) return;
     set({
       state: health.state === 'connected' ? 'pairing-required' : health.state,
       reachable: health.state === 'connected',
@@ -354,11 +378,13 @@ export const useProxyStore = create<ProxyStoreState>((set, get) => ({
 
   dismissError: () => {
     cancelPairingPolling();
+    operationGeneration += 1;
     set({ error: null });
   },
 
   cancelPairing: () => {
     cancelPairingPolling();
+    operationGeneration += 1;
   },
 }));
 
@@ -368,7 +394,7 @@ export function getProxyRuntimeCredentials(): {
   proxyToken: string | null;
 } {
   const { url } = resolveProxyConfig();
-  const { state, token } = useProxyStore.getState();
-  const authenticated = state === 'connected' && token !== null;
-  return { proxyUrl: url, proxyToken: authenticated ? token : null };
+  const { state, token, authenticated } = useProxyStore.getState();
+  const connected = state === 'connected' && authenticated && token !== null;
+  return { proxyUrl: url, proxyToken: connected ? token : null };
 }

@@ -3,7 +3,6 @@ export interface CatalogIssue {
   message: string;
 }
 
-/** Thrown when a catalog manifest is invalid or inconsistent. */
 export class CatalogValidationError extends Error {
   readonly issues: readonly CatalogIssue[];
 

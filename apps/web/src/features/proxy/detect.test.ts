@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { checkProxy } from './detect';
 import type { FetchLike } from '../../config/load-config';
+import { TEST_PROXY_URL } from '../../test/fixtures';
 
 function fetchOk(body: unknown): FetchLike {
   return (async () =>
@@ -23,16 +24,13 @@ afterEach(() => {
 
 describe('checkProxy', () => {
   it('local network proxy stopped (network error) → not-running', async () => {
-    const health = await checkProxy(
-      'http://127.0.0.1:37892',
-      fetchFail(new TypeError('Failed to fetch')),
-    );
+    const health = await checkProxy(TEST_PROXY_URL, fetchFail(new TypeError('Failed to fetch')));
     expect(health.state).toBe('not-running');
   });
 
   it('timeout (AbortError) → not-running', async () => {
     const abort = new DOMException('aborted', 'AbortError');
-    const health = await checkProxy('http://127.0.0.1:37892', fetchFail(abort));
+    const health = await checkProxy(TEST_PROXY_URL, fetchFail(abort));
     expect(health.state).toBe('not-running');
   });
 
@@ -45,15 +43,15 @@ describe('checkProxy', () => {
           throw new SyntaxError('bad json');
         },
       }) as unknown as Response) as FetchLike;
-    expect((await checkProxy('http://127.0.0.1:37892', fetchImpl)).state).toBe('incompatible');
-    expect((await checkProxy('http://127.0.0.1:37892', fetchOk({ status: 'ko' }))).state).toBe(
+    expect((await checkProxy(TEST_PROXY_URL, fetchImpl)).state).toBe('incompatible');
+    expect((await checkProxy(TEST_PROXY_URL, fetchOk({ status: 'ko' }))).state).toBe(
       'incompatible',
     );
   });
 
   it('different wispVersion → incompatible', async () => {
     const health = await checkProxy(
-      'http://127.0.0.1:37892',
+      TEST_PROXY_URL,
       fetchOk({ status: 'ok', version: '9.9.9', wispVersion: 2 }),
     );
     expect(health.state).toBe('incompatible');
@@ -62,7 +60,7 @@ describe('checkProxy', () => {
 
   it('healthy /health → connected (reached)', async () => {
     const health = await checkProxy(
-      'http://127.0.0.1:37892',
+      TEST_PROXY_URL,
       fetchOk({ status: 'ok', version: '0.1.0', wispVersion: 1 }),
     );
     expect(health).toMatchObject({ state: 'connected', wispVersion: 1 });
@@ -77,10 +75,7 @@ describe('checkProxy', () => {
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36',
       userAgentData: {},
     });
-    const health = await checkProxy(
-      'http://127.0.0.1:37892',
-      fetchFail(new TypeError('Failed to fetch')),
-    );
+    const health = await checkProxy(TEST_PROXY_URL, fetchFail(new TypeError('Failed to fetch')));
     expect(health.state).toBe('error');
     expect(health.uncertain).toBe(true);
     expect(health.error).toMatch(/local network proxy/i);

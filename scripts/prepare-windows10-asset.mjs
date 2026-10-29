@@ -1,12 +1,5 @@
 #!/usr/bin/env node
-// Builds the manifest of the Windows 10 x86 disk supplied locally, by delegating
-// to prepare-windows7-asset.mjs with the Windows 10 values pinned; operator
-// options come after and win.
-//
-//   pnpm assets:windows10:prepare -- --source "<path>/Windows10-32bit.img"
-//   pnpm assets:windows10:check
-//
-// Writes images/windows-10-x86/manifest.json. The disk is served in place.
+// Windows 10 x86 manifest generator: delegates to prepare-windows7-asset.mjs.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';

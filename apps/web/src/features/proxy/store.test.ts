@@ -30,7 +30,6 @@ const HEALTH_OK = { status: 200, body: { status: 'ok', version: '0.1.0', wispVer
 const VERIFY_OK = { status: 200, body: { ok: true, expiresAt: futureIso() } };
 
 beforeEach(() => {
-  // Stops any leftover watch between tests.
   useProxyStore.getState().dismissError();
   localStorage.clear();
   sessionStorage.clear();
@@ -103,6 +102,32 @@ describe('useProxyStore', () => {
       expect(useProxyStore.getState().token).toBe('tok');
       expect(useProxyStore.getState().authenticated).toBe(true);
       expect(useProxyStore.getState().reachable).toBe(true);
+    } finally {
+      useProxyStore.getState().dismissError();
+      vi.useRealTimers();
+    }
+  });
+
+  it('refresh does not interrupt an active pairing', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = fetchRouter({
+        '/health': HEALTH_OK,
+        '/api/pair/request': {
+          status: 201,
+          body: { pairingId: 'p1', userCode: '654321', expiresAt: 'x' },
+        },
+        '/api/pair/status?id=p1': {
+          status: 200,
+          body: { status: 'approved', expiresAt: 'x' },
+        },
+        '/api/pair/exchange': { status: 200, body: { token: 'tok', expiresAt: futureIso() } },
+        '/api/session/verify': VERIFY_OK,
+      });
+      await useProxyStore.getState().startPairing(fetchImpl);
+      await useProxyStore.getState().refresh(fetchImpl);
+      await vi.advanceTimersByTimeAsync(PAIRING_POLL_INTERVAL_MS);
+      expect(useProxyStore.getState().state).toBe('connected');
     } finally {
       useProxyStore.getState().dismissError();
       vi.useRealTimers();
@@ -280,6 +305,41 @@ describe('useProxyStore', () => {
     expect(useProxyStore.getState().authenticated).toBe(true);
   });
 
+  it('refresh persists the renewed expiry returned by verifyToken', async () => {
+    saveProxySession({
+      token: 'persisted',
+      expiresAt: futureIso(10_000),
+      proxyUrl: resolveProxyConfig().url,
+    });
+    const renewed = futureIso(120_000);
+    await useProxyStore.getState().refresh(
+      fetchRouter({
+        '/health': HEALTH_OK,
+        '/api/session/verify': { status: 200, body: { ok: true, expiresAt: renewed } },
+      }),
+    );
+    expect(useProxyStore.getState().state).toBe('connected');
+    const stored = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? '{}') as {
+      expiresAt?: string;
+    };
+    expect(stored.expiresAt).toBe(renewed);
+  });
+
+  it('refresh does not persist a renewed expiry that is already past', async () => {
+    useProxyStore.setState({ token: 'mem' });
+    await useProxyStore.getState().refresh(
+      fetchRouter({
+        '/health': HEALTH_OK,
+        '/api/session/verify': {
+          status: 200,
+          body: { ok: true, expiresAt: new Date(Date.now() - 1000).toISOString() },
+        },
+      }),
+    );
+    expect(useProxyStore.getState().state).toBe('connected');
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
   it('refresh with an expired persisted token → pairing-required', async () => {
     saveProxySession({
       token: 'expired',
@@ -303,6 +363,68 @@ describe('useProxyStore', () => {
       '/api/session/revoke': { status: 200, body: { revoked: true } },
     });
     await useProxyStore.getState().revoke(fetchImpl);
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it('disconnects locally before the revocation response arrives', async () => {
+    saveProxySession({
+      token: 'tok',
+      expiresAt: futureIso(),
+      proxyUrl: resolveProxyConfig().url,
+    });
+    useProxyStore.setState({ token: 'tok', state: 'connected', authenticated: true });
+    let releaseRevoke: ((response: Response) => void) | undefined;
+    const fetchImpl: FetchLike = async (input) => {
+      if (String(input).includes('/api/session/revoke')) {
+        return new Promise<Response>((resolve) => {
+          releaseRevoke = resolve;
+        });
+      }
+      return { ok: true, status: 200, json: async () => HEALTH_OK.body } as Response;
+    };
+    const revocation = useProxyStore.getState().revoke(fetchImpl);
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(getProxyRuntimeCredentials().proxyToken).toBeNull();
+    expect(useProxyStore.getState().state).toBe('pairing-required');
+    releaseRevoke?.({ ok: true, status: 200, json: async () => ({ revoked: true }) } as Response);
+    await revocation;
+  });
+
+  it('a failed revocation can be retried', async () => {
+    saveProxySession({
+      token: 'tok',
+      expiresAt: futureIso(),
+      proxyUrl: resolveProxyConfig().url,
+    });
+    useProxyStore.setState({ token: 'tok', state: 'connected', authenticated: true });
+    const revokedTokens: unknown[] = [];
+    const failing: FetchLike = async (_input, init) => {
+      revokedTokens.push(JSON.parse(String(init?.body)).token);
+      throw new TypeError('Failed to fetch');
+    };
+
+    await useProxyStore.getState().revoke(failing);
+
+    expect(useProxyStore.getState().state).toBe('error');
+    expect(useProxyStore.getState().token).toBeNull();
+    expect(getProxyRuntimeCredentials().proxyToken).toBeNull();
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
+
+    // The token is only kept in memory, so a second attempt can still revoke it.
+    const fetchImpl = (async (input: string, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/session/revoke')) {
+        revokedTokens.push(JSON.parse(String(init?.body)).token);
+        return { ok: true, status: 200, json: async () => ({ revoked: true }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => HEALTH_OK.body } as Response;
+    }) as FetchLike;
+
+    await useProxyStore.getState().revoke(fetchImpl);
+
+    expect(revokedTokens).toEqual(['tok', 'tok']);
+    expect(useProxyStore.getState().state).toBe('pairing-required');
+    expect(useProxyStore.getState().token).toBeNull();
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
@@ -341,7 +463,6 @@ describe('useProxyStore', () => {
 
   it('/health OK but verifyToken hits a network error → uncertain error, never connected', async () => {
     useProxyStore.setState({ token: 'mem', state: 'connected', authenticated: true });
-    // The router does not expose `/api/session/verify`: the check fails.
     await useProxyStore.getState().refresh(fetchRouter({ '/health': HEALTH_OK }));
     const { state, authenticated } = useProxyStore.getState();
     expect(state).toBe('error');
@@ -351,8 +472,73 @@ describe('useProxyStore', () => {
   it('getProxyRuntimeCredentials only returns a token when authenticated', () => {
     useProxyStore.setState({ token: 'tok', state: 'pairing-required', authenticated: false });
     expect(getProxyRuntimeCredentials().proxyToken).toBeNull();
+    useProxyStore.setState({ state: 'connected', authenticated: false });
+    expect(getProxyRuntimeCredentials().proxyToken).toBeNull();
     useProxyStore.setState({ token: 'tok', state: 'connected', authenticated: true });
     expect(getProxyRuntimeCredentials().proxyToken).toBe('tok');
+  });
+
+  it('late refresh verification cannot restore a revoked session', async () => {
+    let releaseVerification: ((response: Response) => void) | undefined;
+    let verificationStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      verificationStarted = resolve;
+    });
+    const fetchImpl: FetchLike = async (input) => {
+      const url = String(input);
+      if (url.includes('/api/session/verify')) {
+        verificationStarted?.();
+        return new Promise<Response>((resolve) => {
+          releaseVerification = resolve;
+        });
+      }
+      if (url.includes('/api/session/revoke')) {
+        return { ok: true, status: 200, json: async () => ({ revoked: true }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => HEALTH_OK.body } as Response;
+    };
+    useProxyStore.setState({ token: 'tok', state: 'connected', authenticated: true });
+    const refresh = useProxyStore.getState().refresh(fetchImpl);
+    await started;
+    await useProxyStore.getState().revoke(fetchImpl);
+    releaseVerification?.({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, expiresAt: futureIso() }),
+    } as Response);
+    await refresh;
+    expect(useProxyStore.getState().state).toBe('pairing-required');
+    expect(getProxyRuntimeCredentials().proxyToken).toBeNull();
+  });
+
+  it('late pairing request cannot restart polling after disconnect', async () => {
+    let releaseRequest: ((response: Response) => void) | undefined;
+    let requestStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      requestStarted = resolve;
+    });
+    const fetchImpl: FetchLike = async (input) => {
+      const url = String(input);
+      if (url.includes('/api/pair/request')) {
+        requestStarted?.();
+        return new Promise<Response>((resolve) => {
+          releaseRequest = resolve;
+        });
+      }
+      return { ok: true, status: 200, json: async () => HEALTH_OK.body } as Response;
+    };
+    const pairing = useProxyStore.getState().startPairing(fetchImpl);
+    await started;
+    await useProxyStore.getState().revoke(fetchImpl);
+    releaseRequest?.({
+      ok: true,
+      status: 201,
+      json: async () => ({ pairingId: 'late', userCode: '123456', expiresAt: futureIso() }),
+    } as Response);
+    await pairing;
+    expect(useProxyStore.getState().state).toBe('pairing-required');
+    expect(useProxyStore.getState().pairingId).toBeNull();
+    expect(useProxyStore.getState().userCode).toBeNull();
   });
 
   it('race: a late approval from a cancelled poll is ignored', async () => {
@@ -387,9 +573,7 @@ describe('useProxyStore', () => {
       }) as FetchLike;
 
       await useProxyStore.getState().startPairing(fetchImpl);
-      // First tick: the status request stays pending.
       await vi.advanceTimersByTimeAsync(PAIRING_POLL_INTERVAL_MS);
-      // New attempt: cancels the previous poll.
       useProxyStore.getState().dismissError();
       expect(typeof settleStatus).toBe('function');
       settleStatus?.({

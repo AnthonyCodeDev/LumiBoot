@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { Topbar } from './Topbar';
+import { DISCORD_INVITE_URL } from '../../config/environment';
 
 function renderTopbar(initialEntries: string[] = ['/']) {
   return render(
@@ -17,7 +18,7 @@ describe('Topbar', () => {
     renderTopbar();
     expect(screen.getByRole('link', { name: 'LumiBoot, home' })).toBeTruthy();
     const discord = screen.getByRole('link', { name: 'Join the Discord' });
-    expect(discord.getAttribute('href')).toBe('https://discord.gg/HcqduKt');
+    expect(discord.getAttribute('href')).toBe(DISCORD_INVITE_URL);
     expect(discord.getAttribute('target')).toBe('_blank');
     expect(discord.getAttribute('rel')).toBe('noopener noreferrer');
   });

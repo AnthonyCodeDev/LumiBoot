@@ -1,26 +1,12 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
-/**
- * Workspace dependency graph analysis tool.
- *
- * It is deliberately free of external dependencies: it reads the `package.json`
- * files and the TypeScript sources, then exposes pure primitives such as graphs,
- * cycles and forbidden imports, which the architecture tests assemble into rules.
- *
- * Two levels are distinguished:
- * - the DECLARED graph, from `package.json` to the `@lumiboot/*` dependencies;
- * - the ACTUAL graph, the imports present in the sources, which must be a subset
- *   of the former: no phantom dependency.
- */
+// Dependency-graph analysis: declared vs actual imports, cycles, escaping paths.
 
-/** Workspace folders that are analyzed by `pnpm-workspace.yaml`. */
 export const WORKSPACE_DIRS = ['apps', 'packages'] as const;
 
-/** Scope of the internal packages. */
 export const INTERNAL_SCOPE = '@lumiboot/';
 
-/** Technical folders that are never walked. */
 export const IGNORED_DIRS: ReadonlySet<string> = new Set([
   'node_modules',
   'dist',
@@ -43,21 +29,15 @@ export interface WorkspacePackage {
   readonly declaredDeps: readonly string[];
 }
 
-/** Converts a Windows path to POSIX, so that it reads evenly in comparisons. */
 export function toPosix(path: string): string {
   return path.split(sep).join('/');
 }
 
-/** True when the name is an internal `@lumiboot/*` package. */
 export function isInternalPackage(name: string): boolean {
   return name.startsWith(INTERNAL_SCOPE);
 }
 
-/**
- * Extracts the package name of an import specifier, or `null` when it is not
- * internal. `@lumiboot/contracts` -> `@lumiboot/contracts`;
- * `@lumiboot/contracts/src/x` -> `@lumiboot/contracts`.
- */
+/** `@lumiboot/contracts/src/x` -> `@lumiboot/contracts`; null when not internal. */
 export function internalPackageFromSpecifier(specifier: string): string | null {
   if (!isInternalPackage(specifier)) return null;
   const parts = specifier.split('/');
@@ -65,21 +45,14 @@ export function internalPackageFromSpecifier(specifier: string): string | null {
   return `${parts[0]}/${parts[1]}`;
 }
 
-/**
- * True when the specifier is a forbidden deep import such as
- * `@lumiboot/contracts/src/...`, which would bypass the public surface.
- */
+/** True for a deep import such as `@lumiboot/contracts/src/...` (bypasses surface). */
 export function isDeepInternalSpecifier(specifier: string): boolean {
   const pkg = internalPackageFromSpecifier(specifier);
   if (pkg === null) return false;
   return specifier !== pkg;
 }
 
-/**
- * Reads every import/export/require specifier of a source.
- * Handles `import ... from 'x'`, `import 'x'`, `export ... from 'x'`,
- * `import('x')` and `require('x')`.
- */
+/** Every import/export/require specifier of a source (static and dynamic). */
 export function extractModuleSpecifiers(source: string): string[] {
   const specifiers = new Set<string>();
   const patterns = [
@@ -96,7 +69,6 @@ export function extractModuleSpecifiers(source: string): string[] {
   return [...specifiers];
 }
 
-/** Recursively lists the `.ts`/`.tsx` sources of a folder. */
 export function collectSourceFiles(dir: string): string[] {
   let entries;
   try {
@@ -114,7 +86,6 @@ export function collectSourceFiles(dir: string): string[] {
   return files;
 }
 
-/** All workspace sources, excluding ignored folders. */
 export function collectWorkspaceSourceFiles(root: string): string[] {
   const files: string[] = [];
   for (const group of WORKSPACE_DIRS) {
@@ -160,11 +131,7 @@ function readDeclaredDeps(manifest: Record<string, unknown>): string[] {
   return [...deps].sort();
 }
 
-/**
- * Reads the workspace packages (`apps/*`, `packages/*`).
- * Nested `node_modules` are ignored: a dependency `package.json` must never be
- * mistaken for a repository package.
- */
+/** Workspace packages (`apps/*`, `packages/*`), ignoring nested `node_modules`. */
 export function collectWorkspacePackages(root: string): WorkspacePackage[] {
   const packages: WorkspacePackage[] = [];
   for (const group of WORKSPACE_DIRS) {
@@ -190,11 +157,7 @@ export function collectWorkspacePackages(root: string): WorkspacePackage[] {
   return packages.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/**
- * Directed graph of the actual imports between internal packages: an edge
- * `source -> target` as soon as a source of the `source` package imports the
- * internal `target` package.
- */
+/** Import graph between internal packages (edge = a real source import). */
 export function buildPackageImportGraph(
   packages: readonly WorkspacePackage[],
 ): Map<string, Set<string>> {
@@ -222,10 +185,7 @@ export function buildDeclaredPackageGraph(
   return graph;
 }
 
-/**
- * Detects the cycles of a directed graph (strongly connected components larger
- * than 1, plus self-loops). Each cycle is returned sorted for a stable report.
- */
+/** Cycles of a directed graph: SCCs larger than 1, plus self-loops, sorted. */
 export function findCycles(graph: ReadonlyMap<string, Iterable<string>>): string[][] {
   const nodes = [...graph.keys()].sort();
   const index = new Map<string, number>();
@@ -298,11 +258,7 @@ export interface RelativeEscape {
   readonly targetPackage: string;
 }
 
-/**
- * Detects relative imports that "escape" from a package towards ANOTHER package
- * of the repository (e.g. `../../provider-v86/src/...`). Such paths bypass the
- * public surface and freeze the internal structure.
- */
+/** Relative imports escaping to ANOTHER package (e.g. `../../provider-v86/src`). */
 export function findCrossPackageRelativeImports(
   packages: readonly WorkspacePackage[],
 ): RelativeEscape[] {

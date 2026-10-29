@@ -156,7 +156,7 @@ class FakeXhr implements RangeRequest {
   }
 }
 
-/** Behaviour applied by `send()`; every test may replace it. */
+/** Behaviour applied by `send()`. */
 let xhrPlan: (request: FakeXhr) => void = plan206(DISK_SIZE);
 
 /** Answers the requested range with a genuine 206 over `total` bytes. */
@@ -195,6 +195,28 @@ describe('ensureImageManifest', () => {
 
     expect(manifest.ref).toBe('debian-12-i386');
     expect(getImageManifest('debian-12-i386')).not.toBeNull();
+  });
+
+  it.each([
+    '/images/../private/data',
+    '/images/debian-12-i386/%2e%2e/data',
+    '/images/other/disk.img',
+  ])('rejects an unsafe or unrelated file URL: %s', async (url) => {
+    const manifest = validManifest();
+    manifest.files.disk.url = url;
+    vi.stubGlobal('fetch', mockFetch(manifest));
+
+    await expect(ensureImageManifest(manifest.ref)).rejects.toMatchObject({
+      code: 'ASSET_INVALID_MANIFEST',
+    });
+  });
+
+  it('rejects a boot binary URL outside the local engine directory', async () => {
+    const manifest = { ...validManifest(), boot: { wasmPath: 'https://other.example/v86.wasm' } };
+    vi.stubGlobal('fetch', mockFetch(manifest));
+    await expect(ensureImageManifest(manifest.ref)).rejects.toMatchObject({
+      code: 'ASSET_INVALID_MANIFEST',
+    });
   });
 
   it('rejects a placeholder manifest (unknown fields and missing files)', async () => {

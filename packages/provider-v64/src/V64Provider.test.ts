@@ -80,8 +80,7 @@ describe('V64Provider', () => {
     const instance = await provider.start(system, document.createElement('div'));
     const options = createEngine.mock.calls[0]?.[0];
 
-    // Every manifest URL carries a digest-derived version: a cached Range
-    // response for the same path must not replay an earlier build's bytes.
+    // Every manifest URL carries a digest-derived version: no cached replay of old bytes.
     expect(options).toMatchObject({
       cpu_type: 'x86_64',
       cpu_worker: true,
@@ -122,5 +121,24 @@ describe('V64Provider', () => {
       size: 2048,
     });
     await instance.dispose();
+  });
+
+  it('releases the engine and the network when the instance cannot be wired', async () => {
+    const destroy = vi.fn(async () => undefined);
+    const createEngine = vi.fn(async (_options: V64Options) => ({
+      ...runtime(),
+      add_listener: () => {
+        throw new Error('listener registration failed');
+      },
+      destroy,
+    }));
+    const provider = new V64Provider({ createEngine, resolveManifest: async () => manifest });
+
+    await expect(provider.start(system, document.createElement('div'))).rejects.toMatchObject({
+      code: 'START_FAILED',
+      message: expect.stringContaining('could not be wired'),
+    });
+    // No orphaned emulator: a wiring failure must destroy the runtime.
+    expect(destroy).toHaveBeenCalledTimes(1);
   });
 });

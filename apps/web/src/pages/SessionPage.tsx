@@ -31,7 +31,6 @@ export function SessionPage() {
     const element = consoleRef.current;
     if (sessionId && system && element) {
       activeIdRef.current = sessionId;
-      // Boot rejections are surfaced here, never left unhandled.
       boot(sessionId, element).catch((error) => {
         if (!mountedRef.current || activeIdRef.current !== sessionId) return;
         setActionError(toUserMessage(error));
@@ -74,10 +73,8 @@ export function SessionPage() {
     setRestarting(true);
     setActionError(null);
     try {
-      // Stop and release the previous session before creating a new one.
       await stop(restartingId);
       await dispose(restartingId);
-      // The user may have left during the stop: do not navigate then.
       if (!mountedRef.current || activeIdRef.current !== restartingId) return;
       const nextId = createSession(system.id);
       navigate(`/session/${nextId}`, { replace: true });

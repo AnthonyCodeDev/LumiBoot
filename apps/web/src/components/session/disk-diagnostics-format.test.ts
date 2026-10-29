@@ -5,8 +5,10 @@ import {
   diagnosticsHealth,
   formatDiskDiagnostics,
   HEALTH_MESSAGES,
+  redactDiagnosticsUrl,
   statusesLabel,
 } from './disk-diagnostics-format';
+import { DISK_ASSET_URL, DISK_ASSET_URL_REDACTED } from '../../test/fixtures';
 
 function summary(overrides: Partial<DiskDiagnosticsSummary> = {}): DiskDiagnosticsSummary {
   return {
@@ -45,7 +47,7 @@ describe('diagnosticsHealth', () => {
   });
 
   it('is healthy for the few empty blocks of a real ext4 image', () => {
-    // 3 % of 200 reads: exactly the profile measured on a real Debian boot.
+    // 3 % of 200 reads, as measured on a real Debian boot.
     const health = diagnosticsHealth(
       summary({ requests: 200, allZero: 6, byStatus: { '206': 200 } }),
     );
@@ -87,6 +89,24 @@ describe('diagnosticsHealth', () => {
   });
 });
 
+describe('redactDiagnosticsUrl', () => {
+  it('drops the query string and the fragment', () => {
+    expect(redactDiagnosticsUrl('/images/win/disk.img?token=SECRET')).toBe('/images/win/disk.img');
+    expect(redactDiagnosticsUrl('/images/win/disk.img?token=SECRET#frag')).toBe(
+      '/images/win/disk.img',
+    );
+  });
+
+  it('keeps the origin of an absolute URL but not its secret', () => {
+    expect(redactDiagnosticsUrl(DISK_ASSET_URL)).toBe(DISK_ASSET_URL_REDACTED);
+  });
+
+  it('returns an unparsable value unchanged', () => {
+    expect(redactDiagnosticsUrl('')).toBe('');
+    expect(redactDiagnosticsUrl('???')).toBe('???');
+  });
+});
+
 describe('formatDiskDiagnostics', () => {
   it('exposes the health verdict and the statuses', () => {
     const text = formatDiskDiagnostics({
@@ -98,6 +118,23 @@ describe('formatDiskDiagnostics', () => {
     expect(text).toContain('requests: 2');
     expect(text).toContain('statuses: 206 × 2');
     expect(text).toContain('serviceWorkerController: none');
+  });
+
+  it('never leaks an access token from a disk URL or the page URL', () => {
+    const entry: DiskRequestLogEntry = {
+      ...errorEntry(),
+      url: DISK_ASSET_URL,
+    };
+    const text = formatDiskDiagnostics({
+      summary: summary({ requests: 1, byStatus: { '206': 1 } }),
+      entries: [entry],
+    });
+
+    expect(text).not.toContain('SECRET');
+    expect(text).toContain('/images/win/disk.img');
+    if (typeof location !== 'undefined') {
+      expect(text).toContain(`page: ${redactDiagnosticsUrl(location.href)}`);
+    }
   });
 
   it('formats an empty log without throwing', () => {

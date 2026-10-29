@@ -8,22 +8,20 @@ import {
   type AssetAvailabilityOptions,
 } from './manifest-loader';
 
-/**
- * Local disk booted by BIOS. The public form forbids `source` and `provenance`
- * so no operator path is ever served.
- */
+/** Served form: no `source`/`provenance`, so no operator path leaks. */
 
 const HEX64 = /^[0-9a-f]{64}$/i;
 const IMAGE_REF = /^[a-z0-9-]+$/;
+// The loopback disk server appends `?token=<bearer>`: that query is allowed, nothing else.
+const IMAGE_FILE_URL =
+  /^\/images\/[a-z0-9-]+\/[A-Za-z0-9][A-Za-z0-9._-]*(?:\?token=(?:[A-Za-z0-9_.!~*'()-]|%[0-9a-fA-F]{2})+)?$/;
+const ENGINE_FILE_URL =
+  /^\/v86\/[A-Za-z0-9][A-Za-z0-9._-]*(?:\?token=(?:[A-Za-z0-9_.!~*'()-]|%[0-9a-fA-F]{2})+)?$/;
 const ARCHITECTURES = ['i386', 'x86', 'x86_64', 'arm', 'arm64', 'powerpc', 'm68k'] as const;
 
-/** v86 engine binary served under `/v86/`. */
 export const localDiskEngineBinarySchema = z
   .object({
-    url: z
-      .string()
-      .min(1)
-      .regex(/^\/v86\//, 'URL expected under "/v86/"'),
+    url: z.string().regex(ENGINE_FILE_URL, 'plain file URL expected under "/v86/"'),
     size: z.number().int().positive(),
     sha256: z.string().regex(HEX64, '64-character hexadecimal SHA-256 expected'),
   })
@@ -47,10 +45,7 @@ export const localDiskFileSchema = z
   .object({
     fileName: z.string().min(1),
     format: z.enum(['raw', 'iso']),
-    url: z
-      .string()
-      .min(1)
-      .regex(/^\/images\//, 'URL expected under "/images/"'),
+    url: z.string().regex(IMAGE_FILE_URL, 'plain file URL expected under "/images/<ref>/"'),
     size: z.number().int().positive(),
     mtimeMs: z.number().int().nonnegative(),
     sha256: z.string().regex(HEX64, '64-character hexadecimal SHA-256 expected').optional(),
@@ -74,10 +69,7 @@ export const localDiskSourceSchema = z
 export const localDiskBootSchema = z
   .object({
     mode: z.literal('disk-boot'),
-    url: z
-      .string()
-      .min(1)
-      .regex(/^\/images\//, 'URL expected under "/images/"'),
+    url: z.string().regex(IMAGE_FILE_URL, 'plain file URL expected under "/images/<ref>/"'),
     async: z.literal(true),
     size: z.number().int().positive(),
   })
@@ -98,7 +90,10 @@ const localDiskCoreShape = {
 } as const;
 
 /** `.strict()` rejects `source` and `provenance` from the served form. */
-export const localDiskPublicManifestSchema = z.object(localDiskCoreShape).strict();
+export const localDiskPublicManifestSchema = z
+  .object(localDiskCoreShape)
+  .strict()
+  .superRefine(validateDiskPaths);
 
 /** Public form plus the optional internal `source` and `provenance`. */
 export const localDiskManifestSchema = z
@@ -107,7 +102,39 @@ export const localDiskManifestSchema = z
     provenance: z.string().min(1).optional(),
     source: localDiskSourceSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(validateDiskPaths);
+
+function validateDiskPaths(
+  manifest: {
+    ref: string;
+    disk: { url: string; size: number };
+    boot: { url: string; size: number };
+  },
+  context: z.RefinementCtx,
+): void {
+  if (!manifest.disk.url.startsWith(`/images/${manifest.ref}/`)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['disk', 'url'],
+      message: 'disk URL must belong to the manifest reference',
+    });
+  }
+  if (manifest.boot.url !== manifest.disk.url) {
+    context.addIssue({
+      code: 'custom',
+      path: ['boot', 'url'],
+      message: 'boot URL must match the disk URL',
+    });
+  }
+  if (manifest.boot.size !== manifest.disk.size) {
+    context.addIssue({
+      code: 'custom',
+      path: ['boot', 'size'],
+      message: 'boot size must match the disk size',
+    });
+  }
+}
 
 export type LocalDiskEngineBinary = z.infer<typeof localDiskEngineBinarySchema>;
 export type LocalDiskFile = z.infer<typeof localDiskFileSchema>;
@@ -120,7 +147,6 @@ function formatIssues(error: z.ZodError): string {
     .join('; ');
 }
 
-/** Throws `AssetError` with the failing field paths. */
 export function parseLocalDiskManifest(input: unknown): LocalDiskManifest {
   const parsed = localDiskManifestSchema.safeParse(input);
   if (!parsed.success) {
@@ -132,7 +158,6 @@ export function parseLocalDiskManifest(input: unknown): LocalDiskManifest {
   return parsed.data;
 }
 
-/** Rejects any internal field in a served manifest. */
 export function parseLocalDiskPublicManifest(input: unknown): LocalDiskPublicManifest {
   const parsed = localDiskPublicManifestSchema.safeParse(input);
   if (!parsed.success) {
@@ -176,14 +201,10 @@ export interface V86AsyncDrive {
   readonly size: number;
 }
 
-/**
- * Keeps the `async`/`size` rule testable without depending on the provider.
- */
 export function toV86AsyncDrive(manifest: LocalDiskManifest): V86AsyncDrive {
   return { url: manifest.boot.url, async: true, size: manifest.disk.size };
 }
 
-/** Shape expected by `VMMedia`. */
 export interface LocalDiskMedia {
   readonly kind: 'disk';
   readonly url: string;
@@ -298,7 +319,6 @@ export async function loadLocalDiskManifest(
   return manifest;
 }
 
-/** Valid manifest, matching reference, then working HTTP Range. */
 export async function checkLocalDiskAvailability(
   ref: string,
   options: AssetAvailabilityOptions = {},
@@ -342,10 +362,7 @@ export async function checkLocalDiskAvailability(
   return { ref, ...probe };
 }
 
-/**
- * Returns the inconsistencies; an empty list means conforming. `mtime` is only
- * compared when the manifest documents a `source`.
- */
+/** Empty list means conforming; `mtime` is compared only with a `source`. */
 export function diffLocalDiskIntegrity(
   manifest: LocalDiskManifest,
   observed: { size: number; mtimeMs: number; sha256?: string },

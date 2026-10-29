@@ -8,7 +8,7 @@ export interface ImageFileRef {
   version?: string;
 }
 
-/** Varies engine binary paths and the kernel command line per image. */
+/** Varies engine paths and the kernel command line per image. */
 export interface ImageBootOptions {
   cmdline?: string;
   wasmPath?: string;

@@ -5,11 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAssetServer, parseRangeHeader } from '../scripts/lib/range-server.mjs';
 
-/**
- * Real tests of the local Range HTTP server, with no network mock: a server
- * starts on an ephemeral port and the exact returned bytes are read. This proves
- * that v86 really gets compliant 206 responses to `Range: bytes=...`.
- */
+// Real (unmocked) tests of the local Range HTTP server: exact 206 bytes are read.
 
 const SIZE = 1000;
 const DISK_PATH = '/images/windows-7-x86/disk.img';
@@ -30,20 +26,27 @@ interface HttpResponse {
 
 function rawRequest(
   path: string,
-  { method = 'GET', headers = {} }: { method?: string; headers?: Record<string, string> } = {},
+  {
+    method = 'GET',
+    headers = {},
+    targetPort = port,
+  }: { method?: string; headers?: Record<string, string>; targetPort?: number } = {},
 ): Promise<HttpResponse> {
   return new Promise((resolve, reject) => {
-    const req = httpRequest({ host: '127.0.0.1', port, path, method, headers }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () =>
-        resolve({
-          status: res.statusCode ?? 0,
-          headers: res.headers,
-          body: Buffer.concat(chunks),
-        }),
-      );
-    });
+    const req = httpRequest(
+      { host: '127.0.0.1', port: targetPort, path, method, headers },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () =>
+          resolve({
+            status: res.statusCode ?? 0,
+            headers: res.headers,
+            body: Buffer.concat(chunks),
+          }),
+        );
+      },
+    );
     req.on('error', reject);
     req.end();
   });
@@ -181,9 +184,17 @@ describe('createAssetServer - real HTTP Range', () => {
   it('answers CORS OPTIONS preflights (Range + X-Accept-Encoding)', async () => {
     const res = await rawRequest(`${DISK_PATH}?token=${TOKEN}`, { method: 'OPTIONS' });
     expect(res.status).toBe(204);
-    expect(res.headers['access-control-allow-origin']).toBe('*');
     expect(String(res.headers['access-control-allow-headers'])).toContain('Range');
     expect(String(res.headers['access-control-allow-headers'])).toContain('X-Accept-Encoding');
+  });
+
+  it('sets no CORS header by default', async () => {
+    // A wildcard would let any website read the operator's local disk.
+    const res = await rawRequest(`${DISK_PATH}?token=${TOKEN}`);
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
+    expect(res.headers['access-control-expose-headers']).toBeUndefined();
+    const preflight = await rawRequest(`${DISK_PATH}?token=${TOKEN}`, { method: 'OPTIONS' });
+    expect(preflight.headers['access-control-allow-origin']).toBeUndefined();
   });
 
   it('serves a multi-range as multipart/byteranges', async () => {
@@ -197,7 +208,6 @@ describe('createAssetServer - real HTTP Range', () => {
     expect(text).toContain(`--${boundary}`);
     expect(text).toContain(`Content-Range: bytes 0-0/${SIZE}`);
     expect(text).toContain(`Content-Range: bytes 10-11/${SIZE}`);
-    // The exact bytes of both ranges must be present.
     expect(res.body.includes(pattern.subarray(0, 1))).toBe(true);
     expect(res.body.includes(pattern.subarray(10, 12))).toBe(true);
     expect(res.body.includes(Buffer.from(`--${boundary}--`))).toBe(true);
@@ -226,6 +236,30 @@ describe('createAssetServer - real HTTP Range', () => {
       ref: 'windows-7-x86',
       size: SIZE,
     });
+  });
+});
+
+describe('createAssetServer - explicit CORS', () => {
+  it('sets Access-Control-Allow-Origin only when the caller asks for it', async () => {
+    const corsServer = createAssetServer({
+      token: TOKEN,
+      // The wildcard is legal here because the read is gated by the token.
+      corsOrigin: '*',
+      routes: { [DISK_PATH]: { file: diskFile } },
+    });
+    const address = await corsServer.listen({ host: '127.0.0.1', port: 0 });
+    const corsPort = typeof address === 'object' && address !== null ? address.port : 0;
+    try {
+      const res = await rawRequest(`${DISK_PATH}?token=${TOKEN}`, { targetPort: corsPort });
+      expect(res.status).toBe(200);
+      expect(res.headers['access-control-allow-origin']).toBe('*');
+      expect(String(res.headers['access-control-expose-headers'])).toContain('Content-Range');
+      // A bad token still never answers with the payload.
+      const refused = await rawRequest(DISK_PATH, { targetPort: corsPort });
+      expect(refused.status).toBe(401);
+    } finally {
+      await corsServer.close();
+    }
   });
 });
 

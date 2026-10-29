@@ -46,6 +46,41 @@ pnpm dev
 
 Open `http://127.0.0.1:5173`. `assets:prepare` fetches `v86.wasm` and the pinned BIOS files, verified by size and SHA-256 against `scripts/v86-assets.lock.json`.
 
+## Configuration (`.env`)
+
+`.env.example` is the tracked template; copy it to `.env` at the repository root:
+
+```bash
+cp .env.example .env
+```
+
+`.env` is ignored by Git. The shell always wins: an exported variable is never overridden by the file. Every value in the template is the built-in default, so an empty file changes nothing, and no secret belongs there.
+
+| Group                       | Variables                                                                                                                 |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Web client (`VITE_*`)       | `VITE_LUMIBOOT_CONFIG_URL`, `VITE_DOWNLOADS_MANIFEST_URL`, `VITE_PROXY_URL`                                               |
+| Vite dev server and preview | `WEB_DEV_HOST`, `WEB_DEV_PORT`, `WEB_PREVIEW_PORT`                                                                        |
+| Playwright end-to-end tests | `E2E_HOST`, `E2E_PORT`, `E2E_BASE_URL`; the suite keeps its own `5200`, never the `5173` dev server                       |
+| Local disk asset server     | `LUMIBOOT_ASSET_HOST`, `LUMIBOOT_ASSET_PORT`, plus the optional `LUMIBOOT_ASSET_*` overrides                              |
+| Go network proxy            | `LUMIBOOT_PROXY_LISTEN_ADDR`, `LUMIBOOT_PROXY_ALLOWED_ORIGINS`                                                            |
+| nginx deployment            | `LUMIBOOT_DOMAIN`, `LUMIBOOT_HTTP_PORT`, `LUMIBOOT_PROXY_PORT`                                                            |
+| WISP relay                  | `WISP_DOMAIN`, `LUMIBOOT_ORIGIN`, `WISP_BIND_ADDRESS`, optional `LUMIBOOT_WISP_RELAY_URL`                                 |
+| Behaviour flags             | `LUMIBOOT_COOP_COEP`, `LUMIBOOT_SOURCEMAP`, `LUMIBOOT_DISK_DEBUG`                                                         |
+| Tests                       | `VM_E2E_ASSETS`                                                                                                           |
+
+The optional `LUMIBOOT_PROXY_*` overrides (timeouts, connection caps, pairing TTL, bandwidth limit, private-network and non-loopback permissions) are detailed in `apps/network-proxy/README.md`; an unparsable value fails proxy startup instead of falling back silently.
+
+The nginx deployment files are rendered from `infra/nginx/*.template`. After changing `LUMIBOOT_DOMAIN`, `LUMIBOOT_HTTP_PORT` or `LUMIBOOT_PROXY_PORT`, run:
+
+```bash
+pnpm config:nginx        # rewrite infra/nginx/site.conf and security-headers.conf
+pnpm config:nginx:check  # report drift and exit 1 instead of writing
+```
+
+and commit the rendered files, which stay tracked so a plain clone still deploys. `tests/nginx-render.test.ts` fails when the tracked files no longer match the templates. The defaults (`lumiboot.example.com`, HTTP 80, proxy 37892) reproduce the historical behaviour; the CSP keeps the proxy origins explicit, never `*`.
+
+The Go proxy reads the same file: `pnpm proxy:dev` forwards the `LUMIBOOT_PROXY_*` variables to `go run` and passes its arguments through, for example `pnpm proxy:dev -- --version`.
+
 ## Media
 
 No disk, ISO or license key is shipped or downloaded: register your own image before starting a session.
@@ -81,6 +116,9 @@ pnpm test:e2e              # Playwright, port 5200
 pnpm assets:check          # v86 binary integrity
 pnpm assets:windows7:prepare|check
 pnpm assets:windows10:prepare|check
+pnpm config:nginx          # render infra/nginx/*.conf from .env
+pnpm config:nginx:check    # exit 1 when the rendered nginx files drifted
+pnpm proxy:dev             # run the Go network proxy with .env applied
 ```
 
 The real boot tests need several GiB of media and stay opt-in: `VM_E2E_ASSETS=1 pnpm test:e2e`. They are skipped otherwise.

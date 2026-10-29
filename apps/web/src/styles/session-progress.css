@@ -1,5 +1,3 @@
-/* Session boot: heading + log journal on the dark theme, using the shared tokens. */
-
 .session-progress {
   display: flex;
   flex-direction: column;
@@ -15,7 +13,6 @@
   text-align: center;
 }
 
-/* "Message" state: stopping / idle — no log, no progress. */
 .session-progress--message {
   align-items: center;
   justify-content: center;
@@ -88,8 +85,7 @@
   text-wrap: balance;
 }
 
-/* Boot log: rounded panel with the last serial lines. Older lines fade out, the
-   last one keeps a blinking cursor. */
+/* Older lines fade out, the last one keeps a blinking cursor. */
 .session-logs {
   position: relative;
   display: flex;
@@ -128,7 +124,6 @@
   transition: color var(--duration) var(--ease);
 }
 
-/* The last line, the most recent one, is highlighted. */
 .session-logs-line[data-current] {
   color: var(--text-secondary);
 }

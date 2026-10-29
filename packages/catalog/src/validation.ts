@@ -1,7 +1,6 @@
 import { osCatalogSchema, type OSDefinition } from '@lumiboot/contracts';
 import { CatalogValidationError, type CatalogIssue } from './errors';
 
-/** Zod validation plus `id`/`slug` uniqueness on untrusted input. */
 export function validateCatalog(input: unknown): OSDefinition[] {
   const result = osCatalogSchema.safeParse(input);
   if (!result.success) {

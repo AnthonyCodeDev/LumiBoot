@@ -56,7 +56,6 @@ function formatIssues(error: z.ZodError): string[] {
   });
 }
 
-/** Drops the fields that do not belong to the selected mode. */
 export function normalizeNetworkProfile(input: unknown): NetworkProfile {
   const result = networkProfileSchema.safeParse(input);
   if (!result.success) {
@@ -69,7 +68,6 @@ export function normalizeNetworkProfile(input: unknown): NetworkProfile {
   return cleanProfile(result.data);
 }
 
-/** Non-throwing variant. */
 export function validateNetworkProfile(input: unknown): NetworkProfileValidation {
   const result = networkProfileSchema.safeParse(input);
   if (!result.success) {

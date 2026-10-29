@@ -1,21 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-/**
- * Validation of the Pointer Lock orchestration module in REAL Chromium, without
- * starting a VM: the module is loaded as is from the Vite dev server
- * (`/src/components/session/pointer-lock.ts`) and then driven by REAL user
- * gestures (`page.mouse.click`), which is required for the browser to accept
- * `requestPointerLock`.
- *
- * Proofs: a click captures, with a single cursor, the guest one; releasing
- * restores the host cursor, since native Escape becomes a `pointerlockchange`,
- * triggered here through `exitPointerLock` because headless Chromium does not
- * intercept Escape; a click recaptures, and `dispose` releases.
- *
- * The "native Escape" sequence is covered by the unit tests, `pointerlockchange`
- * plus the removed class; this test proves the behavior in a real rendering
- * engine.
- */
+// Real Pointer Lock behaviour in Chromium: the module is loaded from the dev server.
 test.describe('Mouse capture (Pointer Lock) - real module in Chromium', () => {
   test('captures on click, releases (simulated native Escape), recaptures, then releases on dispose', async ({
     page,
@@ -72,8 +57,7 @@ test.describe('Mouse capture (Pointer Lock) - real module in Chromium', () => {
     expect(await isLockedToScreen()).toBe(false);
     expect(await hasLockedClass()).toBe(false);
 
-    // Real click from a user gesture: capture, with the host cursor hidden by a
-    // class.
+    // Real user click: capture, with the host cursor hidden by a class.
     await page.mouse.click(cx, cy);
     await expect.poll(isLockedToScreen).toBe(true);
     await expect.poll(hasLockedClass).toBe(true);
@@ -86,8 +70,7 @@ test.describe('Mouse capture (Pointer Lock) - real module in Chromium', () => {
     // New explicit click: recapture.
     await page.mouse.click(cx, cy);
     await expect.poll(isLockedToScreen).toBe(true);
-    // The synchronization through `pointerlockchange` is awaited, until the class
-    // is applied.
+    // Wait for the class applied through `pointerlockchange`.
     await expect.poll(hasLockedClass).toBe(true);
 
     // `dispose`, called on session stop or unmount, releases the lock.

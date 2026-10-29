@@ -73,7 +73,8 @@ fi
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The build directory can live on a native ext4 filesystem outside the
 # repository: debootstrap and chroot fail on 9p/DrvFs mounts.
-BUILD_DIR="${LUMIBOOT_BUILD_DIR:-$HERE/build$BUILD_SUFFIX}"
+DEFAULT_BUILD_DIR="$(realpath -m -- "$HERE/build$BUILD_SUFFIX")"
+BUILD_DIR="$(realpath -m -- "${LUMIBOOT_BUILD_DIR:-$DEFAULT_BUILD_DIR}")"
 ROOTFS="$BUILD_DIR/rootfs"
 
 BASE_PACKAGES="linux-image-686 initramfs-tools systemd-sysv systemd-resolved udev kmod \
@@ -120,14 +121,24 @@ require() {
   exit 1
 }
 
-for tool in debootstrap mkfs.ext4 truncate sha256sum chroot e2fsck node; do require "$tool"; done
+for tool in debootstrap mkfs.ext4 truncate sha256sum chroot e2fsck node realpath; do require "$tool"; done
 if [ "$(uname -m)" != "x86_64" ]; then
   require qemu-i386
   echo "Warning: non-x86_64 host, i386 debootstrap requires binfmt/qemu-user." >&2
 fi
 
+if [ "$BUILD_DIR" = / ] || { [ -e "$BUILD_DIR" ] && [ ! -d "$BUILD_DIR" ]; }; then
+  echo "Refusing unsafe build directory: $BUILD_DIR" >&2
+  exit 1
+fi
+if [ "$BUILD_DIR" != "$DEFAULT_BUILD_DIR" ] && [ -d "$BUILD_DIR" ] &&
+   [ ! -f "$BUILD_DIR/.lumiboot-build" ] && [ -n "$(ls -A "$BUILD_DIR")" ]; then
+  echo "Refusing to erase an existing custom directory without .lumiboot-build: $BUILD_DIR" >&2
+  exit 1
+fi
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
+: > "$BUILD_DIR/.lumiboot-build"
 
 echo "== 1. debootstrap $RELEASE/$ARCH (minbase) -- flavor=$FLAVOR =="
 debootstrap --arch="$ARCH" --variant=minbase "$RELEASE" "$ROOTFS" "$DEBIAN_MIRROR"

@@ -142,12 +142,19 @@ func (c *Console) promptNext() {
 }
 
 // handleLine answers a pending pairing, then interprets the line as a command.
+// Only an explicit yes/no answers a pending request: an empty line or a typo
+// asks again instead of silently denying a legitimate pairing.
 func (c *Console) handleLine(line string) (quit bool) {
 	line = strings.TrimSpace(line)
 	if c.awaiting != nil {
+		answer := classifyAnswer(line)
+		if answer == answerUnclear {
+			c.write(`Answer "y" to approve or "n" to deny. Approve? [y/N] `)
+			return false
+		}
 		p := *c.awaiting
 		c.awaiting = nil
-		approve := isAffirmative(line)
+		approve := answer == answerYes
 		if err := c.ctrl.Approve(p.ID, approve); err != nil {
 			c.printf("Decision failed for %s: %v\n", p.UserCode, err)
 		} else if approve {
@@ -339,12 +346,27 @@ func parseCommand(line string) (cmd, arg string) {
 	return strings.ToLower(line), ""
 }
 
-func isAffirmative(line string) bool {
+// answerKind classifies a line typed at the pairing prompt.
+type answerKind int
+
+const (
+	// answerUnclear is an empty line, a typo or anything that is not a
+	// deliberate yes/no: the console asks again.
+	answerUnclear answerKind = iota
+	answerYes
+	answerNo
+)
+
+// classifyAnswer maps a line to an explicit answer; French variants are kept
+// because the console is used in both languages.
+func classifyAnswer(line string) answerKind {
 	switch strings.ToLower(strings.TrimSpace(line)) {
 	case "y", "yes", "o", "oui":
-		return true
+		return answerYes
+	case "n", "no", "non":
+		return answerNo
 	default:
-		return false
+		return answerUnclear
 	}
 }
 

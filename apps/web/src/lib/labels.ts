@@ -2,7 +2,6 @@ import type {
   Architecture,
   Availability,
   EngineId,
-  ExecutionMode,
   HardwareNetwork,
   LaunchProfile,
   OSDefinition,
@@ -26,7 +25,6 @@ export const engineLabels: Record<EngineId, string> = {
   'wasm-68k': 'WASM 68k',
 };
 
-/** Short engine labels, used in session subtitles. */
 export const engineShortLabels: Record<EngineId, string> = {
   v86: 'v86',
   v64: 'v64',
@@ -37,17 +35,11 @@ export const engineShortLabels: Record<EngineId, string> = {
   'wasm-68k': 'WASM 68k',
 };
 
-export const executionLabels: Record<ExecutionMode, string> = {
-  browser: 'In the browser',
-};
-
-/** Labels for the emulated boot media. */
 export const bootDeviceLabels: Record<string, string> = {
   disk: 'Disk (hda)',
   cdrom: 'CD-ROM',
 };
 
-/** Labels for the emulated network card as seen by the guest. */
 export const hardwareNetworkLabels: Record<HardwareNetwork, string> = {
   virtio: 'VirtIO',
   ne2k: 'NE2000',
@@ -63,21 +55,10 @@ export const availabilityLabels: Record<Availability, string> = {
   'resource-required': 'Resource required',
 };
 
-export const executionShortLabel = (mode: ExecutionMode): string =>
-  mode === 'browser' ? 'Local · WASM' : 'Local · WASM';
-
 export function getPrimaryLaunchProfile(
   system: Pick<OSDefinition, 'launchProfiles'>,
 ): LaunchProfile {
   return system.launchProfiles.find((profile) => profile.featured) ?? system.launchProfiles[0]!;
-}
-
-export function launchProfileLabel(profile: LaunchProfile): string {
-  return `${engineLabels[profile.engineId]} · ${executionLabels[profile.executionMode]}`;
-}
-
-export function launchProfileShortLabel(profile: LaunchProfile): string {
-  return `${engineLabels[profile.engineId]} · ${executionShortLabel(profile.executionMode)}`;
 }
 
 export const architectureLabels: Record<Architecture, string> = {
@@ -111,14 +92,12 @@ export function cleanVersionLabel(versionLabel: string): string {
     .join(' · ');
 }
 
-/** Deduplicated architecture synthesis for a parent and all of its variants. */
 export function architectureSummary(
   systems: readonly Pick<OSDefinition, 'architecture'>[],
 ): string {
   return [...new Set(systems.map((system) => architectureLabels[system.architecture]))].join(' · ');
 }
 
-/** Canonical version line: release/flavour first, architecture synthesis last. */
 export function systemVersionLabel(
   system: Pick<OSDefinition, 'versionLabel' | 'architecture'>,
   variants: readonly Pick<OSDefinition, 'architecture'>[] = [system],

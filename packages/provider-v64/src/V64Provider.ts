@@ -197,15 +197,31 @@ export class V64Provider implements VMEngine {
         cause: error,
       });
     }
-    const instance = new V86Instance({
-      providerId: this.id,
-      systemId: os.id,
-      emulator: emulator as never,
-      console: consoleAdapter,
-      readiness: profile.readiness ?? DEFAULT_GUEST_READINESS,
-      network,
-    });
-    instance.wire();
+    let instance: V86Instance;
+    try {
+      instance = new V86Instance({
+        providerId: this.id,
+        systemId: os.id,
+        emulator: emulator as never,
+        console: consoleAdapter,
+        readiness: profile.readiness ?? DEFAULT_GUEST_READINESS,
+        network,
+      });
+      instance.wire();
+    } catch (error) {
+      // A wiring failure must leave no orphaned emulator, network or console.
+      try {
+        await emulator.destroy();
+      } catch {
+        /* best-effort cleanup */
+      }
+      consoleAdapter.detach();
+      await network.dispose().catch(() => undefined);
+      throw new VMError('START_FAILED', `The v64 session could not be wired for "${os.id}".`, {
+        systemId: os.id,
+        cause: error,
+      });
+    }
     return instance;
   }
 }
@@ -232,13 +248,8 @@ async function resolveBootMedia(
   if (!disk || !bzimage || !initrd)
     throw new Error('The manifest needs disk, bzimage and initrd files.');
   return {
-    // v64's validated x86-64 direct-kernel path keeps the companion ISO in a
-    // synchronous buffer. Its ranged ATAPI path can otherwise complete a read
-    // after Linux has advanced the IDE DMA state, producing an HSM violation
-    // and preventing Alpine from mounting its boot media.
+    // Synchronous ISO buffer: the ranged ATAPI path races IDE DMA (HSM violation).
     cdrom: { url: versionedMediaUrl(disk.url, disk.sha256), size: disk.size },
-    // Manifest media are versioned by their digest so a cached Range response
-    // for the same path can never replay bytes from an earlier build.
     bzimage: { url: versionedMediaUrl(bzimage.url, bzimage.sha256), size: bzimage.size },
     initrd: { url: versionedMediaUrl(initrd.url, initrd.sha256), size: initrd.size },
     cmdline:

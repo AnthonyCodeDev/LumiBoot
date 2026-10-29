@@ -8,7 +8,6 @@ export interface CatalogFilterCriteria {
   systems: readonly OSDefinition[];
 }
 
-/** Accent-insensitive and case-insensitive search. */
 export function normalizeText(value: string): string {
   return value
     .toLocaleLowerCase('en')

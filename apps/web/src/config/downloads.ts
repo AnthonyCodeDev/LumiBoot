@@ -2,16 +2,35 @@ import { z } from 'zod';
 import type { PlatformKey } from '../lib/platform';
 import { resolveProxyConfig } from './runtime';
 import type { FetchLike } from './load-config';
+import { readEnv, sameOriginPath } from './environment';
 
-/** Public location of the downloads manifest. */
-export const DOWNLOADS_MANIFEST_URL = '/downloads/manifest.json';
+export const DOWNLOADS_MANIFEST_URL = sameOriginPath(
+  readEnv('VITE_DOWNLOADS_MANIFEST_URL', '/downloads/manifest.json'),
+  '/downloads/manifest.json',
+);
+
+/** A compromised manifest must not point at a third-party binary: same-origin paths only. */
+function isSafeDownloadUrl(value: string): boolean {
+  if (value.length === 0) return false;
+  if (/\s/.test(value)) return false;
+  if (!value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return false;
+  try {
+    const base = 'https://lumiboot.invalid';
+    return new URL(value, base).origin === base;
+  } catch {
+    return false;
+  }
+}
+
+/** A SHA-256 digest, lowercase or uppercase hex. */
+const SHA256_PATTERN = /^[0-9a-f]{64}$/i;
 
 const downloadEntrySchema = z
   .object({
     file: z.string().min(1),
-    url: z.string().min(1).nullable(),
+    url: z.string().refine(isSafeDownloadUrl, 'Unsafe download URL.').nullable(),
     size: z.number().int().nonnegative().nullable(),
-    sha256: z.string().min(1).nullable(),
+    sha256: z.string().regex(SHA256_PATTERN, 'Invalid SHA-256 digest.').nullable(),
     published: z.boolean(),
     signed: z.boolean().optional(),
     notarized: z.boolean().optional(),
@@ -23,13 +42,15 @@ export const downloadsManifestSchema = z
     version: z.string().min(1),
     wispVersion: z.number().int(),
     generatedAt: z.string().nullable(),
-    platforms: z.object({
-      'windows-x64': downloadEntrySchema,
-      'windows-arm64': downloadEntrySchema,
-      'linux-x64': downloadEntrySchema,
-      'linux-arm64': downloadEntrySchema,
-      macos: downloadEntrySchema,
-    }),
+    platforms: z
+      .object({
+        'windows-x64': downloadEntrySchema,
+        'windows-arm64': downloadEntrySchema,
+        'linux-x64': downloadEntrySchema,
+        'linux-arm64': downloadEntrySchema,
+        macos: downloadEntrySchema,
+      })
+      .strict(),
   })
   .strict();
 
@@ -80,11 +101,15 @@ export async function loadDownloadsManifest(
   return result.data;
 }
 
-/** Downloadable only when `published` and `url` is set; gives `null` otherwise. */
+/** Only published entries with a safe `url`, a positive `size` and a SHA-256 digest are links. */
 export function resolveDownloadUrl(manifest: DownloadsManifest, key: PlatformKey): string | null {
   const entry = manifest.platforms[key];
   if (!entry.published) return null;
   if (entry.url === null || entry.url.length === 0) return null;
+  // Keep this guard for manifests supplied directly to components in tests or embeds.
+  if (!isSafeDownloadUrl(entry.url)) return null;
+  if (entry.size === null || !Number.isInteger(entry.size) || entry.size <= 0) return null;
+  if (entry.sha256 === null || !SHA256_PATTERN.test(entry.sha256)) return null;
   return entry.url;
 }
 

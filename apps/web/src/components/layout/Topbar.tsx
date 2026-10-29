@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { DISCORD_INVITE_URL } from '../../config/environment';
 
 export function Topbar() {
   const [open, setOpen] = useState(false);
@@ -82,7 +83,7 @@ export function Topbar() {
 
       <div className="topbar-menu" id={menuId} ref={menuRef} data-open={open}>
         <a
-          href="https://discord.gg/HcqduKt"
+          href={DISCORD_INVITE_URL}
           className="btn btn-primary topbar-cta"
           target="_blank"
           rel="noopener noreferrer"

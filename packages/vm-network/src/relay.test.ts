@@ -1,26 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import { validateRelayUrl } from './relay';
+import {
+  HOSTILE_ORIGIN,
+  RELAY_PUBLIC,
+  RELAY_WSS,
+  RELAY_WSS_PORT,
+  RELAY_WS_LOCAL,
+} from './testing/fixtures';
 
 describe('validateRelayUrl', () => {
   it('accepts a wss address with host and port', () => {
-    const result = validateRelayUrl('wss://relay.example:8443');
+    const result = validateRelayUrl(RELAY_WSS_PORT);
     expect(result.ok).toBe(true);
-    expect(result.url).toBe('wss://relay.example:8443/');
+    expect(result.url).toBe(`${RELAY_WSS_PORT}/`);
   });
 
   it('normalizes a wss address', () => {
-    const result = validateRelayUrl('wss://relay.example');
+    const result = validateRelayUrl(RELAY_WSS);
     expect(result.ok).toBe(true);
-    expect(result.url).toBe('wss://relay.example/');
+    expect(result.url).toBe(`${RELAY_WSS}/`);
   });
 
   it('rejects ws:// by default', () => {
-    expect(validateRelayUrl('ws://relay.example').ok).toBe(false);
+    expect(validateRelayUrl(RELAY_WSS.replace('wss://', 'ws://')).ok).toBe(false);
   });
 
   it('rejects http and https', () => {
-    expect(validateRelayUrl('http://relay.example').ok).toBe(false);
-    expect(validateRelayUrl('https://relay.example').ok).toBe(false);
+    expect(validateRelayUrl(HOSTILE_ORIGIN).ok).toBe(false);
+    expect(validateRelayUrl(RELAY_PUBLIC).ok).toBe(false);
   });
 
   it('rejects an empty or non-string address', () => {
@@ -31,12 +38,12 @@ describe('validateRelayUrl', () => {
   });
 
   it('rejects credentials (userinfo)', () => {
-    expect(validateRelayUrl('wss://user:pass@relay.example').ok).toBe(false);
-    expect(validateRelayUrl('wss://user@relay.example').ok).toBe(false);
+    expect(validateRelayUrl(RELAY_WSS.replace('://', '://user:pass@')).ok).toBe(false);
+    expect(validateRelayUrl(RELAY_WSS.replace('://', '://user@')).ok).toBe(false);
   });
 
   it('rejects a fragment', () => {
-    expect(validateRelayUrl('wss://relay.example#frag').ok).toBe(false);
+    expect(validateRelayUrl(`${RELAY_WSS}#frag`).ok).toBe(false);
   });
 
   it('rejects a malformed address', () => {
@@ -45,9 +52,9 @@ describe('validateRelayUrl', () => {
   });
 
   it('allows ws:// on localhost only with allowInsecure', () => {
-    expect(validateRelayUrl('ws://localhost:1234', { allowInsecure: true }).ok).toBe(true);
+    expect(validateRelayUrl(RELAY_WS_LOCAL, { allowInsecure: true }).ok).toBe(true);
     expect(validateRelayUrl('ws://127.0.0.1:1234', { allowInsecure: true }).ok).toBe(true);
-    expect(validateRelayUrl('ws://localhost:1234').ok).toBe(false);
+    expect(validateRelayUrl(RELAY_WS_LOCAL).ok).toBe(false);
     expect(validateRelayUrl('ws://example.com', { allowInsecure: true }).ok).toBe(false);
   });
 });

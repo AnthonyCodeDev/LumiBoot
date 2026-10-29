@@ -3,15 +3,25 @@ package auth
 import (
 	"crypto/rand"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/lumiboot/network-proxy/internal/testutil"
 )
+
+// testOrigin is the deployment origin these tests allow and send, derived from
+// `E2E_HOST` / `E2E_PORT` (`http://127.0.0.1:5200` by default).
+var testOrigin = testutil.TestOrigin()
+
+// altOrigin is a second allowed origin, a production-looking one.
+var altOrigin = testutil.AltOrigin()
 
 func testAuth(now *time.Time) *Authenticator {
 	return NewAuthenticatorWithClock(
-		[]string{"http://localhost:5200", "https://lumiboot.example.com"},
+		[]string{testOrigin, altOrigin},
 		10*time.Minute,
 		time.Hour,
 		rand.Reader,
@@ -23,10 +33,10 @@ func TestOriginMatching(t *testing.T) {
 	now := time.Now()
 	a := testAuth(&now)
 	allowed := []string{
-		"http://localhost:5200",
-		"http://localhost:5200/",          // trailing slash tolerated
-		"HTTP://LOCALHOST:5200/some/path", // case + path tolerated
-		"https://lumiboot.example.com",
+		testOrigin,
+		testOrigin + "/", // trailing slash tolerated
+		strings.ToUpper(testOrigin) + "/some/path", // case + path tolerated
+		altOrigin,
 	}
 	for _, o := range allowed {
 		if !a.IsOriginAllowed(o) {
@@ -34,8 +44,8 @@ func TestOriginMatching(t *testing.T) {
 		}
 	}
 	denied := []string{
-		"", "null", "http://localhost:5201", "http://evil.com",
-		"http://localhost:5200.evil.com", "ftp://localhost:5200", "not-a-url",
+		"", "null", testutil.WithPort(testOrigin, 5201), testutil.HostileOrigin(),
+		testOrigin + ".evil.com", testutil.WithScheme(testOrigin, "ftp"), "not-a-url",
 	}
 	for _, o := range denied {
 		if a.IsOriginAllowed(o) {
@@ -48,7 +58,7 @@ func TestPairingFlow(t *testing.T) {
 	now := time.Now()
 	a := testAuth(&now)
 
-	p, err := a.RequestPairing("http://localhost:5200")
+	p, err := a.RequestPairing(testOrigin)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
@@ -56,34 +66,34 @@ func TestPairingFlow(t *testing.T) {
 		t.Fatalf("incomplete pairing: %+v", p)
 	}
 
-	if _, _, err := a.Exchange(p.ID, "http://localhost:5200"); !errors.Is(err, ErrPairingNotApproved) {
+	if _, _, err := a.Exchange(p.ID, testOrigin); !errors.Is(err, ErrPairingNotApproved) {
 		t.Fatalf("pre-approval exchange: %v", err)
 	}
 
 	if err := a.Approve(p.ID, true); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
-	token, expiresAt, err := a.Exchange(p.ID, "http://localhost:5200")
+	token, expiresAt, err := a.Exchange(p.ID, testOrigin)
 	if err != nil {
 		t.Fatalf("exchange: %v", err)
 	}
 	if token == "" || expiresAt.IsZero() {
 		t.Fatal("empty token")
 	}
-	if _, _, err := a.Exchange(p.ID, "http://localhost:5200"); !errors.Is(err, ErrPairingNotFound) {
+	if _, _, err := a.Exchange(p.ID, testOrigin); !errors.Is(err, ErrPairingNotFound) {
 		t.Fatalf("pairing reuse: %v", err)
 	}
 
-	if !a.Verify(token, "http://localhost:5200") {
+	if !a.Verify(token, testOrigin) {
 		t.Fatal("valid token refused")
 	}
-	if a.Verify(token, "https://lumiboot.example.com") {
+	if a.Verify(token, altOrigin) {
 		t.Fatal("token accepted from another origin")
 	}
-	if a.Verify("", "http://localhost:5200") {
+	if a.Verify("", testOrigin) {
 		t.Fatal("empty token accepted")
 	}
-	if a.Verify("garbage", "http://localhost:5200") {
+	if a.Verify("garbage", testOrigin) {
 		t.Fatal("unknown token accepted")
 	}
 
@@ -93,7 +103,7 @@ func TestPairingFlow(t *testing.T) {
 	if !a.Revoke(token) {
 		t.Fatal("revocation failed")
 	}
-	if a.Verify(token, "http://localhost:5200") {
+	if a.Verify(token, testOrigin) {
 		t.Fatal("revoked token accepted")
 	}
 	if a.Revoke(token) {
@@ -104,7 +114,7 @@ func TestPairingFlow(t *testing.T) {
 func TestPairingDenied(t *testing.T) {
 	now := time.Now()
 	a := testAuth(&now)
-	p, err := a.RequestPairing("http://localhost:5200")
+	p, err := a.RequestPairing(testOrigin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,17 +129,17 @@ func TestPairingDenied(t *testing.T) {
 func TestPairingBadOrigin(t *testing.T) {
 	now := time.Now()
 	a := testAuth(&now)
-	if _, err := a.RequestPairing("http://evil.com"); !errors.Is(err, ErrOriginNotAllowed) {
+	if _, err := a.RequestPairing(testutil.HostileOrigin()); !errors.Is(err, ErrOriginNotAllowed) {
 		t.Fatalf("hostile origin: %v", err)
 	}
-	p, err := a.RequestPairing("http://localhost:5200")
+	p, err := a.RequestPairing(testOrigin)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := a.Approve(p.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := a.Exchange(p.ID, "https://lumiboot.example.com"); !errors.Is(err, ErrOriginMismatch) {
+	if _, _, err := a.Exchange(p.ID, altOrigin); !errors.Is(err, ErrOriginMismatch) {
 		t.Fatalf("different origin accepted: %v", err)
 	}
 }
@@ -137,7 +147,7 @@ func TestPairingBadOrigin(t *testing.T) {
 func TestExpiry(t *testing.T) {
 	now := time.Now()
 	a := testAuth(&now)
-	p, err := a.RequestPairing("http://localhost:5200")
+	p, err := a.RequestPairing(testOrigin)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,19 +161,19 @@ func TestExpiry(t *testing.T) {
 
 	now = time.Now()
 	a = testAuth(&now)
-	p2, err := a.RequestPairing("http://localhost:5200")
+	p2, err := a.RequestPairing(testOrigin)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := a.Approve(p2.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	token, _, err := a.Exchange(p2.ID, "http://localhost:5200")
+	token, _, err := a.Exchange(p2.ID, testOrigin)
 	if err != nil {
 		t.Fatal(err)
 	}
 	now = now.Add(2 * time.Hour) // beyond SessionTokenTTL
-	if a.Verify(token, "http://localhost:5200") {
+	if a.Verify(token, testOrigin) {
 		t.Fatal("expired session accepted")
 	}
 	if got := len(a.ListSessions()); got != 0 {
@@ -174,9 +184,9 @@ func TestExpiry(t *testing.T) {
 func TestAdminRevoke(t *testing.T) {
 	now := time.Now()
 	a := testAuth(&now)
-	p, _ := a.RequestPairing("http://localhost:5200")
+	p, _ := a.RequestPairing(testOrigin)
 	_ = a.Approve(p.ID, true)
-	token, _, _ := a.Exchange(p.ID, "http://localhost:5200")
+	token, _, _ := a.Exchange(p.ID, testOrigin)
 	sessions := a.ListSessions()
 	if len(sessions) != 1 {
 		t.Fatalf("sessions: %d", len(sessions))
@@ -184,7 +194,7 @@ func TestAdminRevoke(t *testing.T) {
 	if !a.AdminRevoke(sessions[0].ID) {
 		t.Fatal("admin revocation failed")
 	}
-	if a.Verify(token, "http://localhost:5200") {
+	if a.Verify(token, testOrigin) {
 		t.Fatal("session revoked by admin still valid")
 	}
 	if a.AdminRevoke("abcd") {
@@ -195,7 +205,7 @@ func TestAdminRevoke(t *testing.T) {
 func TestPendingPairings(t *testing.T) {
 	now := time.Now()
 	a := testAuth(&now)
-	if _, err := a.RequestPairing("http://localhost:5200"); err != nil {
+	if _, err := a.RequestPairing(testOrigin); err != nil {
 		t.Fatal(err)
 	}
 	pending := a.PendingPairings()
@@ -206,14 +216,14 @@ func TestPendingPairings(t *testing.T) {
 
 func issueToken(t *testing.T, a *Authenticator) string {
 	t.Helper()
-	p, err := a.RequestPairing("http://localhost:5200")
+	p, err := a.RequestPairing(testOrigin)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
 	if err := a.Approve(p.ID, true); err != nil {
 		t.Fatalf("approve: %v", err)
 	}
-	token, _, err := a.Exchange(p.ID, "http://localhost:5200")
+	token, _, err := a.Exchange(p.ID, testOrigin)
 	if err != nil {
 		t.Fatalf("exchange: %v", err)
 	}
@@ -227,14 +237,14 @@ func TestTransportClosedOnRevoke(t *testing.T) {
 	token := issueToken(t, a)
 
 	closed := make(chan struct{}, 1)
-	info, tid, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
+	info, tid, ok := a.AttachSession(token, testOrigin, func() { closed <- struct{}{} })
 	if !ok || info.ID == "" || tid == "" {
 		t.Fatal("transport attachment refused")
 	}
-	if _, _, ok := a.AttachSession("wrong", "http://localhost:5200", func() {}); ok {
+	if _, _, ok := a.AttachSession("wrong", testOrigin, func() {}); ok {
 		t.Fatal("attachment of an invalid token accepted")
 	}
-	if _, _, ok := a.AttachSession(token, "https://lumiboot.example.com", func() {}); ok {
+	if _, _, ok := a.AttachSession(token, altOrigin, func() {}); ok {
 		t.Fatal("attachment from another origin accepted")
 	}
 
@@ -256,7 +266,7 @@ func TestTransportClosedOnAdminRevokeAndExpiry(t *testing.T) {
 	attach := func() (token, id string, closed chan struct{}) {
 		token = issueToken(t, a)
 		closed = make(chan struct{}, 1)
-		info, _, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
+		info, _, ok := a.AttachSession(token, testOrigin, func() { closed <- struct{}{} })
 		if !ok {
 			t.Fatal("attachment refused")
 		}
@@ -289,7 +299,7 @@ func TestDetachSessionPreventsCallback(t *testing.T) {
 	a := testAuth(&now)
 	token := issueToken(t, a)
 	closed := make(chan struct{}, 1)
-	_, tid, ok := a.AttachSession(token, "http://localhost:5200", func() { closed <- struct{}{} })
+	_, tid, ok := a.AttachSession(token, testOrigin, func() { closed <- struct{}{} })
 	if !ok {
 		t.Fatal("attachment refused")
 	}
@@ -309,18 +319,18 @@ func TestPairingFloodLimit(t *testing.T) {
 	now := time.Now()
 	a := testAuth(&now)
 	for i := 0; i < maxPendingPerOrigin; i++ {
-		if _, err := a.RequestPairing("http://localhost:5200"); err != nil {
+		if _, err := a.RequestPairing(testOrigin); err != nil {
 			t.Fatalf("request %d: %v", i, err)
 		}
 	}
-	if _, err := a.RequestPairing("http://localhost:5200"); !errors.Is(err, ErrPairingLimit) {
+	if _, err := a.RequestPairing(testOrigin); !errors.Is(err, ErrPairingLimit) {
 		t.Fatalf("per-origin cap not applied: %v", err)
 	}
-	if _, err := a.RequestPairing("https://lumiboot.example.com"); err != nil {
+	if _, err := a.RequestPairing(altOrigin); err != nil {
 		t.Fatalf("other origin wrongly blocked: %v", err)
 	}
 	now = now.Add(11 * time.Minute)
-	if _, err := a.RequestPairing("http://localhost:5200"); err != nil {
+	if _, err := a.RequestPairing(testOrigin); err != nil {
 		t.Fatalf("after cleanup: %v", err)
 	}
 }
@@ -344,8 +354,8 @@ func TestTwoTransportsSameTokenRevokeClosesBoth(t *testing.T) {
 
 	closedA := make(chan struct{}, 1)
 	closedB := make(chan struct{}, 1)
-	_, tidA, okA := a.AttachSession(token, "http://localhost:5200", func() { closedA <- struct{}{} })
-	_, tidB, okB := a.AttachSession(token, "http://localhost:5200", func() { closedB <- struct{}{} })
+	_, tidA, okA := a.AttachSession(token, testOrigin, func() { closedA <- struct{}{} })
+	_, tidB, okB := a.AttachSession(token, testOrigin, func() { closedB <- struct{}{} })
 	if !okA || !okB || tidA == "" || tidB == "" || tidA == tidB {
 		t.Fatalf("attachments: okA=%v okB=%v tidA=%q tidB=%q", okA, okB, tidA, tidB)
 	}
@@ -365,8 +375,8 @@ func TestDetachOnlyRemovesTargetTransport(t *testing.T) {
 
 	closedA := make(chan struct{}, 1)
 	closedB := make(chan struct{}, 1)
-	_, tidA, _ := a.AttachSession(token, "http://localhost:5200", func() { closedA <- struct{}{} })
-	a.AttachSession(token, "http://localhost:5200", func() { closedB <- struct{}{} })
+	_, tidA, _ := a.AttachSession(token, testOrigin, func() { closedA <- struct{}{} })
+	a.AttachSession(token, testOrigin, func() { closedB <- struct{}{} })
 	a.DetachSession(token, tidA)
 
 	if !a.Revoke(token) {
@@ -390,11 +400,11 @@ func TestVerifyExpiredClosesAllTransports(t *testing.T) {
 
 	closedA := make(chan struct{}, 1)
 	closedB := make(chan struct{}, 1)
-	a.AttachSession(token, "http://localhost:5200", func() { closedA <- struct{}{} })
-	a.AttachSession(token, "http://localhost:5200", func() { closedB <- struct{}{} })
+	a.AttachSession(token, testOrigin, func() { closedA <- struct{}{} })
+	a.AttachSession(token, testOrigin, func() { closedB <- struct{}{} })
 
 	now = now.Add(2 * time.Hour) // beyond SessionTokenTTL
-	if a.Verify(token, "http://localhost:5200") {
+	if a.Verify(token, testOrigin) {
 		t.Fatal("expired session accepted")
 	}
 	expectClosed(t, closedA, "Verify transport A")
@@ -411,8 +421,8 @@ func TestListSessionsExpiredClosesAllTransports(t *testing.T) {
 
 	closedA := make(chan struct{}, 1)
 	closedB := make(chan struct{}, 1)
-	a.AttachSession(token, "http://localhost:5200", func() { closedA <- struct{}{} })
-	a.AttachSession(token, "http://localhost:5200", func() { closedB <- struct{}{} })
+	a.AttachSession(token, testOrigin, func() { closedA <- struct{}{} })
+	a.AttachSession(token, testOrigin, func() { closedB <- struct{}{} })
 
 	now = now.Add(2 * time.Hour)
 	if got := a.ListSessions(); len(got) != 0 {
@@ -431,8 +441,8 @@ func TestCleanupExpiredClosesAllTransports(t *testing.T) {
 
 	closedA := make(chan struct{}, 1)
 	closedB := make(chan struct{}, 1)
-	a.AttachSession(token, "http://localhost:5200", func() { closedA <- struct{}{} })
-	a.AttachSession(token, "http://localhost:5200", func() { closedB <- struct{}{} })
+	a.AttachSession(token, testOrigin, func() { closedA <- struct{}{} })
+	a.AttachSession(token, testOrigin, func() { closedB <- struct{}{} })
 
 	now = now.Add(2 * time.Hour)
 	a.CleanupExpired()
@@ -450,7 +460,7 @@ func TestCloseAllSessionsClosesEveryTransport(t *testing.T) {
 	attach := func(token string) {
 		ch := make(chan struct{}, 1)
 		chans = append(chans, ch)
-		a.AttachSession(token, "http://localhost:5200", func() { ch <- struct{}{} })
+		a.AttachSession(token, testOrigin, func() { ch <- struct{}{} })
 	}
 	attach(issueToken(t, a))
 	attach(issueToken(t, a))
@@ -471,7 +481,7 @@ func TestCloseAllSessionsIdempotent(t *testing.T) {
 	token := issueToken(t, a)
 
 	var calls int32
-	a.AttachSession(token, "http://localhost:5200", func() { atomic.AddInt32(&calls, 1) })
+	a.AttachSession(token, testOrigin, func() { atomic.AddInt32(&calls, 1) })
 	a.CloseAllSessions()
 	a.CloseAllSessions()
 	a.CloseAllSessions()
@@ -481,7 +491,8 @@ func TestCloseAllSessionsIdempotent(t *testing.T) {
 	}
 }
 
-// TestConcurrentAttachDetachRevoke: no deadlock nor double close under -race.
+// TestConcurrentAttachDetachRevoke: no deadlock nor double close under -race,
+// and the per-token cap holds under concurrency.
 func TestConcurrentAttachDetachRevoke(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
@@ -496,7 +507,7 @@ func TestConcurrentAttachDetachRevoke(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, tid, ok := a.AttachSession(token, "http://localhost:5200", func() {
+			_, tid, ok := a.AttachSession(token, testOrigin, func() {
 				atomic.AddInt32(&closed, 1)
 			})
 			if ok {
@@ -506,10 +517,22 @@ func TestConcurrentAttachDetachRevoke(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Detach half the transports: revocation only closes the rest.
+	attached := 0
+	for _, tid := range tids {
+		if tid != "" {
+			attached++
+		}
+	}
+	if attached != MaxTransportsPerToken {
+		t.Fatalf("attached=%d, expected the per-token cap %d", attached, MaxTransportsPerToken)
+	}
+
+	// Detach half the attached transports: revocation only closes the rest.
+	detached := 0
 	for i := 0; i < n; i += 2 {
 		if tids[i] != "" {
 			a.DetachSession(token, tids[i])
+			detached++
 		}
 	}
 
@@ -524,11 +547,66 @@ func TestConcurrentAttachDetachRevoke(t *testing.T) {
 		t.Fatal("Revoke blocked (deadlock?)")
 	}
 
+	want := int32(attached - detached)
 	got := atomic.LoadInt32(&closed)
-	if got > n {
-		t.Fatalf("double close: %d closes for %d transports", got, n)
+	if got > int32(attached) {
+		t.Fatalf("double close: %d closes for %d transports", got, attached)
 	}
-	if got != int32(n/2) {
-		t.Fatalf("closes=%d, expected %d (non-detached transports)", got, n/2)
+	if got != want {
+		t.Fatalf("closes=%d, expected %d (non-detached transports)", got, want)
+	}
+}
+
+// TestAttachSessionTransportCap: a token accepts a bounded number of
+// simultaneous transports, and detaching one frees a slot.
+func TestAttachSessionTransportCap(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+	token := issueToken(t, a)
+
+	var tids []string
+	for i := 0; i < MaxTransportsPerToken; i++ {
+		_, tid, ok := a.AttachSession(token, testOrigin, func() {})
+		if !ok {
+			t.Fatalf("attachment %d refused below the cap", i)
+		}
+		tids = append(tids, tid)
+	}
+	if _, _, ok := a.AttachSession(token, testOrigin, func() {}); ok {
+		t.Fatalf("attachment above the cap of %d accepted", MaxTransportsPerToken)
+	}
+
+	a.DetachSession(token, tids[0])
+	if _, _, ok := a.AttachSession(token, testOrigin, func() {}); !ok {
+		t.Fatal("attachment refused after DetachSession freed a slot")
+	}
+}
+
+// TestStatusForRequiresPairingOrigin: an allowed origin cannot read a pairing
+// created by another allowed origin.
+func TestStatusForRequiresPairingOrigin(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	a := testAuth(&now)
+
+	p, err := a.RequestPairing(testOrigin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := a.StatusFor(p.ID, testOrigin); !ok || got.ID != p.ID {
+		t.Fatalf("same-origin status refused: %+v ok=%v", got, ok)
+	}
+	if _, ok := a.StatusFor(p.ID, altOrigin); ok {
+		t.Fatal("pairing status readable from another allowed origin")
+	}
+	if _, ok := a.StatusFor(p.ID, ""); ok {
+		t.Fatal("pairing status readable without an origin")
+	}
+	if _, ok := a.StatusFor(p.ID, testutil.HostileOrigin()); ok {
+		t.Fatal("pairing status readable from a forbidden origin")
+	}
+	if got, ok := a.Status(p.ID); !ok || got.ID != p.ID {
+		t.Fatal("origin-free Status must still work for internal callers")
 	}
 }

@@ -1,13 +1,5 @@
 #!/usr/bin/env node
-// Serves locally, on loopback, the disk of a prepare-*-asset manifest over HTTP
-// Range, with the manifest and the v86 engine binaries from a single origin.
-//
-//   node scripts/serve-windows7-asset.mjs --manifest <json> [--source <img>]
-//   node scripts/serve-windows7-asset.mjs --port 37893 [--token <t> | --no-token]
-//
-// SECURITY: listens on 127.0.0.1 and requires a token by default; `--expose`
-// widens it to a non-loopback host. The served manifest drops `source` and
-// `provenance`.
+// Serves a prepare-*-asset disk over HTTP Range: loopback only, token required.
 
 import { readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -15,23 +7,42 @@ import { randomBytes } from 'node:crypto';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createAssetServer } from './lib/range-server.mjs';
+import { loadEnvFile } from './lib/load-env.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
 
-const DEFAULTS = {
-  manifest: join(repoRoot, 'images', 'windows-7-pro-sp1-x86', 'manifest.json'),
-  source: undefined,
-  host: '127.0.0.1',
-  port: 37893,
-  token: undefined,
-  noToken: false,
-  expose: false,
-};
+const DEFAULT_MANIFEST = join(repoRoot, 'images', 'windows-7-pro-sp1-x86', 'manifest.json');
+export const DEFAULT_HOST = '127.0.0.1';
+/** Default port: one above the local network proxy (37892), never the same. */
+export const DEFAULT_PORT = 37893;
+
+/** Built-in defaults, overridable from `.env` (LUMIBOOT_ASSET_*); the CLI wins. */
+export function defaultOptions(env = process.env) {
+  const port = Number(env.LUMIBOOT_ASSET_PORT);
+  return {
+    manifest: env.LUMIBOOT_ASSET_MANIFEST || DEFAULT_MANIFEST,
+    source: env.LUMIBOOT_ASSET_SOURCE || undefined,
+    host: env.LUMIBOOT_ASSET_HOST || DEFAULT_HOST,
+    port: Number.isInteger(port) && port >= 1 && port <= 65535 ? port : DEFAULT_PORT,
+    token: env.LUMIBOOT_ASSET_TOKEN || undefined,
+    noToken: env.LUMIBOOT_ASSET_NO_TOKEN === '1',
+    expose: false,
+  };
+}
+
+const isLoopback = (host) => host === '127.0.0.1' || host === '::1' || host === 'localhost';
+
+/** Printable origin for the listening host; IPv6 literals need brackets. */
+export function originFor(host, port) {
+  const displayHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
+  const bracketed = displayHost.includes(':') ? `[${displayHost}]` : displayHost;
+  return `http://${bracketed}:${port}`;
+}
 
 /** Parses the CLI arguments; importing the module never starts the server. */
-export function parseArgs(args) {
-  const options = { ...DEFAULTS };
+export function parseArgs(args, env = process.env) {
+  const options = defaultOptions(env);
 
   for (let i = 0; i < args.length; i += 1) {
     const [name, inline] =
@@ -70,7 +81,9 @@ export function parseArgs(args) {
       case '-h':
         process.stdout.write(
           'Usage: node scripts/serve-windows7-asset.mjs [--manifest <json>] [--source <img>]\n' +
-            '       [--host 127.0.0.1] [--port 37893] [--token <token> | --no-token] [--expose] [-h]\n',
+            `       [--host ${DEFAULT_HOST}] [--port ${DEFAULT_PORT}] [--token <token> | --no-token] [--expose] [-h]\n` +
+            '  --no-token: loopback only; disables CORS, so other origins cannot read the disk.\n' +
+            '  Defaults come from the root .env (LUMIBOOT_ASSET_*); shell and CLI win.\n',
         );
         process.exit(0);
         break;
@@ -79,10 +92,12 @@ export function parseArgs(args) {
     }
   }
 
+  if (options.noToken && !isLoopback(options.host)) {
+    throw new Error('--no-token is only allowed with a loopback host.');
+  }
+
   return options;
 }
-
-const isLoopback = (host) => host === '127.0.0.1' || host === '::1' || host === 'localhost';
 
 /** Drops `source` and `provenance`, and appends the token suffix to served URLs. */
 export function toPublicServedManifest(manifest, options = {}) {
@@ -113,7 +128,7 @@ export function toPublicServedManifest(manifest, options = {}) {
   return publicManifest;
 }
 
-/** Disk path from `--source`, the recorded path, or `images/<ref>/`; external disks need `--source`. */
+/** Disk path from `--source`, else the recorded path, else `images/<ref>/`. */
 export function resolveDiskPath({ source, manifest }) {
   if (source !== undefined && source.length > 0) return resolve(source);
   const recorded = manifest.source?.path;
@@ -131,6 +146,8 @@ export function resolveDiskPath({ source, manifest }) {
 }
 
 async function main() {
+  // Root `.env` defaults; shell variables and CLI arguments keep priority.
+  loadEnvFile();
   const options = parseArgs(process.argv.slice(2));
   const manifestPath = resolve(options.manifest);
   let manifest;
@@ -169,7 +186,7 @@ async function main() {
   }
 
   const token = options.noToken ? null : (options.token ?? randomBytes(24).toString('hex'));
-  const suffix = token === null ? '' : `?token=${token}`;
+  const suffix = token === null ? '' : `?token=${encodeURIComponent(token)}`;
 
   const diskRoute = `/images/${ref}/${manifest.disk.fileName ?? 'disk.img'}`;
   const manifestRoute = `/images/${ref}/manifest.json`;
@@ -193,12 +210,20 @@ async function main() {
     if (existsSync(file)) routes[`/v86/${name}`] = { file, contentType };
   }
 
-  const server = createAssetServer({ routes, token });
+  const server = createAssetServer({
+    routes,
+    token,
+    // Without a bearer, block CORS; with a token, allow explicit cross-origin reads.
+    ...(token === null
+      ? {
+          corsOrigin: null,
+          extraHeaders: { 'Cross-Origin-Resource-Policy': 'same-origin' },
+        }
+      : { corsOrigin: '*' }),
+  });
   const address = await server.listen({ host: options.host, port: options.port });
   const actualPort = typeof address === 'object' && address !== null ? address.port : options.port;
-  const hostForUrl =
-    options.host === '0.0.0.0' || options.host === '::' ? '127.0.0.1' : options.host;
-  const origin = `http://${hostForUrl}:${actualPort}`;
+  const origin = originFor(options.host, actualPort);
 
   process.stdout.write(
     [
@@ -207,7 +232,7 @@ async function main() {
       `  ref       : ${ref}`,
       `  disk      : ${diskPath} (${diskInfo.size} bytes)`,
       token === null
-        ? '  token     : disabled (--no-token) — loopback only'
+        ? '  token     : disabled (--no-token) — loopback, cross-origin access blocked'
         : `  token     : ${token}`,
       '',
       '  Range proof:',

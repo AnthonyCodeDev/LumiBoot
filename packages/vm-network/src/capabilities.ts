@@ -10,7 +10,7 @@ export interface NicCapabilities {
   ne2k: boolean;
 }
 
-/** What the guest OS can do on top of the NIC, independent of the transport. */
+/** What the guest can do on top of the NIC. */
 export interface GuestStackCapabilities {
   ip: boolean;
   dhcp: boolean;
@@ -59,7 +59,6 @@ const NO_TRANSPORT: TransportCapabilities = Object.freeze({
   cors: false,
 });
 
-/** No network access. */
 export const OFFLINE_CAPABILITIES: NetworkCapabilities = Object.freeze({
   nic: NO_NIC,
   guestStack: NO_GUEST_STACK,
@@ -67,10 +66,7 @@ export const OFFLINE_CAPABILITIES: NetworkCapabilities = Object.freeze({
   fullInternet: false,
 });
 
-/**
- * The v86 `fetch` backend only carries HTTP port 80, so HTTPS fails and
- * `transport.https` stays false.
- */
+/** The `fetch` backend only carries HTTP port 80: HTTPS fails. */
 export const BROWSER_FETCH_CAPABILITIES: NetworkCapabilities = Object.freeze({
   nic: Object.freeze({ ethernet: true, virtio: true, ne2k: true }),
   guestStack: Object.freeze({
@@ -85,10 +81,7 @@ export const BROWSER_FETCH_CAPABILITIES: NetworkCapabilities = Object.freeze({
   fullInternet: false,
 });
 
-/**
- * A real WISP relay carries arbitrary TCP including 443, but this stays a static
- * capability: only a probe can confirm connectivity.
- */
+/** A real WISP relay carries 443, but only a probe confirms connectivity. */
 export const USER_RELAY_CAPABILITIES: NetworkCapabilities = Object.freeze({
   nic: Object.freeze({ ethernet: true, virtio: true, ne2k: true }),
   guestStack: Object.freeze({

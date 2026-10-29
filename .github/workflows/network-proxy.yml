@@ -69,10 +69,14 @@ jobs:
       - id: compute
         env:
           INPUT_VERSION: ${{ inputs.version }}
+          # GitHub context values reach the script through `env`, never by
+          # interpolation: an unquoted `${{ github.* }}` would be shell syntax.
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
         run: |
           set -euo pipefail
           RELEASE="false"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             RELEASE="true"
             if [ -n "$INPUT_VERSION" ]; then
               VERSION="$INPUT_VERSION"
@@ -86,7 +90,7 @@ jobs:
                 VERSION="${MAJOR}.${MINOR}.${PATCH}"
               fi
             fi
-          elif [[ "${{ github.ref }}" == refs/tags/network-v* ]]; then
+          elif [[ "$REF" == refs/tags/network-v* ]]; then
             RELEASE="true"
             VERSION="${GITHUB_REF_NAME#network-v}"
           else
@@ -124,12 +128,15 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
+          # The version comes from an output and is only used as a Go linker
+          # value: keep it in `env`, never interpolate it into the script body.
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           mkdir -p dist
           BIN="lumiboot-network"
           if [ "$GOOS" = "windows" ]; then BIN="$BIN.exe"; fi
           go build -trimpath \
-            -ldflags="-s -w -X github.com/lumiboot/network-proxy/internal/server.Version=${{ needs.prepare.outputs.version }}" \
+            -ldflags="-s -w -X 'github.com/lumiboot/network-proxy/internal/server.Version=$VERSION'" \
             -o "dist/$BIN" ./cmd/lumiboot-network
           if [ "$GOOS" = "windows" ]; then
             mv "dist/$BIN" "dist/LumiBoot-Network-$GOOS-$GOARCH.exe"

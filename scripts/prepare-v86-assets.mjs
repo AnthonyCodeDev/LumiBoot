@@ -1,11 +1,5 @@
 #!/usr/bin/env node
-// Prepares the static v86 engine binaries in apps/web/public/v86/: the WASM from
-// the installed npm package, the BIOS files from the pinned copy/v86 commit.
-//
-//   node scripts/prepare-v86-assets.mjs          # copy/download then verify
-//   node scripts/prepare-v86-assets.mjs --check   # verify only
-//
-// Any SHA-256 or size mismatch makes the script fail.
+// Copies/downloads the v86 binaries into apps/web/public/v86/ and verifies them.
 
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';

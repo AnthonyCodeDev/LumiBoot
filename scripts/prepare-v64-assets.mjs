@@ -15,9 +15,11 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 function verify(name, bytes) {
   const expected = lock.assets[name];
   if (!expected) throw new Error(`No lock entry for "${name}".`);
-  if (bytes.length !== expected.size) throw new Error(`${name}: ${bytes.length} bytes instead of ${expected.size}.`);
+  if (bytes.length !== expected.size)
+    throw new Error(`${name}: ${bytes.length} bytes instead of ${expected.size}.`);
   const actual = sha256(bytes);
-  if (actual !== expected.sha256) throw new Error(`${name}: SHA-256 ${actual} instead of ${expected.sha256}.`);
+  if (actual !== expected.sha256)
+    throw new Error(`${name}: SHA-256 ${actual} instead of ${expected.sha256}.`);
 }
 
 let ok = true;

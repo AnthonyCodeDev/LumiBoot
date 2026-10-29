@@ -42,6 +42,16 @@ func pipeDialer() DialFunc {
 	}
 }
 
+type eofAfterDataConn struct{ net.Conn }
+
+func (c eofAfterDataConn) Read(buf []byte) (int, error) {
+	n, err := c.Conn.Read(buf)
+	if n > 0 {
+		return n, io.EOF
+	}
+	return n, err
+}
+
 func publicResolve(_ context.Context, _ string) ([]net.IP, error) {
 	return []net.IP{net.ParseIP("203.0.113.7")}, nil
 }
@@ -159,6 +169,26 @@ func TestConnectDataCloseEcho(t *testing.T) {
 	expectClose(t, readFrame(t, fx.conn), 1, CloseInvalidInfo)
 }
 
+func TestDataReturnedWithEOFIsDelivered(t *testing.T) {
+	fx := newSession(t, func(c *HandlerConfig) {
+		c.Dial = func(_ context.Context, _, _ string) (net.Conn, error) {
+			client, server := net.Pipe()
+			go func() {
+				defer func() { _ = server.Close() }()
+				_, _ = server.Write([]byte("last bytes"))
+			}()
+			return eofAfterDataConn{client}, nil
+		}
+	})
+	_ = readFrame(t, fx.conn)
+	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
+	data := readFrame(t, fx.conn)
+	if data.Type != TypeData || data.StreamID != 1 || string(data.Payload) != "last bytes" {
+		t.Fatalf("final data lost: %+v", data)
+	}
+	expectClose(t, readFrame(t, fx.conn), 1, CloseClientDone)
+}
+
 func TestUDPRefused(t *testing.T) {
 	fx := newSession(t, nil)
 	_ = readFrame(t, fx.conn)
@@ -217,6 +247,37 @@ func TestConnectRefused(t *testing.T) {
 	_ = readFrame(t, fx.conn)
 	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
 	expectClose(t, readFrame(t, fx.conn), 1, CloseConnectRefused)
+}
+
+func TestResolutionUsesConnectTimeout(t *testing.T) {
+	fx := newSession(t, func(c *HandlerConfig) {
+		c.ConnectTimeout = 100 * time.Millisecond
+		c.Resolve = func(ctx context.Context, _ string) ([]net.IP, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+	})
+	_ = readFrame(t, fx.conn)
+	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
+	expectClose(t, readFrame(t, fx.conn), 1, CloseConnectTimeout)
+	if got := fx.mgr.Count(); got != 0 {
+		t.Fatalf("timed-out DNS lookup left %d stream(s) reserved", got)
+	}
+}
+
+func TestSweptPendingConnectReleasesStream(t *testing.T) {
+	fx := newSession(t, func(c *HandlerConfig) {
+		c.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+			c.Manager.SweepIdle(-time.Second)
+			return pipeDialer()(ctx, network, address)
+		}
+	})
+	_ = readFrame(t, fx.conn)
+	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
+	expectClose(t, readFrame(t, fx.conn), 1, CloseTransferTimeout)
+	if got := fx.stats.Snapshot().ActiveConnections; got != 0 {
+		t.Fatalf("swept connect left %d active stream(s)", got)
+	}
 }
 
 // TestFlowControlContinueEmission: a CONTINUE is emitted every InitialBufferPackets
@@ -359,5 +420,124 @@ func TestWriteFullErrorPartial(t *testing.T) {
 	}
 	if n != 2 {
 		t.Fatalf("partial bytes counted: %d, expected 2", n)
+	}
+}
+
+// TestIdleTimeoutClosesSilentClient: a peer that stops answering pings (suspended
+// tab, dropped network) is disconnected after IdleTimeout instead of living
+// forever.
+func TestIdleTimeoutClosesSilentClient(t *testing.T) {
+	const idle = 150 * time.Millisecond
+	fx := newSession(t, func(c *HandlerConfig) { c.IdleTimeout = idle })
+	// Simulate a suspended tab: never answer the server's pings.
+	fx.conn.SetPingHandler(func(string) error { return nil })
+	_ = readFrame(t, fx.conn) // initial CONTINUE
+
+	const budget = 2 * time.Second
+	_ = fx.conn.SetReadDeadline(time.Now().Add(budget))
+	start := time.Now()
+	for {
+		if _, _, err := fx.conn.ReadMessage(); err != nil {
+			if isTimeout(err) {
+				t.Fatalf("connection still open after %s", budget)
+			}
+			break
+		}
+	}
+	if elapsed := time.Since(start); elapsed > budget {
+		t.Fatalf("idle connection closed after %s, want < %s", elapsed, budget)
+	}
+}
+
+// TestPingsKeepResponsiveClientAlive: pongs push the read deadline forward, so a
+// responsive but idle client survives several idle periods and still relays data.
+func TestPingsKeepResponsiveClientAlive(t *testing.T) {
+	const idle = 150 * time.Millisecond
+	fx := newSession(t, func(c *HandlerConfig) { c.IdleTimeout = idle })
+
+	pings := make(chan struct{}, 8)
+	fx.conn.SetPingHandler(func(appData string) error {
+		select {
+		case pings <- struct{}{}:
+		default:
+		}
+		// Same behaviour as gorilla's default handler, but observable.
+		return fx.conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(time.Second))
+	})
+
+	// The client must read continuously for control frames to be processed.
+	frames := make(chan Frame, 8)
+	go func() {
+		defer close(frames)
+		for {
+			_, msg, err := fx.conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			f, err := DecodeFrame(msg, 4*1024*1024)
+			if err != nil {
+				return
+			}
+			frames <- f
+		}
+	}()
+
+	select {
+	case f := <-frames: // initial CONTINUE
+		if f.Type != TypeContinue || f.StreamID != 0 {
+			t.Fatalf("initial CONTINUE expected, got %+v", f)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no initial CONTINUE")
+	}
+
+	for i := 0; i < 3; i++ {
+		select {
+		case <-pings:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("no server ping observed (idle=%s)", idle)
+		}
+	}
+
+	// The session outlived several idle periods: data still flows.
+	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
+	sendFrame(t, fx.conn, Frame{Type: TypeData, StreamID: 1, Payload: []byte("still-alive")})
+	select {
+	case echo := <-frames:
+		if echo.Type != TypeData || echo.StreamID != 1 || string(echo.Payload) != "still-alive" {
+			t.Fatalf("unexpected echo after keepalive: %+v", echo)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no echo after keepalive")
+	}
+}
+
+// zeroReadConn is a broken upstream whose Read never returns data nor an error.
+type zeroReadConn struct{}
+
+func (zeroReadConn) Read([]byte) (int, error)         { return 0, nil }
+func (zeroReadConn) Write(p []byte) (int, error)      { return len(p), nil }
+func (zeroReadConn) Close() error                     { return nil }
+func (zeroReadConn) LocalAddr() net.Addr              { return dummyAddr{} }
+func (zeroReadConn) RemoteAddr() net.Addr             { return dummyAddr{} }
+func (zeroReadConn) SetDeadline(time.Time) error      { return nil }
+func (zeroReadConn) SetReadDeadline(time.Time) error  { return nil }
+func (zeroReadConn) SetWriteDeadline(time.Time) error { return nil }
+
+// TestZeroLengthReadsCloseStream: (0, nil) must not spin the pump forever.
+func TestZeroLengthReadsCloseStream(t *testing.T) {
+	fx := newSession(t, func(c *HandlerConfig) {
+		c.Dial = func(_ context.Context, _, _ string) (net.Conn, error) {
+			return zeroReadConn{}, nil
+		}
+	})
+	_ = readFrame(t, fx.conn) // initial CONTINUE
+	sendFrame(t, fx.conn, Frame{Type: TypeConnect, StreamID: 1, Payload: BuildConnectPayload(StreamTypeTCP, 80, "example.com")})
+	expectClose(t, readFrame(t, fx.conn), 1, CloseTransferTimeout)
+	if got := fx.stats.Snapshot().Errors; got == 0 {
+		t.Fatal("zero-length read loop not counted as an error")
+	}
+	if got := fx.stats.Snapshot().ActiveConnections; got != 0 {
+		t.Fatalf("closed stream still active: %d", got)
 	}
 }

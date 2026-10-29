@@ -4,11 +4,9 @@ import type { V86, V86Options } from 'v86';
 import type { ImageManifest, LocalDiskManifest } from '@lumiboot/vm-assets';
 import { V86Provider } from './V86Provider';
 import type { V86ConsoleAdapter } from './console-adapter';
+import { DISCARD_WISP_URL, RELAY_ORIGIN, RELAY_WSS_PATH } from './testing/fixtures';
 
-/**
- * Captures the controllers created by the provider to prove no failure path
- * leaks one.
- */
+/** Captures the controllers so no failure path leaks one. */
 const { createdControllers } = vi.hoisted(() => ({
   createdControllers: [] as Array<import('@lumiboot/vm-network').NetworkController>,
 }));
@@ -275,10 +273,10 @@ describe('V86Provider', () => {
   it('valid user-relay: injects a net_device with relay_url and the matching NIC', async () => {
     const { provider, captured } = setup();
     await provider.start(makeOS(), document.createElement('div'), {
-      network: { mode: 'user-relay', relayUrl: 'wss://relay.example.com:8443/wisp' },
+      network: { mode: 'user-relay', relayUrl: RELAY_WSS_PATH },
     });
     expect(captured[0]?.net_device).toEqual({
-      relay_url: 'wisps://relay.example.com:8443/wisp',
+      relay_url: `wisps://${RELAY_ORIGIN}:8443/wisp`,
       type: 'virtio',
     });
   });
@@ -330,11 +328,14 @@ describe('V86Provider', () => {
   it('unreachable relay: the start succeeds without blocking the lifecycle', async () => {
     const { provider, captured } = setup();
     const instance = await provider.start(makeOS(), document.createElement('div'), {
-      network: { mode: 'user-relay', relayUrl: 'wss://127.0.0.1:9/' },
+      network: { mode: 'user-relay', relayUrl: DISCARD_WISP_URL },
     });
 
     // A real TLS WISP relay is targeted.
-    expect(captured[0]?.net_device).toEqual({ relay_url: 'wisps://127.0.0.1:9/', type: 'virtio' });
+    expect(captured[0]?.net_device).toEqual({
+      relay_url: DISCARD_WISP_URL.replace('wss://', 'wisps://'),
+      type: 'virtio',
+    });
 
     // A dead relay is only observed at runtime, so the controller stays configured.
     const controller = createdControllers[0];
@@ -442,12 +443,10 @@ describe('V86Provider', () => {
 
     const instance = await provider.start(makeOS(), document.createElement('div'));
 
-    // v86 reads the disk with XMLHttpRequest: the patch must be in place before
-    // the dynamic import resolves, never after the first read.
+    // v86 reads disks with XHR: the patch must be in place before the import resolves.
     expect(order).toEqual(['install', 'engine']);
     await instance.dispose();
-    // The transport intentionally outlives the session: it is page-wide and
-    // idempotent, so a restart never falls back to the HTTP cache.
+    // Page-wide and idempotent: a restart never falls back to the HTTP cache.
     expect(order).toEqual(['install', 'engine']);
   });
 
@@ -551,10 +550,7 @@ describe('V86Provider: imported media (Windows 7)', () => {
     expect(captured).toHaveLength(0);
   });
 
-  /**
-   * `custom-image` declares no `bootDevice`: the media format alone decides the
-   * mount, so a bootable ISO is no longer mistaken for an installer.
-   */
+  // `custom-image` declares no `bootDevice`: the media format alone decides the mount.
   function makeCustomImageOS(): OSDefinition {
     return makeOS({
       id: 'custom-image',

@@ -1,7 +1,6 @@
 import type { OSDefinition } from '@lumiboot/contracts';
 import type { VMEngine } from '../contracts/VMEngine';
 
-/** Device state read before a launch, independent of the catalog. */
 export interface RuntimeEnvironment {
   webAssembly: boolean;
   crossOriginIsolated: boolean;
@@ -24,9 +23,7 @@ export function detectRuntimeEnvironment(
   };
 }
 
-/**
- * An engine declaring no architecture cannot be contradicted on that criterion.
- */
+/** An engine declaring no architecture cannot be contradicted on that criterion. */
 export function checkEngineCompatibility(
   engine: VMEngine,
   os: OSDefinition,

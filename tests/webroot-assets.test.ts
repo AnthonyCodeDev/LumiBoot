@@ -2,18 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
 
-/**
- * Build/CI guardrail for the public webroot, for P2 security.
- *
- * The published webroot, `apps/web/public/` then `apps/web/dist/`, must NEVER
- * contain a proprietary system image such as Windows media, nor user media. Free
- * distribution disks such as Debian and Ubuntu stay allowed: this guardrail must
- * not break free Linux images.
- */
+// Build/CI guardrail: the public webroot never holds proprietary or user media.
 
 const repoRoot = process.cwd();
 
-/** Free image references allowed in the public webroot. */
 const ALLOWED_IMAGE_REFS = [/^alpine-/i, /^debian-/i, /^ubuntu-/i];
 
 const DISK_SUFFIXES = new Set([
@@ -28,7 +20,6 @@ const DISK_SUFFIXES = new Set([
   '.raw',
 ]);
 
-/** User media: never publishable in the static webroot. */
 const USER_MEDIA_SUFFIXES = new Set(['.mp4', '.mkv', '.avi', '.mov', '.webm', '.vob', '.m4v']);
 
 const PROPRIETARY_MEDIA = /windows|winxp|winvista|win(?:7|8|10|11)/i;
@@ -38,10 +29,6 @@ export interface WebrootViolation {
   reason: string;
 }
 
-/**
- * Detects forbidden media in a list of paths relative to an `images/` folder:
- * proprietary system names, user media, or non-free disks.
- */
 export function findForbiddenWebrootMedia(relativePaths: string[]): WebrootViolation[] {
   const violations: WebrootViolation[] = [];
   for (const rawPath of relativePaths) {

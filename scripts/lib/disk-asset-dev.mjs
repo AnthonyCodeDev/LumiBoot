@@ -1,8 +1,4 @@
-// Development middleware serving the manifests of local RAW disks and the disks
-// themselves over HTTP Range, from the same origin as the app.
-//
-// Every `images/*/manifest.json` with `boot.mode === 'disk-boot'` is registered;
-// the disk is served in place and never enters the `public/` bundle.
+// Dev middleware serving local RAW disk manifests and disks over HTTP Range.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
@@ -10,16 +6,25 @@ import { createJsonHandler, createRangeHandler } from './range-server.mjs';
 
 const REF_PATTERN = /^[a-z0-9-]+$/;
 
-/** Human-readable size in GiB. */
 function formatGiB(bytes) {
   const gib = bytes / 1024 ** 3;
   return `${Number.isInteger(gib) ? gib : gib.toFixed(1)} GiB`;
 }
 
-/**
- * Serializes the public form of a disk manifest: `source` and `provenance` must
- * never leave the host.
- */
+function isLoopbackHost(host) {
+  try {
+    const url = new URL(`http://${host}`);
+    return (
+      url.username === '' &&
+      url.password === '' &&
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]')
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Public manifest: `source` and `provenance` never leave the host. */
 export function toPublicDiskManifest(manifest) {
   const publicManifest = {
     version: manifest.version,
@@ -37,7 +42,6 @@ export function toPublicDiskManifest(manifest) {
   return publicManifest;
 }
 
-/** Whether `dir` holds a subdirectory with a `manifest.json`. */
 function hasDiskManifest(dir) {
   try {
     return readdirSync(dir, { withFileTypes: true }).some(
@@ -61,10 +65,7 @@ function findRepoRoot(start) {
   return null;
 }
 
-/**
- * Discovers every local disk under `images/`; `source.path` is relative to the
- * repository root, never to the cwd.
- */
+/** Discovers every local disk under `images/` (paths relative to the repo root). */
 function discoverLocalDisks(imagesDir) {
   const routes = new Map();
   const served = [];
@@ -137,6 +138,8 @@ function discoverLocalDisks(imagesDir) {
         filePath: diskPath,
         size: info.size,
         contentType: 'application/octet-stream',
+        corsOrigin: null,
+        extraHeaders: { 'Cross-Origin-Resource-Policy': 'same-origin' },
         token: null,
       }),
     );
@@ -145,6 +148,8 @@ function discoverLocalDisks(imagesDir) {
       createJsonHandler({
         body: `${JSON.stringify(toPublicDiskManifest(manifest), null, 2)}\n`,
         contentType: 'application/json; charset=utf-8',
+        corsOrigin: null,
+        extraHeaders: { 'Cross-Origin-Resource-Policy': 'same-origin' },
         token: null,
       }),
     );
@@ -154,9 +159,10 @@ function discoverLocalDisks(imagesDir) {
   return { routes, served, skipped };
 }
 
-/** Builds a connect middleware; passes through when no disk is available. */
+/** Connect middleware; passes through when no disk is available. */
 export function createDiskAssetMiddleware(options = {}) {
   const logger = options.logger ?? ((message) => process.stderr.write(`${message}\n`));
+  const debug = options.debug ?? process.env.LUMIBOOT_DISK_DEBUG === '1';
   const passThrough = (_req, _res, next) => next();
 
   const repoRoot = options.repoRoot ?? findRepoRoot(options.cwd ?? process.cwd());
@@ -175,7 +181,7 @@ export function createDiskAssetMiddleware(options = {}) {
   } else {
     logger('[lumiboot] no local disk served (Windows unavailable).');
   }
-  if (process.env.LUMIBOOT_DISK_DEBUG === '1') {
+  if (debug) {
     for (const reason of skipped) logger(`[lumiboot] disk skipped: ${reason}`);
   }
 
@@ -190,6 +196,19 @@ export function createDiskAssetMiddleware(options = {}) {
     }
     const handler = routes.get(pathname);
     if (handler !== undefined) {
+      // Only the dev server's own page may read the operator's local disk.
+      const origin = req.headers.origin;
+      const scheme = req.socket.encrypted ? 'https' : 'http';
+      const requestOrigin = `${scheme}://${req.headers.host ?? ''}`;
+      if (!isLoopbackHost(req.headers.host) || (origin !== undefined && origin !== requestOrigin)) {
+        res.statusCode = 403;
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+        res.setHeader('Content-Length', '0');
+        res.end();
+        return;
+      }
+      res.removeHeader('Access-Control-Allow-Origin');
       handler(req, res);
       return;
     }

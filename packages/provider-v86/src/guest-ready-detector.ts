@@ -4,16 +4,12 @@ import type {
   GuestReadinessMode,
 } from '@lumiboot/contracts';
 
-/**
- * Detects the guest boot proof declared by the profile `readiness` contract.
- *
- * `disk-boot` only attests BIOS activity and is never a guest marker.
- */
+/** Detects the boot proof declared in `readiness`; `disk-boot` is a weak BIOS signal. */
 const DEFAULT_CHANNEL: GuestReadinessChannel = 'serial';
 const DEFAULT_MODE: GuestReadinessMode = 'guest-marker';
 const DEFAULT_TIMEOUT_MS = 120_000;
 
-/** Absorbs noise from the rest of the stream after the marker. */
+/** Extra tail so stream noise cannot hide the marker. */
 const EXTRA_TAIL_LENGTH = 64;
 
 export class GuestReadyDetector {
@@ -36,7 +32,6 @@ export class GuestReadyDetector {
     this.#timeoutMs = readiness.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
-  /** Marker expected by this instance. */
   get marker(): string {
     return this.#marker;
   }
@@ -50,7 +45,6 @@ export class GuestReadyDetector {
     return this.#mode;
   }
 
-  /** Maximum wait for the proof, in milliseconds. */
   get timeoutMs(): number {
     return this.#timeoutMs;
   }
@@ -64,9 +58,7 @@ export class GuestReadyDetector {
     return `the marker "${this.#marker}" on the ${channel} channel`;
   }
 
-  /**
-   * Consumes one byte; `true` only once, when the full marker is present.
-   */
+  /** Consumes one byte; `true` once, when the full marker is present. */
   pushByte(byte: number): boolean {
     if (this.#detected) return false;
     // The marker is ASCII: no UTF-8 boundary issue.

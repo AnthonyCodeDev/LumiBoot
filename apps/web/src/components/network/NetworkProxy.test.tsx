@@ -9,12 +9,15 @@ import type { HostPlatform } from '../../lib/platform';
 import { NetworkProxyCard } from './NetworkProxyCard';
 import { NetworkProxyDownload } from './NetworkProxyDownload';
 
+/** A syntactically valid digest: `resolveDownloadUrl` refuses anything else. */
+const SHA256 = 'a'.repeat(64);
+
 function manifestWith(published: Record<string, string | null>): DownloadsManifest {
   const entry = (file: string, url: string | null) => ({
     file,
     url,
     size: url ? 10 : null,
-    sha256: url ? 'sha' : null,
+    sha256: url ? SHA256 : null,
     published: url !== null,
   });
   return {
@@ -39,10 +42,10 @@ function manifestWith(published: Record<string, string | null>): DownloadsManife
 }
 
 const WIN: HostPlatform = { os: 'windows', arch: 'x64', key: 'windows-x64' };
-const PUBLISHED_WIN = manifestWith({ 'windows-x64': 'https://example.com/win.exe' });
+const WIN_DOWNLOAD = '/downloads/LumiBoot-Network-windows-amd64.exe';
+const PUBLISHED_WIN = manifestWith({ 'windows-x64': WIN_DOWNLOAD });
 const PROXY_URL = resolveProxyConfig().url;
 
-/** Persists a valid, non-expired pairing session for the current URL. */
 function persistSession(): void {
   saveProxySession({
     token: 'tok',
@@ -62,7 +65,6 @@ beforeEach(() => {
   refresh.mockClear();
   cancelPairing.mockClear();
   startPairing.mockClear();
-  // Resets the implementation possibly overridden by a test.
   startPairing.mockImplementation(async () => {});
   revoke.mockClear();
   useProxyStore.setState({
@@ -117,8 +119,10 @@ describe('NetworkProxyCard', () => {
   it('discreet "Install" link present when a published target exists', () => {
     render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
     const link = screen.getByRole('link', { name: 'Install' });
-    expect(link.getAttribute('href')).toBe('https://example.com/win.exe');
+    expect(link.getAttribute('href')).toBe(WIN_DOWNLOAD);
     expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('download')).toBe('LumiBoot-Network-windows-amd64.exe');
+    expect(link.getAttribute('title')).toBe(`SHA-256: ${SHA256}`);
   });
 
   it('no "Install" link when no target is published', () => {
@@ -143,10 +147,8 @@ describe('NetworkProxyCard', () => {
       error: 'A long technical store message that must not be displayed.',
     });
     render(<NetworkProxyCard platform={WIN} manifest={PUBLISHED_WIN} />);
-    // No error and no alert when not paired.
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByRole('status')).toBeNull();
-    // Never the store message nor the former alarming copy.
     expect(screen.queryByText(/long technical store message/)).toBeNull();
     expect(screen.queryByText(/The proxy did not answer/)).toBeNull();
     expect(screen.queryByText(/Pairing impossible/)).toBeNull();
@@ -175,7 +177,6 @@ describe('NetworkProxyCard', () => {
     const user = userEvent.setup();
     persistSession();
     useProxyStore.setState({ state: 'not-running' });
-    // The real action switches to 'connecting': simulate that transition.
     startPairing.mockImplementation(async () => {
       useProxyStore.setState({ state: 'connecting' });
     });
@@ -201,8 +202,9 @@ describe('NetworkProxyDownload', () => {
   it('renders an "Install" link for the detected/injected platform', () => {
     render(<NetworkProxyDownload platform={WIN} manifest={PUBLISHED_WIN} />);
     const link = screen.getByRole('link', { name: 'Install' });
-    expect(link.getAttribute('href')).toBe('https://example.com/win.exe');
+    expect(link.getAttribute('href')).toBe(WIN_DOWNLOAD);
     expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(link.getAttribute('download')).toBe('LumiBoot-Network-windows-amd64.exe');
   });
 
   it('renders nothing when no published target matches', () => {
@@ -224,12 +226,9 @@ describe('NetworkProxyDownload', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(toggle.textContent).toBe('hide versions');
 
-    // All 5 platforms are listed.
     expect(screen.getAllByRole('listitem')).toHaveLength(5);
-    // Published target is a clickable link.
     const winLink = screen.getByRole('link', { name: 'Windows x64' });
-    expect(winLink.getAttribute('href')).toBe('https://example.com/win.exe');
-    // Unpublished targets show as unavailable.
+    expect(winLink.getAttribute('href')).toBe(WIN_DOWNLOAD);
     expect(screen.getByText(/Windows ARM64 · Unavailable/)).toBeTruthy();
     expect(screen.getByText(/macOS · Unavailable/)).toBeTruthy();
 

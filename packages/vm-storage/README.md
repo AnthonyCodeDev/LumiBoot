@@ -9,13 +9,17 @@ Versioned key-value storage for VM metadata and disks: quotas, pluggable backend
 - `VmMetadataStorage` / `VmDiskStorage` — subclasses fixing `kind` to `metadata` or `disk` and
   the default namespace `lumiboot:metadata` / `lumiboot:disk`.
 - Records — `write`, `read`, `readRecord`, `delete`, `listRecords`; a record carries `key`,
-  `value`, `createdAt`, `updatedAt` and `sizeBytes`.
-- Quota — `quotaBytes` is compared with the projected usage before every write; an overflow
-  raises `StorageError` with code `STORAGE_QUOTA_EXCEEDED`. `estimateUsageBytes()` returns the
-  current total.
+  `value`, `createdAt`, `updatedAt` and `sizeBytes`. Records are revalidated on every read
+  (`read`, `readRecord`, `listRecords`, `exportSnapshot`): `key`, `value`, integer
+  `createdAt`/`updatedAt` and `sizeBytes === byteLength(value)`; a corrupted record raises
+  `STORAGE_CORRUPTED` instead of returning a partial value.
+- Quota — `quotaBytes` is compared with the actual UTF-8 bytes stored by the backend before
+  every write, including record metadata; an overflow raises `StorageError` with code
+  `STORAGE_QUOTA_EXCEEDED`. `estimateUsageBytes()` returns the current total.
 - Versions — `exportSnapshot()` returns `{ version: 1, namespace, kind, quotaBytes, records }`;
-  `importSnapshot()` rejects other versions (`STORAGE_VERSION_MISMATCH`) and restores the
-  previous content when a write fails. Version 1 is the only format understood today.
+  `importSnapshot()` checks the version, namespace, kind and record integrity before changing
+  data. It restores the previous content when a write fails. Version 1 is the only format
+  understood today.
 - Errors — `StorageError` and `isStorageError()`. Raised codes: `STORAGE_QUOTA_EXCEEDED`,
   `STORAGE_CORRUPTED`, `STORAGE_WRITE_FAILED` and `STORAGE_VERSION_MISMATCH`; the declared
   `STORAGE_NOT_FOUND` and `STORAGE_READ_FAILED` are not raised yet.

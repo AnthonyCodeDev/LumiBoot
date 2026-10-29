@@ -11,7 +11,6 @@ export interface NetworkErrorOptions {
   cause?: unknown;
 }
 
-/** Carries a stable code. */
 export class NetworkError extends Error {
   readonly code: NetworkErrorCode;
 

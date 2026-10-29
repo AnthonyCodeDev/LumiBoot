@@ -40,21 +40,14 @@ export const V86_ASSET_PATHS = {
   vgaBios: '/v86/vgabios.bin',
 } as const;
 
-/**
- * 115200 serial console; `root=/dev/sda` maps to the `hda` disk.
- *
- * `rootwait rootdelay=5` are required: v86 serves the disk over asynchronous
- * HTTP Range requests, so the root device may answer after the ATA probe. An
- * initramfs that does not wait (systemd 237 on Ubuntu bionic) then abandons the
- * boot with "ALERT! /dev/sda does not exist".
- */
+/** 115200 serial console; rootwait/rootdelay=5 wait for the async range disk. */
 export const DEFAULT_BOOT_CMDLINE =
   'console=tty0 console=ttyS0,115200 root=/dev/sda rw rootwait rootdelay=5';
 
-/** Duplicated as a number so the provider never imports `v86` at load time. */
+/** Numeric duplicate: the provider must not import `v86` at load time. */
 const BOOT_ORDER_CD_HARDDISK_FLOPPY = 0x123 as BootOrder;
 
-/** `VMInstance` exposes no snapshot entry point, so snapshots are not advertised. */
+/** `VMInstance` has no snapshot entry point, so snapshots are not advertised. */
 const V86_CAPABILITIES: VMCapabilities = {
   runtime: 'browser',
   architectures: ['i386'],
@@ -71,22 +64,14 @@ export interface V86ProviderOptions {
   createEngine?: V86Factory;
   /** Defaults to `ensureImageManifest`. */
   resolveManifest?: (ref: string, signal?: AbortSignal) => Promise<ImageManifest>;
-  /** Defaults to `ensureLocalDiskManifest`. */
   resolveDiskManifest?: (ref: string, signal?: AbortSignal) => Promise<LocalDiskManifest>;
   /** Injectable in tests; DOM console by default. */
   createConsole?: () => V86ConsoleAdapter;
-  /**
-   * Installs the Range-aware `XMLHttpRequest` before v86 is imported. Injectable
-   * in tests; the real transport stays installed for the whole page.
-   */
+  /** Installs the Range-aware XHR before v86 loads; injectable for tests. */
   installRangeTransport?: () => () => void;
 }
 
-/**
- * 32-bit x86 browser engine backed by v86.
- *
- * The guest is never `running` before the proof declared by the profile.
- */
+/** 32-bit x86 browser engine backed by v86. */
 export class V86Provider implements VMEngine {
   readonly id = V86_PROVIDER_ID;
   readonly #createEngine: V86Factory;
@@ -146,7 +131,7 @@ export class V86Provider implements VMEngine {
     // A `disk-boot` profile boots a hard disk through BIOS, without a kernel.
     const isDiskBoot = launchProfile.readiness?.mode === 'disk-boot';
 
-    // Imported media boots through BIOS; LumiBoot ships no proprietary media.
+    // Imported media boots through BIOS; no proprietary media is shipped.
     const media = configuration?.media;
     if (os.mediaStrategy === 'user-import' && media === undefined) {
       throw new VMError(
@@ -228,9 +213,7 @@ export class V86Provider implements VMEngine {
     const kernelDisk = manifest?.files['disk'];
     const bzimage = manifest?.files['bzimage'];
     const initrd = manifest?.files['initrd'];
-    // RAW disks stay read-only through Range requests: guest writes live in memory
-    // and vanish on stop. Manifest media are versioned by their digest so a cached
-    // Range response for the same path cannot replay bytes from an earlier build.
+    // RAW disks stay read-only via ranges: guest writes live in memory, lost on stop.
     const bootMedia: V86Options = media
       ? resolveMediaBootOptions(media, launchProfile, configuration, os.id)
       : diskManifest
@@ -270,10 +253,8 @@ export class V86Provider implements VMEngine {
 
     let emulator: Awaited<ReturnType<V86Factory>>;
     try {
-      // Before the dynamic import of v86: its disk reads are `XMLHttpRequest`
-      // with a `Range` header, and the constructor is the only injection point.
-      // The transport is idempotent and intentionally kept for the page: a
-      // session restart must not leave a window whose v86 reads hit the cache.
+      // Before v86's dynamic import: its reads are XHR+Range, the ctor is the only hook.
+      // Kept for the page: a restart must not leave a window hitting the cache.
       this.#installRangeTransport();
       emulator = await this.#createEngine(options);
     } catch (error) {
@@ -385,10 +366,7 @@ function resolveMemoryMiB(
   );
 }
 
-/**
- * v86 clamps memory to `2^31 - 128 KiB`; values above 2048 MiB are rejected
- * instead of being silently reduced.
- */
+/** v86 clamps to 2^31-128 KiB: reject > 2048 MiB instead of reducing silently. */
 function assertSupportedMemoryMiB(value: number, label: string, systemId: string): void {
   const supported = Number.isInteger(value) && value > 0 && value * MiB <= 0x80000000;
   if (!supported) {
@@ -400,7 +378,7 @@ function assertSupportedMemoryMiB(value: number, label: string, systemId: string
   }
 }
 
-/** Network failures must fail the session at start, never silently. */
+/** Network failures fail the session at start, never silently. */
 function toStartFailure(error: unknown, systemId: string): VMError {
   if (isVMError(error)) return error;
   if (isNetworkError(error)) {
@@ -413,10 +391,7 @@ function toStartFailure(error: unknown, systemId: string): VMError {
   });
 }
 
-/**
- * `raw` media becomes a read-only `hda`, `iso` a CD-ROM with CD-first boot.
- * Installation ISOs are rejected: v86 persists no write.
- */
+/** raw media: read-only hda. iso: CD-ROM. Installation ISOs are rejected. */
 function resolveMediaBootOptions(
   media: VMMedia,
   launchProfile: OSDefinition['launchProfiles'][number],

@@ -14,7 +14,8 @@
 # Requires Linux or WSL2, root, debootstrap, and qemu-i386 on a non-x86_64 host.
 # UBUNTU_MIRROR, UBUNTU_SECURITY_MIRROR, UBUNTU_KEYRING, SNAPSHOT, DISK_SIZE and
 # LUMIBOOT_BUILD_DIR override the mirrors, the archive keyring, the snapshot, the
-# disk size and the build directory.
+# disk size and the build directory. An archive without a trusted keyring is
+# refused unless LUMIBOOT_ALLOW_UNVERIFIED_ARCHIVE=1 is set explicitly.
 # Writes rootfs.img, vmlinuz-686, initrd.img, manifest.json, packages.tsv and
 # provenance.txt into build/, build-desktop/ or build-xfce/.
 set -euo pipefail
@@ -89,7 +90,8 @@ fi
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The build directory can live on a native ext4 filesystem outside the
 # repository: debootstrap and chroot fail on 9p/DrvFs mounts.
-BUILD_DIR="${LUMIBOOT_BUILD_DIR:-$HERE/build$BUILD_SUFFIX}"
+DEFAULT_BUILD_DIR="$(realpath -m -- "$HERE/build$BUILD_SUFFIX")"
+BUILD_DIR="$(realpath -m -- "${LUMIBOOT_BUILD_DIR:-$DEFAULT_BUILD_DIR}")"
 ROOTFS="$BUILD_DIR/rootfs"
 
 # Ubuntu name is linux-image-generic (bionic i386 tracks 4.15.0-*-generic);
@@ -141,15 +143,15 @@ require() {
   exit 1
 }
 
-for tool in debootstrap mkfs.ext4 truncate sha256sum chroot e2fsck node; do require "$tool"; done
+for tool in debootstrap mkfs.ext4 truncate sha256sum chroot e2fsck node realpath; do require "$tool"; done
 if [ "$(uname -m)" != "x86_64" ]; then
   require qemu-i386
   echo "Warning: non-x86_64 host, i386 debootstrap requires binfmt/qemu-user." >&2
 fi
 
 # debootstrap verifies the Release signature of the suite it installs. A Debian
-# host has no /usr/share/keyrings/ubuntu-archive-keyring.gpg: fall back to
-# --no-check-gpg with an explicit warning instead of failing silently.
+# host may have no Ubuntu archive keyring. Do not silently build a bootable
+# image from unauthenticated packages in that case.
 DEBOOTSTRAP_ARGS=(--arch="$ARCH" --variant=minbase --components=main,universe)
 KEYRING="${UBUNTU_KEYRING:-}"
 if [ -z "$KEYRING" ] && [ -f /usr/share/keyrings/ubuntu-archive-keyring.gpg ]; then
@@ -165,17 +167,34 @@ if [ -n "$KEYRING" ]; then
   DEBOOTSTRAP_ARGS+=(--keyring="$KEYRING")
   KEYRING_NOTE="$KEYRING"
 else
+  if [ "${LUMIBOOT_ALLOW_UNVERIFIED_ARCHIVE:-0}" != "1" ]; then
+    cat >&2 <<'EOF'
+No Ubuntu archive keyring found. Set UBUNTU_KEYRING to a trusted bionic
+archive keyring before building the image. To accept unauthenticated packages
+for a disposable local build, set LUMIBOOT_ALLOW_UNVERIFIED_ARCHIVE=1 explicitly.
+EOF
+    exit 1
+  fi
   cat >&2 <<'EOF'
 Warning: no Ubuntu archive keyring found (UBUNTU_KEYRING unset and
 /usr/share/keyrings/ubuntu-archive-keyring.gpg absent): debootstrap runs with
---no-check-gpg. The Release file is then not authenticated; check the mirror with
-a known-good source, or pass UBUNTU_KEYRING=/path/to/bionic-keyring.gpg.
+--no-check-gpg by explicit opt-in. The Release file is not authenticated.
 EOF
   DEBOOTSTRAP_ARGS+=(--no-check-gpg)
 fi
 
+if [ "$BUILD_DIR" = / ] || { [ -e "$BUILD_DIR" ] && [ ! -d "$BUILD_DIR" ]; }; then
+  echo "Refusing unsafe build directory: $BUILD_DIR" >&2
+  exit 1
+fi
+if [ "$BUILD_DIR" != "$DEFAULT_BUILD_DIR" ] && [ -d "$BUILD_DIR" ] &&
+   [ ! -f "$BUILD_DIR/.lumiboot-build" ] && [ -n "$(ls -A "$BUILD_DIR")" ]; then
+  echo "Refusing to erase an existing custom directory without .lumiboot-build: $BUILD_DIR" >&2
+  exit 1
+fi
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
+: > "$BUILD_DIR/.lumiboot-build"
 
 echo "== 1. debootstrap $RELEASE/$ARCH (minbase) -- flavor=$FLAVOR =="
 debootstrap "${DEBOOTSTRAP_ARGS[@]}" "$RELEASE" "$ROOTFS" "$UBUNTU_MIRROR"

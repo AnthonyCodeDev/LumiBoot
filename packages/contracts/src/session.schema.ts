@@ -37,7 +37,6 @@ export const networkTransportSchema = z.enum(['none', 'fetch', 'wisp']);
 /** Mirror of the `vm-network` probe kinds. */
 export const networkProbeKindSchema = z.enum(['dns', 'http', 'https', 'tcp']);
 
-/** `at` is the measurement timestamp in ms. */
 export const networkProbeResultSchema = z.object({
   ok: z.boolean(),
   at: z.number(),

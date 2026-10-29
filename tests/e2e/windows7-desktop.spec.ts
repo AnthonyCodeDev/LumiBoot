@@ -1,27 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
-/**
- * REAL boot of the Windows 7 group in v86, from the local RAW disks
- * `images/windows-7-x86/disk.img` (16 GiB) and
- * `images/windows-7-pro-sp1-x86/disk.img` (32 GiB), outside `public/`.
- *
- * This file is only enabled when the disks are really present and served over
- * HTTP Range:
- *
- *   $env:VM_E2E_ASSETS='1'; pnpm exec playwright test tests/e2e/windows7-desktop.spec.ts
- *
- * Without that variable, the tests are **skipped**, not "passed": without a
- * disk, no proof is possible.
- *
- * Unlike Debian, Windows emits NO LumiBoot marker. The "desktop" proof is
- * therefore **visual**: v86's 2D VGA canvas, the real screen of the emulated
- * machine and never a fake React desktop, must show a colored and stable image,
- * not a black POST screen or a plain text cursor.
- *
- * The path is factored into `bootWindowsDesktop`, which covers navigation,
- * variant selection, launch, wait, visual proof and measurements, and
- * parameterized by the variant label and the URL fragment of the expected disk.
- */
+// Real Windows 7 boot from local RAW disks; the desktop proof is the VGA canvas.
 
 const assetsPresent = process.env.VM_E2E_ASSETS === '1';
 
@@ -30,14 +9,7 @@ const RUNNING_TIMEOUT_MS = 900_000;
 const DESKTOP_TIMEOUT_MS = 600_000;
 const STOP_TIMEOUT_MS = 60_000;
 
-/**
- * A "desktop" is accepted when, on **3 consecutive polls**, the canvas is
- * visible, mostly non-black with `nonBlackRatio > 0.5`, and colorful enough with
- * `distinctColors > 64`, colors quantized to 3 bits/channel.
- *
- * The poll counter lives on `window` because `waitForFunction` re-evaluates the
- * function on every poll without keeping closure state.
- */
+// A desktop needs 3 consecutive polls: mostly non-black and colorful enough.
 export interface DesktopMetrics {
   /** True when the desktop was proven over `consecutive` polls. */
   readonly proven: boolean;
@@ -102,8 +74,7 @@ async function waitForDesktopProof(page: Page): Promise<DesktopMetrics> {
         }
         // A desktop is only accepted after `consecutive` positive polls in a row.
         if (state.__lumibootWin7Polls >= consecutive) {
-          // Measurements of the conclusive poll, with the same thresholds and no
-          // relaxation.
+          // Measurements of the conclusive poll, same thresholds, no relaxation.
           return {
             nonBlackRatio,
             distinctColors,
@@ -134,15 +105,7 @@ async function waitForDesktopProof(page: Page): Promise<DesktopMetrics> {
   }
 }
 
-/**
- * Counter of the disk bytes really served over HTTP Range for the expected disk,
- * `diskUrlFragment`.
- *
- * `performance.transferSize` heavily UNDER-COUNTS the range XHRs of v86,
- * observed at ~97 KiB reported for ~193 MiB actually served. The real HTTP
- * responses, captured with `page.on('response')`, are therefore counted, with the
- * sum of their `Content-Length`, which reflects the effective Range traffic.
- */
+/** Counts disk bytes over HTTP Range: `transferSize` under-counts v86's XHRs. */
 function createDiskByteCounter(
   page: Page,
   diskUrlFragment: string,
@@ -208,7 +171,6 @@ export interface WindowsBootOptions {
   readonly diskUrlFragment: string;
   /** Name of the attached VGA screenshot, the visual proof. */
   readonly screenshotName: string;
-  /** Title printed in the measurements. */
   readonly title: string;
   /** Guest RAM requested from the engine, as declared in the catalog profile. */
   readonly guestRamMiB: number;
@@ -221,13 +183,7 @@ export interface WindowsBootResult {
   readonly state: Locator;
 }
 
-/**
- * Complete and proven path of a Windows 7 variant: library -> "windows" search
- * -> `windows-7-x86` mother card -> optional variant selection -> launch ->
- * `running` -> visual desktop proof on the real 2D VGA canvas -> measurements:
- * time, disk bytes through HTTP responses, memory. On failure, the raw
- * diagnostics are attached.
- */
+/** Proven path: library -> variant -> launch -> running -> visual proof -> measures. */
 async function bootWindowsDesktop(
   page: Page,
   options: WindowsBootOptions,
@@ -245,8 +201,7 @@ async function bootWindowsDesktop(
     await page.locator('.os-card[data-id="windows-7-x86"]').click();
     await expect(page).toHaveURL(/\/systems\/windows-7-x86$/);
 
-    // 2. Optional variant selection through the custom dropdown: it does NOT
-    //    navigate, so the mother page stays displayed.
+    // 2. Optional variant selection: the dropdown does not navigate.
     if (options.variantLabel) {
       await page.getByRole('button', { name: 'Choose variant' }).click();
       await page.getByRole('button', { name: options.variantLabel, exact: true }).click();
@@ -261,8 +216,7 @@ async function bootWindowsDesktop(
     await expect(page).toHaveURL(/\/session\//);
     await expect(page.locator('.session-console')).toBeVisible();
 
-    // 4. `running` is only emitted after a real disk read, `ide-read-end`, never
-    //    simulated by a React timer.
+    // 4. `running` follows a real disk read (`ide-read-end`), never a timer.
     const state = page.locator('.session-toolbar');
     await expect(state).toHaveAttribute('data-state', 'running', {
       timeout: RUNNING_TIMEOUT_MS,
@@ -314,16 +268,11 @@ async function bootWindowsDesktop(
   }
 }
 
-/**
- * Common post-boot steps: real inputs, since mouse and keyboard reach the
- * emulated screen; Pointer Lock capture with a single cursor, the guest one;
- * fullscreen available, then a clean stop.
- */
+/** Post-boot: real inputs, Pointer Lock, fullscreen available, clean stop. */
 async function exerciseAndStop(page: Page, state: Locator): Promise<void> {
   const screen = page.locator('.v86-screen');
 
-  // An explicit click inside the screen captures the pointer: the browser hides
-  // the host cursor and v86 receives RELATIVE movements, even at the edges.
+  // A click inside the screen captures the pointer (relative movements).
   await screen.click();
   await expect
     .poll(() =>
@@ -331,9 +280,7 @@ async function exerciseAndStop(page: Page, state: Locator): Promise<void> {
     )
     .toBe(true);
 
-  // Escape is handled natively by the browser; in headless Chromium it is not
-  // intercepted, so the lock is released explicitly, following the same
-  // `pointerlockchange` path as the one triggered by Escape in a real session.
+  // Headless Chromium does not intercept Escape: release the lock explicitly.
   await page.evaluate(() => document.exitPointerLock());
   await expect.poll(() => page.evaluate(() => document.pointerLockElement === null)).toBe(true);
 
@@ -355,8 +302,7 @@ test.describe('Windows 7 session (v86, real boot)', () => {
     // Complete Windows boot under software emulation: explicit wall-clock budget.
     test.setTimeout(1_800_000);
 
-    // No variant selected: the mother opens the best variant, Professional, with
-    // `variantOrder: 1`.
+    // No variant selected: the mother opens Professional (`variantOrder: 1`).
     const { state } = await bootWindowsDesktop(page, {
       diskUrlFragment: '/images/windows-7-pro-sp1-x86/disk.img',
       screenshotName: 'windows7-professionnel-desktop',

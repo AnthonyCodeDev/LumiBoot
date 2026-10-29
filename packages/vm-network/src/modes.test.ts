@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NETWORK_MODES, networkModes } from './modes';
+import { DEFAULT_PROXY_HOST } from './proxy';
 
 describe('NETWORK_MODES', () => {
   it('contains local-proxy between browser-fetch and user-relay', () => {
@@ -21,6 +22,6 @@ describe('networkModes', () => {
     expect(info.availability).toBe('ready');
     expect(info.requiresRestart).toBe(true);
     expect(info.requiresConfiguration).toBe(true);
-    expect(info.description).toContain('127.0.0.1');
+    expect(info.description).toContain(DEFAULT_PROXY_HOST);
   });
 });

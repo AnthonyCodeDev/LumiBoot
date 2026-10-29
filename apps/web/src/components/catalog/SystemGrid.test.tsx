@@ -8,10 +8,8 @@ import { SystemGrid } from './SystemGrid';
 import { availabilityLabels } from '../../lib/labels';
 import { useCatalogStore } from '../../features/catalog/catalog.store';
 
-/** One card per displayed system: group parents and standalone systems. */
 const displayedCount = getDisplaySystems().length;
 
-/** Availabilities rendered in the main, non-muted group. */
 const PLAYABLE: ReadonlySet<Availability> = new Set(['ready', 'resource-required']);
 
 function LocationProbe() {
@@ -46,7 +44,6 @@ describe('SystemGrid', () => {
     act(() => {
       useCatalogStore.getState().setQuery('debian');
     });
-    // Three variants match "debian", but only the parent card is shown.
     const cards = screen.getAllByRole('article');
     expect(cards).toHaveLength(1);
     expect(cards[0]!.getAttribute('data-id')).toBe('debian-12-i386');
@@ -81,7 +78,6 @@ describe('SystemGrid', () => {
     const cards = screen.getAllByRole('article');
     expect(cards).toHaveLength(displayedCount);
     for (const card of cards) {
-      // Availability is read from the catalogue, never hard-coded.
       const id = card.getAttribute('data-id');
       const system = id ? getSystemById(id) : null;
       expect(system).not.toBeNull();
@@ -99,7 +95,6 @@ describe('SystemGrid', () => {
       const id = card.getAttribute('data-id');
       return getSystemById(id!)!.availability;
     });
-    // `resource-required` is playable: only its media is user-supplied.
     let seenPending = false;
     for (const availability of availabilities) {
       if (PLAYABLE.has(availability)) {
@@ -117,7 +112,6 @@ describe('SystemGrid', () => {
 
   it('omits the separator when only one group is visible', () => {
     renderGrid();
-    // "custom" only matches the generic entry: a single, playable group.
     act(() => {
       useCatalogStore.getState().setFamily('custom');
     });
@@ -134,7 +128,6 @@ describe('SystemGrid', () => {
       const system = getSystemById(id!)!;
       const isMuted = card.classList.contains('is-muted');
       expect(isMuted).toBe(!PLAYABLE.has(system.availability));
-      // `ready` and `resource-required` always render at full opacity.
       if (system.availability === 'ready' || system.availability === 'resource-required') {
         expect(isMuted).toBe(false);
       }
@@ -149,7 +142,6 @@ describe('SystemGrid', () => {
     expect(card).toBeDefined();
     expect(card!.classList.contains('is-muted')).toBe(false);
     expect(getSystemById('custom-image')!.availability).toBe('resource-required');
-    // It sits in the first `.cards` container: the one without `is-muted` cards.
     const group = card!.closest('.cards');
     expect(group).not.toBeNull();
     expect(group!.querySelector('.is-muted')).toBeNull();
@@ -181,7 +173,6 @@ describe('SystemGrid', () => {
       .find((article) => article.getAttribute('data-id') === 'debian-12-i386');
     expect(card).toBeDefined();
     await user.click(card as HTMLElement);
-    // The card opens the parent: the variant is then picked on its page.
     expect(screen.getByTestId('location').textContent).toBe('/systems/debian-12-i386');
   });
 });

@@ -65,7 +65,6 @@ export const families = [
     accentRgb: '198,185,255',
   },
   {
-    // Generic entry: any disk media the user owns, no brand.
     id: 'custom',
     family: 'custom',
     displayName: 'Custom',

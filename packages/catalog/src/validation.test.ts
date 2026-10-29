@@ -55,7 +55,6 @@ describe('validateCatalog', () => {
     const child = catalog.find((entry) => entry.id === 'windows-7-pro-sp1-x86')!;
     expect(mother.variantGroupId).toBeUndefined();
     expect(child.variantGroupId).toBe('windows-7-x86');
-    // The full catalog, parent and variant, passes Zod.
     expect(() => validateCatalog(catalog)).not.toThrow();
   });
 });

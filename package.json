@@ -36,6 +36,9 @@
     "assets:windows7:serve": "node scripts/serve-windows7-asset.mjs",
     "assets:windows10:prepare": "node scripts/prepare-windows10-asset.mjs",
     "assets:windows10:check": "node scripts/prepare-windows10-asset.mjs --check",
+    "config:nginx": "node scripts/render-nginx-config.mjs",
+    "config:nginx:check": "node scripts/render-nginx-config.mjs --check",
+    "proxy:dev": "node scripts/run-network-proxy.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test"

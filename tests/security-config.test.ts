@@ -2,12 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-/**
- * Web configuration guardrails for P2 security:
- * - production sourcemaps are disabled by default;
- * - the pairing bearer is only persisted in `sessionStorage`;
- * - no WISP URL, which carries the token in the query, is ever logged.
- */
+// Web config guardrails: sourcemaps off, bearer in sessionStorage, no token in logs.
 
 const repoRoot = process.cwd();
 
@@ -29,6 +24,17 @@ function collectSourceFiles(directory: string): string[] {
 }
 
 describe('web configuration (security)', () => {
+  it('keeps the Docker development server on loopback by default', () => {
+    const compose = read('infra/dev/docker-compose.yml');
+    // Host-side publication must be driven by WEB_DEV_HOST, not a literal wildcard.
+    expect(compose).toContain("'${WEB_DEV_HOST:-127.0.0.1}:${WEB_DEV_PORT:-5173}");
+    expect(compose).toContain('${WEB_DEV_PORT:-5173}:${WEB_DEV_PORT:-5173}');
+    const ports = compose.slice(compose.indexOf('ports:'), compose.indexOf('environment:'));
+    expect(ports).not.toMatch(/0\.0\.0\.0/);
+    // Inside the container Vite must listen on every interface to be reachable.
+    expect(compose).toContain('WEB_DEV_HOST: 0.0.0.0');
+  });
+
   it('disables public sourcemaps by default (explicit opt-in)', () => {
     const config = read('apps/web/vite.config.ts');
     expect(config).not.toMatch(/sourcemap:\s*true/);
