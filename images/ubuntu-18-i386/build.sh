@@ -306,6 +306,8 @@ ata_generic
 sd_mod
 EOF
 sed -i 's/^MODULES=.*/MODULES=most/' "$ROOTFS/etc/initramfs-tools/initramfs.conf" 2>/dev/null || true
+install -D -m 0755 "$HERE/guest/lumiboot-root-device" \
+  "$ROOTFS/etc/initramfs-tools/scripts/local-premount/lumiboot-root-device"
 
 echo "== 6. Unprivileged user + serial console =="
 chroot "$ROOTFS" bash -e -c '

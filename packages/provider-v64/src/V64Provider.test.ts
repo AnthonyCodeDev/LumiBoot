@@ -80,6 +80,8 @@ describe('V64Provider', () => {
     const instance = await provider.start(system, document.createElement('div'));
     const options = createEngine.mock.calls[0]?.[0];
 
+    // Every manifest URL carries a digest-derived version: a cached Range
+    // response for the same path must not replay an earlier build's bytes.
     expect(options).toMatchObject({
       cpu_type: 'x86_64',
       cpu_worker: true,
@@ -88,11 +90,37 @@ describe('V64Provider', () => {
       experimental_smp_jit: true,
       graphics_adapter: 'bochs_vga',
       memory_size: 1024 * 1024 * 1024,
-      cdrom: { url: '/images/alpine-test-x64/alpine.iso', size: 4096 },
-      bzimage: { url: '/images/alpine-test-x64/vmlinuz' },
-      initrd: { url: '/images/alpine-test-x64/initrd' },
+      cdrom: { url: '/images/alpine-test-x64/alpine.iso?v=aaaaaaaaaaaa', size: 4096 },
+      bzimage: { url: '/images/alpine-test-x64/vmlinuz?v=bbbbbbbbbbbb', size: 2048 },
+      initrd: { url: '/images/alpine-test-x64/initrd?v=cccccccccccc', size: 2048 },
     });
+    expect(options?.bzimage?.size).toBe(2048);
+    expect(options?.initrd?.size).toBe(2048);
     expect(options?.cdrom?.async).toBeUndefined();
+    await instance.dispose();
+  });
+
+  it('extends an existing query with the version instead of replacing it', async () => {
+    const versioned: ImageManifest = {
+      ...manifest,
+      files: {
+        ...manifest.files,
+        initrd: {
+          url: '/images/alpine-test-x64/initrd?raw=1',
+          size: 2048,
+          sha256: 'c'.repeat(64),
+        },
+      },
+    };
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({ createEngine, resolveManifest: async () => versioned });
+    const instance = await provider.start(system, document.createElement('div'));
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options?.initrd).toEqual({
+      url: '/images/alpine-test-x64/initrd?raw=1&v=cccccccccccc',
+      size: 2048,
+    });
     await instance.dispose();
   });
 });

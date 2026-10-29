@@ -38,6 +38,8 @@ const RUNTIME_REASON_MESSAGES: Record<AssetUnavailableReason, string> = {
   'disk-mismatch': 'The served disk size does not match the one announced by the manifest.',
   'range-unsupported':
     'The server does not serve the disk over HTTP Range (206): v86 cannot read it in ranges.',
+  'range-intercepted':
+    'A cached response or a service worker answers the disk with the whole file instead of HTTP ranges: clear the site data, then retry.',
   unauthorized: 'Access to the media was refused by the server.',
   network: 'The media is unreachable (network error).',
   aborted: 'The media availability check was aborted.',

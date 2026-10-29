@@ -104,6 +104,13 @@ The real boot tests need several GiB of media and stay opt-in: `VM_E2E_ASSETS=1 
 
 UI → `VMRegistry` → dynamic import of the selected provider → manifest/media → emulator. Stop calls `stop()` then `dispose()`. Design notes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/v64.md`](docs/v64.md).
 
+## Troubleshooting
+
+Disk reads go through HTTP Range requests. When a boot stalls on `/dev/sda` (the guest reads zeros), open **Disk diagnostics** under the session screen:
+
+- disk reads are sent through `fetch(..., { cache: 'no-store' })` instead of the HTTP cache, so `allZero` being `true` on every read means something upstream rewrites the bytes (service worker, proxy, antivirus);
+- If the panel shows `allZero` reads or statuses other than `206`, clear the site's data and unregister the service worker for this origin, then reload. **Copy** pastes the whole report, including the service-worker URL, into a bug report.
+
 ## Network
 
 - `offline`: no NIC.

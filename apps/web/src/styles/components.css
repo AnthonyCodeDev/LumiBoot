@@ -610,6 +610,127 @@
   border-color: #5e3434;
   color: #f0b4ae;
 }
+/* Disk diagnostics: one collapsed line under the viewport. It must stay
+   reachable when the guest reads zeros, so it never depends on the console. */
+.session-disk-diagnostics {
+  flex: 0 0 auto;
+  margin: 8px 0 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.session-disk-diagnostics > summary {
+  cursor: pointer;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  user-select: none;
+}
+.session-disk-diagnostics > summary:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+}
+.session-disk-diagnostics__body {
+  margin: 8px auto 0;
+  padding: 10px 12px;
+  max-width: 720px;
+  border: 1px solid #282c33;
+  border-radius: var(--radius-md, 8px);
+  background: rgba(11, 13, 16, 0.72);
+  text-align: left;
+}
+.session-disk-diagnostics__counters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px 12px;
+  margin: 0;
+}
+.session-disk-diagnostics__counters dt {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.session-disk-diagnostics__counters dd {
+  margin: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.session-disk-diagnostics__health {
+  margin: 0 0 8px;
+  color: var(--text-tertiary);
+}
+.session-disk-diagnostics__health--healthy {
+  color: #a8c7b4;
+}
+.session-disk-diagnostics__health--suspect {
+  color: #f0b4ae;
+}
+.session-disk-diagnostics__health--unknown {
+  color: var(--text-tertiary);
+}
+.session-disk-diagnostics__suspect {
+  color: #e5c07b;
+  overflow-wrap: anywhere;
+}
+.session-disk-diagnostics__repair {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #22262d;
+}
+.session-disk-diagnostics__action {
+  margin-top: 8px;
+  padding: 3px 10px;
+  border: 1px solid #2c333e;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+.session-disk-diagnostics__action:hover:not(:disabled) {
+  border-color: #3a4452;
+  color: #d5dbe3;
+}
+.session-disk-diagnostics__action--inline {
+  margin: 0 0 0 6px;
+  vertical-align: baseline;
+}
+.session-disk-diagnostics__action:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+.session-disk-diagnostics__repair-report,
+.session-disk-diagnostics__repair-hint {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+.session-disk-diagnostics__log {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.session-disk-diagnostics__log code {
+  color: var(--text-secondary);
+}
+.session-disk-diagnostics__copy {
+  margin-top: 8px;
+  padding: 3px 10px;
+  border: 1px solid #2c333e;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+.session-disk-diagnostics__copy:hover {
+  border-color: #3a4452;
+  color: #d5dbe3;
+}
 /* Serial logs: smaller, below the screen, terminal style. */
 .v86-serial {
   display: block;

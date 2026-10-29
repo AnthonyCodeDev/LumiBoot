@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AssetError } from './errors';
 import { getImageManifest, registerImageManifest, type ImageManifest } from './manifest';
+import { versionedMediaUrl } from './media-url';
 
 const HEX64 = /^[0-9a-f]{64}$/i;
 const IMAGE_REF = /^[a-z0-9-]+$/;
@@ -165,16 +166,21 @@ const imageManifestRequests = createSharedRequestRegistry<ImageManifest>(
 export async function ensureImageManifest(
   ref: string,
   signal?: AbortSignal,
+  options: ImageManifestLoadOptions = {},
 ): Promise<ImageManifest> {
   const known = getImageManifest(ref);
   if (known) return known;
 
   return imageManifestRequests.run(ref, signal, (requestSignal) =>
-    loadImageManifest(ref, requestSignal),
+    loadImageManifest(ref, requestSignal, options),
   );
 }
 
-export async function loadImageManifest(ref: string, signal?: AbortSignal): Promise<ImageManifest> {
+export async function loadImageManifest(
+  ref: string,
+  signal?: AbortSignal,
+  options: ImageManifestLoadOptions = {},
+): Promise<ImageManifest> {
   if (!IMAGE_REF.test(ref)) {
     throw new AssetError('ASSET_INVALID_MANIFEST', 'Invalid image reference.', { ref });
   }
@@ -238,6 +244,8 @@ export async function loadImageManifest(ref: string, signal?: AbortSignal): Prom
     );
   }
 
+  await assertDiskServedByRanges(manifest, signal, options);
+
   registerImageManifest(manifest);
   return manifest;
 }
@@ -254,6 +262,7 @@ export type AssetUnavailableReason =
   | 'disk-html'
   | 'disk-mismatch'
   | 'range-unsupported'
+  | 'range-intercepted'
   | 'unauthorized'
   | 'network'
   | 'aborted';
@@ -471,6 +480,548 @@ export async function probeRangeAvailability(
 
   discardBody(response);
   return unavailable('network', `Unexpected disk response (HTTP ${response.status}).`);
+}
+
+/**
+ * The subset of `XMLHttpRequest` the v86-compatible probe needs. v86 reads disks
+ * with `XMLHttpRequest` and a `Range` header, so this probe must use the same
+ * transport: `fetch` may succeed through a path (cache, service worker) that v86
+ * never sees.
+ */
+export interface RangeRequest {
+  timeout: number;
+  responseType: XMLHttpRequestResponseType;
+  readonly status: number;
+  readonly response: ArrayBuffer | null;
+  getResponseHeader(name: string): string | null;
+  open(method: string, url: string): void;
+  setRequestHeader(name: string, value: string): void;
+  send(): void;
+  abort(): void;
+  onload: (() => void) | null;
+  onerror: (() => void) | null;
+  ontimeout: (() => void) | null;
+  onabort: (() => void) | null;
+}
+
+/** Injectable constructor-like factory (tests); `XMLHttpRequest` by default. */
+export type RangeRequestFactory = () => RangeRequest;
+
+export interface RangeReadProbeOptions {
+  readonly signal?: AbortSignal;
+  /** Short by design: a 4 KiB read must answer at once. */
+  readonly timeoutMs?: number;
+  readonly createRequest?: RangeRequestFactory;
+}
+
+/** A skipped probe means the environment cannot issue the request at all. */
+export type RangeReadProbeOutcome =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly reason: AssetUnavailableReason;
+      readonly message: string;
+      readonly cause?: unknown;
+    };
+
+export interface ImageManifestLoadOptions {
+  /** Injectable v86-style range read (tests); `probeRangeRead` by default. */
+  readonly rangeProbe?: (
+    url: string,
+    size: number,
+    options?: RangeReadProbeOptions,
+  ) => Promise<RangeReadProbeOutcome>;
+  /** Forwarded to the range probe (tests). */
+  readonly rangeProbeOptions?: RangeReadProbeOptions;
+  /**
+   * Control transport of the byte cross-check; `globalThis.fetch` by default.
+   * `null` disables the comparison (tests, and environments without fetch).
+   */
+  readonly controlFetch?: typeof fetch | null;
+}
+
+export const RANGE_READ_PROBE_TIMEOUT_MS = 15_000;
+
+/** Non-zero offset: a whole-file (HTTP 200) answer from a cache is unmistakable. */
+const RANGE_READ_PROBE_OFFSET = 4096;
+const RANGE_READ_PROBE_LENGTH = 4096;
+
+type RangeAttempt =
+  | {
+      readonly kind: 'response';
+      readonly status: number;
+      readonly byteLength: number;
+      readonly contentRange: string;
+      /** Body bytes, kept for the cross-transport comparison. */
+      readonly bytes: Uint8Array | null;
+    }
+  | { readonly kind: 'timeout' }
+  | { readonly kind: 'unavailable' }
+  | { readonly kind: 'error'; readonly cause?: unknown }
+  | { readonly kind: 'aborted' };
+
+function defaultRangeRequestFactory(): RangeRequestFactory | undefined {
+  const constructor = (globalThis as { XMLHttpRequest?: new () => RangeRequest }).XMLHttpRequest;
+  if (typeof constructor !== 'function') return undefined;
+  return () => new constructor();
+}
+
+/** Resolves once, whatever the callback order or the abort signal. */
+function sendRangeRequest(
+  request: RangeRequest,
+  url: string,
+  offset: number,
+  length: number,
+  options: RangeReadProbeOptions,
+): Promise<RangeAttempt> {
+  return new Promise<RangeAttempt>((resolve) => {
+    const signal = options.signal;
+    let settled = false;
+
+    const finish = (attempt: RangeAttempt): void => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener('abort', onAbort);
+      resolve(attempt);
+    };
+
+    function onAbort(): void {
+      try {
+        request.abort();
+      } catch {
+        /* already finished */
+      }
+      finish({ kind: 'aborted' });
+    }
+
+    request.onload = () => {
+      let contentRange = '';
+      try {
+        contentRange = request.getResponseHeader('Content-Range') ?? '';
+      } catch {
+        /* header unreadable: treated as absent */
+      }
+      const body = request.response;
+      finish({
+        kind: 'response',
+        status: request.status,
+        byteLength:
+          body !== null && typeof (body as { byteLength?: unknown }).byteLength === 'number'
+            ? body.byteLength
+            : -1,
+        contentRange,
+        // Only an `ArrayBuffer` body is comparable; an unexpected type is ignored.
+        bytes: body instanceof ArrayBuffer ? new Uint8Array(body) : null,
+      });
+    };
+    request.onerror = () => finish({ kind: 'error' });
+    request.ontimeout = () => finish({ kind: 'timeout' });
+    request.onabort = () => finish({ kind: 'aborted' });
+    request.timeout = options.timeoutMs ?? RANGE_READ_PROBE_TIMEOUT_MS;
+
+    if (signal?.aborted) {
+      finish({ kind: 'aborted' });
+      return;
+    }
+    signal?.addEventListener('abort', onAbort, { once: true });
+
+    try {
+      request.open('GET', url);
+      // v86 compares an `ArrayBuffer` body, and decompression must not alter the range.
+      request.responseType = 'arraybuffer';
+      // Same headers as v86, and deliberately no cache directive: the probe must
+      // go through whatever the browser would use for the real disk reads.
+      request.setRequestHeader('Range', `bytes=${offset}-${offset + length - 1}`);
+      request.setRequestHeader('X-Accept-Encoding', 'identity');
+      request.send();
+    } catch {
+      // A synchronous throw means the request never left the browser (invalid
+      // base URL, detached document): nothing to compare against, not a boot blocker.
+      finish({ kind: 'unavailable' });
+    }
+  });
+}
+
+/** Probe outcome plus the bytes and range it used, for the cross-check. */
+interface RangeProbeRead {
+  readonly outcome: RangeReadProbeOutcome;
+  readonly bytes: Uint8Array | null;
+  readonly status: number | null;
+  readonly offset: number;
+  readonly length: number;
+}
+
+/**
+ * Reads one non-zero 4 KiB block the way v86 does. A server or cache answering
+ * 200 leaves v86's read unresolved (it aborts the request), and the guest then
+ * reads zeros forever: detecting it here turns a silent stall into an error.
+ */
+export async function probeRangeRead(
+  url: string,
+  size: number,
+  options: RangeReadProbeOptions = {},
+): Promise<RangeReadProbeOutcome> {
+  return (await readRangeProbe(url, size, options)).outcome;
+}
+
+async function readRangeProbe(
+  url: string,
+  size: number,
+  options: RangeReadProbeOptions = {},
+): Promise<RangeProbeRead> {
+  const skipped = (outcome: RangeReadProbeOutcome = { ok: true }): RangeProbeRead => ({
+    outcome,
+    bytes: null,
+    status: null,
+    offset: 0,
+    length: 0,
+  });
+
+  const createRequest = options.createRequest ?? defaultRangeRequestFactory();
+  // No `XMLHttpRequest` (Node, workers): the probe cannot mirror v86, so it is a no-op.
+  if (createRequest === undefined) return skipped();
+
+  const offset = size > RANGE_READ_PROBE_OFFSET ? RANGE_READ_PROBE_OFFSET : 0;
+  const length = Math.min(RANGE_READ_PROBE_LENGTH, size - offset);
+  if (length <= 0) return skipped();
+
+  let request: RangeRequest;
+  try {
+    request = createRequest();
+  } catch {
+    // The environment refuses to build a request: nothing to compare against.
+    return skipped();
+  }
+
+  const attempt = await sendRangeRequest(request, url, offset, length, options);
+  const read = (
+    outcome: RangeReadProbeOutcome,
+    bytes: Uint8Array | null,
+    status: number | null,
+  ): RangeProbeRead => ({
+    outcome,
+    bytes,
+    status,
+    offset,
+    length,
+  });
+
+  switch (attempt.kind) {
+    case 'aborted':
+      return read(
+        options.signal?.aborted === true
+          ? {
+              ok: false,
+              reason: 'aborted',
+              message: 'Disk range probe canceled.',
+            }
+          : { ok: true },
+        null,
+        null,
+      );
+    case 'timeout':
+      return read(
+        {
+          ok: false,
+          reason: 'network',
+          message: `The disk did not answer a ${length}-byte range read within ${
+            (options.timeoutMs ?? RANGE_READ_PROBE_TIMEOUT_MS) / 1000
+          } s.`,
+        },
+        null,
+        null,
+      );
+    case 'unavailable':
+      return skipped();
+    case 'error':
+      return read(
+        {
+          ok: false,
+          reason: 'network',
+          message: 'The disk does not answer a range read the way v86 issues it.',
+          ...(attempt.cause === undefined ? {} : { cause: attempt.cause }),
+        },
+        null,
+        null,
+      );
+    case 'response':
+      break;
+  }
+
+  if (attempt.status === 200) {
+    return read(
+      {
+        ok: false,
+        reason: 'range-intercepted',
+        message:
+          `${url} was not served as ranged content (HTTP 200 instead of 206): a cached ` +
+          'response, a service worker or a proxy is intercepting the disk. Clear this ' +
+          "site's data (DevTools > Application > Clear site data), unregister any service " +
+          'worker for this origin, then reload.',
+      },
+      attempt.bytes,
+      attempt.status,
+    );
+  }
+
+  if (attempt.status === 404) {
+    return read(
+      {
+        ok: false,
+        reason: 'disk-missing',
+        message: ASSET_UNAVAILABLE_MESSAGES['disk-missing'],
+      },
+      attempt.bytes,
+      attempt.status,
+    );
+  }
+
+  if (attempt.status === 401 || attempt.status === 403) {
+    return read(
+      {
+        ok: false,
+        reason: 'unauthorized',
+        message: `Disk access denied (HTTP ${attempt.status}).`,
+      },
+      attempt.bytes,
+      attempt.status,
+    );
+  }
+
+  if (attempt.status !== 206) {
+    return read(
+      {
+        ok: false,
+        reason: 'range-unsupported',
+        message: `Unexpected disk range response (HTTP ${attempt.status} instead of 206).`,
+      },
+      attempt.bytes,
+      attempt.status,
+    );
+  }
+
+  const match = /^bytes\s+(\d+)-(\d+)\/(\d+|\*)$/i.exec(attempt.contentRange.trim());
+  if (match === null) {
+    return read(
+      {
+        ok: false,
+        reason: 'range-unsupported',
+        message: `HTTP 206 without a usable "Content-Range" (${attempt.contentRange || 'missing'}): range reads are undetermined.`,
+      },
+      attempt.bytes,
+      attempt.status,
+    );
+  }
+  const [start, end] = [Number(match[1]), Number(match[2])];
+  if (start !== offset || end !== offset + length - 1) {
+    return read(
+      {
+        ok: false,
+        reason: 'range-unsupported',
+        message: `"Content-Range" ${attempt.contentRange} does not match the requested bytes ${offset}-${offset + length - 1}.`,
+      },
+      attempt.bytes,
+      attempt.status,
+    );
+  }
+  if (match[3] !== '*' && Number(match[3]) !== size) {
+    return read(
+      {
+        ok: false,
+        reason: 'disk-mismatch',
+        message: `Inconsistent disk size: ${Number(match[3])} bytes served, ${size} expected.`,
+      },
+      attempt.bytes,
+      attempt.status,
+    );
+  }
+  if (attempt.byteLength !== length) {
+    return read(
+      {
+        ok: false,
+        reason: 'disk-mismatch',
+        message: `The range read returned ${attempt.byteLength} bytes instead of ${length}.`,
+      },
+      attempt.bytes,
+      attempt.status,
+    );
+  }
+
+  return read({ ok: true }, attempt.bytes, attempt.status);
+}
+
+/** Header bag accepted from a real `Response` and from test doubles. */
+interface HeaderBagLike {
+  get(name: string): string | null;
+}
+
+/** A stub `fetch` (tests) has no byte body: nothing to compare with. */
+function canCompareBytes(response: Response): boolean {
+  const headers = (response as { headers?: unknown }).headers;
+  return (
+    typeof (response as { arrayBuffer?: unknown }).arrayBuffer === 'function' &&
+    headers !== null &&
+    headers !== undefined &&
+    typeof (headers as HeaderBagLike).get === 'function'
+  );
+}
+
+function isAllZero(bytes: Uint8Array): boolean {
+  for (const byte of bytes) {
+    if (byte !== 0) return false;
+  }
+  return true;
+}
+
+/** `null` means the two ranged bodies agree. */
+export type RangeByteDivergence = 'length' | 'all-zero' | 'content';
+
+/** Compares the XHR body with the `fetch` body for the very same range. */
+export function detectRangeByteDivergence(
+  browserBytes: Uint8Array,
+  controlBytes: Uint8Array,
+): RangeByteDivergence | null {
+  if (browserBytes.length !== controlBytes.length) return 'length';
+  // Zeros on both sides mean nothing is actually served: a distinct failure.
+  if (isAllZero(browserBytes) && isAllZero(controlBytes)) return 'all-zero';
+  for (let index = 0; index < browserBytes.length; index += 1) {
+    if (browserBytes[index] !== controlBytes[index]) return 'content';
+  }
+  return null;
+}
+
+const RANGE_INTERCEPTED_HINT =
+  'An HTTP cache, a service worker, or a proxy/antivirus is rewriting the response. ' +
+  "Clear this site's data (DevTools > Application > Clear site data), unregister the " +
+  'service worker for this origin, then reload.';
+
+/** Human-readable, actionable message for a divergence. */
+export function describeRangeDivergence(
+  url: string,
+  divergence: RangeByteDivergence,
+  browserStatus: number,
+  controlStatus: number,
+): string {
+  if (divergence === 'all-zero') {
+    return (
+      `The ranged read of ${url} returned only zero bytes on both transports ` +
+      `(HTTP ${browserStatus} and ${controlStatus}): the file is served empty, or every ` +
+      `layer between the disk and the page returns zeros. ${RANGE_INTERCEPTED_HINT}`
+    );
+  }
+  return (
+    `The ranged bytes served for ${url} differ between v86's transport (XMLHttpRequest, ` +
+    `HTTP ${browserStatus}) and a no-store fetch (HTTP ${controlStatus}), or their sizes ` +
+    `differ. ${RANGE_INTERCEPTED_HINT}`
+  );
+}
+
+/**
+ * Same range, second transport: `fetch` with `cache: 'no-store'`. Identical bytes
+ * prove the duplex path healthy; different bytes prove a cache, a service worker
+ * or an antivirus rewrites the disk without changing the status.
+ *
+ * Never blocks a boot whose v86 path already worked when the control request
+ * cannot run at all (no fetch, network error, non-Response stub in tests).
+ */
+async function assertRangeBytesMatch(
+  url: string,
+  read: RangeProbeRead,
+  signal: AbortSignal | undefined,
+  ref: string,
+  controlFetch: typeof fetch | null | undefined,
+): Promise<void> {
+  const browserBytes = read.bytes;
+  if (browserBytes === null || read.length <= 0) return;
+  // A zeroed browser block is accepted: the legacy probe cannot tell an empty
+  // FAT region from a cache; the transport diagnostics report the pattern.
+  if (isAllZero(browserBytes)) return;
+
+  const fetchImpl = controlFetch === null ? undefined : (controlFetch ?? globalThis.fetch);
+  if (typeof fetchImpl !== 'function') return;
+
+  const end = read.offset + read.length - 1;
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'GET',
+      headers: { Range: `bytes=${read.offset}-${end}`, 'X-Accept-Encoding': 'identity' },
+      cache: 'no-store',
+      ...(signal === undefined ? {} : { signal }),
+    });
+  } catch {
+    // Cannot run the control request: keep the existing behaviour.
+    return;
+  }
+
+  if (!canCompareBytes(response)) return;
+
+  const browserStatus = read.status ?? 0;
+  if (response.status !== browserStatus) {
+    throw new AssetError(
+      'ASSET_RANGE_UNAVAILABLE',
+      `The ranged read of ${url} answered HTTP ${browserStatus} through v86's ` +
+        `transport but HTTP ${response.status} through a no-store fetch. ${RANGE_INTERCEPTED_HINT}`,
+      { ref },
+    );
+  }
+
+  let controlBytes: Uint8Array;
+  try {
+    controlBytes = new Uint8Array(await response.arrayBuffer());
+  } catch {
+    // The control body could not be read: no proof of corruption.
+    return;
+  }
+
+  const divergence = detectRangeByteDivergence(browserBytes, controlBytes);
+  if (divergence === null) return;
+
+  throw new AssetError(
+    'ASSET_RANGE_UNAVAILABLE',
+    describeRangeDivergence(url, divergence, browserStatus, response.status),
+    { ref },
+  );
+}
+
+/**
+ * The `disk` file is the one v86 keeps reading by ranges for the whole boot; an
+ * unsatisfied range read there never resolves, so the boot is refused early.
+ */
+async function assertDiskServedByRanges(
+  manifest: ImageManifest,
+  signal: AbortSignal | undefined,
+  options: ImageManifestLoadOptions,
+): Promise<void> {
+  const disk = manifest.files['disk'];
+  if (disk === undefined) return;
+
+  // Same URL as the one v86 requests, `?v=<sha256>` included.
+  const url = versionedMediaUrl(disk.url, disk.sha256);
+  const probeOptions: RangeReadProbeOptions = {
+    ...options.rangeProbeOptions,
+    ...(signal === undefined ? {} : { signal }),
+  };
+
+  // An injected probe owns its own transport: no bytes to cross-check.
+  if (options.rangeProbe !== undefined) {
+    const probe = await options.rangeProbe(url, disk.size, probeOptions);
+    if (probe.ok) return;
+    throw new AssetError('ASSET_RANGE_UNAVAILABLE', probe.message, {
+      ref: manifest.ref,
+      ...(probe.cause === undefined ? {} : { cause: probe.cause }),
+    });
+  }
+
+  const read = await readRangeProbe(url, disk.size, probeOptions);
+  if (!read.outcome.ok) {
+    throw new AssetError('ASSET_RANGE_UNAVAILABLE', read.outcome.message, {
+      ref: manifest.ref,
+      ...(read.outcome.cause === undefined ? {} : { cause: read.outcome.cause }),
+    });
+  }
+
+  await assertRangeBytesMatch(url, read, signal, manifest.ref, options.controlFetch);
 }
 
 /** Valid manifest, matching reference, then disk served over HTTP Range. */

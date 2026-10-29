@@ -1,6 +1,14 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AssetError } from './errors';
 import { clearImageManifests, getImageManifest } from './manifest';
-import { checkImageAvailability, ensureImageManifest } from './manifest-loader';
+import {
+  checkImageAvailability,
+  describeRangeDivergence,
+  detectRangeByteDivergence,
+  ensureImageManifest,
+  probeRangeRead,
+  type RangeRequest,
+} from './manifest-loader';
 
 function validManifest(ref = 'debian-12-i386') {
   return {
@@ -103,6 +111,75 @@ class FakeSignal {
 function mockFetch(payload: unknown, ok = true, status = 200): typeof fetch {
   return vi.fn(async () => ({ ok, status, json: async () => payload })) as unknown as typeof fetch;
 }
+
+const DISK_SIZE = 100;
+const DISK_URL = '/images/debian-12-i386/rootfs.img';
+/** Same URL v86 requests: the provider appends `?v=<sha256 prefix>`. */
+const VERSIONED_DISK_URL = `${DISK_URL}?v=${'a'.repeat(12)}`;
+
+/** Minimal `XMLHttpRequest` stand-in: v86's transport is never `fetch`. */
+class FakeXhr implements RangeRequest {
+  timeout = 0;
+  responseType: XMLHttpRequestResponseType = '';
+  status = 0;
+  response: ArrayBuffer | null = null;
+  method = '';
+  url = '';
+  readonly requestHeaders: Record<string, string> = {};
+  readonly responseHeaders: Record<string, string> = {};
+  aborted = false;
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  ontimeout: (() => void) | null = null;
+  onabort: (() => void) | null = null;
+
+  open(method: string, url: string): void {
+    this.method = method;
+    this.url = url;
+  }
+
+  setRequestHeader(name: string, value: string): void {
+    this.requestHeaders[name] = value;
+  }
+
+  getResponseHeader(name: string): string | null {
+    return this.responseHeaders[name.toLowerCase()] ?? null;
+  }
+
+  send(): void {
+    xhrPlan(this);
+  }
+
+  abort(): void {
+    this.aborted = true;
+    this.onabort?.();
+  }
+}
+
+/** Behaviour applied by `send()`; every test may replace it. */
+let xhrPlan: (request: FakeXhr) => void = plan206(DISK_SIZE);
+
+/** Answers the requested range with a genuine 206 over `total` bytes. */
+function plan206(total: number): (request: FakeXhr) => void {
+  return (request) => {
+    const match = /bytes=(\d+)-(\d+)/.exec(request.requestHeaders['Range'] ?? '');
+    const from = Number(match?.[1] ?? 0);
+    const to = Number(match?.[2] ?? 0);
+    request.status = 206;
+    request.responseHeaders['content-range'] = `bytes ${from}-${to}/${total}`;
+    request.response = new ArrayBuffer(to - from + 1);
+    request.onload?.();
+  };
+}
+
+function probeDisk(size = 1_000_000) {
+  return probeRangeRead(DISK_URL, size, { createRequest: () => new FakeXhr() });
+}
+
+beforeEach(() => {
+  xhrPlan = plan206(DISK_SIZE);
+  vi.stubGlobal('XMLHttpRequest', FakeXhr);
+});
 
 afterEach(() => {
   clearImageManifests();
@@ -388,5 +465,315 @@ describe('checkImageAvailability', () => {
     });
 
     expect(result).toMatchObject({ available: false, reason: 'disk-missing' });
+  });
+});
+
+describe('probeRangeRead', () => {
+  const SIZE = 1_000_000;
+
+  it('accepts a real 206 whose Content-Range and body match the request', async () => {
+    xhrPlan = plan206(SIZE);
+
+    await expect(probeDisk(SIZE)).resolves.toEqual({ ok: true });
+  });
+
+  it('reads a non-zero offset with v86 headers and no cache directive', async () => {
+    const requests: FakeXhr[] = [];
+    xhrPlan = (request) => {
+      requests.push(request);
+      plan206(SIZE)(request);
+    };
+
+    await probeDisk(SIZE);
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.method).toBe('GET');
+    expect(requests[0]?.responseType).toBe('arraybuffer');
+    // Exactly v86's contract: no `cache: 'no-store'`, no anti-cache parameter.
+    expect(requests[0]?.requestHeaders).toEqual({
+      Range: 'bytes=4096-8191',
+      'X-Accept-Encoding': 'identity',
+    });
+  });
+
+  it('fails on HTTP 200 with an actionable message', async () => {
+    xhrPlan = (request) => {
+      request.status = 200;
+      request.response = new ArrayBuffer(SIZE);
+      request.onload?.();
+    };
+
+    const outcome = await probeDisk(SIZE);
+
+    expect(outcome).toMatchObject({ ok: false, reason: 'range-intercepted' });
+    if (outcome.ok) throw new Error('expected a failure');
+    expect(outcome.message).toContain('HTTP 200 instead of 206');
+    expect(outcome.message).toContain('service worker');
+    expect(outcome.message).toContain('Clear site data');
+  });
+
+  it('fails on HTTP 404', async () => {
+    xhrPlan = (request) => {
+      request.status = 404;
+      request.onload?.();
+    };
+
+    await expect(probeDisk(SIZE)).resolves.toMatchObject({ ok: false, reason: 'disk-missing' });
+  });
+
+  it('fails on HTTP 416', async () => {
+    xhrPlan = (request) => {
+      request.status = 416;
+      request.responseHeaders['content-range'] = `bytes */${SIZE}`;
+      request.onload?.();
+    };
+
+    const outcome = await probeDisk(SIZE);
+
+    expect(outcome).toMatchObject({ ok: false, reason: 'range-unsupported' });
+    if (outcome.ok) throw new Error('expected a failure');
+    expect(outcome.message).toContain('416');
+  });
+
+  it('fails when the body does not have the requested length', async () => {
+    xhrPlan = (request) => {
+      request.status = 206;
+      request.responseHeaders['content-range'] = `bytes 4096-8191/${SIZE}`;
+      request.response = new ArrayBuffer(10);
+      request.onload?.();
+    };
+
+    const outcome = await probeDisk(SIZE);
+
+    expect(outcome).toMatchObject({ ok: false, reason: 'disk-mismatch' });
+    if (outcome.ok) throw new Error('expected a failure');
+    expect(outcome.message).toContain('10 bytes instead of 4096');
+  });
+
+  it('fails when Content-Range describes another range', async () => {
+    xhrPlan = (request) => {
+      request.status = 206;
+      request.responseHeaders['content-range'] = `bytes 0-4095/${SIZE}`;
+      request.response = new ArrayBuffer(4096);
+      request.onload?.();
+    };
+
+    await expect(probeDisk(SIZE)).resolves.toMatchObject({
+      ok: false,
+      reason: 'range-unsupported',
+    });
+  });
+
+  it('fails on timeout', async () => {
+    xhrPlan = (request) => request.ontimeout?.();
+
+    const outcome = await probeDisk(SIZE);
+
+    expect(outcome).toMatchObject({ ok: false, reason: 'network' });
+    if (outcome.ok) throw new Error('expected a failure');
+    expect(outcome.message).toContain('15 s');
+  });
+
+  it('fails on a transport error', async () => {
+    xhrPlan = (request) => request.onerror?.();
+
+    await expect(probeDisk(SIZE)).resolves.toMatchObject({ ok: false, reason: 'network' });
+  });
+
+  it('is a no-op when the environment has no XMLHttpRequest', async () => {
+    vi.stubGlobal('XMLHttpRequest', undefined);
+
+    await expect(probeRangeRead(DISK_URL, SIZE)).resolves.toEqual({ ok: true });
+  });
+
+  it('is a no-op when the request cannot even be opened', async () => {
+    await expect(
+      probeRangeRead(DISK_URL, SIZE, {
+        createRequest: () => {
+          const request = new FakeXhr();
+          request.open = () => {
+            throw new Error('Invalid URL');
+          };
+          return request;
+        },
+      }),
+    ).resolves.toEqual({ ok: true });
+  });
+});
+
+describe('ensureImageManifest range gate', () => {
+  it('probes files.disk only, on the versioned URL v86 requests', async () => {
+    vi.stubGlobal('fetch', mockFetch(validManifest()));
+    const calls: Array<{ url: string; size: number }> = [];
+
+    const manifest = await ensureImageManifest('debian-12-i386', undefined, {
+      rangeProbe: async (url, size) => {
+        calls.push({ url, size });
+        return { ok: true };
+      },
+    });
+
+    expect(manifest.ref).toBe('debian-12-i386');
+    expect(calls).toEqual([{ url: VERSIONED_DISK_URL, size: DISK_SIZE }]);
+  });
+
+  it('refuses a cached HTTP 200 on the disk, does not register it, and re-probes later', async () => {
+    vi.stubGlobal('fetch', mockFetch(validManifest()));
+    xhrPlan = (request) => {
+      request.status = 200;
+      request.response = new ArrayBuffer(DISK_SIZE);
+      request.onload?.();
+    };
+
+    const failure = await ensureImageManifest('debian-12-i386').catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(AssetError);
+    expect(failure).toMatchObject({ code: 'ASSET_RANGE_UNAVAILABLE', ref: 'debian-12-i386' });
+    expect((failure as AssetError).message).toContain(VERSIONED_DISK_URL);
+    expect(getImageManifest('debian-12-i386')).toBeNull();
+
+    // A healthy range path boots: the failure was never cached.
+    xhrPlan = plan206(DISK_SIZE);
+    await expect(ensureImageManifest('debian-12-i386')).resolves.toMatchObject({
+      ref: 'debian-12-i386',
+    });
+    expect(getImageManifest('debian-12-i386')).not.toBeNull();
+  });
+});
+
+describe('ensureImageManifest byte cross-check', () => {
+  /** Non-zero pseudo-random block: a real disk never serves zeros here. */
+  const REAL = Array.from({ length: DISK_SIZE }, (_, index) => (index % 251) + 1);
+
+  function planBytes(payload: number[], total = DISK_SIZE): (request: FakeXhr) => void {
+    return (request) => {
+      const match = /bytes=(\d+)-(\d+)/.exec(request.requestHeaders['Range'] ?? '');
+      const from = Number(match?.[1] ?? 0);
+      request.status = 206;
+      request.responseHeaders['content-range'] =
+        `bytes ${from}-${from + payload.length - 1}/${total}`;
+      request.response = Uint8Array.from(payload).buffer;
+      request.onload?.();
+    };
+  }
+
+  function byteResponse(payload: number[], status = 206, total = DISK_SIZE): Response {
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      headers: fakeHeaders({ 'content-range': `bytes 0-${payload.length - 1}/${total}` }),
+      arrayBuffer: async () => Uint8Array.from(payload).buffer,
+      body: null,
+    } as unknown as Response;
+  }
+
+  function controlFetch(payload: number[], status = 206): typeof fetch {
+    return vi.fn(async () => byteResponse(payload, status)) as unknown as typeof fetch;
+  }
+
+  it('accepts identical bytes from XHR and from a no-store fetch', async () => {
+    const fetchMock = mockFetch(validManifest());
+    vi.stubGlobal('fetch', fetchMock);
+    xhrPlan = planBytes(REAL);
+    const control = controlFetch(REAL);
+
+    const manifest = await ensureImageManifest('debian-12-i386', undefined, {
+      controlFetch: control,
+    });
+
+    expect(manifest.ref).toBe('debian-12-i386');
+    // Same range, same anti-cache contract as v86's request.
+    const [url, init] = (
+      control as unknown as {
+        mock: { calls: Array<[string, RequestInit]> };
+      }
+    ).mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(VERSIONED_DISK_URL);
+    expect(init.method).toBe('GET');
+    expect(init.cache).toBe('no-store');
+    expect(init.headers).toEqual({ Range: 'bytes=0-99', 'X-Accept-Encoding': 'identity' });
+  });
+
+  it('rejects zeros replayed by a cache while XHR serves real bytes', async () => {
+    vi.stubGlobal('fetch', mockFetch(validManifest()));
+    xhrPlan = planBytes(REAL);
+
+    const failure = await ensureImageManifest('debian-12-i386', undefined, {
+      controlFetch: controlFetch(new Array<number>(DISK_SIZE).fill(0)),
+    }).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(AssetError);
+    expect(failure).toMatchObject({ code: 'ASSET_RANGE_UNAVAILABLE', ref: 'debian-12-i386' });
+    const message = (failure as AssetError).message;
+    expect(message).toContain(VERSIONED_DISK_URL);
+    expect(message).toContain('differ');
+    expect(message).toContain('HTTP cache');
+    expect(message).toContain('service worker');
+    expect(message).toContain('proxy/antivirus');
+    expect(message).toContain('Clear site data');
+    // The broken manifest is not registered: a later boot re-probes.
+    expect(getImageManifest('debian-12-i386')).toBeNull();
+  });
+
+  it('rejects different statuses for the same range', async () => {
+    vi.stubGlobal('fetch', mockFetch(validManifest()));
+    xhrPlan = planBytes(REAL);
+
+    const failure = await ensureImageManifest('debian-12-i386', undefined, {
+      controlFetch: controlFetch(REAL, 200),
+    }).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(AssetError);
+    expect(failure).toMatchObject({ code: 'ASSET_RANGE_UNAVAILABLE' });
+    const message = (failure as AssetError).message;
+    expect(message).toContain('HTTP 206');
+    expect(message).toContain('HTTP 200');
+    expect(message).toContain('service worker');
+  });
+
+  it('distinguishes a file that is served empty on both transports', () => {
+    // Both bodies all-zero: equal but meaningless, never a valid disk block.
+    expect(detectRangeByteDivergence(new Uint8Array(4), new Uint8Array(4))).toBe('all-zero');
+    const message = describeRangeDivergence('/images/x/disk.img', 'all-zero', 206, 206);
+    expect(message).toContain('only zero bytes');
+    expect(message).toContain('served empty');
+    expect(message).not.toContain('differ');
+  });
+
+  it('is a no-op when the control transport is unavailable', async () => {
+    vi.stubGlobal('fetch', mockFetch(validManifest()));
+    xhrPlan = planBytes(REAL);
+
+    await expect(
+      ensureImageManifest('debian-12-i386', undefined, { controlFetch: null }),
+    ).resolves.toMatchObject({ ref: 'debian-12-i386' });
+  });
+
+  it('is a no-op when the environment exposes no fetch at all', async () => {
+    // The manifest is served, then `fetch` disappears: the guard must not throw.
+    const fetchMock = vi.fn(async () => {
+      vi.stubGlobal('fetch', undefined);
+      return fakeResponse(validManifest());
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    xhrPlan = planBytes(REAL);
+
+    await expect(ensureImageManifest('debian-12-i386')).resolves.toMatchObject({
+      ref: 'debian-12-i386',
+    });
+  });
+
+  it('is a no-op when XMLHttpRequest is unavailable', async () => {
+    vi.stubGlobal('fetch', mockFetch(validManifest()));
+    vi.stubGlobal('XMLHttpRequest', undefined);
+    const control = vi.fn(async () => byteResponse(REAL));
+
+    await expect(
+      ensureImageManifest('debian-12-i386', undefined, {
+        controlFetch: control as unknown as typeof fetch,
+      }),
+    ).resolves.toMatchObject({ ref: 'debian-12-i386' });
+    // Without the XHR path there is nothing to compare with.
+    expect(control).not.toHaveBeenCalled();
   });
 });
