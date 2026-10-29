@@ -84,7 +84,7 @@ provider-v64            → {contracts, provider-v86 (shared console/lifecycle a
 5. `running` follows a proof: Linux serial marker or first disk read (`disk-boot`).
 6. Stop releases the network controller, emulator, listeners and session.
 
-The session view follows the profile `displayMode`: `text` (CLI guest, output on ttyS0 only) opens the serial terminal by default, `graphical` or absent keeps the VGA/framebuffer screen and leaves the serial logs collapsed.
+The session view uses `displayMode` to describe the guest surface (`text` for CLI, `graphical` or absent for VGA/framebuffer), while serial logs always start collapsed. The user opens or closes them explicitly with the "Logs" button.
 
 States: `idle → preparing → downloading → booting → running → stopping → stopped`, `error` on failure (`packages/vm-core/src/lifecycle/SessionState.ts`).
 

@@ -153,8 +153,9 @@ const inittab = `# LumiBoot: initialize the disposable account before OpenRC sta
 ::wait:/sbin/openrc default
 ::shutdown:/sbin/openrc shutdown
 
-# Immediate login on both the VGA console and the serial console.
-tty1::respawn:/sbin/getty -n -l /usr/local/sbin/lumiboot-autologin 38400 tty1
+# The initramfs adds the resolved VGA console with the autologin command patched
+# below. Keep only the fixed serial console here to avoid two gettys fighting on
+# tty0/tty1, which are aliases of the same active virtual terminal.
 ttyS0::respawn:/sbin/getty -n -l /usr/local/sbin/lumiboot-autologin -L 115200 ttyS0 vt100
 `;
 const setupScript = `#!/bin/sh
@@ -173,14 +174,28 @@ for group in wheel audio video input netdev; do
 done
 mkdir -p /home/lumiboot
 chown -R lumiboot:lumiboot /home/lumiboot
+
+# Match the Debian/Ubuntu guests: French AZERTY on the visible Linux console.
+AZERTY_KEYMAP=/usr/share/bkeymaps/fr/fr-azerty.bmap.gz
+if [ ! -r "$AZERTY_KEYMAP" ]; then
+  echo "Missing Alpine French AZERTY keymap: $AZERTY_KEYMAP" >&2
+  exit 1
+fi
+zcat "$AZERTY_KEYMAP" | loadkmap
+touch /etc/lumiboot-azerty-ready
 `;
 const autologinScript = `#!/bin/sh
 terminal=$(tty)
+case "$terminal" in
+  /dev/tty0|/dev/tty1)
+    printf 'LUMIBOOT_VGA_AUTOLOGIN\\n' > /dev/ttyS0
+    ;;
+esac
 /usr/bin/setsid -c /bin/login -f lumiboot <"$terminal" >"$terminal" 2>&1 &
 wait $!
 `;
 
-await writeFile(join(overlayRoot, 'etc', 'apk', 'world'), 'alpine-base\ndoas\n');
+await writeFile(join(overlayRoot, 'etc', 'apk', 'world'), 'alpine-base\ndoas\nkbd-bkeymaps\n');
 await writeFile(join(overlayRoot, 'etc', 'doas.conf'), 'permit nopass :wheel\n');
 await writeFile(join(overlayRoot, 'etc', 'hostname'), 'lumiboot\n');
 await writeFile(join(overlayRoot, 'etc', 'inittab'), inittab);
@@ -241,9 +256,24 @@ if (extractInit.status !== 0)
 const repositoryScan = 'echo "$ovl" | cat - "$repofile" | while read -r dir; do';
 const patchedRepositoryScan =
   '{ [ "$ovl" = "/lumiboot.apkovl.tar.gz" ] || echo "$ovl"; cat "$repofile"; } | while read -r dir; do';
-const patchedInit = extractInit.stdout.replace(repositoryScan, patchedRepositoryScan);
-if (patchedInit === extractInit.stdout)
+const defaultConsoleGetty = '$tty::respawn:/sbin/getty -L 0 $tty $term';
+const autologinConsoleGetty =
+  '$tty::respawn:/sbin/getty -n -l /usr/local/sbin/lumiboot-autologin -L 0 $tty $term';
+const consoleLoop = 'for tty in $consoles; do';
+const deduplicatedConsoleLoop = `for tty in $consoles; do
+		# tty0 aliases the active virtual terminal (tty1 under v64). Starting a
+		# second getty on it makes two shells fight for the same visible console.
+		[ "$tty" = "tty0" ] && continue`;
+const patchedInit = extractInit.stdout
+  .replace(repositoryScan, patchedRepositoryScan)
+  .replace(defaultConsoleGetty, autologinConsoleGetty)
+  .replace(consoleLoop, deduplicatedConsoleLoop);
+if (!patchedInit.includes(patchedRepositoryScan))
   throw new Error('Unable to patch the embedded-apkovl repository scan in Alpine init.');
+if (!patchedInit.includes(autologinConsoleGetty))
+  throw new Error('Unable to patch Alpine dynamic console getty for autologin.');
+if (!patchedInit.includes(deduplicatedConsoleLoop))
+  throw new Error('Unable to deduplicate Alpine VGA console aliases.');
 
 await writeFile(
   outputInitrd,

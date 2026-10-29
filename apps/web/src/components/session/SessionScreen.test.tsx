@@ -201,7 +201,7 @@ describe('SessionScreen — voile de boot et note de preuve tardive', () => {
   });
 });
 
-describe('SessionScreen — terminal série ouvert par défaut en mode texte', () => {
+describe('SessionScreen — visibilité des logs', () => {
   function renderSession(systemId: string) {
     const system = getSystemById(systemId)!;
     const consoleRef = { current: null as HTMLDivElement | null };
@@ -237,31 +237,29 @@ describe('SessionScreen — terminal série ouvert par défaut en mode texte', (
     expect(logs.getAttribute('aria-pressed')).toBe('false');
   }
 
-  it('opens the serial console for a CLI guest (`displayMode: "text"`)', () => {
-    for (const systemId of ['ubuntu-18-i386', 'debian-12-i386']) {
-      const { console, logs, unmount } = renderSession(systemId);
-      expectOpen(console, logs);
-      unmount();
-    }
-  });
-
-  it('keeps the logs collapsed for a graphical guest', () => {
-    for (const systemId of ['ubuntu-18-i386-xfce', 'windows-10-x86']) {
+  it('keeps the logs collapsed by default for every guest type', () => {
+    for (const systemId of [
+      'alpine-3-24-x86-64',
+      'ubuntu-18-i386',
+      'debian-12-i386',
+      'ubuntu-18-i386-xfce',
+      'windows-10-x86',
+    ]) {
       const { console, logs, unmount } = renderSession(systemId);
       expectClosed(console, logs);
       unmount();
     }
   });
 
-  it('keeps the "Logs" button a working toggle, even when opened by default', async () => {
+  it('keeps the "Logs" button as the explicit visibility toggle', async () => {
     const user = userEvent.setup();
     const { console, logs } = renderSession('ubuntu-18-i386');
-    expectOpen(console, logs);
-
-    await user.click(logs);
     expectClosed(console, logs);
 
     await user.click(logs);
     expectOpen(console, logs);
+
+    await user.click(logs);
+    expectClosed(console, logs);
   });
 });

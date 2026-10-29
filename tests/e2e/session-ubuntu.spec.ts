@@ -46,9 +46,8 @@ test.describe('Ubuntu 18.04 LTS i386 session (v86, real boot)', () => {
     // The console container stays mounted during the whole boot.
     await expect(page.locator('.session-console')).toBeVisible();
 
-    // The CLI profile (`displayMode: 'text'`) opens the serial console by
-    // default: the VGA text screen freezes while systemd only writes on ttyS0.
-    // The button is a toggle, so it is only clicked when the panel is closed.
+    // Logs are collapsed by default for every profile. Open them explicitly to
+    // observe systemd on ttyS0 and enter the CLI commands.
     const logsButton = page.getByRole('button', { name: 'Logs' });
     if ((await logsButton.getAttribute('aria-pressed')) !== 'true') {
       await logsButton.click();

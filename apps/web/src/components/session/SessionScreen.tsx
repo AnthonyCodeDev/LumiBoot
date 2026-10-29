@@ -4,7 +4,6 @@ import { STANDARD_VM_DISPLAY, type SessionSnapshot } from '@lumiboot/vm-core';
 import { SessionToolbar } from './SessionToolbar';
 import { StatusOverlay } from './StatusOverlay';
 import { usePointerLockCapture } from './usePointerLockCapture';
-import { opensSerialConsoleByDefault } from '../../lib/display-mode';
 
 export interface SessionScreenProps {
   session: SessionSnapshot;
@@ -36,10 +35,9 @@ export function SessionScreen({
   const running = session.state === 'running';
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fullscreenSupported, setFullscreenSupported] = useState(true);
-  // A CLI guest (`displayMode: 'text'`) opens on its serial console: the VGA text
-  // screen freezes while systemd only writes on ttyS0, which looks like a hang.
-  // The toolbar button stays a toggle, so the panel can still be folded back.
-  const [logsOpen, setLogsOpen] = useState(() => opensSerialConsoleByDefault(system));
+  // The guest display is always the primary surface. Serial logs stay collapsed
+  // for every VM until the visitor explicitly opens them from the toolbar.
+  const [logsOpen, setLogsOpen] = useState(false);
   // Single visible cursor: a click inside the screen captures, Escape releases.
   const {
     captured,
