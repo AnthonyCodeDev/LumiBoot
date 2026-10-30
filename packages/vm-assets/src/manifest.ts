@@ -14,6 +14,11 @@ export interface ImageBootOptions {
   wasmPath?: string;
   biosUrl?: string;
   vgaBiosUrl?: string;
+  /**
+   * The ISO carries its own bootloader: the guest boots from El-Torito, so no
+   * bzimage/initrd is injected and the disk is only mounted as a CD-ROM.
+   */
+  cdromOnly?: boolean;
 }
 
 export interface ImageManifest {

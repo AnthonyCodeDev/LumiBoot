@@ -219,6 +219,27 @@ describe('ensureImageManifest', () => {
     });
   });
 
+  it('accepts a self-booting ISO manifest (boot.cdromOnly)', async () => {
+    const manifest = {
+      ...validManifest(),
+      boot: { cmdline: 'console=ttyS0 root=live:CDLABEL=X rd.live.image', cdromOnly: true },
+    };
+    vi.stubGlobal('fetch', mockFetch(manifest));
+
+    const loaded = await ensureImageManifest(manifest.ref);
+
+    expect(loaded.boot?.cdromOnly).toBe(true);
+    expect(loaded.boot?.cmdline).toContain('rd.live.image');
+  });
+
+  it('rejects a non-boolean boot.cdromOnly', async () => {
+    const manifest = { ...validManifest(), boot: { cdromOnly: 'yes' } };
+    vi.stubGlobal('fetch', mockFetch(manifest));
+    await expect(ensureImageManifest(manifest.ref)).rejects.toMatchObject({
+      code: 'ASSET_INVALID_MANIFEST',
+    });
+  });
+
   it('rejects a placeholder manifest (unknown fields and missing files)', async () => {
     vi.stubGlobal(
       'fetch',

@@ -119,7 +119,7 @@ Each image × profile candidate is evaluated on its own. Required user media giv
 - Ubuntu 18.04 LTS: CLI, X11/Openbox and XFCE built locally, published and validated by a real boot.
 - Windows 7: Lite and Professional SP1, local RAW disks over HTTP Range.
 - Windows 10 x86: boot proven on an operator RAW disk over HTTP Range, with `virtio-net` and the VirtIO NetKVM driver; guest connectivity untested, see [`images/windows-10-x86/README.md`](../images/windows-10-x86/README.md).
-- Windows 11, Fedora, Mint and macOS: catalogue only, not developed, engines or images missing.
+- Windows 11 and macOS: catalogue only, not developed, engines or images missing.
 - Custom image: generic entry point booting a local `.iso`, `.img` or `.raw` imported by the visitor, through the integrated v86 engine.
 - Network modes `offline`, `browser-fetch`, `local-proxy` and `user-relay` are implemented.
 - Boot proof: the profile `readiness.timeoutMs` is a **diagnostic**, not a failure. On expiry the provider emits the `boot-timeout` progress phase only: the VM is not stopped, the console/screen stays live, the session stays `booting`, and a late guest marker still reaches `running` (never simulated by a timer). The loading veil is bounded to **5 s** from mount; past it the real console or screen is shown whatever the boot state.

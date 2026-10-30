@@ -96,7 +96,7 @@ describe('getLaunchReadiness', () => {
   });
 
   it('refuses a not-ready system whose engine is not integrated', () => {
-    const readiness = getLaunchReadiness(system('fedora-workstation'));
+    const readiness = getLaunchReadiness(system('macos-sequoia'));
     expect(readiness.canLaunch).toBe(false);
     expect(readiness.reason).toMatch(/not ready|integrated/i);
   });
@@ -233,7 +233,7 @@ describe('resolveLaunchReadiness', () => {
       return rangeResponse(200);
     }) as unknown as typeof fetch;
 
-    const result = await resolveLaunchReadiness(system('fedora-workstation'), { fetchImpl });
+    const result = await resolveLaunchReadiness(system('macos-sequoia'), { fetchImpl });
     expect(result.canLaunch).toBe(false);
     expect(calls).toBe(0);
   });

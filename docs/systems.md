@@ -11,11 +11,12 @@
 | `windows-7-pro-sp1-x86`  | Windows 7 Professional SP1 x86 | 1536 MiB  | operator RAW disk   | `disk-boot`              |
 | `windows-7-x86`          | Windows 7 Lite x86             | 1024 MiB  | operator RAW disk   | `disk-boot`              |
 | `windows-10-x86`         | Windows 10 x86 32-bit          | 2048 MiB  | operator RAW disk   | `disk-boot`              |
+| `fedora-44-x86-64`       | Fedora 44 x86-64               | 1024 MiB  | built bootable ISO  | `LUMIBOOT_GUEST_READY`   |
 | `custom-image`           | Custom image (ISO / IMG / RAW) | 512 MiB   | user-imported media | `LUMIBOOT_GUEST_READY`   |
 
 No disk, ISO or license key is shipped by this repository. This page is the index and the commands; details live next to each image under `images/<ref>/`.
 
-Windows 11, Fedora, Linux Mint and macOS are catalogued but not developed: their x86-64 or ARM engine is not integrated, so they stay `planned` ("Not ready") with nothing to import.
+Windows 11 and macOS are catalogued but not developed: their x86-64 or ARM engine is not integrated, so they stay `planned` ("Not ready") with nothing to import.
 
 Ubuntu 18.04 LTS follows the Debian pipeline — one script, three variants — and all three are built
 locally, published into the Git-ignored `apps/web/public/images/<ref>/` directories and validated by
@@ -69,6 +70,42 @@ A successful build is not a proof: the order is build → publish → smoke test
 Build details, packages, provenance and smoke tests: [`images/ubuntu-18-i386/README.md`](../images/ubuntu-18-i386/README.md).
 
 Readiness threshold: the CLI profile waits 240 s for `LUMIBOOT_GUEST_READY`, like the graphical variants, because software emulation can push a measured boot past 120 s. Expiry is diagnostic only (`boot-timeout`): the VM is not stopped, the console stays live and a late marker still reaches `running`.
+
+## Fedora 44 x86-64
+
+Prerequisites: Linux or WSL2 on an x86_64 host, root, `dnf`, `rpm`, `dracut`,
+`squashfs-tools`, `e2fsprogs`, `xorriso`, `grub-mkrescue` (`grub-common`,
+`grub-pc-bin`, `mtools`), `cpio`, `xz`, `node`, and the Fedora 44 GPG key
+(`/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-44-primary`).
+
+```bash
+sudo ./images/fedora-44-x86-64/build.sh
+```
+
+The script builds a minimal rootfs with `dnf --installroot`, packs it as an ext4
+image inside `LiveOS/squashfs.img` and emits `build/`: `vmlinuz`, `initrd.img`,
+`fedora-44-x86-64.iso`, `manifest.json`, `packages.tsv`, `provenance.txt`. Copy
+the four artifacts into `apps/web/public/images/fedora-44-x86-64/`, a Git-ignored
+directory. v64 mounts the ISO as a `cdrom` and nothing else: the disc carries its
+own GRUB El-Torito boot record, `vmlinuz`, `initrd.img` and a `grub.cfg` with
+`console=tty0 console=ttyS0,115200 root=live:CDLABEL=LUMIBOOT-FEDORA rd.live.image selinux=0 loglevel=4`,
+and its manifest says `boot.cdromOnly: true`.
+
+El-Torito is the boot path for a reason, not a preference. When v64 injects a
+`bzimage`, `libv86.mjs` hard-codes the initrd window at 64 MiB; the Fedora 44
+kernel decompresses to ~74 MiB and overwrote the initrd mid-boot
+(`Initramfs unpacking failed: junk within compressed archive`, then
+`Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0)`).
+32-bit Debian/Ubuntu kernels stay below that limit, Fedora does not, and v86
+exposes no `initrd_addr` option. Letting the disc's bootloader place kernel and
+initramfs removes the constraint.
+
+The profile is `validated: true`: `tests/e2e/session-fedora.spec.ts` boots the
+published image in Chromium, waits for `LUMIBOOT_GUEST_READY:fedora-44-x86-64`
+(emitted by the guest, never by the client), types the smoke-test commands on
+ttyS0 and checks their output. A successful build alone proves nothing: revert
+the flag as soon as a rebuild stops reaching the marker. Build details, package
+list and smoke test: [`images/fedora-44-x86-64/README.md`](../images/fedora-44-x86-64/README.md).
 
 ## Windows 7
 

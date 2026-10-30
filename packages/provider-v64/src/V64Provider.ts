@@ -243,6 +243,20 @@ async function resolveBootMedia(
     };
   }
   const disk = manifest?.files.disk;
+  if (manifest?.boot?.cdromOnly === true) {
+    if (!disk) throw new Error('A cdromOnly manifest needs a disk file (the bootable ISO).');
+    return {
+      // The ISO boots itself through GRUB on El-Torito: no bzimage/initrd is
+      // injected, so the initrd window hard-coded at 64 MiB in libv86.mjs can no
+      // longer be overwritten by a kernel that decompresses above it (the reason
+      // the Fedora live image panicked with "junk within compressed archive").
+      // Synchronous ISO buffer, like the injected-bzimage path: the ranged ATAPI
+      // path races IDE DMA (HSM violation, "BMDMA stat 0x5" in the guest log),
+      // and the stalled CD reads then starve udev until a device wait expires.
+      cdrom: { url: versionedMediaUrl(disk.url, disk.sha256), size: disk.size },
+      boot_order: BOOT_ORDER_CD_HARDDISK_FLOPPY,
+    };
+  }
   const bzimage = manifest?.files.bzimage;
   const initrd = manifest?.files.initrd;
   if (!disk || !bzimage || !initrd)

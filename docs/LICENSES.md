@@ -51,6 +51,6 @@ image is loaded from an external domain at runtime.
 ## Trademarks
 
 - The OS icons in `apps/web/public/icons/os/` are the official brand marks, sourced from [Simple Icons](https://simpleicons.org/) (released under CC0 1.0). Brand colours follow each owner's palette. See https://simpleicons.org/ for the full set.
-- Windows, macOS, Ubuntu, Linux Mint, Fedora and Debian are trademarks of their respective owners.
+- Windows, macOS, Ubuntu, Fedora and Debian are trademarks of their respective owners.
 - LumiBoot is not affiliated with, endorsed by or sponsored by any of them.
 - Those names and icons are used only to identify the systems, nominatively and descriptively.
