@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Library', () => {
-  test('shows the eleven displayed catalog systems (mothers + standalone)', async ({ page }) => {
+  test('shows the ten displayed catalog systems (mothers + standalone)', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible();
-    // Child variants fold onto their mother card: 11 mother/standalone cards.
-    await expect(page.locator('.os-card')).toHaveCount(11);
+    // Child variants fold onto their mother card: 10 mother/standalone cards.
+    await expect(page.locator('.os-card')).toHaveCount(10);
   });
 
   test('searches for a system and filters by family', async ({ page }) => {
