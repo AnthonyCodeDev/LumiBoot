@@ -22,9 +22,11 @@ test.describe('Library', () => {
     await page.getByRole('button', { name: 'Windows' }).click();
     await expect(page.locator('.os-card')).toHaveCount(4);
 
-    // The generic entry has its own family chip, after macOS.
-    await page.getByRole('button', { name: 'Custom' }).click();
-    await expect(page.locator('.os-card')).toHaveCount(1);
+    // No Custom chip anymore: the generic entry stays visible under All.
+    await expect(page.locator('[data-filter="custom"]')).toHaveCount(0);
+    await expect(page.locator('.filter-chips [data-filter]')).toHaveCount(4);
+    await page.getByRole('button', { name: 'All' }).click();
+    await expect(page.locator('.os-card')).toHaveCount(10);
     await expect(page.locator('.os-card[data-id="custom-image"]')).toHaveCount(1);
   });
 
@@ -44,6 +46,123 @@ test.describe('Library', () => {
     await expect(page).toHaveURL(/\/systems\//);
     await expect(page.locator('.detail-drawer')).toHaveCount(0);
     await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+});
+
+// Facet counts come from the catalog (10 displayed cards): 5 x 32 bits (i386),
+// 4 x 64 bits (x86_64: Fedora, Alpine, Windows 8.1, Windows 11) and 1 ARM 64 bits (macOS).
+test.describe('Facet filters', () => {
+  test('facet filters narrow the library', async ({ page }) => {
+    await page.goto('/');
+
+    const architectureTrigger = page.getByRole('button', { name: /^Architecture filter/ });
+    const architectureMenu = page.getByRole('group', { name: 'Architecture' });
+    await expect(architectureTrigger).toHaveAttribute('aria-expanded', 'false');
+
+    await architectureTrigger.click();
+    await expect(architectureTrigger).toHaveAttribute('aria-expanded', 'true');
+    await expect(architectureMenu.getByRole('checkbox')).toHaveCount(3);
+    await expect(architectureMenu.locator('[data-value="i386"] .facet-option-count')).toHaveText(
+      '5',
+    );
+    await expect(architectureMenu.locator('[data-value="x86_64"] .facet-option-count')).toHaveText(
+      '4',
+    );
+    await expect(architectureMenu.locator('[data-value="arm64"] .facet-option-count')).toHaveText(
+      '1',
+    );
+
+    // 64 bits: Fedora, Alpine, Windows 8.1 and Windows 11 only.
+    await architectureMenu.locator('[data-value="x86_64"]').click();
+    await expect(architectureMenu.locator('[data-value="x86_64"]')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    // No count badge: the selection is only exposed through the trigger label.
+    await expect(architectureTrigger).toHaveAttribute(
+      'aria-label',
+      'Architecture filter, 1 selected',
+    );
+    await expect(page.locator('.facet-count')).toHaveCount(0);
+    await expect(page.locator('.os-card')).toHaveCount(4);
+    await expect(page.locator('.os-card[data-id="debian-12-i386"]')).toHaveCount(0);
+    for (const id of [
+      'fedora-44-x86-64',
+      'alpine-3-24-x86-64',
+      'windows-8-1-x64',
+      'windows-11-x64',
+    ]) {
+      await expect(page.locator(`.os-card[data-id="${id}"]`)).toHaveCount(1);
+    }
+
+    // Family and facet intersect.
+    await page.getByRole('button', { name: 'Windows' }).click();
+    await expect(page.locator('.os-card')).toHaveCount(2);
+    await expect(page.locator('.os-card[data-id="windows-8-1-x64"]')).toHaveCount(1);
+    await expect(page.locator('.os-card[data-id="windows-11-x64"]')).toHaveCount(1);
+    await expect(page.locator('.os-card[data-id="windows-7-x86"]')).toHaveCount(0);
+
+    // Reopen the panel and uncheck the option: the grid widens back.
+    await expect(architectureTrigger).toHaveAttribute('aria-expanded', 'false');
+    await architectureTrigger.click();
+    await expect(architectureMenu.locator('[data-value="x86_64"]')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await architectureMenu.locator('[data-value="x86_64"]').click();
+    await expect(architectureMenu.locator('[data-value="x86_64"]')).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    await expect(page.locator('.os-card')).toHaveCount(4);
+    await expect(page.locator('.os-card[data-id="windows-7-x86"]')).toHaveCount(1);
+    // No tags in the trigger and no Clear action in the panel.
+    await expect(page.locator('.facet-tag')).toHaveCount(0);
+    await expect(page.locator('.facet-count')).toHaveCount(0);
+    await expect(architectureTrigger).toHaveAttribute(
+      'aria-label',
+      'Architecture filter, no selection',
+    );
+    await expect(architectureMenu.getByRole('button', { name: 'Clear' })).toHaveCount(0);
+
+    // Escape folds the panel and keeps aria-expanded in sync.
+    await page.keyboard.press('Escape');
+    await expect(architectureTrigger).toHaveAttribute('aria-expanded', 'false');
+    await expect(architectureMenu).toHaveCount(0);
+  });
+
+  // `.filter:hover` must never win over the active/open rules (same specificity otherwise).
+  test('an active filter keeps its selected look on hover', async ({ page }) => {
+    await page.goto('/');
+
+    // Tokens from global.css: --primary-soft: #1b2445, active text: #b9c5ff.
+    const activeBackground = 'rgb(27, 36, 69)';
+    const activeText = 'rgb(185, 197, 255)';
+    const mutedBackground = 'rgb(25, 29, 38)'; // --surface-muted: #191d26
+
+    const all = page.getByRole('button', { name: 'All' });
+    await expect(all).toHaveClass(/active/);
+    await all.hover();
+    await expect(all).toHaveCSS('background-color', activeBackground);
+    await expect(all).toHaveCSS('color', activeText);
+
+    // A non-active chip keeps the muted hover look.
+    const linux = page.getByRole('button', { name: 'Linux' });
+    await linux.hover();
+    await expect(linux).toHaveCSS('background-color', mutedBackground);
+
+    const architectureTrigger = page.getByRole('button', { name: /^Architecture filter/ });
+    await architectureTrigger.click();
+    await page.getByRole('checkbox', { name: /^64 bits/ }).click();
+    // Open panel: the active look survives the hover.
+    await architectureTrigger.hover();
+    await expect(architectureTrigger).toHaveCSS('background-color', activeBackground);
+    await expect(architectureTrigger).toHaveCSS('color', activeText);
+
+    await page.keyboard.press('Escape');
+    await architectureTrigger.hover();
+    await expect(architectureTrigger).toHaveCSS('background-color', activeBackground);
+    await expect(architectureTrigger).toHaveCSS('color', activeText);
   });
 });
 

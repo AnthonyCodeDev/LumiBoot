@@ -128,6 +128,7 @@
 .filter-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-bottom: 24px;
   padding-bottom: 14px;
@@ -159,7 +160,145 @@
   background: var(--primary-soft);
   color: #b9c5ff;
 }
+/* An active filter keeps its selected look on hover: the active rules win over `:hover`. */
+.filter.active:hover {
+  border-color: #303a63;
+  background: var(--primary-soft);
+  color: #b9c5ff;
+}
 
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.filter-facets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Facets: a dropdown trigger (label + count) and a floating checkbox panel. */
+.facet {
+  position: relative;
+  display: inline-flex;
+}
+.facet-trigger {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 550;
+  transition:
+    color var(--duration-fast),
+    background var(--duration-fast),
+    border-color var(--duration-fast);
+}
+.facet-trigger:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+.facet-trigger.is-active {
+  border-color: #303a63;
+  background: var(--primary-soft);
+  color: #b9c5ff;
+}
+/* An active or open facet keeps its selected look on hover, like `.filter.active`. */
+.facet-trigger.is-active:hover,
+.facet-trigger[aria-expanded='true']:hover {
+  border-color: #303a63;
+  background: var(--primary-soft);
+  color: #b9c5ff;
+}
+.facet-chevron {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  transition: transform var(--duration-fast) var(--ease);
+}
+.facet[data-open='true'] .facet-chevron {
+  transform: rotate(180deg);
+}
+
+/* Fixed so the row's horizontal scroll (mobile) never clips the panel. */
+.facet-menu {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-md);
+}
+.facet-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+  transition:
+    color var(--duration-fast),
+    background var(--duration-fast);
+}
+.facet-option:hover:not(:disabled) {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+.facet-option.is-selected {
+  background: var(--primary-soft);
+  color: #b9c5ff;
+}
+/* A selected option keeps its selected look on hover too. */
+.facet-option.is-selected:hover:not(:disabled) {
+  background: var(--primary-soft);
+  color: #b9c5ff;
+}
+.facet-option:disabled,
+.facet-option.is-empty {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+.facet-option-label {
+  white-space: nowrap;
+}
+.facet-option-count {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.facet-option.is-selected .facet-option-count {
+  color: #b9c5ff;
+}
+.facet-option-check {
+  width: 12px;
+  flex: 0 0 auto;
+  color: #b9c5ff;
+  font-size: 11px;
+  text-align: center;
+}
 .cards {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1075,14 +1214,25 @@
     flex: 1;
   }
   .filter-row {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    overflow: visible;
+  }
+  /* The chips keep their edge-to-edge horizontal scroll; the facets get their own line. */
+  .filter-chips {
     flex-wrap: nowrap;
+    width: 100%;
     margin-inline: -20px;
-    padding: 0 20px 14px;
+    padding-inline: 20px;
     overflow-x: auto;
     scrollbar-width: none;
   }
-  .filter-row::-webkit-scrollbar {
+  .filter-chips::-webkit-scrollbar {
     display: none;
+  }
+  .filter-facets {
+    width: 100%;
+    margin-left: 0;
   }
   .filter {
     flex: 0 0 auto;

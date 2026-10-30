@@ -14,20 +14,6 @@ export interface SystemImageDefinition {
 
 export const images = [
   {
-    id: 'alpine-3-24-x86-64-image',
-    familyId: 'alpine',
-    architecture: 'x86_64',
-    imageRef: 'alpine-3-24-x86-64',
-    requirements: [
-      'Modern browser with WebAssembly',
-      '1024 MiB guest memory',
-      'Cross-origin isolation for parallel host threads',
-      'Official Alpine 3.24.0 virt ISO prepared locally',
-    ],
-    integrationNote:
-      'Official Alpine 3.24.0 x86_64 virt ISO, pinned by SHA-256 and booted through v64 with a reproducible LumiBoot autologin overlay. Two guest cores use parallel Workers when cross-origin isolation is available and cooperative scheduling otherwise.',
-  },
-  {
     id: 'debian-12-i386-image',
     familyId: 'debian',
     architecture: 'i386',
@@ -141,6 +127,20 @@ export const images = [
       'it as a CD-ROM; lumiboot autologin on tty1 and ttyS0. Guest writes stay in ' +
       'memory for the duration of the session. No image is distributed. Real boot ' +
       'proven by the E2E suite (tests/e2e/session-fedora.spec.ts).',
+  },
+  {
+    id: 'alpine-3-24-x86-64-image',
+    familyId: 'alpine',
+    architecture: 'x86_64',
+    imageRef: 'alpine-3-24-x86-64',
+    requirements: [
+      'Modern browser with WebAssembly',
+      '1024 MiB guest memory',
+      'Cross-origin isolation for parallel host threads',
+      'Official Alpine 3.24.0 virt ISO prepared locally',
+    ],
+    integrationNote:
+      'Official Alpine 3.24.0 x86_64 virt ISO, pinned by SHA-256 and booted through v64 with a reproducible LumiBoot autologin overlay. Two guest cores use parallel Workers when cross-origin isolation is available and cooperative scheduling otherwise.',
   },
   {
     id: 'windows-7-x86-image',

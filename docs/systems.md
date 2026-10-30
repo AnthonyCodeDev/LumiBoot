@@ -8,10 +8,11 @@
 | `ubuntu-18-i386`         | Ubuntu 18.04 CLI               | 512 MiB   | built rootfs        | `LUMIBOOT_GUEST_READY`   |
 | `ubuntu-18-i386-desktop` | Ubuntu 18.04 X11/Openbox       | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
 | `ubuntu-18-i386-xfce`    | Ubuntu 18.04 XFCE              | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
+| `fedora-44-x86-64`       | Fedora 44 x86-64               | 1024 MiB  | built bootable ISO  | `LUMIBOOT_GUEST_READY`   |
+| `alpine-3-24-x86-64`     | Alpine 3.24 x86-64 (v64 JIT)   | 1024 MiB  | official virt ISO   | `lumiboot@lumiboot`      |
 | `windows-7-pro-sp1-x86`  | Windows 7 Professional SP1 x86 | 1536 MiB  | operator RAW disk   | `disk-boot`              |
 | `windows-7-x86`          | Windows 7 Lite x86             | 1024 MiB  | operator RAW disk   | `disk-boot`              |
 | `windows-10-x86`         | Windows 10 x86 32-bit          | 2048 MiB  | operator RAW disk   | `disk-boot`              |
-| `fedora-44-x86-64`       | Fedora 44 x86-64               | 1024 MiB  | built bootable ISO  | `LUMIBOOT_GUEST_READY`   |
 | `custom-image`           | Custom image (ISO / IMG / RAW) | 512 MiB   | user-imported media | `LUMIBOOT_GUEST_READY`   |
 
 No disk, ISO or license key is shipped by this repository. This page is the index and the commands; details live next to each image under `images/<ref>/`.
