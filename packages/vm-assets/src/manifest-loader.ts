@@ -22,6 +22,8 @@ export const imageBootOptionsSchema = z
     wasmPath: z.string().regex(ENGINE_FILE_URL).optional(),
     biosUrl: z.string().regex(ENGINE_FILE_URL).optional(),
     vgaBiosUrl: z.string().regex(ENGINE_FILE_URL).optional(),
+    /** The ISO carries its own bootloader (El-Torito): no kernel injection. */
+    cdromOnly: z.boolean().optional(),
   })
   .strict();
 

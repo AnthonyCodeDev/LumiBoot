@@ -99,6 +99,27 @@ describe('V64Provider', () => {
     await instance.dispose();
   });
 
+  it('boots a self-booting ISO from El-Torito without injecting kernel or initrd', async () => {
+    // v64 hard-codes the injected initrd window at 64 MiB: a Fedora kernel that
+    // decompresses above it is why the disc has to boot itself.
+    const selfBooting: ImageManifest = { ...manifest, boot: { cdromOnly: true } };
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({ createEngine, resolveManifest: async () => selfBooting });
+    const instance = await provider.start(system, document.createElement('div'));
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options).toMatchObject({
+      // Buffered whole: the ranged ATAPI path trips an IDE DMA HSM violation.
+      cdrom: { url: '/images/alpine-test-x64/alpine.iso?v=aaaaaaaaaaaa', size: 4096 },
+      boot_order: 0x123,
+    });
+    expect(options?.cdrom?.async).toBeUndefined();
+    expect(options?.bzimage).toBeUndefined();
+    expect(options?.initrd).toBeUndefined();
+    expect(options?.cmdline).toBeUndefined();
+    await instance.dispose();
+  });
+
   it('extends an existing query with the version instead of replacing it', async () => {
     const versioned: ImageManifest = {
       ...manifest,

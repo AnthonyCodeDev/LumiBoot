@@ -41,14 +41,6 @@ export const families = [
     accentRgb: '114,151,243',
   },
   {
-    id: 'mint',
-    family: 'linux',
-    displayName: 'Linux Mint',
-    iconUrl: '/icons/os/mint.svg',
-    accent: '#66c69d',
-    accentRgb: '102,198,157',
-  },
-  {
     id: 'windows',
     family: 'windows',
     displayName: 'Windows',

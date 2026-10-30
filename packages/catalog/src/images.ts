@@ -124,18 +124,23 @@ export const images = [
       '(tests/e2e/xfce-ubuntu.spec.ts).',
   },
   {
-    id: 'fedora-workstation-image',
+    id: 'fedora-44-x86-64-image',
     familyId: 'fedora',
     architecture: 'x86_64',
-    requirements: ['WebAssembly', 'Enough memory', 'x86-64 architecture'],
-    integrationNote: 'Base image to pair with an x86-64 browser engine.',
-  },
-  {
-    id: 'mint-x64-image',
-    familyId: 'mint',
-    architecture: 'x86_64',
-    requirements: ['WebAssembly', 'Enough memory', 'x86-64 architecture'],
-    integrationNote: 'Base image to pair with an x86-64 browser engine.',
+    imageRef: 'fedora-44-x86-64',
+    requirements: [
+      'Modern browser with WebAssembly',
+      '1024 MiB guest memory',
+      'Cross-origin isolation for parallel host threads',
+      'Fedora 44 x86-64 live ISO built locally',
+    ],
+    integrationNote:
+      'Fedora 44 x86-64 live ISO built locally by images/fedora-44-x86-64/build.sh ' +
+      '(dnf --installroot): a live squashfs whose ISO carries its own GRUB El-Torito ' +
+      'boot record, so the disc loads kernel and initramfs itself and v64 only mounts ' +
+      'it as a CD-ROM; lumiboot autologin on tty1 and ttyS0. Guest writes stay in ' +
+      'memory for the duration of the session. No image is distributed. Real boot ' +
+      'proven by the E2E suite (tests/e2e/session-fedora.spec.ts).',
   },
   {
     id: 'windows-7-x86-image',
@@ -208,7 +213,7 @@ export const images = [
     requirements: ['x86-64 browser engine (not integrated yet)', 'Windows license'],
     integrationNote:
       'Not developed yet: no x86-64 browser engine is integrated and no image is ' +
-      'bundled or imported. Listed for information only, like Fedora, Mint and macOS.',
+      'bundled or imported. Listed for information only, like macOS.',
   },
   {
     id: 'macos-sequoia-image',

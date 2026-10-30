@@ -80,21 +80,42 @@ describe('catalog: consistent effective availability', () => {
   });
 
   it('keeps the other systems at planned', () => {
-    expect(getSystemById('fedora-workstation')?.availability).toBe('planned');
     expect(getSystemById('macos-sequoia')?.availability).toBe('planned');
   });
 
-  it('does not make a system with a non-integrated engine available', () => {
-    const fedora = getSystemById('fedora-workstation');
+  it('marks Fedora ready (self-booting ISO + integrated v64 engine + validated boot)', () => {
+    const fedora = getSystemById('fedora-44-x86-64');
     const profile = fedora?.launchProfiles[0];
+    expect(fedora?.imageRef).toBe('fedora-44-x86-64');
+    expect(profile && isEngineIntegrated(profile.engineId)).toBe(true);
+    // `validated: true` only once tests/e2e/session-fedora.spec.ts booted it.
+    expect(fedora?.availability).toBe('ready');
+  });
+
+  it('keeps a Fedora-shaped system without a proven boot at planned', () => {
+    const fedora = getSystemById('fedora-44-x86-64');
+    const profile = fedora?.launchProfiles[0];
+    const facts: SystemAvailabilityFacts = {
+      hasImage: fedora?.imageRef !== undefined,
+      hasCompatibleProfile: profile?.executionMode === 'browser',
+      engineIntegrated: profile ? isEngineIntegrated(profile.engineId) : false,
+      // An image plus an integrated engine are not enough on their own.
+      validated: false,
+    };
+    expect(getAggregatedAvailability([facts])).toBe('planned');
+  });
+
+  it('does not make a system with a non-integrated engine available', () => {
+    const windows = getSystemById('windows-11-x64');
+    const profile = windows?.launchProfiles[0];
     expect(profile && isEngineIntegrated(profile.engineId)).toBe(false);
-    expect(fedora?.availability).not.toBe('ready');
+    expect(windows?.availability).not.toBe('ready');
   });
 
   it('does not make a system without a referenced image available', () => {
-    const mint = getSystemById('mint-x64');
-    expect(mint?.imageRef).toBeUndefined();
-    expect(mint?.availability).not.toBe('ready');
+    const macos = getSystemById('macos-sequoia');
+    expect(macos?.imageRef).toBeUndefined();
+    expect(macos?.availability).not.toBe('ready');
   });
 });
 

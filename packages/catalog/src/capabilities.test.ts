@@ -30,8 +30,8 @@ describe('getCompatibility', () => {
     expect(result.reasons.join(' ')).toMatch(/WebAssembly/);
   });
 
-  it('rejects a system whose engine is not integrated (Fedora x64)', () => {
-    const result = getCompatibility(system('fedora-workstation'), CAPS);
+  it('rejects a system whose engine is not integrated (macOS Sequoia ARM)', () => {
+    const result = getCompatibility(system('macos-sequoia'), CAPS);
     expect(result.supported).toBe(false);
     expect(result.reasons.join(' ')).toMatch(/engine/i);
   });
