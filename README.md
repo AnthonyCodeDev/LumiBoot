@@ -19,15 +19,16 @@ LumiBoot is a browser-based operating system emulation platform designed to run 
 
 ## Systems
 
-| System            | Variants                 | Guest RAM               | Media                                    | Register with                      |
-| ----------------- | ------------------------ | ----------------------- | ---------------------------------------- | ---------------------------------- |
-| Debian 12         | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | built ext4 rootfs, kernel and initrd     | `images/debian-12-i386/build.sh`   |
-| Ubuntu 18.04      | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | built ext4 rootfs, kernel and initrd     | `images/ubuntu-18-i386/build.sh`   |
-| Fedora 44         | x86-64 (v64 JIT)         | 1024 MiB                | built live ISO (squashfs), kernel/initrd | `images/fedora-44-x86-64/build.sh` |
-| Alpine Linux 3.24 | x86-64 (v64 JIT)         | 1024 MiB                | official `virt` ISO, kernel + initramfs  | `pnpm assets:v64:alpine`           |
-| Windows 7         | Professional SP1 / Lite  | 1536 / 1024 MiB         | installed 32-bit BIOS/MBR RAW disk       | `pnpm assets:windows7:prepare`     |
-| Windows 10 x86    | 32-bit                   | 2048 MiB                | installed 32-bit BIOS/MBR RAW disk       | `pnpm assets:windows10:prepare`    |
-| Custom image      | ISO / IMG / RAW          | 512 MiB                 | `.iso`, `.img` or `.raw` you own         | Import it in the app               |
+| System              | Variants                 | Guest RAM               | Media                                    | Register with                      |
+| ------------------- | ------------------------ | ----------------------- | ---------------------------------------- | ---------------------------------- |
+| Debian 12           | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | built ext4 rootfs, kernel and initrd     | `images/debian-12-i386/build.sh`   |
+| Ubuntu 18.04        | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | built ext4 rootfs, kernel and initrd     | `images/ubuntu-18-i386/build.sh`   |
+| Fedora 44           | x86-64 (v64 JIT)         | 1024 MiB                | built live ISO (squashfs), kernel/initrd | `images/fedora-44-x86-64/build.sh` |
+| Alpine Linux 3.24   | x86-64 (v64 JIT)         | 1024 MiB                | official `virt` ISO, kernel + initramfs  | `pnpm assets:v64:alpine`           |
+| Windows 7           | Professional SP1 / Lite  | 1536 / 1024 MiB         | installed 32-bit BIOS/MBR RAW disk       | `pnpm assets:windows7:prepare`     |
+| Windows 8.1 Pro x86 | 32-bit                   | 2048 MiB                | installed 32-bit BIOS/MBR RAW disk       | `pnpm assets:windows8:prepare`     |
+| Windows 10 x86      | 32-bit                   | 2048 MiB                | installed 32-bit BIOS/MBR RAW disk       | `pnpm assets:windows10:prepare`    |
+| Custom image        | ISO / IMG / RAW          | 512 MiB                 | `.iso`, `.img` or `.raw` you own         | Import it in the app               |
 
 No disk, ISO or license key ships with the repository: prepare or import your own media before starting a session.
 
@@ -37,6 +38,7 @@ sudo ./images/ubuntu-18-i386/build.sh
 sudo ./images/fedora-44-x86-64/build.sh
 pnpm assets:v64:alpine
 pnpm assets:windows7:prepare --source images/windows-7-pro-sp1-x86/disk.img
+pnpm assets:windows8:prepare --source images/windows-8-1-x86/disk.img
 pnpm assets:windows10:prepare --source images/windows-10-x86/disk.img
 ```
 
@@ -74,6 +76,7 @@ pnpm test                  # Vitest
 pnpm test:e2e              # Playwright, port 5200
 pnpm assets:check          # v86 binary integrity
 pnpm assets:windows7:prepare|check
+pnpm assets:windows8:prepare|check
 pnpm assets:windows10:prepare|check
 pnpm config:nginx          # render infra/nginx/*.conf from .env
 pnpm config:nginx:check    # exit 1 when the rendered nginx files drifted

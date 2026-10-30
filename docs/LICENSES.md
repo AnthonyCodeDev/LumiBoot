@@ -43,6 +43,7 @@ image is loaded from an external domain at runtime.
 - Debian: Bookworm images, provenance and packages recorded (`packages.tsv`).
 - Ubuntu 18.04 LTS: locally built bionic images, provenance and packages recorded (`packages.tsv`); no image distributed.
 - Windows 7: operator RAW disks, outside Git, HTTP Range in development; no image or key distributed.
+- Windows 8.1 Pro x86: operator RAW disk converted from their own QEMU/VirtualBox installation, outside Git, HTTP Range in development. The user's Windows licence is required; no media or third-party link distributed. Same pipeline as Windows 7: [`images/windows-8-1-x86/README.md`](../images/windows-8-1-x86/README.md).
 - Windows 10 x86: operator RAW disk converted from their own QEMU/VirtualBox installation, outside Git, HTTP Range in development. The user's Windows licence is required; no media or third-party link distributed. Same pipeline as Windows 7: [`images/windows-10-x86/README.md`](../images/windows-10-x86/README.md).
 - Windows 11: not developed; no x86-64 engine, no image, no media distributed.
 - Custom image: any `.iso`, `.img` or `.raw` imported by the visitor, kept as a local blob in the tab; LumiBoot distributes no media and the file is never uploaded.

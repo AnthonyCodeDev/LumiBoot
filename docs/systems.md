@@ -12,6 +12,7 @@
 | `alpine-3-24-x86-64`     | Alpine 3.24 x86-64 (v64 JIT)   | 1024 MiB  | official virt ISO   | `lumiboot@lumiboot`      |
 | `windows-7-pro-sp1-x86`  | Windows 7 Professional SP1 x86 | 1536 MiB  | operator RAW disk   | `disk-boot`              |
 | `windows-7-x86`          | Windows 7 Lite x86             | 1024 MiB  | operator RAW disk   | `disk-boot`              |
+| `windows-8-1-x86`        | Windows 8.1 Pro x86 32-bit     | 2048 MiB  | operator RAW disk   | `disk-boot`              |
 | `windows-10-x86`         | Windows 10 x86 32-bit          | 2048 MiB  | operator RAW disk   | `disk-boot`              |
 | `custom-image`           | Custom image (ISO / IMG / RAW) | 512 MiB   | user-imported media | `LUMIBOOT_GUEST_READY`   |
 
@@ -120,6 +121,20 @@ pnpm assets:windows7:check
 The Lite variant reads `images/windows-7-x86/disk.img` with 1024 MiB of guest RAM. Register it with `--ref windows-7-x86 --memory-mib 1024`.
 
 Guest networking needs an NE2000 driver installed inside the disk, offline under QEMU. Disk preparation, driver install, readiness, HTTP Range transport and network modes: [`images/windows-7-pro-sp1-x86/README.md`](../images/windows-7-pro-sp1-x86/README.md). The Lite variant has its own page: [`images/windows-7-x86/README.md`](../images/windows-7-x86/README.md).
+
+## Windows 8.1 Pro x86
+
+Requires a 32-bit BIOS/MBR installation; a UEFI/GPT disk does not boot. Convert to RAW, keep it outside `public/`:
+
+```powershell
+qemu-img convert -O raw source.qcow2 images/windows-8-1-x86/disk.img
+pnpm assets:windows8:prepare --source images/windows-8-1-x86/disk.img
+pnpm assets:windows8:check
+```
+
+2048 MiB of guest RAM minimum. The profile declares `e1000` + ACPI, matching a disk installed with `-nic user,model=e1000`. QEMU install, RAW conversion, HTTP Range and limitations: [`images/windows-8-1-x86/README.md`](../images/windows-8-1-x86/README.md).
+
+The profile declares `validated: true` because the session boots from the operator's installed RAW disk: availability is `ready` and the card is launchable. No Windows 8.1 E2E spec is versioned under `tests/e2e`, so this is an explicit operator decision rather than a recorded test proof. See [`images/windows-8-1-x86/README.md`](../images/windows-8-1-x86/README.md#validation-status) for the honest validation checklist.
 
 ## Windows 10 x86
 

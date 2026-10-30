@@ -60,7 +60,7 @@ describe('SystemGrid', () => {
     expect(within(card('debian-12-i386')).getByText('12 Bookworm · 32 bits')).toBeTruthy();
     expect(within(card('ubuntu-18-i386')).getByText('18.04 LTS · 32 bits')).toBeTruthy();
     expect(within(card('windows-7-x86')).getByText('32 bits')).toBeTruthy();
-    expect(within(card('windows-8-1-x64')).getByText('64 bits')).toBeTruthy();
+    expect(within(card('windows-11-x64')).getByText('64 bits')).toBeTruthy();
     expect(within(card('windows-10-x86')).getByText('32 bits')).toBeTruthy();
   });
 

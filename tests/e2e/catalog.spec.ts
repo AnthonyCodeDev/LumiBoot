@@ -49,8 +49,8 @@ test.describe('Library', () => {
   });
 });
 
-// Facet counts come from the catalog (10 displayed cards): 5 x 32 bits (i386),
-// 4 x 64 bits (x86_64: Fedora, Alpine, Windows 8.1, Windows 11) and 1 ARM 64 bits (macOS).
+// Facet counts come from the catalog (10 displayed cards): 6 x 32 bits (i386),
+// 3 x 64 bits (x86_64: Fedora, Alpine, Windows 11) and 1 ARM 64 bits (macOS).
 test.describe('Facet filters', () => {
   test('facet filters narrow the library', async ({ page }) => {
     await page.goto('/');
@@ -63,16 +63,16 @@ test.describe('Facet filters', () => {
     await expect(architectureTrigger).toHaveAttribute('aria-expanded', 'true');
     await expect(architectureMenu.getByRole('checkbox')).toHaveCount(3);
     await expect(architectureMenu.locator('[data-value="i386"] .facet-option-count')).toHaveText(
-      '5',
+      '6',
     );
     await expect(architectureMenu.locator('[data-value="x86_64"] .facet-option-count')).toHaveText(
-      '4',
+      '3',
     );
     await expect(architectureMenu.locator('[data-value="arm64"] .facet-option-count')).toHaveText(
       '1',
     );
 
-    // 64 bits: Fedora, Alpine, Windows 8.1 and Windows 11 only.
+    // 64 bits: Fedora, Alpine and Windows 11 only.
     await architectureMenu.locator('[data-value="x86_64"]').click();
     await expect(architectureMenu.locator('[data-value="x86_64"]')).toHaveAttribute(
       'aria-checked',
@@ -84,21 +84,15 @@ test.describe('Facet filters', () => {
       'Architecture filter, 1 selected',
     );
     await expect(page.locator('.facet-count')).toHaveCount(0);
-    await expect(page.locator('.os-card')).toHaveCount(4);
+    await expect(page.locator('.os-card')).toHaveCount(3);
     await expect(page.locator('.os-card[data-id="debian-12-i386"]')).toHaveCount(0);
-    for (const id of [
-      'fedora-44-x86-64',
-      'alpine-3-24-x86-64',
-      'windows-8-1-x64',
-      'windows-11-x64',
-    ]) {
+    for (const id of ['fedora-44-x86-64', 'alpine-3-24-x86-64', 'windows-11-x64']) {
       await expect(page.locator(`.os-card[data-id="${id}"]`)).toHaveCount(1);
     }
 
     // Family and facet intersect.
     await page.getByRole('button', { name: 'Windows' }).click();
-    await expect(page.locator('.os-card')).toHaveCount(2);
-    await expect(page.locator('.os-card[data-id="windows-8-1-x64"]')).toHaveCount(1);
+    await expect(page.locator('.os-card')).toHaveCount(1);
     await expect(page.locator('.os-card[data-id="windows-11-x64"]')).toHaveCount(1);
     await expect(page.locator('.os-card[data-id="windows-7-x86"]')).toHaveCount(0);
 

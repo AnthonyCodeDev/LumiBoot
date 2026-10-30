@@ -34,6 +34,8 @@
     "assets:windows7:prepare": "node scripts/prepare-windows7-asset.mjs",
     "assets:windows7:check": "node scripts/prepare-windows7-asset.mjs --check",
     "assets:windows7:serve": "node scripts/serve-windows7-asset.mjs",
+    "assets:windows8:prepare": "node scripts/prepare-windows8-asset.mjs",
+    "assets:windows8:check": "node scripts/prepare-windows8-asset.mjs --check",
     "assets:windows10:prepare": "node scripts/prepare-windows10-asset.mjs",
     "assets:windows10:check": "node scripts/prepare-windows10-asset.mjs --check",
     "config:nginx": "node scripts/render-nginx-config.mjs",
