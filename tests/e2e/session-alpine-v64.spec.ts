@@ -12,10 +12,22 @@ test.describe('Alpine 3.24 x86-64 session (v64, real boot)', () => {
 
   test('boots the official x86-64 guest and executes a 64-bit command', async ({ page }) => {
     test.setTimeout(420_000);
-    await page.goto('/');
+    // Direct system page instead of the library card: since the XFCE variant
+    // exists, the Alpine card opens it by default (`variantOrder: 1`), while this
+    // spec proves the official CLI ISO. The variant dropdown is the only way to
+    // pick it, so it is driven through its ARIA roles below.
+    await page.goto('/systems/alpine-3-24-x86-64');
     await expect.poll(() => page.evaluate(() => crossOriginIsolated)).toBe(true);
-    await page.getByLabel('Search for a system').fill('alpine');
-    await page.locator('.os-card').first().click();
+    await page.getByRole('button', { name: 'Choose variant' }).click();
+    const cliVariant = page
+      .getByRole('listbox', { name: 'Available variants' })
+      .getByRole('option', { name: /Alpine Linux CLI/ });
+    // Labels are built as "<system> <variant> · <architecture>".
+    await expect(cliVariant).toHaveAttribute('aria-selected', 'false');
+    await cliVariant.click();
+    await expect(page.getByRole('button', { name: 'Choose variant' })).toContainText(
+      'Alpine Linux CLI',
+    );
     await page.getByRole('button', { name: 'Start session' }).click();
     await expect(page).toHaveURL(/\/session\//);
 

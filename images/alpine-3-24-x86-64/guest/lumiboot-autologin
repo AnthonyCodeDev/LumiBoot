@@ -1,0 +1,13 @@
+#!/bin/sh
+# LumiBoot autologin for both gettys of /etc/inittab. tty0 aliases the active
+# virtual terminal, so the VGA marker is only printed there (never on ttyS0).
+terminal=$(tty)
+case "$terminal" in
+  /dev/tty0|/dev/tty1)
+    printf 'LUMIBOOT_VGA_AUTOLOGIN\n' > /dev/ttyS0
+    ;;
+esac
+# -c gives login its own controlling terminal; login -f skips the password and
+# starts the login shell, which is where the XFCE session is launched.
+/usr/bin/setsid -c /bin/login -f lumiboot <"$terminal" >"$terminal" 2>&1 &
+wait $!

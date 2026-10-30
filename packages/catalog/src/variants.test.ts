@@ -21,6 +21,8 @@ const ubuntuDesktop = getSystemById('ubuntu-18-i386-desktop')!;
 const ubuntuXfce = getSystemById('ubuntu-18-i386-xfce')!;
 const fedoraMother = getSystemById('fedora-44-x86-64')!;
 const fedoraXfce = getSystemById('fedora-44-x86-64-xfce')!;
+const alpineMother = getSystemById('alpine-3-24-x86-64')!;
+const alpineXfce = getSystemById('alpine-3-24-x86-64-xfce')!;
 const macosSequoia = getSystemById('macos-sequoia')!;
 
 describe('Debian variant group', () => {
@@ -211,6 +213,63 @@ describe('Fedora variant group', () => {
   });
 });
 
+describe('Alpine variant group', () => {
+  it('sorts the default variant first (XFCE → CLI)', () => {
+    const group = getVariantGroup(alpineMother);
+    expect(group).toHaveLength(2);
+    expect(group.map((system) => system.id)).toEqual([
+      'alpine-3-24-x86-64-xfce',
+      'alpine-3-24-x86-64',
+    ]);
+  });
+
+  it('finds the same group from the parent as from the child', () => {
+    const expected = ['alpine-3-24-x86-64-xfce', 'alpine-3-24-x86-64'];
+    expect(getVariantGroup(alpineXfce).map((system) => system.id)).toEqual(expected);
+    expect(getVariantGroup(alpineMother).map((system) => system.id)).toEqual(expected);
+  });
+
+  it('finds the CLI parent from the XFCE child', () => {
+    expect(getVariantParent(alpineXfce).id).toBe('alpine-3-24-x86-64');
+    expect(getVariantParent(alpineMother).id).toBe('alpine-3-24-x86-64');
+    expect(getVariantParentId(alpineXfce)).toBe('alpine-3-24-x86-64');
+    expect(getVariantParentId(alpineMother)).toBe('alpine-3-24-x86-64');
+  });
+
+  it('exposes the neutral parent (CLI) and the child label', () => {
+    expect(alpineMother.variantGroupId).toBeUndefined();
+    expect(alpineMother.variantName).toBe('CLI');
+    expect(alpineXfce.variantGroupId).toBe('alpine-3-24-x86-64');
+    expect(alpineXfce.variantName).toBe('XFCE');
+  });
+
+  it('exposes an ascending variantOrder (XFCE < CLI)', () => {
+    expect(alpineXfce.variantOrder).toBe(1);
+    expect(alpineMother.variantOrder).toBe(2);
+  });
+
+  it('selects XFCE as the default variant and exposes both variants as ready', () => {
+    expect(getDefaultVariant(alpineMother).id).toBe('alpine-3-24-x86-64-xfce');
+    expect(getDefaultVariant(alpineXfce).id).toBe('alpine-3-24-x86-64-xfce');
+    // Both profiles are `validated: true`: the XFCE card is launchable, and the
+    // 2026-10-30 real boot is recorded by desktop-alpine-xfce.spec.ts.
+    expect(alpineMother.availability).toBe('ready');
+    expect(alpineXfce.availability).toBe('ready');
+  });
+
+  it('folds the XFCE child onto the CLI card and out of the displayed systems', () => {
+    const display = getDisplaySystems().map((system) => system.id);
+    expect(display).toContain('alpine-3-24-x86-64');
+    expect(display).not.toContain('alpine-3-24-x86-64-xfce');
+    expect(hasVariants(alpineMother)).toBe(true);
+    expect(hasVariants(alpineXfce)).toBe(true);
+  });
+
+  it('always resolves the XFCE child by its id and slug', () => {
+    expect(getSystemById('alpine-3-24-x86-64-xfce')?.slug).toBe('alpine-3-24-x86-64-xfce');
+  });
+});
+
 describe('standalone Windows 10 x86 system', () => {
   it('belongs to no variant group', () => {
     expect(windows10Mother.variantGroupId).toBeUndefined();
@@ -243,6 +302,7 @@ describe('getDisplaySystems', () => {
     expect(display.some((system) => system.id === 'ubuntu-18-i386-desktop')).toBe(false);
     expect(display.some((system) => system.id === 'ubuntu-18-i386-xfce')).toBe(false);
     expect(display.some((system) => system.id === 'fedora-44-x86-64-xfce')).toBe(false);
+    expect(display.some((system) => system.id === 'alpine-3-24-x86-64-xfce')).toBe(false);
   });
 
   it('keeps the Debian parent, the Windows 7 parent and the standalone systems', () => {
@@ -256,10 +316,12 @@ describe('getDisplaySystems', () => {
     expect(ids).not.toContain('ubuntu-18-i386-xfce');
     expect(ids).toContain('fedora-44-x86-64');
     expect(ids).not.toContain('fedora-44-x86-64-xfce');
+    expect(ids).toContain('alpine-3-24-x86-64');
+    expect(ids).not.toContain('alpine-3-24-x86-64-xfce');
     expect(ids).toContain('macos-sequoia');
-    // Six child variants are folded away: Debian X11/XFCE, Ubuntu X11/XFCE,
-    // Windows 7 Professional and Fedora XFCE.
-    expect(getDisplaySystems()).toHaveLength(systems.length - 6);
+    // Seven child variants are folded away: Debian X11/XFCE, Ubuntu X11/XFCE,
+    // Windows 7 Professional, Fedora XFCE and Alpine XFCE.
+    expect(getDisplaySystems()).toHaveLength(systems.length - 7);
   });
 });
 

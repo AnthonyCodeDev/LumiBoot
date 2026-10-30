@@ -10,7 +10,8 @@
 | `ubuntu-18-i386-xfce`    | Ubuntu 18.04 XFCE              | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
 | `fedora-44-x86-64`       | Fedora 44 x86-64 CLI           | 1024 MiB  | built bootable ISO  | `LUMIBOOT_GUEST_READY`   |
 | `fedora-44-x86-64-xfce`  | Fedora 44 x86-64 XFCE          | 2048 MiB  | built bootable ISO  | `LUMIBOOT_DESKTOP_READY` |
-| `alpine-3-24-x86-64`     | Alpine 3.24 x86-64 (v64 JIT)   | 1024 MiB  | official virt ISO   | `lumiboot@lumiboot`      |
+| `alpine-3-24-x86-64`     | Alpine 3.24 x86-64 CLI (v64 JIT) | 1024 MiB  | official virt ISO   | `lumiboot@lumiboot`      |
+| `alpine-3-24-x86-64-xfce` | Alpine 3.24 x86-64 XFCE | 2048 MiB  | rebuilt virt ISO + squashfs rootfs | `LUMIBOOT_DESKTOP_READY` |
 | `windows-7-pro-sp1-x86`  | Windows 7 Professional SP1 x86 | 1536 MiB  | operator RAW disk   | `disk-boot`              |
 | `windows-7-x86`          | Windows 7 Lite x86             | 1024 MiB  | operator RAW disk   | `disk-boot`              |
 | `windows-8-1-x86`        | Windows 8.1 Pro x86 32-bit     | 2048 MiB  | operator RAW disk   | `disk-boot`              |
@@ -151,6 +152,67 @@ without `VM_E2E_ASSETS=1` and the published `manifest.json`.
 Build details, package lists and smoke tests:
 [`images/fedora-44-x86-64/README.md`](../images/fedora-44-x86-64/README.md).
 
+## Alpine Linux 3.24 x86-64
+
+Two flavors with two different pipelines:
+
+| Flavor | Reference | RAM | Media | Marker |
+|---|---|---:|---|---|
+| CLI | `alpine-3-24-x86-64` | 1024 MiB | official 3.24.0 `virt` ISO, kernel + initramfs | `lumiboot@lumiboot` |
+| XFCE | `alpine-3-24-x86-64-xfce` | 2048 MiB | official 3.24.3 ISO rebuilt with a preinstalled squashfs rootfs | `LUMIBOOT_DESKTOP_READY` |
+
+The CLI flavor is only published: `pnpm assets:v64:alpine` downloads the
+official unmodified ISO, verifies its pinned SHA-256, extracts the kernel and the
+initramfs and writes the apkovl overlay that adds the LumiBoot autologin.
+
+The XFCE flavor is rebuilt locally, because the official `virt` ISO carries **no
+rootfs**: its initramfs installs one into a tmpfs with `apk add` from the ISO's
+`/apks` repository at every boot. That is cheap for a console, but XFCE means
+~370 packages and ~650 MiB to unpack on each start (10–20 min under v64).
+The variant therefore ships a **preinstalled squashfs rootfs** mounted read-only
+with an **overlayfs RAM upper layer** by a custom initramfs `init`
+(`images/alpine-3-24-x86-64/guest/init`): it mounts the ISO and the rootfs
+squashfs, loads overlayfs from the modules already inside that rootfs, mounts a
+tmpfs for the overlay, moves `/proc /sys /dev` and `switch_root`s to OpenRC.
+Guest writes stay in RAM and are lost on stop, like every other LumiBoot image.
+
+Prerequisites: Linux or WSL2 on an x86_64 host, **no root at all**, `curl`,
+`xorriso`, `squashfs-tools` (`mksquashfs`, `unsquashfs`), `cpio`, `gzip`, `tar`
+and `sha256sum`. The work directory (default
+`${XDG_CACHE_HOME:-$HOME/.cache}/lumiboot/alpine-3-24-x86-64`, overridable with
+`LUMIBOOT_BUILD_DIR`) must be a native Linux filesystem: `/mnt/c` under WSL2
+drops file modes and the setuid bit of `usr/libexec/Xorg.wrap`.
+
+```bash
+FLAVOR=xfce ./images/alpine-3-24-x86-64/build.sh
+pnpm assets:v64:alpine:xfce
+```
+
+`build.sh` installs the rootfs with `apk.static --root` (signature-checked
+against the pinned Alpine keyring, no `--allow-untrusted`, no chroot), drops the
+kernel modules of `boot/modloop-virt` into `lib/modules`, installs the guest
+files, wires the OpenRC runlevels with plain symlinks, packs the rootfs with
+`mksquashfs -all-root` (which keeps the setuid bit of `usr/libexec/Xorg.wrap`),
+rebuilds the initramfs around its own `init`, and repacks the ISO with `xorriso
+-boot_image any keep`: the official BIOS and UEFI El-Torito records are kept and
+`/apks` is removed. Outputs land in `images/alpine-3-24-x86-64/build-xfce/`;
+`pnpm assets:v64:alpine:xfce` publishes them under
+`apps/web/public/images/alpine-3-24-x86-64-xfce/` and recomputes the manifest
+(on v64 the guest boots `bzimage + initrd + cdrom`, like the CLI flavor).
+
+The XFCE profile is `validated: true`: `tests/e2e/desktop-alpine-xfce.spec.ts`
+booted the published image in Chromium on 2026-10-30 and the guest printed
+`LUMIBOOT_DESKTOP_READY:alpine-3-24-x86-64-xfce` 132.7 s after the start click;
+the desktop was then painted on the VGA canvas in 1024x768 (mean luminance
+58.8/255, 99.6 % non-black pixels, 217 distinct colours over three stable
+samples). Builds and sizes are measured too: the ISO is 305 135 616 bytes, the
+rootfs squashfs 249 782 272 bytes for 373 packages, and a full build takes about
+1 min 45 s under WSL2. As everywhere: revert the flag as soon as a rebuild stops
+reaching the marker.
+
+Build details, package list and smoke test:
+[`images/alpine-3-24-x86-64/README.md`](../images/alpine-3-24-x86-64/README.md).
+
 ## Windows 7
 
 Requires an installed 32-bit RAW disk, bootable in BIOS/MBR, with your own license; a UEFI/GPT installation does not boot. Place it at `images/windows-7-pro-sp1-x86/disk.img`:
@@ -224,6 +286,7 @@ Current groups:
 | Debian (`debian-12-i386`) | XFCE, X11, CLI | XFCE |
 | Ubuntu (`ubuntu-18-i386`) | XFCE, X11, CLI | XFCE |
 | Fedora 44 (`fedora-44-x86-64`) | XFCE, CLI | XFCE (both variants `validated: true`; both ISOs are built, published and booted in CI-less Playwright runs) |
+| Alpine 3.24 (`alpine-3-24-x86-64`) | XFCE, CLI | XFCE (both variants `validated: true`; the XFCE ISO is built, published and booted for real) |
 | Windows 7 (`windows-7-x86`) | Professional, Lite | Professional |
 
 Helpers in `packages/catalog/src/systems.ts`: `getDisplaySystems()` returns the parents and standalone systems, `getVariantGroup()` the members sorted by `variantOrder`, `getDefaultVariant()` the first member, `getVariantParent()` and `getVariantParentId()` resolve the parent, and `hasVariants()` tells whether a group holds several entries.

@@ -288,9 +288,47 @@ export const launchProfiles = [
     slug: 'alpine-3-24-x86-64',
     displayName: 'Alpine Linux',
     versionLabel: '3.24 · x86-64',
+    // XFCE is the default variant of the card (order 1); the CLI comes second,
+    // like Debian, Ubuntu and Fedora. The CLI ISO itself is unchanged.
+    variantName: 'CLI',
+    variantOrder: 2,
     validated: true,
     description:
       'Alpine Linux 3.24 x86-64 running locally in the browser with the v64 WebAssembly JIT.',
+  },
+  {
+    id: 'alpine-3-24-x86-64-xfce',
+    imageId: 'alpine-3-24-x86-64-xfce-image',
+    engineId: 'v64',
+    executionMode: 'browser',
+    minMemoryMiB: 2048,
+    configuration: {
+      memoryMiB: 2048,
+      vgaMemoryMiB: 32,
+      bootDevice: 'cdrom',
+      extra: { v64CpuCores: 2, v64Graphics: 'bochs_vga' },
+    },
+    hardwareProfile: { ...pcHardware('virtio'), acpi: true },
+    readiness: { ...desktopReadiness('alpine-3-24-x86-64-xfce'), timeoutMs: 300_000 },
+    displayMode: 'graphical',
+    slug: 'alpine-3-24-x86-64-xfce',
+    displayName: 'Alpine Linux (XFCE)',
+    versionLabel: '3.24 · x86-64',
+    variantGroupId: 'alpine-3-24-x86-64',
+    variantName: 'XFCE',
+    variantOrder: 1,
+    // Built and published under apps/web/public/images/alpine-3-24-x86-64-xfce/
+    // (ISO 305 135 616 bytes, rootfs squashfs 249 782 272 bytes, 373 packages,
+    // ~1 min 45 s build under WSL2). Booted for real in Chromium on 2026-10-30 by
+    // tests/e2e/desktop-alpine-xfce.spec.ts: the guest printed
+    // LUMIBOOT_DESKTOP_READY:alpine-3-24-x86-64-xfce 132.7 s after the start
+    // click, and the XFCE desktop appeared on the VGA canvas in 1024x768 (mean
+    // luminance 58.8/255, 99.6 % non-black pixels, 217 distinct colours, three
+    // stable samples). Keep the flag honest: revert it as soon as a rebuild stops
+    // reaching the marker.
+    validated: true,
+    description:
+      'The Alpine Linux 3.24 x86-64 variant with the XFCE desktop environment: Xorg + XFCE on tty1, from a preinstalled squashfs rootfs on a repacked official ISO.',
   },
   {
     id: 'windows-7-x86',

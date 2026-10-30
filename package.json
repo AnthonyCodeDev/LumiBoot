@@ -31,6 +31,7 @@
     "assets:v64:prepare": "node scripts/prepare-v64-assets.mjs",
     "assets:v64:check": "node scripts/prepare-v64-assets.mjs --check",
     "assets:v64:alpine": "node scripts/prepare-v64-alpine.mjs",
+    "assets:v64:alpine:xfce": "node scripts/prepare-v64-alpine.mjs --flavor=xfce",
     "assets:windows7:prepare": "node scripts/prepare-windows7-asset.mjs",
     "assets:windows7:check": "node scripts/prepare-windows7-asset.mjs --check",
     "assets:windows7:serve": "node scripts/serve-windows7-asset.mjs",

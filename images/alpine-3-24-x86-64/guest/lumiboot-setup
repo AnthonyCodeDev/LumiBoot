@@ -1,0 +1,31 @@
+#!/bin/sh
+# LumiBoot: initialize the disposable account before OpenRC starts services.
+# The rootfs is read-only and every boot starts from the same squashfs, so this
+# recreates the account and its home directory instead of persisting them.
+set -eu
+
+hostname lumiboot
+if ! grep -q '^lumiboot:' /etc/group; then
+  addgroup -g 1000 lumiboot
+fi
+if ! id -u lumiboot >/dev/null 2>&1; then
+  adduser -D -u 1000 -G lumiboot -h /home/lumiboot -s /bin/ash lumiboot
+fi
+passwd -d lumiboot >/dev/null 2>&1 || true
+# wheel: passwordless doas. audio/video/input: Xorg and libinput device access;
+# netdev: unprivileged network tools.
+for group in wheel audio video input netdev; do
+  addgroup lumiboot "$group" >/dev/null 2>&1 || true
+done
+mkdir -p /home/lumiboot
+chown -R lumiboot:lumiboot /home/lumiboot
+
+# Match the Debian/Ubuntu/Fedora guests: French AZERTY on the visible Linux
+# console. The X layout is set independently by the xorg.conf.d snippet.
+AZERTY_KEYMAP=/usr/share/bkeymaps/fr/fr-azerty.bmap.gz
+if [ ! -r "$AZERTY_KEYMAP" ]; then
+  echo "Missing Alpine French AZERTY keymap: $AZERTY_KEYMAP" >&2
+  exit 1
+fi
+zcat "$AZERTY_KEYMAP" | loadkmap
+touch /etc/lumiboot-azerty-ready

@@ -1,0 +1,104 @@
+#!/bin/sh
+#
+# LumiBoot initramfs init for the Alpine XFCE image.
+#
+# The official Alpine `virt` ISO ships no rootfs: its own init installs one into
+# a tmpfs with apk on every boot. That is fine for a console, but XFCE would cost
+# ~370 packages to unpack at each start, so this image carries a preinstalled
+# squashfs rootfs instead. Only the stock initramfs kernel modules are reused:
+# this script mounts the ISO, then the rootfs with a RAM overlay, and hands over
+# to OpenRC. Every failure is written to the console and drops to a shell: a
+# silent panic is not debuggable under software emulation.
+set -eu
+
+# The kernel execs this init with an empty environment: without an explicit
+# PATH, not even the busybox applets below would be found.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# The initramfs ships one busybox binary and almost no applet symlinks (only sh).
+# Alpine's own init spreads them with `busybox --install -s`; every command here
+# (mount, mkdir, sleep, mknod, switch_root) relies on it.
+/bin/busybox --install -s
+
+CONSOLE=/dev/console
+
+say() {
+  printf 'lumiboot-init: %s\n' "$*" >"$CONSOLE" 2>/dev/null ||
+    printf 'lumiboot-init: %s\n' "$*" >&2
+}
+
+die() {
+  say "FATAL: $*"
+  say "the boot cannot continue; dropping to a recovery shell"
+  exec sh
+}
+
+# devtmpfs gives the kernel-populated /dev (block devices are needed before udev
+# ever runs). mdev is only the fallback when devtmpfs is unavailable.
+mount -t proc proc /proc || die "cannot mount /proc"
+mount -t sysfs sys /sys || die "cannot mount /sys"
+mkdir -p /dev
+if ! mount -t devtmpfs devtmpfs /dev 2>/dev/null; then
+  mount -t tmpfs dev /dev || die "cannot mount /dev"
+  mdev -s || die "cannot populate /dev with mdev"
+fi
+[ -c /dev/console ] || mknod /dev/console c 5 1
+
+# loop, squashfs and isofs are modules of the virt kernel shipped in this
+# initramfs; sr_mod and ata_piix expose the emulated CD-ROM. A module that is
+# already built in makes modprobe return non-zero, hence the ignored status.
+for module in loop squashfs isofs sr_mod ata_piix sd_mod; do
+  modprobe "$module" 2>/dev/null || true
+done
+
+# The CD may answer after the ATA probe: keep looking for it before failing.
+mkdir -p /media/cdrom /media/rootfs /media/overlay /newroot
+CDROM=""
+attempt=0
+while [ -z "$CDROM" ] && [ "$attempt" -lt 60 ]; do
+  for device in /dev/sr0 /dev/sr1 /dev/sda; do
+    [ -b "$device" ] || continue
+    if mount -t iso9660 -o ro "$device" /media/cdrom 2>/dev/null; then
+      if [ -f /media/cdrom/boot/lumiboot-rootfs.squashfs ]; then
+        CDROM="$device"
+        break
+      fi
+      umount /media/cdrom
+    fi
+  done
+  [ -n "$CDROM" ] || sleep 1
+  attempt=$((attempt + 1))
+done
+[ -n "$CDROM" ] || die "no LumiBoot CD-ROM found (tried /dev/sr0, /dev/sr1, /dev/sda)"
+say "ISO mounted from $CDROM"
+
+# The rootfs squashfs already carries the whole module tree (build.sh extracted
+# boot/modloop-virt into lib/modules/<ver>), so overlayfs is loaded from there:
+# mounting the modloop here would nest it as /lib/modules/modules/<ver>, which is
+# not where modprobe looks. `-d` asks modprobe for that root; insmod with the
+# exact path is the last resort when modprobe cannot parse the foreign root.
+mount -t squashfs -o loop,ro /media/cdrom/boot/lumiboot-rootfs.squashfs /media/rootfs ||
+  die "cannot mount the LumiBoot rootfs squashfs"
+
+KVER="$(uname -r)"
+modprobe -d /media/rootfs overlay 2>/dev/null ||
+  modprobe overlay 2>/dev/null ||
+  insmod "/media/rootfs/lib/modules/$KVER/kernel/fs/overlayfs/overlay.ko" ||
+  die "the overlayfs module is missing from the rootfs"
+
+# The rootfs is read-only; everything the guest writes lands in this tmpfs and is
+# lost on stop, exactly like the other LumiBoot images.
+mount -t tmpfs -o mode=0755,rw lumiboot-overlay /media/overlay ||
+  die "cannot mount the overlay tmpfs"
+mkdir -p /media/overlay/upper /media/overlay/work
+mount -t overlay -o lowerdir=/media/rootfs,upperdir=/media/overlay/upper,workdir=/media/overlay/work \
+  overlay /newroot || die "cannot assemble the overlay root"
+
+# The pseudo filesystems move with the switch: OpenRC and udev expect the ones
+# the kernel already populated.
+for directory in proc sys dev; do
+  mount -o move "/$directory" "/newroot/$directory" || die "cannot move /$directory to the new root"
+done
+
+say "switching to the LumiBoot rootfs"
+exec switch_root /newroot /sbin/init
