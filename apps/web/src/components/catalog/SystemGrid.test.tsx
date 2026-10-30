@@ -30,6 +30,8 @@ beforeEach(() => {
     systems,
     family: 'all',
     query: '',
+    architectures: [],
+    engines: [],
   });
 });
 

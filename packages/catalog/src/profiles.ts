@@ -62,32 +62,6 @@ function diskBootReadiness(systemId: string): GuestReadiness {
 
 export const launchProfiles = [
   {
-    id: 'alpine-3-24-x86-64',
-    imageId: 'alpine-3-24-x86-64-image',
-    engineId: 'v64',
-    executionMode: 'browser',
-    minMemoryMiB: 1024,
-    configuration: {
-      memoryMiB: 1024,
-      vgaMemoryMiB: 32,
-      bootDevice: 'cdrom',
-      extra: { v64CpuCores: 2, v64Graphics: 'bochs_vga' },
-    },
-    hardwareProfile: { ...pcHardware('virtio'), acpi: true },
-    readiness: {
-      marker: 'lumiboot@lumiboot',
-      channel: 'serial',
-      timeoutMs: 300_000,
-    },
-    displayMode: 'text',
-    slug: 'alpine-3-24-x86-64',
-    displayName: 'Alpine Linux',
-    versionLabel: '3.24 · x86-64',
-    validated: true,
-    description:
-      'Alpine Linux 3.24 x86-64 running locally in the browser with the v64 WebAssembly JIT.',
-  },
-  {
     id: 'debian-12-i386',
     imageId: 'debian-12-i386-image',
     engineId: 'v86',
@@ -251,6 +225,32 @@ export const launchProfiles = [
     validated: true,
     description:
       'A live Fedora 44 x86-64 console, built locally and booted in the browser by the v64 WebAssembly JIT.',
+  },
+  {
+    id: 'alpine-3-24-x86-64',
+    imageId: 'alpine-3-24-x86-64-image',
+    engineId: 'v64',
+    executionMode: 'browser',
+    minMemoryMiB: 1024,
+    configuration: {
+      memoryMiB: 1024,
+      vgaMemoryMiB: 32,
+      bootDevice: 'cdrom',
+      extra: { v64CpuCores: 2, v64Graphics: 'bochs_vga' },
+    },
+    hardwareProfile: { ...pcHardware('virtio'), acpi: true },
+    readiness: {
+      marker: 'lumiboot@lumiboot',
+      channel: 'serial',
+      timeoutMs: 300_000,
+    },
+    displayMode: 'text',
+    slug: 'alpine-3-24-x86-64',
+    displayName: 'Alpine Linux',
+    versionLabel: '3.24 · x86-64',
+    validated: true,
+    description:
+      'Alpine Linux 3.24 x86-64 running locally in the browser with the v64 WebAssembly JIT.',
   },
   {
     id: 'windows-7-x86',
