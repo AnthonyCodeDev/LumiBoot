@@ -8,7 +8,8 @@
 | `ubuntu-18-i386`         | Ubuntu 18.04 CLI               | 512 MiB   | built rootfs        | `LUMIBOOT_GUEST_READY`   |
 | `ubuntu-18-i386-desktop` | Ubuntu 18.04 X11/Openbox       | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
 | `ubuntu-18-i386-xfce`    | Ubuntu 18.04 XFCE              | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
-| `fedora-44-x86-64`       | Fedora 44 x86-64               | 1024 MiB  | built bootable ISO  | `LUMIBOOT_GUEST_READY`   |
+| `fedora-44-x86-64`       | Fedora 44 x86-64 CLI           | 1024 MiB  | built bootable ISO  | `LUMIBOOT_GUEST_READY`   |
+| `fedora-44-x86-64-xfce`  | Fedora 44 x86-64 XFCE          | 2048 MiB  | built bootable ISO  | `LUMIBOOT_DESKTOP_READY` |
 | `alpine-3-24-x86-64`     | Alpine 3.24 x86-64 (v64 JIT)   | 1024 MiB  | official virt ISO   | `lumiboot@lumiboot`      |
 | `windows-7-pro-sp1-x86`  | Windows 7 Professional SP1 x86 | 1536 MiB  | operator RAW disk   | `disk-boot`              |
 | `windows-7-x86`          | Windows 7 Lite x86             | 1024 MiB  | operator RAW disk   | `disk-boot`              |
@@ -81,17 +82,26 @@ Prerequisites: Linux or WSL2 on an x86_64 host, root, `dnf`, `rpm`, `dracut`,
 (`/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-44-primary`).
 
 ```bash
-sudo ./images/fedora-44-x86-64/build.sh
+sudo ./images/fedora-44-x86-64/build.sh                 # CLI
+sudo FLAVOR=xfce ./images/fedora-44-x86-64/build.sh     # Xorg + XFCE
 ```
 
-The script builds a minimal rootfs with `dnf --installroot`, packs it as an ext4
-image inside `LiveOS/squashfs.img` and emits `build/`: `vmlinuz`, `initrd.img`,
-`fedora-44-x86-64.iso`, `manifest.json`, `packages.tsv`, `provenance.txt`. Copy
-the four artifacts into `apps/web/public/images/fedora-44-x86-64/`, a Git-ignored
-directory. v64 mounts the ISO as a `cdrom` and nothing else: the disc carries its
-own GRUB El-Torito boot record, `vmlinuz`, `initrd.img` and a `grub.cfg` with
-`console=tty0 console=ttyS0,115200 root=live:CDLABEL=LUMIBOOT-FEDORA rd.live.image selinux=0 loglevel=4`,
-and its manifest says `boot.cdromOnly: true`.
+| Flavor | Reference | RAM | Disk | Marker |
+|---|---|---:|---:|---|
+| CLI | `fedora-44-x86-64` | 1024 MiB | 2 GiB | `LUMIBOOT_GUEST_READY` |
+| XFCE | `fedora-44-x86-64-xfce` | 2048 MiB | 4 GiB | `LUMIBOOT_DESKTOP_READY` |
+
+Outputs land in `build/` and `build-xfce/`: `vmlinuz`, `initrd.img`, `<ref>.iso`,
+`manifest.json`, `packages.tsv`, `provenance.txt`. Copy the first four into
+`apps/web/public/images/<ref>/`, a Git-ignored directory. The script builds a
+rootfs with `dnf --installroot` and packs it as an ext4 image inside
+`LiveOS/squashfs.img`. v64 mounts the ISO as a `cdrom` and nothing else: the disc
+carries its own GRUB El-Torito boot record, `vmlinuz`, `initrd.img` and a
+`grub.cfg` with
+`console=tty0 console=ttyS0,115200 root=live:CDLABEL=<ISO label> rd.live.image selinux=0 loglevel=4`
+(`LUMIBOOT-FEDORA` for the CLI, `LUMIBOOT-FEDORA-XFCE` for XFCE: the label is the
+only way the initramfs finds its medium), and its manifest says
+`boot.cdromOnly: true`.
 
 El-Torito is the boot path for a reason, not a preference. When v64 injects a
 `bzimage`, `libv86.mjs` hard-codes the initrd window at 64 MiB; the Fedora 44
@@ -102,12 +112,28 @@ kernel decompresses to ~74 MiB and overwrote the initrd mid-boot
 exposes no `initrd_addr` option. Letting the disc's bootloader place kernel and
 initramfs removes the constraint.
 
-The profile is `validated: true`: `tests/e2e/session-fedora.spec.ts` boots the
+The CLI flavor is `validated: true`: `tests/e2e/session-fedora.spec.ts` boots the
 published image in Chromium, waits for `LUMIBOOT_GUEST_READY:fedora-44-x86-64`
 (emitted by the guest, never by the client), types the smoke-test commands on
 ttyS0 and checks their output. A successful build alone proves nothing: revert
-the flag as soon as a rebuild stops reaching the marker. Build details, package
-list and smoke test: [`images/fedora-44-x86-64/README.md`](../images/fedora-44-x86-64/README.md).
+the flag as soon as a rebuild stops reaching the marker.
+
+The XFCE flavor is `validated: true` too: the ISO is built and published, and the
+operator declared it ready. The pipeline (Xorg `modesetting` on the bochs-drm
+framebuffer, `startxfce4` from the tty1 autologin,
+`lumiboot-desktop-ready.service` waiting for the X socket, `xdpyinfo` and the
+session process before emitting `LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce`)
+is in place. Fedora 41+ retired `xorg-x11-drv-vesa` and `xorg-x11-drv-fbdev`, so
+`kernel-modules` (bochs-drm) and the server's own `modesetting` driver are the
+only video path. XFCE is the default variant of the card (`variantOrder: 1`), as
+on Debian and Ubuntu; the CLI comes second (`variantOrder: 2`). Both variants are
+launchable once their artifacts are published under
+`apps/web/public/images/<ref>/`. Honest caveat: no E2E boot has been recorded for
+XFCE yet — `tests/e2e` has no XFCE Fedora spec observing
+`LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce`, so writing and running it (then
+reverting `validated` if the marker never appears) is still to be done.
+Build details, package lists and smoke tests:
+[`images/fedora-44-x86-64/README.md`](../images/fedora-44-x86-64/README.md).
 
 ## Windows 7
 
@@ -181,6 +207,7 @@ Current groups:
 |---|---|---|
 | Debian (`debian-12-i386`) | XFCE, X11, CLI | XFCE |
 | Ubuntu (`ubuntu-18-i386`) | XFCE, X11, CLI | XFCE |
+| Fedora 44 (`fedora-44-x86-64`) | XFCE, CLI | XFCE (both variants `validated: true`; the ISO is built and published) |
 | Windows 7 (`windows-7-x86`) | Professional, Lite | Professional |
 
 Helpers in `packages/catalog/src/systems.ts`: `getDisplaySystems()` returns the parents and standalone systems, `getVariantGroup()` the members sorted by `variantOrder`, `getDefaultVariant()` the first member, `getVariantParent()` and `getVariantParentId()` resolve the parent, and `hasVariants()` tells whether a group holds several entries.

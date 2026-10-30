@@ -2,8 +2,13 @@
 #
 # Reproducible build of a Fedora 44 x86-64 live image for v64.
 #
-#   sudo ./images/fedora-44-x86-64/build.sh
-#   sudo FEDORA_RELEASEVER=44 FEDORA_MIRROR=https://mirror.example/fedora ./images/fedora-44-x86-64/build.sh
+#   sudo ./images/fedora-44-x86-64/build.sh                 # CLI flavor
+#   sudo FLAVOR=xfce ./images/fedora-44-x86-64/build.sh     # XFCE flavor
+#   sudo ./images/fedora-44-x86-64/build.sh xfce            # flavor as first argument
+#
+# FLAVOR picks the guest, like the Debian/Ubuntu scripts:
+#   cli  -> fedora-44-x86-64       minimal live console (default)
+#   xfce -> fedora-44-x86-64-xfce  Xorg + XFCE session on tty1
 #
 # Requires Linux or WSL2, root, a dnf repository for FEDORA_RELEASEVER, and the
 # tools dnf, rpm, dracut, mksquashfs (squashfs-tools), mke2fs (e2fsprogs),
@@ -14,21 +19,50 @@
 # FEDORA_RELEASEVER, FEDORA_MIRROR, ISO_LABEL, DISK_MIB and LUMIBOOT_BUILD_DIR
 # override the release, the mirror, the ISO label, the ext4 size and the build
 # directory.
-# Writes vmlinuz, initrd.img, fedora-44-x86-64.iso, manifest.json, packages.tsv
-# and provenance.txt into build/. The ISO carries the kernel, the initramfs and
-# a GRUB El-Torito boot record: the guest boots from the disc itself.
+# Writes vmlinuz, initrd.img, <ref>.iso, manifest.json, packages.tsv and
+# provenance.txt into build/ (cli) or build-xfce/ (xfce). The ISO carries the
+# kernel, the initramfs and a GRUB El-Torito boot record: the guest boots from
+# the disc itself.
 set -euo pipefail
 
-REF="fedora-44-x86-64"
+FLAVOR="${1:-${FLAVOR:-cli}}"
+case "$FLAVOR" in
+  cli)
+    REF="fedora-44-x86-64"
+    # A console guest needs no desktop memory.
+    MEMORY_MIB="1024"
+    VGA_MIB="32"
+    # Size of the ext4 filesystem stored inside the live squashfs. The empty
+    # space compresses to almost nothing, so the default stays generous.
+    DISK_MIB_DEFAULT="2048"
+    BUILD_SUFFIX=""
+    ISO_LABEL_DEFAULT="LUMIBOOT-FEDORA"
+    GRAPHICAL=""
+    ;;
+  xfce)
+    REF="fedora-44-x86-64-xfce"
+    # Xorg, XFCE and Mesa need headroom; v64 rounds the size to whole MiB.
+    MEMORY_MIB="2048"
+    VGA_MIB="32"
+    # XFCE plus the DRM kernel modules is much larger than the console.
+    DISK_MIB_DEFAULT="4096"
+    BUILD_SUFFIX="-xfce"
+    # A distinct CDLABEL is mandatory: `root=live:CDLABEL=...` is the only way
+    # the initramfs finds its medium, so the two ISOs must never share a label.
+    ISO_LABEL_DEFAULT="LUMIBOOT-FEDORA-XFCE"
+    GRAPHICAL="true"
+    ;;
+  *)
+    echo "Unknown flavor: \"$FLAVOR\" (expected: cli | xfce)." >&2
+    exit 1
+    ;;
+esac
+
 ARCH="x86_64"
 FEDORA_RELEASEVER="${FEDORA_RELEASEVER:-44}"
 FEDORA_MIRROR="${FEDORA_MIRROR:-https://download.fedoraproject.org/pub/fedora/linux}"
-ISO_LABEL="${ISO_LABEL:-LUMIBOOT-FEDORA}"
-MEMORY_MIB="1024"
-VGA_MIB="32"
-# Size of the ext4 filesystem stored inside the live squashfs. The empty space
-# compresses to almost nothing, so the default stays generous.
-DISK_MIB="${DISK_MIB:-2048}"
+ISO_LABEL="${ISO_LABEL:-$ISO_LABEL_DEFAULT}"
+DISK_MIB="${DISK_MIB:-$DISK_MIB_DEFAULT}"
 
 # dracut finds the live root through the ISO label, hence CDLABEL. `rd.live.image`
 # asks dmsquash-live for the live image layout (LiveOS/squashfs.img) and
@@ -39,7 +73,7 @@ LIVE_CMDLINE="console=tty0 console=ttyS0,115200 root=live:CDLABEL=$ISO_LABEL rd.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The build directory can live on a native ext4 filesystem outside the
 # repository: chroot and mke2fs -d fail on 9p/DrvFs mounts.
-DEFAULT_BUILD_DIR="$(realpath -m -- "$HERE/build")"
+DEFAULT_BUILD_DIR="$(realpath -m -- "$HERE/build$BUILD_SUFFIX")"
 BUILD_DIR="$(realpath -m -- "${LUMIBOOT_BUILD_DIR:-$DEFAULT_BUILD_DIR}")"
 ROOTFS="$BUILD_DIR/rootfs"
 # Contents of LiveOS/squashfs.img, then of the ISO.
@@ -64,6 +98,31 @@ PACKAGES=(
   # AZERTY console keymap, and the compression dracut is asked to use.
   kbd procps-ng grep sed tar gzip xz
 )
+
+# Graphical stack of the `xfce` flavor only; the console flavor installs none
+# of it. Fedora 41+ retired the `xorg-x11-drv-vesa` and `xorg-x11-drv-fbdev`
+# drivers (dead upstream packages), so the only X video path here is
+# `modesetting` on the bochs-drm KMS device, which lives in kernel-modules.
+# `xorg-x11-utils` no longer exists either: its tools are individual packages.
+XFCE_PACKAGES=(
+  # DRM/input kernel modules (bochs-drm, evdev): kernel-core carries none of them.
+  kernel-modules
+  # Xorg server (ships the modesetting driver) and startx.
+  xorg-x11-server-Xorg xorg-x11-xinit
+  # libinput input driver, and xkbcomp which Xorg runs to build the keymap.
+  xorg-x11-drv-libinput xkbcomp
+  # xdpyinfo (readiness probe of the guest unit), xrandr and xprop.
+  xdpyinfo xrandr xprop
+  # XFCE: session, window manager, panel, desktop, settings daemon, file manager.
+  xfce4-session xfwm4 xfce4-panel xfdesktop xfce4-settings xfconf thunar
+  # Terminal, application finder, fonts and Mesa's software GL drivers.
+  xfce4-terminal xfce4-appfinder dejavu-sans-fonts mesa-dri-drivers
+  # System bus and dbus-launch, which the XFCE session script starts.
+  dbus-daemon dbus-x11
+)
+if [ "$GRAPHICAL" = "true" ]; then
+  PACKAGES+=("${XFCE_PACKAGES[@]}")
+fi
 
 require() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -141,7 +200,7 @@ DNF_OPTS=(
   --setopt=tsflags=nodocs
 )
 
-echo "== 2. Package installation (minimal live guest) =="
+echo "== 2. Package installation (flavor=$FLAVOR, ref=$REF) =="
 dnf -y "${DNF_OPTS[@]}" install "${PACKAGES[@]}"
 
 # Fedora 42+ keeps the real kernel in /usr/lib/modules/<kver>/vmlinuz and only
@@ -194,7 +253,7 @@ cat > "$ROOTFS/etc/hosts" <<EOF
 ::1         localhost
 EOF
 
-# systemd-vconsole-setup applies this at sysinit; lumiboot-ready re-applies it.
+# systemd-vconsole-setup applies this at sysinit; the readiness unit re-applies it.
 cat > "$ROOTFS/etc/vconsole.conf" <<EOF
 KEYMAP=fr
 EOF
@@ -218,26 +277,65 @@ printf "%s\n" "lumiboot ALL=(ALL) NOPASSWD:ALL" > "$ROOTFS/etc/sudoers.d/90-lumi
 chmod 0440 "$ROOTFS/etc/sudoers.d/90-lumiboot"
 chroot "$ROOTFS" visudo -cf /etc/sudoers.d/90-lumiboot
 
-echo "== 6. Autologin on tty1 and ttyS0 + readiness marker =="
+echo "== 6. Autologin on tty1 and ttyS0 + readiness marker (flavor=$FLAVOR) =="
 install -D -m 0644 "$HERE/guest/getty-autologin.conf" \
   "$ROOTFS/etc/systemd/system/getty@tty1.service.d/autologin.conf"
 install -D -m 0644 "$HERE/guest/serial-getty-autologin.conf" \
   "$ROOTFS/etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf"
-install -D -m 0644 "$HERE/guest/lumiboot-ready.service" \
-  "$ROOTFS/etc/systemd/system/lumiboot-ready.service"
 
-chroot "$ROOTFS" bash -e -c '
-  systemctl enable getty@tty1.service serial-getty@ttyS0.service lumiboot-ready.service
+# The marker names the image reference, so both units are templates: @REF@ is
+# substituted here and neither variant can ever print the other one's marker.
+if [ "$GRAPHICAL" = "true" ]; then
+  # Waits for the X socket and emits LUMIBOOT_DESKTOP_READY once XFCE really runs.
+  install -D -m 0755 "$HERE/guest/xfce/lumiboot-desktop-ready.sh" \
+    "$ROOTFS/usr/local/bin/lumiboot-desktop-ready"
+  sed -i "s/@REF@/$REF/" "$ROOTFS/usr/local/bin/lumiboot-desktop-ready"
+  install -D -m 0644 "$HERE/guest/xfce/lumiboot-desktop-ready.service" \
+    "$ROOTFS/etc/systemd/system/lumiboot-desktop-ready.service"
+  # tty1 autologin starts the session; the serial console keeps a plain shell.
+  install -D -m 0644 "$HERE/guest/xfce/bash_profile" "$ROOTFS/home/lumiboot/.bash_profile"
+  chroot "$ROOTFS" chown lumiboot:lumiboot /home/lumiboot/.bash_profile
+  READY_UNITS="lumiboot-desktop-ready.service"
+else
+  install -D -m 0644 "$HERE/guest/lumiboot-ready.service" \
+    "$ROOTFS/etc/systemd/system/lumiboot-ready.service"
+  sed -i "s/@REF@/$REF/" "$ROOTFS/etc/systemd/system/lumiboot-ready.service"
+  READY_UNITS="lumiboot-ready.service"
+fi
+
+chroot "$ROOTFS" bash -e -c "
+  systemctl enable getty@tty1.service serial-getty@ttyS0.service $READY_UNITS
   # An empty /etc/machine-id counts as a first boot: systemd-firstboot would sit
   # on the console asking questions instead of handing the shell to the visitor.
   systemctl mask systemd-firstboot.service >/dev/null
-'
+"
+
+if [ "$GRAPHICAL" = "true" ]; then
+  echo "== 6b. Xorg: modesetting on the bochs-drm framebuffer =="
+  # Fedora 44 has no vesa/fbdev X driver: the bochs-drm KMS device (from
+  # kernel-modules) is the only framebuffer provider under v64, hence the
+  # modesetting driver. The AZERTY layout is set here, not by setxkbmap.
+  install -d -m 0755 "$ROOTFS/etc/X11/xorg.conf.d"
+  install -D -m 0644 "$HERE/guest/xfce/xorg.conf.d/20-lumiboot-modesetting.conf" \
+    "$ROOTFS/etc/X11/xorg.conf.d/20-lumiboot-modesetting.conf"
+  # The server needs root rights to open the DRM device; the session itself
+  # stays unprivileged. Only the autologin user ever calls startxfce4.
+  cat > "$ROOTFS/etc/X11/Xwrapper.config" <<'EOF'
+# Xorg wrapper for v64: root rights are needed to drive the bochs-drm device,
+# and the lumiboot user must be allowed to start the server.
+allowed_users=anybody
+needs_root_rights=yes
+EOF
+  chmod 0644 "$ROOTFS/etc/X11/Xwrapper.config"
+fi
 
 echo "== 7. initramfs: dracut live stack + CD polling =="
 # --no-hostonly: the build host's storage stack (NVMe, virtio) is not the
 # emulated IDE/ATAPI CD of v64, so every storage driver must be embedded.
 # dmsquash-live mounts squashfs.img from the ISO; pollcdrom waits for the ATAPI
-# device to answer before the mount is attempted.
+# device to answer before the mount is attempted. The graphical flavor also
+# needs the DRM and input modules inside the initramfs so bochs-drm can bind
+# before the switch-root.
 # The output path is inside the chroot (the build directory is not), then copied.
 chroot "$ROOTFS" dracut --force --no-hostonly \
   --add "dmsquash-live pollcdrom" --compress xz \
@@ -250,6 +348,74 @@ echo "== 8. Package inventory =="
 rpm --root "$ROOTFS" -qa --qf '%{NAME}\t%{VERSION}-%{RELEASE}\n' | sort \
   > "$BUILD_DIR/packages.tsv"
 wc -l < "$BUILD_DIR/packages.tsv" | xargs echo "installed packages:"
+
+echo "== 8b. In-rootfs verification (identity, keymap, markers, graphics) =="
+chroot "$ROOTFS" env FLAVOR="$FLAVOR" READY_UNITS="$READY_UNITS" bash -c '
+  rc=0
+  echo "--- os-release"; grep PRETTY_NAME /etc/os-release
+  echo "--- console keymap"; cat /etc/vconsole.conf
+  echo "--- autologin"
+  ls -l /etc/systemd/system/getty@tty1.service.d/autologin.conf \
+        /etc/systemd/system/serial-getty@ttyS0.service.d/autologin.conf 2>/dev/null || rc=1
+  echo "--- readiness unit(s)"
+  for u in $READY_UNITS; do
+    if systemctl is-enabled "$u" 2>/dev/null | grep -qx enabled; then
+      echo "$u: ENABLED"
+    else
+      echo "$u: NOT ENABLED"
+      rc=1
+    fi
+  done
+  if [ "$FLAVOR" = "xfce" ]; then
+    echo "--- graphical stack"
+    for b in Xorg startxfce4 xfce4-session xfwm4 xdpyinfo; do
+      if command -v "$b" >/dev/null 2>&1; then
+        echo "OK   $b -> $(command -v "$b")"
+      else
+        echo "MISS $b"
+        rc=1
+      fi
+    done
+    test -x /usr/local/bin/lumiboot-desktop-ready &&
+      echo "lumiboot-desktop-ready: present" || { echo "lumiboot-desktop-ready: MISSING"; rc=1; }
+    marker="$(sed -n "s/.*\(LUMIBOOT_DESKTOP_READY:[a-z0-9.-]*\).*/\1/p" \
+      /usr/local/bin/lumiboot-desktop-ready | head -n1)"
+    if [ -n "$marker" ]; then
+      echo "desktop marker: $marker"
+    else
+      echo "desktop marker: MISSING"
+      rc=1
+    fi
+    ls -l /home/lumiboot/.bash_profile /etc/X11/xorg.conf.d/20-lumiboot-modesetting.conf \
+          /etc/X11/Xwrapper.config 2>/dev/null || rc=1
+    echo "--- X video driver (no vesa/fbdev in Fedora 44)"
+    if [ -e /usr/lib64/xorg/modules/drivers/modesetting_drv.so ] ||
+       [ -e /usr/lib/xorg/modules/drivers/modesetting_drv.so ]; then
+      echo "modesetting_drv.so: present"
+    else
+      echo "modesetting_drv.so: MISSING (shipped by xorg-x11-server-Xorg)"
+      rc=1
+    fi
+    echo "--- bochs-drm (the only /dev/fb0 provider under v64)"
+    if find /usr/lib/modules -name "bochs.ko*" -print -quit | grep -q .; then
+      echo "bochs.ko: present"
+    else
+      echo "bochs.ko: MISSING (needs kernel-modules)"
+      rc=1
+    fi
+  else
+    marker="$(sed -n "s/.*\(LUMIBOOT_GUEST_READY:[a-z0-9.-]*\).*/\1/p" \
+      /etc/systemd/system/lumiboot-ready.service | head -n1)"
+    if [ -n "$marker" ]; then
+      echo "guest marker: $marker"
+    else
+      echo "guest marker: MISSING"
+      rc=1
+    fi
+  fi
+  echo "--- result"; [ "$rc" -eq 0 ] && echo "in-rootfs checks: OK" || echo "in-rootfs checks: FAILED"
+  exit "$rc"
+'
 
 # The pseudo filesystems must never end up inside the image.
 cleanup_mounts
@@ -299,6 +465,7 @@ IMAGE_REF="$REF" IMAGE_ARCH="$ARCH" IMAGE_MEMORY_MIB="$MEMORY_MIB" IMAGE_VGA_MIB
   node "$HERE/write-manifest.mjs" "$BUILD_DIR"
 
 {
+  echo "flavor: $FLAVOR"
   echo "image-ref: $REF"
   echo "release: Fedora $FEDORA_RELEASEVER"
   echo "architecture: $ARCH"
@@ -308,6 +475,7 @@ IMAGE_REF="$REF" IMAGE_ARCH="$ARCH" IMAGE_MEMORY_MIB="$MEMORY_MIB" IMAGE_VGA_MIB
   echo "iso-label: $ISO_LABEL"
   echo "boot-path: grub-mkrescue El-Torito, kernel and initramfs on the disc"
   echo "ext4-size-mib: $DISK_MIB"
+  echo "memory-mib: $MEMORY_MIB"
   echo "cmdline: $LIVE_CMDLINE"
   echo "packages: ${PACKAGES[*]}"
   echo "dnf: $(dnf --version 2>/dev/null | head -n1 || echo unknown)"
@@ -317,9 +485,14 @@ IMAGE_REF="$REF" IMAGE_ARCH="$ARCH" IMAGE_MEMORY_MIB="$MEMORY_MIB" IMAGE_VGA_MIB
 } > "$BUILD_DIR/provenance.txt"
 cat "$BUILD_DIR/provenance.txt"
 
+MARKER="LUMIBOOT_GUEST_READY:$REF"
+if [ "$GRAPHICAL" = "true" ]; then
+  MARKER="LUMIBOOT_DESKTOP_READY:$REF"
+fi
+
 cat <<EOF
 
-Build complete (ref=$REF).
+Build complete (flavor=$FLAVOR, ref=$REF).
 
 To publish into the application:
   mkdir -p "$HERE/../../apps/web/public/images/$REF"
@@ -328,8 +501,11 @@ To publish into the application:
   cp "$BUILD_DIR/initrd.img"           "$HERE/../../apps/web/public/images/$REF/"
   cp "$BUILD_DIR/manifest.json"        "$HERE/../../apps/web/public/images/$REF/"
 
+Expected guest marker on ttyS0 and on tty1: $MARKER
+
 Then run the smoke test of images/fedora-44-x86-64/README.md.
 
-A successful build proves nothing: the profile stays validated:false until a real
-boot in the browser has shown the LUMIBOOT_GUEST_READY:fedora-44-x86-64 marker.
+A successful build proves nothing: a profile only stays validated:true while a
+real boot in the browser still shows that marker. The XFCE variant stays
+validated:false until such a boot has been recorded.
 EOF

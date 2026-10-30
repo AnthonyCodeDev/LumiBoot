@@ -129,6 +129,31 @@ export const images = [
       'proven by the E2E suite (tests/e2e/session-fedora.spec.ts).',
   },
   {
+    id: 'fedora-44-x86-64-xfce-image',
+    familyId: 'fedora',
+    architecture: 'x86_64',
+    imageRef: 'fedora-44-x86-64-xfce',
+    requirements: [
+      'Modern browser with WebAssembly',
+      '2048 MiB guest memory',
+      'Cross-origin isolation for parallel host threads',
+      'Fedora 44 x86-64 XFCE live ISO built locally (Xorg + /dev/fb0)',
+    ],
+    integrationNote:
+      'Graphical XFCE variant of Fedora 44 x86-64, built locally by ' +
+      'images/fedora-44-x86-64/build.sh with FLAVOR=xfce (dnf --installroot): a ' +
+      'live squashfs whose ISO carries its own GRUB El-Torito boot record, so the ' +
+      'disc loads kernel and initramfs itself and v64 only mounts it as a CD-ROM; ' +
+      'lumiboot autologin on tty1 starts Xorg + XFCE, the serial console keeps a ' +
+      'text shell. Guest writes stay in memory for the duration of the session. No ' +
+      'image is distributed. Built locally by images/fedora-44-x86-64/build.sh with ' +
+      'FLAVOR=xfce and published under ' +
+      'apps/web/public/images/fedora-44-x86-64-xfce/; the catalogue declares it ' +
+      'validated: true by operator decision. The E2E boot proof ' +
+      '(LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce on the serial console) is still ' +
+      'to be recorded.',
+  },
+  {
     id: 'alpine-3-24-x86-64-image',
     familyId: 'alpine',
     architecture: 'x86_64',
