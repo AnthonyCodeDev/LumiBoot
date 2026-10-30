@@ -10,10 +10,11 @@ One script, two variants — like Debian and Ubuntu:
 Both are a `dnf --installroot` rootfs packed as an ext4 image inside a
 squashfs, plus a bootable ISO (GRUB El-Torito). XFCE is the default variant of
 the card (`variantOrder: 1`, as on Debian and Ubuntu) and carries
-`validated: true` by operator decision: its ISO is built and published, so
-both variants are launchable. No E2E boot has been recorded for XFCE yet (see
-[Validation](#validation)). The CLI profile is `validated: true` too (a real
-browser boot printed its marker).
+`validated: true`: its ISO is built, published and booted for real in Chromium
+on 2026-10-30 — the guest printed
+`LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce` and the XFCE desktop appeared on
+the VGA canvas in 1024x768 (see [Validation](#validation)). The CLI profile is
+`validated: true` too (a real browser boot printed its marker).
 
 XFCE is the default *card* variant (`variantOrder: 1`, as on Debian/Ubuntu),
 while `build.sh` defaults to `FLAVOR=cli`, exactly like the Debian script
@@ -106,11 +107,33 @@ Fedora package index rather than guessed:
    `LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce` to `/dev/ttyS0` and `/dev/tty1`.
    A timeout prints `LUMIBOOT_DESKTOP_START_FAILED:fedora-44-x86-64-xfce` and the
    unit fails: a JavaScript timer or a client-side string is never accepted.
+   The marker proves the session runs, not that it is painted: under emulation
+   `xfdesktop` fills the root window about 4 minutes later, so the canvas is
+   legitimately black in between. A screenshot taken on the marker measures a
+   black screen even though the guest is healthy.
 
 Both readiness units are templates: `@REF@` is substituted by `build.sh` with the
 flavor's reference, so no marker can name the other variant. The CLI installs
 `lumiboot-ready.service` only; the XFCE flavor installs
 `lumiboot-desktop-ready.service` only.
+
+## Video path
+
+The profile keeps `v64Graphics: 'bochs_vga'`, which XFCE draws on through
+`bochs-drm` + Xorg `modesetting`. Measured on the published ISO (Playwright port
+5200, 2 guest cores, 2048 MiB):
+
+| Adapter | `DESKTOP_READY` | Canvas | Desktop |
+|---|---:|---|---|
+| `bochs_vga` | ~6 min | 1024x768, luminance 172/255, 99.8 % non-black | drawn (kept) |
+| `virtio_gpu` | ~7 min | 1024x768, luminance 172/255, 99.8 % non-black | drawn |
+| `vmware_svga` | ~12 min | 720x400, SeaBIOS text, luminance 1.8/255 | never presented |
+
+`vmwgfx` hands the session to the VMware SVGA device, and v64 can only present
+that scanout through its WebGPU renderer (`libv86-webgpu.js`); headless Chromium
+logs `No available adapters.` and the VGA canvas keeps the boot text.
+`virtio_gpu` works but brings nothing the guest does not already get from
+bochs-drm, so the simplest adapter stays.
 
 ## Boot path: El-Torito, not `bzimage`
 
@@ -202,8 +225,8 @@ successful boot.
   Chromium, waits for `LUMIBOOT_GUEST_READY:fedora-44-x86-64` (emitted by
   `lumiboot-ready.service`, never by the client), then types the smoke-test
   commands on ttyS0 and checks their output.
-- XFCE: `validated: true` in `packages/catalog/src/profiles.ts` — **an operator
-  decision, not a recorded boot**. The ISO was built on
+- XFCE: `validated: true` in `packages/catalog/src/profiles.ts`, and no longer on
+  an operator decision alone. The ISO was built on
   2026-10-30 under WSL2 (Ubuntu) with `LUMIBOOT_BUILD_DIR` on the WSL
   filesystem (never under `/mnt/c`) and `FLAVOR=xfce`, in ~4 min 06 for
   403 packages: ISO 774 070 272 bytes (738.2 MiB), squashfs 707 444 736 bytes,
@@ -211,21 +234,25 @@ successful boot.
   42 475 004 bytes, volume label `LUMIBOOT-FEDORA-XFCE` verified with
   `xorriso -pvd_info` and `blkid`, disk sha256
   `e8c9b14c293b0e15606b7e169a538a96b959ec23ced30b1288ba4bfbb9e8c0c1`. The four
-  artifacts are published under `apps/web/public/images/fedora-44-x86-64-xfce/`,
-  and the profile declares the variant launchable. Building is not validating:
-  no boot in v64 has printed `LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce` yet,
-  so the E2E checklist below stays unchecked until an operator:
+  artifacts are published under `apps/web/public/images/fedora-44-x86-64-xfce/`
+  and the profile declares the variant launchable. The same day, the published
+  ISO was booted in Chromium by `tests/e2e/desktop-fedora-xfce.spec.ts` on the
+  Playwright port 5200 with `VM_E2E_ASSETS=1`:
 
-  - [ ] boots the published image in Chromium and observes
-        `LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce` on the serial console
-        **and** the XFCE desktop on the VGA screen;
-  - [ ] records that proof (an XFCE Fedora spec under `tests/e2e`, mirroring
-        `session-fedora.spec.ts`) and reverts `validated` to `false` if the
-        marker never appears. The variant order already matches the default
-        (`variantOrder`: 1 for XFCE, 2 for CLI), so nothing else changes.
+  - [x] the guest printed `LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce` on the
+        serial console (t≈6 min on 2 guest cores);
+  - [x] the XFCE desktop appeared on the VGA canvas in 1024x768: mean luminance
+        172/255, 99.8 % non-black pixels, XFCE panel, desktop icons and wallpaper
+        visible (about 4 minutes after the marker, when `xfdesktop` paints);
+  - [x] the spec above records that proof and skips without the published
+        `manifest.json`.
+
+  Building is still not validating: revert `validated` to `false` as soon as a
+  rebuild stops reaching the marker or stops drawing the desktop.
 
 ```bash
 VM_E2E_ASSETS=1 pnpm test:e2e tests/e2e/session-fedora.spec.ts
+VM_E2E_ASSETS=1 pnpm test:e2e tests/e2e/desktop-fedora-xfce.spec.ts
 ```
 
 The spec skips without the published assets and `apps/web/public/v64/v86.wasm`.

@@ -20,6 +20,8 @@ import {
 
 export const V64_PROVIDER_ID = 'v64';
 const MiB = 1024 * 1024;
+/** libv86 caps primary RAM below 2 GiB; anything above goes to extended memory. */
+const MAX_PRIMARY_MEMORY_MIB = 2047;
 const BOOT_ORDER_CD_HARDDISK_FLOPPY = 0x123;
 
 export const V64_ASSET_PATHS = {
@@ -126,9 +128,18 @@ export class V64Provider implements VMEngine {
         { systemId: os.id },
       );
     }
-    const primaryMemoryMiB = Math.min(memoryMiB, 2047);
-    const cores = readInteger(configuration, 'v64CpuCores', 2, 1, 8);
-    const graphics = readGraphics(configuration);
+    let primaryMemoryMiB = Math.min(memoryMiB, MAX_PRIMARY_MEMORY_MIB);
+    let extendedMemoryMiB = 0;
+    if (memoryMiB > primaryMemoryMiB) {
+      // libv86 rejects an extended size that is not a non-zero multiple of 2 MiB.
+      extendedMemoryMiB = Math.ceil((memoryMiB - primaryMemoryMiB) / 2) * 2;
+      primaryMemoryMiB = memoryMiB - extendedMemoryMiB;
+    }
+    // `extra` is a profile decision: the application only passes the network,
+    // the media and the abort signal, so the profile stays the fallback.
+    const profileConfiguration = profile.configuration;
+    const cores = readInteger(configuration, profileConfiguration, 'v64CpuCores', 2, 1, 8);
+    const graphics = readGraphics(configuration, profileConfiguration);
     const wantsWebGpu =
       graphics !== 'bochs_vga' && typeof navigator !== 'undefined' && 'gpu' in navigator;
     if (wantsWebGpu) await loadV64WebGpu().catch(() => undefined);
@@ -167,13 +178,11 @@ export class V64Provider implements VMEngine {
       cpu_type: 'x86_64',
       cpu_cores: cores,
       experimental_smp_jit: cores > 1,
-      machine_type: readMachine(configuration),
+      machine_type: readMachine(configuration, profileConfiguration),
       graphics_adapter: graphics,
       graphics_adapter_path: graphicsPath(graphics),
       memory_size: primaryMemoryMiB * MiB,
-      ...(memoryMiB > primaryMemoryMiB
-        ? { extended_memory_size: (memoryMiB - primaryMemoryMiB) * MiB }
-        : {}),
+      ...(extendedMemoryMiB > 0 ? { extended_memory_size: extendedMemoryMiB * MiB } : {}),
       vram_size: (configuration?.vgaMemoryMiB ?? profile.configuration?.vgaMemoryMiB ?? 32) * MiB,
       bios: { url: V64_ASSET_PATHS.bios },
       vga_bios: { url: V64_ASSET_PATHS.vgaBios },
@@ -272,26 +281,49 @@ async function resolveBootMedia(
   };
 }
 
+/** Only the `extra` bag is read from a profile: its literal type is not a `VMConfiguration`. */
+interface ExtraConfiguration {
+  readonly extra?: Readonly<Record<string, unknown>> | undefined;
+}
+
+/** Reads an `extra` option: the caller's configuration wins over the profile. */
+function extraOption(
+  configuration: VMConfiguration | undefined,
+  profileConfiguration: ExtraConfiguration | undefined,
+  key: string,
+): unknown {
+  return configuration?.extra?.[key] ?? profileConfiguration?.extra?.[key];
+}
+
 function readInteger(
   configuration: VMConfiguration | undefined,
+  profileConfiguration: ExtraConfiguration | undefined,
   key: string,
   fallback: number,
   min: number,
   max: number,
 ): number {
-  const value = configuration?.extra?.[key];
+  const value = extraOption(configuration, profileConfiguration, key);
   return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
     ? value
     : fallback;
 }
 
-function readGraphics(configuration: VMConfiguration | undefined): V64Options['graphics_adapter'] {
-  const value = configuration?.extra?.v64Graphics;
+function readGraphics(
+  configuration: VMConfiguration | undefined,
+  profileConfiguration: ExtraConfiguration | undefined,
+): V64Options['graphics_adapter'] {
+  const value = extraOption(configuration, profileConfiguration, 'v64Graphics');
   return value === 'virtio_gpu' || value === 'vmware_svga' ? value : 'bochs_vga';
 }
 
-function readMachine(configuration: VMConfiguration | undefined): V64Options['machine_type'] {
-  return configuration?.extra?.v64Machine === 'q35' ? 'q35' : 'i440fx';
+function readMachine(
+  configuration: VMConfiguration | undefined,
+  profileConfiguration: ExtraConfiguration | undefined,
+): V64Options['machine_type'] {
+  return extraOption(configuration, profileConfiguration, 'v64Machine') === 'q35'
+    ? 'q35'
+    : 'i440fx';
 }
 
 function graphicsPath(graphics: V64Options['graphics_adapter']): string {

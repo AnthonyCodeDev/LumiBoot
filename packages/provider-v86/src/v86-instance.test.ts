@@ -602,6 +602,44 @@ describe('V86Instance', () => {
     expect(disposeSpy).toHaveBeenCalledTimes(1);
     expect(emulator.listenerCount('net0-send')).toBe(0);
   });
+
+  it('emulator-error: fails the boot instead of leaving the session in downloading', async () => {
+    const emulator = new FakeV86();
+    const controller = createNetworkController({ profile: defaultNetworkProfile });
+    await controller.start();
+    const disposeSpy = vi.spyOn(controller, 'dispose');
+
+    const instance = new V86Instance({
+      providerId: 'v64',
+      systemId: 'fedora-44-x86-64-xfce',
+      emulator: emulator as unknown as V86,
+      console: createConsoleStub(),
+      readiness: READINESS,
+      network: controller,
+    });
+    instance.wire();
+
+    const events: SessionEvent[] = [];
+    instance.subscribe((event) => events.push(event));
+
+    // Shape libv86 uses for a CPU-worker init failure.
+    emulator.emit('emulator-error', new Error('extended_memory_size must be a multiple of 2 MiB'));
+    await flushMicrotasks();
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'error',
+          code: 'EMULATOR_ERROR',
+          message: expect.stringContaining('extended_memory_size'),
+        }),
+      ]),
+    );
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    // The listener must be detached with the rest.
+    expect(emulator.removed).toContain('emulator-error');
+    expect(emulator.listenerCount('emulator-error')).toBe(0);
+  });
 });
 
 function flushMicrotasks(): Promise<void> {
