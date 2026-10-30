@@ -159,20 +159,21 @@ export const images = [
       'for the duration of the session. "Lite" variant.',
   },
   {
-    id: 'windows-8-1-x64-image',
+    id: 'windows-8-1-x86-image',
     familyId: 'windows',
-    architecture: 'x86_64',
-    mediaStrategy: 'user-import',
-    requiresUserMedia: true,
+    architecture: 'i386',
+    imageRef: 'windows-8-1-x86',
     requirements: [
-      'An already installed Windows 8.1 x64 RAW/IMG disk you legally own',
-      'Modern Chromium-class browser with WebAssembly and OPFS',
-      'At least 2048 MiB guest memory',
-      'Cross-origin isolation for parallel CPU Workers',
-      'WebGPU recommended for VMware SVGA 3D acceleration',
+      'Modern browser with WebAssembly (v86, 32-bit)',
+      'Local RAW disk served over HTTP Range (images/windows-8-1-x86/disk.img)',
+      '2048 MiB guest memory',
+      'Disk boot (MBR); no Linux kernel',
     ],
     integrationNote:
-      'v64 upstream verifies Windows 8.1 x64 from an installed image on 1, 2 and 4 cores. LumiBoot does not distribute Windows and does not claim that installation from an ISO works. Imported RAW disks are copied once into OPFS and written back there by the CPU Worker.',
+      'Reuses the Windows 7 local RAW disk + 32-bit v86 pipeline (IDE hda, HTTP Range, ' +
+      'guest writes kept in memory for the duration of the session). No ISO is distributed. ' +
+      'Booted from the operator-installed RAW disk; the catalogue profile declares ' +
+      '`validated: true` so the session is launchable.',
   },
   {
     id: 'windows-7-pro-sp1-x86-image',

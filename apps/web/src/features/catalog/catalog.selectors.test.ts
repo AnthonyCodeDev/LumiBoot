@@ -40,9 +40,9 @@ describe('buildCatalogFacets', () => {
   it('counts the displayed cards (parents folded) under All', () => {
     const result = facets();
 
-    // 5 x 32-bit cards, 4 x 64-bit cards, 1 ARM 64-bit card: 10 displayed cards.
+    // 6 x 32-bit cards, 3 x 64-bit cards, 1 ARM 64-bit card: 10 displayed cards.
     expect(result.architectures.map((option) => option.value)).toEqual(['i386', 'x86_64', 'arm64']);
-    expect(counts(result.architectures)).toEqual({ i386: 5, x86_64: 4, arm64: 1 });
+    expect(counts(result.architectures)).toEqual({ i386: 6, x86_64: 3, arm64: 1 });
     expect(result.architectures.map((option) => option.label)).toEqual([
       '32 bits',
       '64 bits',
@@ -56,7 +56,7 @@ describe('buildCatalogFacets', () => {
       'wasm-x86_64',
       'wasm-arm',
     ]);
-    expect(counts(result.engines)).toEqual({ v86: 5, v64: 3, 'wasm-x86_64': 1, 'wasm-arm': 1 });
+    expect(counts(result.engines)).toEqual({ v86: 6, v64: 2, 'wasm-x86_64': 1, 'wasm-arm': 1 });
     expect(result.engines[0]?.label).toBe('v86 / WebAssembly');
     expect(result.engines[2]?.label).toBe('WASM x86-64');
   });
@@ -65,9 +65,9 @@ describe('buildCatalogFacets', () => {
     const result = facets({ architectures: ['x86_64'] });
 
     // The architecture facet does not constrain itself: the counts stay absolute.
-    expect(counts(result.architectures)).toEqual({ i386: 5, x86_64: 4, arm64: 1 });
-    // The engine facet is constrained by the architecture: only the 4 x86-64 cards count.
-    expect(counts(result.engines)).toEqual({ v86: 0, v64: 3, 'wasm-x86_64': 1, 'wasm-arm': 0 });
+    expect(counts(result.architectures)).toEqual({ i386: 6, x86_64: 3, arm64: 1 });
+    // The engine facet is constrained by the architecture: only the 3 x86-64 cards count.
+    expect(counts(result.engines)).toEqual({ v86: 0, v64: 2, 'wasm-x86_64': 1, 'wasm-arm': 0 });
   });
 
   it('keeps the zero-count values listed and disabled', () => {
@@ -96,8 +96,8 @@ describe('buildCatalogFacets', () => {
   it('narrows the counts with the search query', () => {
     const result = facets({ query: 'windows' });
 
-    expect(counts(result.architectures)).toEqual({ i386: 2, x86_64: 2, arm64: 0 });
-    expect(counts(result.engines)).toEqual({ v86: 2, v64: 1, 'wasm-x86_64': 1, 'wasm-arm': 0 });
+    expect(counts(result.architectures)).toEqual({ i386: 3, x86_64: 1, arm64: 0 });
+    expect(counts(result.engines)).toEqual({ v86: 3, v64: 0, 'wasm-x86_64': 1, 'wasm-arm': 0 });
   });
 });
 
@@ -112,17 +112,13 @@ describe('useVisibleSystems', () => {
     expect(result.current.map((system) => system.id)).toEqual([
       'fedora-44-x86-64',
       'alpine-3-24-x86-64',
-      'windows-8-1-x64',
       'windows-11-x64',
     ]);
 
     act(() => {
       useCatalogStore.getState().setFamily('windows');
     });
-    expect(result.current.map((system) => system.id)).toEqual([
-      'windows-8-1-x64',
-      'windows-11-x64',
-    ]);
+    expect(result.current.map((system) => system.id)).toEqual(['windows-11-x64']);
 
     act(() => {
       useCatalogStore.getState().toggleEngine('wasm-x86_64');
@@ -140,8 +136,8 @@ describe('useCatalogFacets', () => {
   it('follows the store', () => {
     const { result } = renderHook(() => useCatalogFacets());
     expect(counts(result.current.engines)).toEqual({
-      v86: 5,
-      v64: 3,
+      v86: 6,
+      v64: 2,
       'wasm-x86_64': 1,
       'wasm-arm': 1,
     });

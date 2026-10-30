@@ -89,25 +89,21 @@ describe('filterSystems with the architecture and engine facets', () => {
 
   it('ORs the values inside each facet', () => {
     const i386 = filterSystems({ ...base, architectures: ['i386'] });
-    expect(i386).toHaveLength(10);
+    expect(i386).toHaveLength(11);
     expect(i386.every((os) => os.architecture === 'i386')).toBe(true);
 
-    // Two architectures: 4 x86-64 systems + macOS (arm64).
-    expect(filterSystems({ ...base, architectures: ['x86_64', 'arm64'] })).toHaveLength(5);
+    // Two architectures: 3 x86-64 systems + macOS (arm64).
+    expect(filterSystems({ ...base, architectures: ['x86_64', 'arm64'] })).toHaveLength(4);
 
     const v64 = filterSystems({ ...base, engines: ['v64'] });
-    expect(v64.map((os) => os.id)).toEqual([
-      'fedora-44-x86-64',
-      'alpine-3-24-x86-64',
-      'windows-8-1-x64',
-    ]);
+    expect(v64.map((os) => os.id)).toEqual(['fedora-44-x86-64', 'alpine-3-24-x86-64']);
     expect(filterSystems({ ...base, engines: ['wasm-x86_64', 'wasm-arm'] })).toHaveLength(2);
   });
 
   it('ANDs the facets together', () => {
-    // `windows` AND `x86_64`: Windows 8.1 and Windows 11 only.
+    // `windows` AND `x86_64`: Windows 11 only.
     const windows64 = filterSystems({ ...base, family: 'windows', architectures: ['x86_64'] });
-    expect(windows64.map((os) => os.id)).toEqual(['windows-8-1-x64', 'windows-11-x64']);
+    expect(windows64.map((os) => os.id)).toEqual(['windows-11-x64']);
 
     // family AND query AND architecture AND engine.
     const linuxDebian = filterSystems({

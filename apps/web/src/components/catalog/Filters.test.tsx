@@ -56,12 +56,7 @@ describe('Filters', () => {
     await user.click(architectureTrigger());
     await user.click(screen.getByRole('checkbox', { name: /^64 bits/ }));
 
-    expect(cardIds()).toEqual([
-      'fedora-44-x86-64',
-      'alpine-3-24-x86-64',
-      'windows-8-1-x64',
-      'windows-11-x64',
-    ]);
+    expect(cardIds()).toEqual(['fedora-44-x86-64', 'alpine-3-24-x86-64', 'windows-11-x64']);
     expect(useCatalogStore.getState().architectures).toEqual(['x86_64']);
 
     // No tag in the trigger: the selection is only visible through the count badge.
@@ -85,7 +80,7 @@ describe('Filters', () => {
     await user.click(architectureTrigger());
     await user.click(screen.getByRole('checkbox', { name: /^64 bits/ }));
 
-    expect(cardIds()).toEqual(['windows-8-1-x64', 'windows-11-x64']);
+    expect(cardIds()).toEqual(['windows-11-x64']);
   });
 
   it('combines the family chip with a facet', async () => {
@@ -98,7 +93,7 @@ describe('Filters', () => {
     await user.click(architectureTrigger());
     await user.click(screen.getByRole('checkbox', { name: /^64 bits/ }));
 
-    expect(cardIds()).toEqual(['windows-8-1-x64', 'windows-11-x64']);
+    expect(cardIds()).toEqual(['windows-11-x64']);
   });
 
   it('resets every filter from the empty state', async () => {
@@ -149,11 +144,13 @@ describe('Filters', () => {
     await user.click(screen.getByRole('checkbox', { name: /^v86 / }));
 
     expect(useCatalogStore.getState().engines).toEqual(['v86']);
-    // v86 systems: Debian, Ubuntu, Windows 7, Windows 10 x86, Custom image.
+    // v86 systems in catalog order: Debian, Ubuntu, Windows 7, Windows 8.1 Pro x86,
+    // Windows 10, Custom image. Every one is playable, so there is no pending group.
     expect(cardIds()).toEqual([
       'debian-12-i386',
       'ubuntu-18-i386',
       'windows-7-x86',
+      'windows-8-1-x86',
       'windows-10-x86',
       'custom-image',
     ]);

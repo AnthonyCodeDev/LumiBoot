@@ -277,34 +277,27 @@ export const launchProfiles = [
       'its local 16 GiB RAW disk, with no installation.',
   },
   {
-    id: 'windows-8-1-x64',
-    imageId: 'windows-8-1-x64-image',
-    engineId: 'v64',
+    id: 'windows-8-1-x86',
+    imageId: 'windows-8-1-x86-image',
+    engineId: 'v86',
     executionMode: 'browser',
     minMemoryMiB: 2048,
     configuration: {
       memoryMiB: 2048,
-      vgaMemoryMiB: 64,
+      vgaMemoryMiB: 16,
       bootDevice: 'disk',
-      extra: {
-        v64CpuCores: 2,
-        v64Graphics: 'vmware_svga',
-        v64Machine: 'i440fx',
-      },
     },
-    hardwareProfile: {
-      ...pcHardware('e1000'),
-      acpi: true,
-      audio: true,
-    },
-    readiness: diskBootReadiness('windows-8-1-x64'),
+    hardwareProfile: { ...pcHardware('e1000'), acpi: true },
+    readiness: diskBootReadiness('windows-8-1-x86'),
     displayMode: 'graphical',
-    slug: 'windows-8-1-x64',
-    displayName: 'Windows 8.1',
-    versionLabel: 'x64 · experimental',
-    validated: false,
+    slug: 'windows-8-1-x86',
+    displayName: 'Windows 8.1 Pro',
+    versionLabel: 'x86 (32-bit)',
+    validated: true,
     description:
-      'Bring an installed Windows 8.1 x64 RAW disk you legally own; v64 runs it locally with an OPFS write-back disk and optional WebGPU graphics.',
+      'A Windows 8.1 Pro x86 (32-bit) session in the browser via v86, booted ' +
+      'directly by BIOS from the local RAW disk, with no installation and no ' +
+      'media to import.',
   },
   {
     id: 'windows-7-pro-sp1-x86',
