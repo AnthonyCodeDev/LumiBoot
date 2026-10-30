@@ -13,30 +13,64 @@ export interface StatusOverlayProps {
 
 const SERIAL_POLL_MS = 400;
 const LOG_LINE_COUNT = 3;
-/** Loading veil window from mount; past it the real UI shows, whatever the boot state. */
-export const BOOT_VEIL_MS = 5_000;
+/** Phases where the guest really starts booting: the loading veil must be gone. */
+const BOOT_STARTED_PHASES = new Set(['disk-boot', 'guest-ready', 'boot-timeout']);
 
-/** `true` during the first `BOOT_VEIL_MS` only; the window never reopens. */
-function useBootVeil(): boolean {
-  const [expired, setExpired] = useState(false);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setExpired(true), BOOT_VEIL_MS);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  return !expired;
+/** `true` once the session reports that the guest OS itself is booting. */
+function bootHasStarted(state: SessionSnapshot['state'], phase?: string): boolean {
+  if (state === 'running') return true;
+  return phase !== undefined && BOOT_STARTED_PHASES.has(phase);
 }
 
-/** Last non-empty serial lines; v86 writes into `.value`, even when hidden. */
-function readSerialTail(container: HTMLElement | null): string[] {
+/** Non-empty serial lines; v86 writes into `.value`, even when hidden. */
+function readSerialLines(container: HTMLElement | null): string[] {
   const serial = container?.querySelector<HTMLTextAreaElement>('textarea.v86-serial');
   const raw = serial?.value ?? '';
   return raw
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
-    .filter((line) => line.trim().length > 0)
-    .slice(-LOG_LINE_COUNT);
+    .filter((line) => line.trim().length > 0);
+}
+
+/** Last non-empty serial lines. */
+function readSerialTail(container: HTMLElement | null): string[] {
+  return readSerialLines(container).slice(-LOG_LINE_COUNT);
+}
+
+/** `true` as soon as the serial buffer holds at least one non-empty line. */
+function hasSerialOutput(container: HTMLElement | null): boolean {
+  return readSerialLines(container).length > 0;
+}
+
+/**
+ * Loading veil until the guest actually starts, never on a timer: `true` while
+ * there is no serial output, no boot phase and no running state. Once cleared,
+ * it never comes back, even if the serial buffer is emptied afterwards.
+ */
+function useBootVeilVisible(
+  consoleRef: RefObject<HTMLDivElement>,
+  session: SessionSnapshot,
+): boolean {
+  const { state, phase } = session;
+  const [veilVisible, setVeilVisible] = useState(
+    () => !bootHasStarted(state, phase) && !hasSerialOutput(consoleRef.current),
+  );
+
+  useEffect(() => {
+    if (!veilVisible) return undefined;
+
+    const check = () => {
+      if (bootHasStarted(state, phase) || hasSerialOutput(consoleRef.current)) {
+        setVeilVisible((prev) => (prev ? false : prev));
+      }
+    };
+
+    check();
+    const timer = window.setInterval(check, SERIAL_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [consoleRef, veilVisible, state, phase]);
+
+  return veilVisible;
 }
 
 interface SessionLogsProps {
@@ -81,7 +115,7 @@ function SessionLogs({ consoleRef, fallback }: SessionLogsProps) {
 export function StatusOverlay({ session, system, consoleRef }: StatusOverlayProps) {
   const launchProfile = getPrimaryLaunchProfile(system);
   // Before every early return so the hook order never changes.
-  const veilVisible = useBootVeil();
+  const veilVisible = useBootVeilVisible(consoleRef, session);
 
   if (session.state === 'error') {
     const mediaRequired = session.error?.code === 'MEDIA_REQUIRED';
