@@ -19,6 +19,15 @@ export interface V86InstanceDeps {
   readonly network?: NetworkController;
 }
 
+/**
+ * `emulator-error` is emitted by libv86 (CPU worker init failure, parallel JIT
+ * failure, WASM core error) but is absent from the published `Event` map.
+ */
+interface EmulatorErrorBus {
+  add_listener(event: 'emulator-error', listener: (argument: unknown) => void): void;
+  remove_listener(event: 'emulator-error', listener: (argument: unknown) => void): void;
+}
+
 /** Ordered stages; `unverified` never means `guest-ready`. */
 export type V86ReadinessStage =
   'idle' | 'emulator-ready' | 'booting' | 'guest-ready' | 'unverified';
@@ -71,6 +80,11 @@ export class V86Instance implements VMInstance {
     this.#onCleanupError = deps.onCleanupError;
   }
 
+  /** `emulator-error` lives outside the typed `Event` map of `v86`. */
+  get #errorBus(): EmulatorErrorBus {
+    return this.#emulator as unknown as EmulatorErrorBus;
+  }
+
   get readiness(): V86ReadinessStage {
     return this.#readinessStage;
   }
@@ -82,6 +96,7 @@ export class V86Instance implements VMInstance {
     emulator.add_listener('emulator-stopped', this.#onEmulatorStopped);
     emulator.add_listener('download-progress', this.#onDownloadProgress);
     emulator.add_listener('download-error', this.#onDownloadError);
+    this.#errorBus.add_listener('emulator-error', this.#onEmulatorError);
     if (this.#detector.mode === 'disk-boot') {
       emulator.add_listener('ide-read-end', this.#onDiskRead);
     } else if (this.#detector.channel === 'vga') {
@@ -253,6 +268,12 @@ export class V86Instance implements VMInstance {
     this.#failBoot('ASSET_DOWNLOAD_FAILED', `Failed to load artifact "${arg.file_name}".`);
   };
 
+  /** libv86 also leaks the worker/TaskError through `console.error`; surface it. */
+  readonly #onEmulatorError = (error: unknown): void => {
+    if (this.#disposed || this.#stopping) return;
+    this.#failBoot('EMULATOR_ERROR', `The emulator failed: ${describeError(error)}`);
+  };
+
   readonly #onEmulatorStopped = (): void => {
     // Echo of a deliberate stop.
     if (this.#disposed || this.#stopping) return;
@@ -300,6 +321,7 @@ export class V86Instance implements VMInstance {
     emulator.remove_listener('emulator-stopped', this.#onEmulatorStopped);
     emulator.remove_listener('download-progress', this.#onDownloadProgress);
     emulator.remove_listener('download-error', this.#onDownloadError);
+    this.#errorBus.remove_listener('emulator-error', this.#onEmulatorError);
     if (this.#detector.mode === 'disk-boot') {
       emulator.remove_listener('ide-read-end', this.#onDiskRead);
     } else if (this.#detector.channel === 'vga') {

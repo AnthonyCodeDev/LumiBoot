@@ -144,6 +144,89 @@ describe('V64Provider', () => {
     await instance.dispose();
   });
 
+  it('applies the profile `extra` when the caller only passes runtime options', async () => {
+    // The web app passes `{ network, media, signal }` and nothing else: a
+    // profile-declared adapter must still reach the engine, otherwise
+    // `v64Graphics` in the catalogue is dead configuration.
+    const profileDriven: OSDefinition = {
+      ...system,
+      launchProfiles: [
+        {
+          ...system.launchProfiles[0]!,
+          configuration: {
+            memoryMiB: 1024,
+            extra: { v64CpuCores: 4, v64Graphics: 'vmware_svga', v64Machine: 'q35' },
+          },
+        },
+      ],
+    };
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({ createEngine, resolveManifest: async () => manifest });
+    const instance = await provider.start(profileDriven, document.createElement('div'), {
+      signal: new AbortController().signal,
+    });
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options?.graphics_adapter).toBe('vmware_svga');
+    expect(options?.graphics_adapter_path).toBe('/v64/v86-vmware-svga.js');
+    expect(options?.cpu_cores).toBe(4);
+    expect(options?.machine_type).toBe('q35');
+    await instance.dispose();
+  });
+
+  it('lets the caller override the profile graphics adapter', async () => {
+    const profileDriven: OSDefinition = {
+      ...system,
+      launchProfiles: [
+        {
+          ...system.launchProfiles[0]!,
+          configuration: { memoryMiB: 1024, extra: { v64Graphics: 'vmware_svga' } },
+        },
+      ],
+    };
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({ createEngine, resolveManifest: async () => manifest });
+    const instance = await provider.start(profileDriven, document.createElement('div'), {
+      extra: { v64Graphics: 'virtio_gpu' },
+    });
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options?.graphics_adapter).toBe('virtio_gpu');
+    expect(options?.graphics_adapter_path).toBe('/v64/v86-virtio-gpu.js');
+    await instance.dispose();
+  });
+
+  it('splits memory above 2 GiB into a valid extended-memory multiple of 2 MiB', async () => {
+    // libv86 throws "extended_memory_size must be a multiple of 2 MiB" in the CPU
+    // worker before the machine starts, which left the Fedora XFCE profile black.
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({ createEngine, resolveManifest: async () => manifest });
+    const instance = await provider.start(system, document.createElement('div'), {
+      memoryMiB: 2048,
+    });
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options?.memory_size).toBe(2046 * 1024 * 1024);
+    expect(options?.extended_memory_size).toBe(2 * 1024 * 1024);
+    expect(
+      ((options?.memory_size ?? 0) + (options?.extended_memory_size ?? 0)) / (1024 * 1024),
+    ).toBe(2048);
+    await instance.dispose();
+  });
+
+  it('leaves memory at or below 2047 MiB without extended memory', async () => {
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({ createEngine, resolveManifest: async () => manifest });
+    const instance = await provider.start(system, document.createElement('div'), {
+      memoryMiB: 1024,
+    });
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options?.memory_size).toBe(1024 * 1024 * 1024);
+    expect(options).not.toHaveProperty('extended_memory_size');
+    await instance.dispose();
+  });
+
   it('releases the engine and the network when the instance cannot be wired', async () => {
     const destroy = vi.fn(async () => undefined);
     const createEngine = vi.fn(async (_options: V64Options) => ({

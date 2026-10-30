@@ -251,9 +251,17 @@ export const launchProfiles = [
     variantName: 'XFCE',
     variantOrder: 1,
     // The ISO is built and published (apps/web/public/images/fedora-44-x86-64-xfce/).
-    // `validated: true` is an explicit operator decision: no E2E boot has been
-    // recorded yet (tests/e2e still has to observe
-    // LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce).
+    // Booted for real in Chromium on 2026-10-30: the guest printed
+    // LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce and the XFCE desktop appeared
+    // on the VGA canvas (1024x768, measured luminance 172/255), recorded by
+    // tests/e2e/desktop-fedora-xfce.spec.ts.
+    // `bochs_vga` is the adapter that shows that desktop: the guest drives it
+    // through bochs-drm + Xorg `modesetting`. `virtio_gpu` also paints, while
+    // `vmware_svga` puts the session on the VMware SVGA device, which v64 can
+    // only present through its WebGPU renderer: without WebGPU the canvas never
+    // leaves the SeaBIOS text mode.
+    // Measured locally: DESKTOP_READY ~6 min after start, first painted desktop
+    // frame ~4 min later (xfdesktop), so a canvas probe must wait after the marker.
     validated: true,
     description:
       'The Fedora 44 x86-64 variant with the XFCE desktop environment: Xorg + XFCE on tty1, from the live ISO built and published locally.',

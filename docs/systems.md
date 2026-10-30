@@ -118,20 +118,36 @@ published image in Chromium, waits for `LUMIBOOT_GUEST_READY:fedora-44-x86-64`
 ttyS0 and checks their output. A successful build alone proves nothing: revert
 the flag as soon as a rebuild stops reaching the marker.
 
-The XFCE flavor is `validated: true` too: the ISO is built and published, and the
-operator declared it ready. The pipeline (Xorg `modesetting` on the bochs-drm
-framebuffer, `startxfce4` from the tty1 autologin,
-`lumiboot-desktop-ready.service` waiting for the X socket, `xdpyinfo` and the
-session process before emitting `LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce`)
-is in place. Fedora 41+ retired `xorg-x11-drv-vesa` and `xorg-x11-drv-fbdev`, so
-`kernel-modules` (bochs-drm) and the server's own `modesetting` driver are the
-only video path. XFCE is the default variant of the card (`variantOrder: 1`), as
-on Debian and Ubuntu; the CLI comes second (`variantOrder: 2`). Both variants are
-launchable once their artifacts are published under
-`apps/web/public/images/<ref>/`. Honest caveat: no E2E boot has been recorded for
-XFCE yet — `tests/e2e` has no XFCE Fedora spec observing
-`LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce`, so writing and running it (then
-reverting `validated` if the marker never appears) is still to be done.
+The XFCE flavor is `validated: true` too, and now on measured evidence: the
+pipeline (Xorg `modesetting` on the bochs-drm framebuffer, `startxfce4` from the
+tty1 autologin, `lumiboot-desktop-ready.service` waiting for the X socket,
+`xdpyinfo` and the session process before emitting
+`LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce`) was booted in Chromium on
+2026-10-30: the guest printed the marker and the desktop appeared on the VGA
+canvas in 1024x768. Fedora 41+ retired `xorg-x11-drv-vesa` and
+`xorg-x11-drv-fbdev`, so `kernel-modules` (bochs-drm) and the server's own
+`modesetting` driver are the only video path. XFCE is the default variant of the
+card (`variantOrder: 1`), as on Debian and Ubuntu; the CLI comes second
+(`variantOrder: 2`). Both variants are launchable once their artifacts are
+published under `apps/web/public/images/<ref>/`.
+
+The graphics adapter is a v64 `extra` option (`v64Graphics`, applied by
+`V64Provider` from the profile when the application passes no override). Three
+adapters were probed on the same guest with the same ISO, on the Playwright port
+5200: `bochs_vga` (kept) and `virtio_gpu` both paint the XFCE desktop (mean
+luminance 172/255, 99.8 % non-black pixels at 1024x768), while `vmware_svga`
+leaves the canvas in the SeaBIOS text mode: `vmwgfx` moves the session to the
+VMware SVGA device, which v64 can only present through its WebGPU renderer
+(absent in headless Chromium: `No available adapters.`). One trap for anyone
+probing this screen: the canvas is legitimately black for ~4 minutes after
+`LUMIBOOT_DESKTOP_READY`, until `xfdesktop` paints the root window, so a probe
+that stops at the marker measures the wallpaper, not a rendering failure.
+
+`tests/e2e/desktop-fedora-xfce.spec.ts` records that proof: it boots the
+published ISO, waits for the guest marker, then polls the canvas until it is
+actually drawn and requires three consecutive stable measurements. It skips
+without `VM_E2E_ASSETS=1` and the published `manifest.json`.
+
 Build details, package lists and smoke tests:
 [`images/fedora-44-x86-64/README.md`](../images/fedora-44-x86-64/README.md).
 
@@ -207,7 +223,7 @@ Current groups:
 |---|---|---|
 | Debian (`debian-12-i386`) | XFCE, X11, CLI | XFCE |
 | Ubuntu (`ubuntu-18-i386`) | XFCE, X11, CLI | XFCE |
-| Fedora 44 (`fedora-44-x86-64`) | XFCE, CLI | XFCE (both variants `validated: true`; the ISO is built and published) |
+| Fedora 44 (`fedora-44-x86-64`) | XFCE, CLI | XFCE (both variants `validated: true`; both ISOs are built, published and booted in CI-less Playwright runs) |
 | Windows 7 (`windows-7-x86`) | Professional, Lite | Professional |
 
 Helpers in `packages/catalog/src/systems.ts`: `getDisplaySystems()` returns the parents and standalone systems, `getVariantGroup()` the members sorted by `variantOrder`, `getDefaultVariant()` the first member, `getVariantParent()` and `getVariantParentId()` resolve the parent, and `hasVariants()` tells whether a group holds several entries.
