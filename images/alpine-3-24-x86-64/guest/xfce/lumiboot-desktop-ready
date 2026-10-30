@@ -1,0 +1,40 @@
+#!/bin/sh
+#
+# Emits the desktop marker once the XFCE session really runs: the X socket of :0
+# exists, the server answers and the session manager or the WM runs. Otherwise a
+# distinct failure marker is written and the script fails, so a successful build
+# is never mistaken for a validated boot.
+#
+# XAUTHORITY points at the lumiboot cookie file, required to query :0.
+# @REF@ is substituted by build.sh.
+set -u
+
+REF='@REF@'
+# doas may reset a minimal environment: the probe needs pgrep and xdpyinfo.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# Generous deadline: software emulation of v64 can be slow, and the marker is
+# diagnostic only (a late marker still reaches `running`).
+DEADLINE=600
+
+export DISPLAY=:0
+export XAUTHORITY=/home/lumiboot/.Xauthority
+
+# Both the session manager and the WM prove the session is alive.
+xfce_session_running() {
+  pgrep -x xfce4-session >/dev/null 2>&1 || pgrep -x xfwm4 >/dev/null 2>&1
+}
+
+i=0
+while [ "$i" -lt "$DEADLINE" ]; do
+  if [ -S /tmp/.X11-unix/X0 ] \
+    && xdpyinfo >/dev/null 2>&1 \
+    && xfce_session_running; then
+    printf 'LUMIBOOT_DESKTOP_READY:%s\n' "$REF" > /dev/ttyS0
+    exit 0
+  fi
+  i=$((i + 1))
+  sleep 1
+done
+
+printf 'LUMIBOOT_DESKTOP_START_FAILED:%s\n' "$REF" > /dev/ttyS0
+exit 1

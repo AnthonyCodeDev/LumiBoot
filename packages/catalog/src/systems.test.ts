@@ -121,6 +121,7 @@ describe('displayMode — primary view declared per profile', () => {
       'debian-12-i386-xfce',
       'ubuntu-18-i386-desktop',
       'ubuntu-18-i386-xfce',
+      'alpine-3-24-x86-64-xfce',
       'windows-7-x86',
       'windows-7-pro-sp1-x86',
       'windows-10-x86',

@@ -1,0 +1,13 @@
+#!/bin/sh
+# X session startup for v64.
+#
+# Under v64 udev loads bochs.ko, so the bochs-drm KMS device exists before X
+# starts: `modesetting` is the primary layout. The fbdev driver on /dev/fb0 stays
+# as the fallback, the reverse of the v86 guests where bochs-drm binds only after
+# the session is requested. Both layouts live in xorg.conf.d/20-lumiboot.conf.
+set -u
+
+if startx -- :0 vt1 -nolisten tcp -layout LumiBootModesetting; then
+  exit 0
+fi
+exec startx -- :0 vt1 -nolisten tcp -layout LumiBootFBDev

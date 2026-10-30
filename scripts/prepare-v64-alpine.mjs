@@ -1,6 +1,14 @@
 #!/usr/bin/env node
+// Publishes the Alpine v64 images into apps/web/public/images/<ref>/.
+//
+//   pnpm assets:v64:alpine        # CLI: official ISO + LumiBoot apkovl overlay
+//   pnpm assets:v64:alpine:xfce   # XFCE: outputs of images/alpine-3-24-x86-64/build.sh
+//
+// The XFCE flavor rebuilds nothing: build.sh on Linux/WSL2 already produced the
+// ISO, the kernel and the patched initramfs. This script only publishes them and
+// recomputes the manifest from the real files.
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +24,17 @@ const ALPINE = {
   url: 'https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-virt-3.24.0-x86_64.iso',
   sha256: '6cd1a38ae05cf96a5d0cbb2ddd6c630834babfeca1ecc5d1f05ec0b06b886102',
 };
+const ALPINE_LICENSE = 'Alpine Linux packages: their respective open-source licenses';
+// XFCE variant: a preinstalled squashfs rootfs on a repacked ISO, built by
+// images/alpine-3-24-x86-64/build.sh. Nothing here downloads or rebuilds it.
+const XFCE = {
+  version: '3.24.3',
+  ref: 'alpine-3-24-x86-64-xfce',
+  buildDir: 'build-xfce',
+  // The guest init mounts the rootfs itself: the cmdline only routes the kernel
+  // console to the VGA screen and the serial port.
+  cmdline: 'console=tty0 console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 loglevel=4',
+};
 const ref = 'alpine-3-24-x86-64';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
@@ -26,12 +45,93 @@ const overlayRoot = join(cache, 'lumiboot-apkovl');
 const initramfsOverlayRoot = join(cache, 'lumiboot-initramfs-overlay');
 const apkovl = join(initramfsOverlayRoot, 'lumiboot.apkovl.tar.gz');
 
+// `cli` keeps the historical behaviour; `xfce` publishes the Linux build.
+let flavor = 'cli';
+for (let index = 0; index < process.argv.length - 2; index += 1) {
+  const argument = process.argv[index + 2];
+  if (argument === '--flavor') {
+    flavor = process.argv[index + 3] ?? '';
+    index += 1;
+  } else if (argument.startsWith('--flavor=')) {
+    flavor = argument.slice('--flavor='.length);
+  } else {
+    throw new Error(`Unknown argument: ${argument} (expected --flavor <cli|xfce>)`);
+  }
+}
+if (flavor !== 'cli' && flavor !== 'xfce')
+  throw new Error(`Unknown flavor: "${flavor}" (expected: cli | xfce)`);
+
 async function hashFile(path) {
   const hash = createHash('sha256');
   const input = createReadStream(path);
   input.on('data', (chunk) => hash.update(chunk));
   await finished(input);
   return hash.digest('hex');
+}
+
+/** Publishes the build.sh outputs of the XFCE flavor, recomputing sizes and SHA-256. */
+async function publishXfce() {
+  const buildDir = join(root, 'images', 'alpine-3-24-x86-64', XFCE.buildDir);
+  const artifacts = {
+    disk: join(buildDir, `${XFCE.ref}.iso`),
+    bzimage: join(buildDir, 'vmlinuz-virt'),
+    initrd: join(buildDir, 'initramfs-virt'),
+  };
+  const provenance = join(buildDir, 'provenance.txt');
+  const missing = [...Object.values(artifacts), provenance].filter((path) => !existsSync(path));
+  if (missing.length > 0) {
+    throw new Error(
+      `Alpine XFCE build outputs are missing:\n  ${missing.join('\n  ')}\n` +
+        'Build them first on Linux or WSL2, on a native filesystem:\n' +
+        '  FLAVOR=xfce ./images/alpine-3-24-x86-64/build.sh',
+    );
+  }
+
+  const publishDir = join(root, 'apps', 'web', 'public', 'images', XFCE.ref);
+  await mkdir(publishDir, { recursive: true });
+  const names = {
+    disk: `${XFCE.ref}.iso`,
+    bzimage: 'vmlinuz-virt',
+    initrd: 'initramfs-virt',
+  };
+  for (const [kind, name] of Object.entries(names)) {
+    await copyFile(artifacts[kind], join(publishDir, name));
+  }
+
+  async function xfceFileRef(path, name) {
+    const info = await stat(path);
+    return {
+      url: `/images/${XFCE.ref}/${name}`,
+      sha256: await hashFile(path),
+      size: info.size,
+      version: XFCE.version,
+    };
+  }
+
+  const manifest = {
+    ref: XFCE.ref,
+    architecture: 'x86_64',
+    memoryMiB: 2048,
+    vgaMemoryMiB: 32,
+    license: ALPINE_LICENSE,
+    files: {
+      disk: await xfceFileRef(join(publishDir, names.disk), names.disk),
+      bzimage: await xfceFileRef(join(publishDir, names.bzimage), names.bzimage),
+      initrd: await xfceFileRef(join(publishDir, names.initrd), names.initrd),
+    },
+    boot: { cmdline: XFCE.cmdline },
+  };
+  await writeFile(join(publishDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  await copyFile(provenance, join(publishDir, 'provenance.txt'));
+  console.log(
+    `✓ Alpine ${XFCE.version} x86_64 XFCE prepared in apps/web/public/images/${XFCE.ref}/`,
+  );
+}
+
+if (flavor === 'xfce') {
+  await publishXfce();
+  // Nothing below applies to the XFCE flavor: it publishes an existing build.
+  process.exit(0);
 }
 
 function cpioHex(value) {
@@ -302,7 +402,7 @@ const manifest = {
   architecture: 'x86_64',
   memoryMiB: 1024,
   vgaMemoryMiB: 32,
-  license: 'Alpine Linux packages: their respective open-source licenses',
+  license: ALPINE_LICENSE,
   files: {
     disk: await fileRef(outputIso, ALPINE.name),
     bzimage: await fileRef(outputKernel, 'vmlinuz-virt'),

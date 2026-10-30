@@ -168,6 +168,31 @@ export const images = [
       'Official Alpine 3.24.0 x86_64 virt ISO, pinned by SHA-256 and booted through v64 with a reproducible LumiBoot autologin overlay. Two guest cores use parallel Workers when cross-origin isolation is available and cooperative scheduling otherwise.',
   },
   {
+    id: 'alpine-3-24-x86-64-xfce-image',
+    familyId: 'alpine',
+    architecture: 'x86_64',
+    imageRef: 'alpine-3-24-x86-64-xfce',
+    requirements: [
+      'Modern browser with WebAssembly',
+      '2048 MiB guest memory',
+      'Cross-origin isolation for parallel host threads',
+      'Alpine 3.24 x86-64 XFCE image built locally (squashfs rootfs on a repacked ISO)',
+    ],
+    integrationNote:
+      'Graphical XFCE variant of Alpine Linux 3.24.3 x86-64, built locally by ' +
+      'images/alpine-3-24-x86-64/build.sh with FLAVOR=xfce. The official `virt` ISO ' +
+      'carries no rootfs: its initramfs installs one with apk at every boot, which ' +
+      'cannot carry XFCE. This image ships a preinstalled squashfs rootfs, mounted ' +
+      'read-only with an overlayfs RAM upper layer by a custom initramfs init, on a ' +
+      'repacked official ISO whose BIOS/UEFI El-Torito records are kept. lumiboot ' +
+      'autologin on tty1 starts Xorg + XFCE through startx; the serial console keeps ' +
+      'a text shell. Guest writes stay in memory for the duration of the session. No ' +
+      'image is distributed. On 2026-10-30 the published image booted for real in ' +
+      'Chromium: the guest printed LUMIBOOT_DESKTOP_READY:alpine-3-24-x86-64-xfce ' +
+      '132.7 s after the start click and the XFCE desktop appeared on the VGA canvas ' +
+      'in 1024x768, recorded by tests/e2e/desktop-alpine-xfce.spec.ts.',
+  },
+  {
     id: 'windows-7-x86-image',
     familyId: 'windows',
     architecture: 'i386',
