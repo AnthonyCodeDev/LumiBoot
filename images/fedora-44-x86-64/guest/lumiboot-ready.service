@@ -8,8 +8,9 @@ Type=oneshot
 RemainAfterExit=yes
 # KEYMAP=fr lives in /etc/vconsole.conf; re-apply it when the vconsole units did
 # not run, then leave the proof file and the marker on both consoles. The marker
-# is emitted by the guest system, never by the client.
-ExecStart=/bin/sh -c 'systemctl restart systemd-vconsole-setup.service || true; touch /etc/lumiboot-azerty-ready; printf "LUMIBOOT_GUEST_READY:fedora-44-x86-64\n" | tee /dev/ttyS0 /dev/tty1 >/dev/null'
+# is emitted by the guest system, never by the client. @REF@ is substituted by
+# build.sh, so this unit can never name another image reference.
+ExecStart=/bin/sh -c 'systemctl restart systemd-vconsole-setup.service || true; touch /etc/lumiboot-azerty-ready; printf "LUMIBOOT_GUEST_READY:@REF@\n" | tee /dev/ttyS0 /dev/tty1 >/dev/null'
 
 [Install]
 WantedBy=multi-user.target

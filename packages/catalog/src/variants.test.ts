@@ -19,6 +19,8 @@ const windows10Mother = getSystemById('windows-10-x86')!;
 const ubuntuMother = getSystemById('ubuntu-18-i386')!;
 const ubuntuDesktop = getSystemById('ubuntu-18-i386-desktop')!;
 const ubuntuXfce = getSystemById('ubuntu-18-i386-xfce')!;
+const fedoraMother = getSystemById('fedora-44-x86-64')!;
+const fedoraXfce = getSystemById('fedora-44-x86-64-xfce')!;
 const macosSequoia = getSystemById('macos-sequoia')!;
 
 describe('Debian variant group', () => {
@@ -156,6 +158,59 @@ describe('Windows 7 variant group', () => {
   });
 });
 
+describe('Fedora variant group', () => {
+  it('sorts the default variant first (XFCE → CLI)', () => {
+    const group = getVariantGroup(fedoraMother);
+    expect(group).toHaveLength(2);
+    expect(group.map((system) => system.id)).toEqual(['fedora-44-x86-64-xfce', 'fedora-44-x86-64']);
+  });
+
+  it('finds the same group from the parent as from the child', () => {
+    const expected = ['fedora-44-x86-64-xfce', 'fedora-44-x86-64'];
+    expect(getVariantGroup(fedoraXfce).map((system) => system.id)).toEqual(expected);
+    expect(getVariantGroup(fedoraMother).map((system) => system.id)).toEqual(expected);
+  });
+
+  it('finds the CLI parent from the XFCE child', () => {
+    expect(getVariantParent(fedoraXfce).id).toBe('fedora-44-x86-64');
+    expect(getVariantParent(fedoraMother).id).toBe('fedora-44-x86-64');
+    expect(getVariantParentId(fedoraXfce)).toBe('fedora-44-x86-64');
+    expect(getVariantParentId(fedoraMother)).toBe('fedora-44-x86-64');
+  });
+
+  it('exposes the neutral parent (CLI) and the child label', () => {
+    expect(fedoraMother.variantGroupId).toBeUndefined();
+    expect(fedoraMother.variantName).toBe('CLI');
+    expect(fedoraXfce.variantGroupId).toBe('fedora-44-x86-64');
+    expect(fedoraXfce.variantName).toBe('XFCE');
+  });
+
+  it('exposes an ascending variantOrder (XFCE < CLI)', () => {
+    expect(fedoraXfce.variantOrder).toBe(1);
+    expect(fedoraMother.variantOrder).toBe(2);
+  });
+
+  it('selects XFCE as the default variant and exposes both variants as ready', () => {
+    expect(getDefaultVariant(fedoraMother).id).toBe('fedora-44-x86-64-xfce');
+    expect(getDefaultVariant(fedoraXfce).id).toBe('fedora-44-x86-64-xfce');
+    // Both profiles are declared `validated: true`: the XFCE card is launchable.
+    expect(fedoraMother.availability).toBe('ready');
+    expect(fedoraXfce.availability).toBe('ready');
+  });
+
+  it('folds the XFCE child onto the CLI card and out of the displayed systems', () => {
+    const display = getDisplaySystems().map((system) => system.id);
+    expect(display).toContain('fedora-44-x86-64');
+    expect(display).not.toContain('fedora-44-x86-64-xfce');
+    expect(hasVariants(fedoraMother)).toBe(true);
+    expect(hasVariants(fedoraXfce)).toBe(true);
+  });
+
+  it('always resolves the XFCE child by its id and slug', () => {
+    expect(getSystemById('fedora-44-x86-64-xfce')?.slug).toBe('fedora-44-x86-64-xfce');
+  });
+});
+
 describe('standalone Windows 10 x86 system', () => {
   it('belongs to no variant group', () => {
     expect(windows10Mother.variantGroupId).toBeUndefined();
@@ -187,6 +242,7 @@ describe('getDisplaySystems', () => {
     expect(display.some((system) => system.id === 'windows-7-pro-sp1-x86')).toBe(false);
     expect(display.some((system) => system.id === 'ubuntu-18-i386-desktop')).toBe(false);
     expect(display.some((system) => system.id === 'ubuntu-18-i386-xfce')).toBe(false);
+    expect(display.some((system) => system.id === 'fedora-44-x86-64-xfce')).toBe(false);
   });
 
   it('keeps the Debian parent, the Windows 7 parent and the standalone systems', () => {
@@ -198,8 +254,12 @@ describe('getDisplaySystems', () => {
     expect(ids).toContain('ubuntu-18-i386');
     expect(ids).not.toContain('ubuntu-18-i386-desktop');
     expect(ids).not.toContain('ubuntu-18-i386-xfce');
+    expect(ids).toContain('fedora-44-x86-64');
+    expect(ids).not.toContain('fedora-44-x86-64-xfce');
     expect(ids).toContain('macos-sequoia');
-    expect(getDisplaySystems()).toHaveLength(systems.length - 5);
+    // Six child variants are folded away: Debian X11/XFCE, Ubuntu X11/XFCE,
+    // Windows 7 Professional and Fedora XFCE.
+    expect(getDisplaySystems()).toHaveLength(systems.length - 6);
   });
 });
 

@@ -1,0 +1,17 @@
+[Unit]
+Description=LumiBoot desktop readiness marker (Xorg + XFCE)
+# Emitted once the whole multi-user boot is complete: tty1 has been handed to the
+# autologin, which starts startxfce4.
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# The marker is only emitted once the X server and the XFCE session really run; a
+# distinct failure marker is written otherwise.
+# Generous start timeout: the software emulation of v64 is slow.
+TimeoutStartSec=360
+ExecStart=/usr/local/bin/lumiboot-desktop-ready
+
+[Install]
+WantedBy=multi-user.target

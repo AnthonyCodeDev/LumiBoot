@@ -5,7 +5,10 @@
 //   node images/fedora-44-x86-64/write-manifest.mjs <artifacts-dir>
 //
 // IMAGE_REF, IMAGE_ARCH, IMAGE_MEMORY_MIB, IMAGE_VGA_MIB and IMAGE_CMDLINE
-// override the defaults, which reproduce the live console image.
+// override the defaults, which reproduce the live console image (FLAVOR=cli).
+// build.sh passes the reference and the cmdline of the built flavor, so the
+// same script serves fedora-44-x86-64 and fedora-44-x86-64-xfce: the ISO name
+// and the base URL always follow IMAGE_REF.
 
 import { createHash } from 'node:crypto';
 import { stat, writeFile } from 'node:fs/promises';
@@ -23,8 +26,9 @@ const CMDLINE = (process.env.IMAGE_CMDLINE ?? DEFAULT_CMDLINE).trim();
 const LICENSE = 'Fedora Linux packages: their respective open-source licenses';
 const BASE_URL = `/images/${REF}`;
 
+// The ISO is named after the reference: `<ref>.iso`, as build.sh writes it.
 const FILES = {
-  disk: 'fedora-44-x86-64.iso',
+  disk: `${REF}.iso`,
   bzimage: 'vmlinuz',
   initrd: 'initrd.img',
 };

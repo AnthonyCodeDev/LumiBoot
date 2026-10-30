@@ -222,9 +222,41 @@ export const launchProfiles = [
     slug: 'fedora-44-x86-64',
     displayName: 'Fedora',
     versionLabel: '44 · x86-64',
+    // XFCE is the default variant (order 1); the CLI comes second, as on Debian/Ubuntu.
+    variantName: 'CLI',
+    variantOrder: 2,
     validated: true,
     description:
       'A live Fedora 44 x86-64 console, built locally and booted in the browser by the v64 WebAssembly JIT.',
+  },
+  {
+    id: 'fedora-44-x86-64-xfce',
+    imageId: 'fedora-44-x86-64-xfce-image',
+    engineId: 'v64',
+    executionMode: 'browser',
+    minMemoryMiB: 2048,
+    configuration: {
+      memoryMiB: 2048,
+      vgaMemoryMiB: 32,
+      bootDevice: 'cdrom',
+      extra: { v64CpuCores: 2, v64Graphics: 'bochs_vga' },
+    },
+    hardwareProfile: { ...pcHardware('virtio'), acpi: true },
+    readiness: { ...desktopReadiness('fedora-44-x86-64-xfce'), timeoutMs: 300_000 },
+    displayMode: 'graphical',
+    slug: 'fedora-44-x86-64-xfce',
+    displayName: 'Fedora (XFCE)',
+    versionLabel: '44 · x86-64',
+    variantGroupId: 'fedora-44-x86-64',
+    variantName: 'XFCE',
+    variantOrder: 1,
+    // The ISO is built and published (apps/web/public/images/fedora-44-x86-64-xfce/).
+    // `validated: true` is an explicit operator decision: no E2E boot has been
+    // recorded yet (tests/e2e still has to observe
+    // LUMIBOOT_DESKTOP_READY:fedora-44-x86-64-xfce).
+    validated: true,
+    description:
+      'The Fedora 44 x86-64 variant with the XFCE desktop environment: Xorg + XFCE on tty1, from the live ISO built and published locally.',
   },
   {
     id: 'alpine-3-24-x86-64',

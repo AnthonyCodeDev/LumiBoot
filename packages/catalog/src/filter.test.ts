@@ -36,7 +36,8 @@ describe('filterSystems', () => {
   it('filters by family and search', () => {
     expect(filterSystems({ ...base, family: 'windows' })).toHaveLength(5);
     expect(filterSystems({ ...base, family: 'custom' })).toHaveLength(1);
-    expect(filterSystems({ ...base, query: 'fedora' })).toHaveLength(1);
+    // Two flat entries (CLI and XFCE): they fold onto a single Fedora card.
+    expect(filterSystems({ ...base, query: 'fedora' })).toHaveLength(2);
     expect(filterSystems({ ...base, query: 'ubuntu x64' })).toHaveLength(0);
   });
 });
@@ -92,11 +93,15 @@ describe('filterSystems with the architecture and engine facets', () => {
     expect(i386).toHaveLength(11);
     expect(i386.every((os) => os.architecture === 'i386')).toBe(true);
 
-    // Two architectures: 3 x86-64 systems + macOS (arm64).
-    expect(filterSystems({ ...base, architectures: ['x86_64', 'arm64'] })).toHaveLength(4);
+    // Two architectures: 4 x86-64 systems + macOS (arm64).
+    expect(filterSystems({ ...base, architectures: ['x86_64', 'arm64'] })).toHaveLength(5);
 
     const v64 = filterSystems({ ...base, engines: ['v64'] });
-    expect(v64.map((os) => os.id)).toEqual(['fedora-44-x86-64', 'alpine-3-24-x86-64']);
+    expect(v64.map((os) => os.id)).toEqual([
+      'fedora-44-x86-64',
+      'fedora-44-x86-64-xfce',
+      'alpine-3-24-x86-64',
+    ]);
     expect(filterSystems({ ...base, engines: ['wasm-x86_64', 'wasm-arm'] })).toHaveLength(2);
   });
 

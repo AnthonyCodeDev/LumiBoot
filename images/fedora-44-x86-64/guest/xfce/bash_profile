@@ -1,0 +1,14 @@
+# ~/.bash_profile: starts the XFCE session on tty1 after the autologin of the
+# unprivileged account. The serial console keeps a plain shell, so `sudo` and the
+# smoke-test commands stay usable on ttyS0 while the desktop runs.
+if [ -f "$HOME/.profile" ]; then
+  . "$HOME/.profile"
+fi
+
+# startxfce4 runs xinit itself when DISPLAY is unset (xorg-x11-xinit) and then
+# /etc/xdg/xfce4/xinitrc; no display manager and no .xinitrc are involved.
+if [ -z "${DISPLAY:-}" ] \
+  && [ "$(tty 2>/dev/null)" = /dev/tty1 ] \
+  && command -v startxfce4 >/dev/null 2>&1; then
+  exec startxfce4
+fi

@@ -23,7 +23,7 @@ LumiBoot is a browser-based operating system emulation platform designed to run 
 | ------------------- | ------------------------ | ----------------------- | ---------------------------------------- | ---------------------------------- |
 | Debian 12           | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | built ext4 rootfs, kernel and initrd     | `images/debian-12-i386/build.sh`   |
 | Ubuntu 18.04        | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | built ext4 rootfs, kernel and initrd     | `images/ubuntu-18-i386/build.sh`   |
-| Fedora 44           | x86-64 (v64 JIT)         | 1024 MiB                | built live ISO (squashfs), kernel/initrd | `images/fedora-44-x86-64/build.sh` |
+| Fedora 44           | XFCE / CLI               | 2 GiB / 1 GiB           | built live ISO (squashfs), kernel/initrd | `images/fedora-44-x86-64/build.sh` |
 | Alpine Linux 3.24   | x86-64 (v64 JIT)         | 1024 MiB                | official `virt` ISO, kernel + initramfs  | `pnpm assets:v64:alpine`           |
 | Windows 7           | Professional SP1 / Lite  | 1536 / 1024 MiB         | installed 32-bit BIOS/MBR RAW disk       | `pnpm assets:windows7:prepare`     |
 | Windows 8.1 Pro x86 | 32-bit                   | 2048 MiB                | installed 32-bit BIOS/MBR RAW disk       | `pnpm assets:windows8:prepare`     |
@@ -44,7 +44,7 @@ pnpm assets:windows10:prepare --source images/windows-10-x86/disk.img
 
 Disks are read-only: guest writes stay in memory and are lost on stop.
 
-Per-system instructions: [`docs/systems.md`](docs/systems.md).
+Per-system instructions, graphical variants and their FLAVOR values: [`docs/systems.md`](docs/systems.md).
 
 ## Requirements
 
