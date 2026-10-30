@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { OSDefinition } from '@lumiboot/contracts';
 import { STANDARD_VM_DISPLAY, type SessionSnapshot } from '@lumiboot/vm-core';
 import { DiskDiagnosticsPanel } from './DiskDiagnosticsPanel';
+import { SessionLogActivity } from './SessionLogActivity';
 import { SessionToolbar } from './SessionToolbar';
 import { StatusOverlay } from './StatusOverlay';
 import { usePointerLockCapture } from './usePointerLockCapture';
@@ -116,6 +117,8 @@ export function SessionScreen({
       {/* The console container stays mounted through every phase: remounting breaks the VM. */}
       <div className="session-viewport">
         <div className={`session-console${logsOpen ? '' : ' logs-hidden'}`} ref={consoleRef} />
+        {/* Ring fed by the hidden serial buffer: proves the logs still advance. */}
+        <SessionLogActivity consoleRef={consoleRef} />
         {!running ? (
           <StatusOverlay session={session} system={system} consoleRef={consoleRef} />
         ) : null}

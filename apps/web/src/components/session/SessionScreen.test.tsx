@@ -123,31 +123,29 @@ describe('SessionScreen — indicateur de capture souris', () => {
 });
 
 describe('SessionScreen — voile de boot et note de preuve tardive', () => {
-  it('keeps the 5 s veil bounded and then leaves the console visible', () => {
+  it('keeps the veil until the guest starts, then leaves the console visible', () => {
     vi.useFakeTimers();
     try {
       const consoleRef = { current: null as HTMLDivElement | null };
-      const { container } = render(
-        <SessionScreen
-          session={makeSession('booting')}
-          system={system}
-          consoleRef={consoleRef}
-          onStop={() => undefined}
-          onRestart={() => undefined}
-        />,
+      const props = {
+        system,
+        consoleRef,
+        onStop: () => undefined,
+        onRestart: () => undefined,
+      };
+      const { container, rerender } = render(
+        <SessionScreen session={makeSession('booting')} {...props} />,
       );
 
-      // Veil on mount, still there at 4 999 ms…
+      // Veil on mount: no timer, it stays put while nothing has started.
       expect(container.querySelector('.status-overlay')).not.toBeNull();
       act(() => {
-        vi.advanceTimersByTime(4_999);
+        vi.advanceTimersByTime(60_000);
       });
       expect(container.querySelector('.status-overlay')).not.toBeNull();
 
-      // …gone at 5 000 ms, with the console still mounted: no remount, live VM.
-      act(() => {
-        vi.advanceTimersByTime(1);
-      });
+      // Guest actually starting: veil gone, console still mounted: no remount, live VM.
+      rerender(<SessionScreen session={makeSession('booting', 'disk-boot')} {...props} />);
       expect(container.querySelector('.status-overlay')).toBeNull();
       expect(container.querySelector('.session-console')).not.toBeNull();
     } finally {

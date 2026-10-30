@@ -2,12 +2,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
 import { getSystemById } from '@lumiboot/catalog';
 import type { SessionSnapshot } from '@lumiboot/vm-core';
-import { BOOT_VEIL_MS, StatusOverlay } from './StatusOverlay';
+import { StatusOverlay } from './StatusOverlay';
 
 const system = getSystemById('debian-12-i386')!;
 
-function makeSession(state: SessionSnapshot['state']): SessionSnapshot {
-  return { id: 'session-test', systemId: system.id, providerId: 'v86', state };
+function makeSession(state: SessionSnapshot['state'], phase?: string): SessionSnapshot {
+  return {
+    id: 'session-test',
+    systemId: system.id,
+    providerId: 'v86',
+    state,
+    ...(phase === undefined ? {} : { phase }),
+  };
 }
 
 /** Fake container with an optional `textarea.v86-serial`. */
@@ -22,16 +28,18 @@ function makeConsoleRef(serialText?: string): { current: HTMLDivElement } {
   return { current: container };
 }
 
+function serialTextarea(consoleRef: { current: HTMLDivElement }): HTMLTextAreaElement {
+  return consoleRef.current.querySelector<HTMLTextAreaElement>('textarea.v86-serial')!;
+}
+
 function readLines(container: HTMLElement): (string | null)[] {
   return Array.from(container.querySelectorAll('.session-logs-line')).map((el) => el.textContent);
 }
 
-function renderOverlay(session: SessionSnapshot): { container: HTMLElement } {
-  const consoleRef = makeConsoleRef();
-  const { container } = render(
-    <StatusOverlay session={session} system={system} consoleRef={consoleRef} />,
-  );
-  return { container };
+function renderOverlay(session: SessionSnapshot, options: { serialText?: string } = {}) {
+  const consoleRef = makeConsoleRef(options.serialText);
+  const view = render(<StatusOverlay session={session} system={system} consoleRef={consoleRef} />);
+  return { consoleRef, ...view };
 }
 
 function advance(ms: number): void {
@@ -41,80 +49,113 @@ function advance(ms: number): void {
 }
 
 describe('StatusOverlay — boot log', () => {
-  it('shows the last 3 non-empty lines of the serial terminal (polling)', () => {
+  it('ignores blank serial lines: whitespace only keeps the veil and the fallback', () => {
     vi.useFakeTimers();
     try {
-      const consoleRef = makeConsoleRef();
-      const { container } = render(
-        <StatusOverlay session={makeSession('booting')} system={system} consoleRef={consoleRef} />,
-      );
-
-      const textarea = document.createElement('textarea');
-      textarea.className = 'v86-serial';
-      textarea.value = 'boot\n\nline 1\nline 2\nline 3\nline 4';
-      consoleRef.current.appendChild(textarea);
-
-      act(() => {
-        vi.advanceTimersByTime(500);
+      const { container } = renderOverlay(makeSession('booting'), {
+        serialText: '\n   \n\t\r\n',
       });
 
-      expect(readLines(container)).toEqual(['line 2', 'line 3', 'line 4']);
+      advance(500);
+
+      expect(container.querySelector('.status-overlay')).not.toBeNull();
+      expect(readLines(container)).toEqual(['Starting the system…']);
     } finally {
       vi.useRealTimers();
     }
   });
 
   it('shows a fallback line when the terminal is empty', () => {
-    const consoleRef = makeConsoleRef();
-    const { container } = render(
-      <StatusOverlay session={makeSession('booting')} system={system} consoleRef={consoleRef} />,
-    );
+    const { container } = renderOverlay(makeSession('booting'));
     expect(readLines(container)).toEqual(['Starting the system…']);
   });
 
   it('renders neither a progress bar nor the "Session running" step', () => {
-    const consoleRef = makeConsoleRef();
-    const { container } = render(
-      <StatusOverlay session={makeSession('booting')} system={system} consoleRef={consoleRef} />,
-    );
+    const { container } = renderOverlay(makeSession('booting'));
     expect(container.querySelector('[role="progressbar"]')).toBeNull();
     expect(container.querySelector('.session-steps')).toBeNull();
     expect(container.textContent).not.toContain('Session running');
   });
 });
 
-describe('StatusOverlay — 5 s boot veil', () => {
-  it('veils a booting session until 4 999 ms, then renders nothing at 5 000 ms', () => {
+describe('StatusOverlay — loading veil until the guest actually starts', () => {
+  it('keeps the veil while the serial terminal stays empty, even after 60 s', () => {
     vi.useFakeTimers();
     try {
-      const { container } = renderOverlay(makeSession('booting'));
+      const { container } = renderOverlay(makeSession('booting'), { serialText: '' });
       expect(container.querySelector('.status-overlay')).not.toBeNull();
       expect(readLines(container)).toEqual(['Starting the system…']);
 
-      advance(BOOT_VEIL_MS - 1);
+      advance(60_000);
+      expect(container.querySelector('.status-overlay')).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops the veil as soon as a non-empty serial line appears', () => {
+    vi.useFakeTimers();
+    try {
+      const { container, consoleRef } = renderOverlay(makeSession('booting'), { serialText: '' });
       expect(container.querySelector('.status-overlay')).not.toBeNull();
 
-      advance(1);
+      act(() => {
+        serialTextarea(consoleRef).value = '\n  \nLinux version 6.1.0-18-686-pae';
+      });
+      advance(500);
+
       expect(container.querySelector('.status-overlay')).toBeNull();
       expect(container.textContent).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
-      // The veil never comes back, even if the boot is still unfinished.
-      advance(60_000);
+  it('drops the veil on the disk-boot and guest-ready phases, without any log', () => {
+    for (const phase of ['disk-boot', 'guest-ready'] as const) {
+      const { container, unmount } = renderOverlay(makeSession('booting', phase));
+      expect(container.querySelector('.status-overlay')).toBeNull();
+      unmount();
+    }
+  });
+
+  it('drops the veil when the phase turns to disk-boot after mount', () => {
+    vi.useFakeTimers();
+    try {
+      const { container, consoleRef, rerender } = renderOverlay(makeSession('booting'), {
+        serialText: '',
+      });
+      expect(container.querySelector('.status-overlay')).not.toBeNull();
+
+      rerender(
+        <StatusOverlay
+          session={makeSession('booting', 'disk-boot')}
+          system={system}
+          consoleRef={consoleRef}
+        />,
+      );
+
       expect(container.querySelector('.status-overlay')).toBeNull();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('veils preparing and downloading the same fixed 5 s', () => {
+  it('never brings the veil back once cleared, even if the buffer is emptied', () => {
     vi.useFakeTimers();
     try {
-      for (const state of ['preparing', 'downloading'] as const) {
-        const { container } = renderOverlay(makeSession(state));
-        expect(container.querySelector('.status-overlay')).not.toBeNull();
-        advance(BOOT_VEIL_MS);
-        expect(container.querySelector('.status-overlay')).toBeNull();
-      }
+      const { container, consoleRef } = renderOverlay(makeSession('booting'), {
+        serialText: 'SeaBIOS\nBooting from Hard Disk...',
+      });
+      advance(500);
+      expect(container.querySelector('.status-overlay')).toBeNull();
+
+      act(() => {
+        serialTextarea(consoleRef).value = '';
+      });
+      advance(60_000);
+
+      expect(container.querySelector('.status-overlay')).toBeNull();
     } finally {
       vi.useRealTimers();
     }
@@ -124,7 +165,7 @@ describe('StatusOverlay — 5 s boot veil', () => {
     vi.useFakeTimers();
     try {
       const { container } = renderOverlay(makeSession('stopped'));
-      advance(BOOT_VEIL_MS);
+      advance(60_000);
       expect(container.querySelector('.status-overlay')).not.toBeNull();
       expect(container.textContent).toContain('System stopped');
     } finally {
@@ -132,7 +173,7 @@ describe('StatusOverlay — 5 s boot veil', () => {
     }
   });
 
-  it('always shows a real error, even after the veil window', () => {
+  it('always shows a real error, even after a long wait', () => {
     vi.useFakeTimers();
     try {
       const session: SessionSnapshot = {
@@ -140,7 +181,6 @@ describe('StatusOverlay — 5 s boot veil', () => {
         error: { code: 'MEDIA_REQUIRED', message: 'System media missing.' },
       };
       const { container } = renderOverlay(session);
-      advance(BOOT_VEIL_MS);
       advance(60_000);
       expect(container.querySelector('.status-overlay[role="alert"]')).not.toBeNull();
       expect(container.textContent).toContain('System media missing.');
