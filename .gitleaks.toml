@@ -10,3 +10,20 @@ title = "LumiBoot"
 # would replace the default rule set — the scan would then detect nothing).
 [extend]
 useDefault = true
+
+# Public SHA-256 checksums pinned in image build scripts.
+#
+# `generic-api-key` fires on identifiers such as `ALPINE_KEYS_SHA256="<64 hex>"`
+# (the `KEYS` token plus a high-entropy value), but that value is the published
+# digest of a redistributable package — Alpine's `alpine-keys` keyring, i.e. the
+# trust anchor, public by design. The exception is deliberately narrow: the path
+# only matches `images/*/build.sh`, and the regex only matches the literal
+# assignment of 64 hexadecimal characters to a `*SHA256` name in that line. A
+# credential cannot take this form, and every other rule (and every other byte
+# of these files) stays scanned. Whenever possible, name the constant after what
+# it protects (`*_TRUST_ANCHOR_*`, `ISO_SHA256`) instead of widening this entry.
+[allowlist]
+description = 'Public SHA-256 integrity checksums of redistributable media and packages pinned in image build scripts; not authentication material.'
+paths = ['''images/.*/build\.sh''']
+regexes = ['''(?i)sha256\s*=\s*"[0-9a-f]{64}"''']
+regexTarget = "line"

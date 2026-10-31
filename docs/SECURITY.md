@@ -54,6 +54,33 @@ The Ubuntu image builder requires a trusted archive keyring by default. `LUMIBOO
 - v86 WASM as `application/wasm`, no fallback under `/v86/`.
 - `/images/`: the free Debian and Ubuntu disks over HTTP Range, no index and no fallback. Proprietary and user media are forbidden in the webroot: Nginx 404 block on `^/images/.*(windows|winxp|winvista|win[0-9])`, plus `tests/webroot-assets.test.ts` on `apps/web/public/` and `apps/web/dist/`, whose allowlist accepts only the `/^debian-/i` and `/^ubuntu-/i` disk refs.
 
+## Secret scanning
+
+CI runs `gitleaks detect` on the full history with `.gitleaks.toml`, which keeps
+every built-in rule (`[extend] useDefault = true`) and only carries documented
+exceptions.
+
+### Public checksums in image build scripts
+
+`generic-api-key` flagged `ALPINE_KEYS_SHA256="…"` in
+`images/alpine-3-24-x86-64/build.sh`: the `KEYS` token plus a high-entropy value
+looks like an API key, but the value is the published SHA-256 of Alpine's
+`alpine-keys` package — the trust anchor every other package is verified
+against, public by design and not authentication material.
+
+The exception is narrowly scoped in `.gitleaks.toml`:
+
+- `paths = ['''images/.*/build\.sh''']`: image build scripts only.
+- `regexes = ['''(?i)sha256\s*=\s*"[0-9a-f]{64}"''']` with
+  `regexTarget = "line"`: only a `*SHA256` assignment of 64 hexadecimal
+  characters, on that line.
+
+A real credential cannot take that form, and the rest of those files stays
+scanned by every rule. Maintenance rule: name the constant after what it
+protects (`*_TRUST_ANCHOR_*`, `ISO_SHA256`) instead of widening the exception,
+and never put a real secret in a build script — the exception would not cover it
+and the scan would (rightly) fail.
+
 ## Known dependency advisories
 
 `react-router@6.30.6`, pulled in by `react-router-dom@^6.27.0` in `apps/web`, carries two moderate advisories: an open redirect through a backslash in a crafted path, and deserialization of attacker-controlled error data under SSR. Neither is known to be exploitable here: LumiBoot is a client-only SPA with no server-side rendering or hydration, and no user-controlled value reaches a router redirect or a programmatic navigation. The durable fix is the major migration to `react-router` 7.18+, which drops the 6.x advisory surface entirely.
