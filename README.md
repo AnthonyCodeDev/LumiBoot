@@ -49,6 +49,26 @@ Disks are read-only: guest writes stay in memory and are lost on stop.
 
 Per-system instructions, graphical variants and their FLAVOR values: [`docs/systems.md`](docs/systems.md).
 
+## Emulation Showcase
+Experience real `operating systems` running seamlessly in your browser, powered by `LumiBoot`.
+
+<h3>Windows 11</h3>
+<img src="images/windows-11-x64/preview.png" alt="Windows 11 Preview" width="100%" />
+<h3>Windows 10</h3>
+<img src="images/windows-10-x86/preview.png" alt="Windows 10 Preview" width="100%" />
+<h3>Windows 8.1</h3>
+<img src="images/windows-8-1-x86/preview.png" alt="Windows 8.1 Preview" width="100%" />
+<h3>Windows 7</h3>
+<img src="images/windows-7-pro-sp1-x86/preview.png" alt="Windows 7 Preview" width="100%" />
+<h3>Debian</h3>
+<img src="images/debian-12-i386/preview.png" alt="Debian Preview" width="100%" />
+<h3>Ubuntu</h3>
+<img src="images/ubuntu-18-i386/preview.png" alt="Ubuntu Preview" width="100%" />
+<h3>Fedora</h3>
+<img src="images/fedora-44-x86-64-xfce/preview.png" alt="Fedora Preview" width="100%" />
+<h3>Alpine</h3>
+<img src="images/alpine-3-24-x86-64/preview.png" alt="Alpine Preview" width="100%" />
+
 ## Requirements
 
 - Node.js >= 20.
@@ -107,27 +127,6 @@ The real boot tests need several GiB of media and stay opt-in: `VM_E2E_ASSETS=1 
 | `infra`                 | nginx, Docker dev, WISP relay                                                   |
 
 UI → `VMRegistry` → dynamic import of the selected provider → manifest/media → emulator. Stop calls `stop()` then `dispose()`. Design notes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/v64.md`](docs/v64.md).
-
-## Emulation Showcase
-Experience real `operating systems` running seamlessly in your browser, powered by `LumiBoot`.
-
-<h3>Debian</h3>
-<img src="images/debian-12-i386/preview.png" alt="Debian Preview" width="100%" />
-<h3>Ubuntu</h3>
-<img src="images/ubuntu-18-i386/preview.png" alt="Ubuntu Preview" width="100%" />
-<h3>Fedora</h3>
-<img src="images/fedora-44-x86-64-xfce/preview.png" alt="Fedora Preview" width="100%" />
-<h3>Alpine</h3>
-<img src="images/alpine-3-24-x86-64/preview.png" alt="Alpine Preview" width="100%" />
-<h3>Windows 7</h3>
-<img src="images/windows-7-pro-sp1-x86/preview.png" alt="Windows 7 Preview" width="100%" />
-<h3>Windows 8.1</h3>
-<img src="images/windows-8-1-x86/preview.png" alt="Windows 8.1 Preview" width="100%" />
-<h3>Windows 10</h3>
-<img src="images/windows-10-x86/preview.png" alt="Windows 10 Preview" width="100%" />
-<h3>Windows 11</h3>
-<img src="images/windows-11-x64/preview.png" alt="Windows 11 Preview" width="100%" />
-
 
 ## Troubleshooting
 
