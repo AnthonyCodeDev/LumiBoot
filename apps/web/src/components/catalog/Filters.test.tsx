@@ -132,8 +132,10 @@ describe('Filters', () => {
     await user.click(screen.getByRole('button', { name: /^Engine filter/ }));
     expect(screen.queryByRole('group', { name: 'Architecture' })).toBeNull();
     const engineMenu = screen.getByRole('group', { name: 'Engine' });
-    expect(within(engineMenu).getAllByRole('checkbox')).toHaveLength(4);
+    // v86, v64 and `wasm-arm` (macOS) are the only engines declared by a displayed card.
+    expect(within(engineMenu).getAllByRole('checkbox')).toHaveLength(3);
     expect(within(engineMenu).getByText('v86 / WebAssembly')).toBeTruthy();
+    expect(within(engineMenu).getByText('v64 / WebAssembly JIT')).toBeTruthy();
   });
 
   it('selects an engine through its label and count badge', async () => {

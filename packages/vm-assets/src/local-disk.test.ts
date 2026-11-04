@@ -49,6 +49,39 @@ function validManifest(): Record<string, unknown> {
   };
 }
 
+/** v64 engine with an OVMF NVRAM image (Windows 11 x64). */
+function validV64Manifest(): Record<string, unknown> {
+  const ref = 'windows-11-x64';
+  return {
+    version: 1,
+    ref,
+    displayName: 'Windows 11 x64 (local media)',
+    architecture: 'x86_64',
+    memoryMiB: 4096,
+    vgaMemoryMiB: 32,
+    license: 'User license',
+    disk: {
+      fileName: 'disk.img',
+      format: 'raw',
+      url: `/images/${ref}/disk.img`,
+      size: SIZE,
+      mtimeMs: 1793400322475,
+    },
+    engine: { id: 'v64' },
+    boot: { mode: 'disk-boot', url: `/images/${ref}/disk.img`, async: true, size: SIZE },
+    firmware: {
+      type: 'uefi',
+      vars: {
+        fileName: 'uefi-vars.fd',
+        url: `/images/${ref}/uefi-vars.fd`,
+        size: 540672,
+        mtimeMs: 1793399417613,
+        sha256: '3a938f1ab967451fd011b4ef55d28da6cf02dc456cede1eb8eee967696a4434f',
+      },
+    },
+  };
+}
+
 describe('parseLocalDiskManifest', () => {
   it('accepts a complete conforming manifest', () => {
     const manifest = parseLocalDiskManifest(validManifest());
@@ -149,6 +182,50 @@ describe('parseLocalDiskManifest', () => {
     (raw.disk as Record<string, unknown>).sha256 = 'deadbeef';
     expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
   });
+
+  it('accepts a v64 manifest with an OVMF firmware image', () => {
+    const manifest = parseLocalDiskManifest(validV64Manifest());
+    expect(manifest.engine).toEqual({ id: 'v64' });
+    expect(manifest.firmware?.type).toBe('uefi');
+    expect(manifest.firmware?.vars.url).toBe('/images/windows-11-x64/uefi-vars.fd');
+    expect(manifest.firmware?.vars.size).toBe(540672);
+  });
+
+  it('keeps the firmware block in the public form', () => {
+    const raw = validV64Manifest();
+    const publicManifest = parseLocalDiskPublicManifest(raw);
+    expect(publicManifest.firmware?.vars.fileName).toBe('uefi-vars.fd');
+    expect(publicManifest).not.toHaveProperty('source');
+  });
+
+  it('rejects a v86 engine that no longer matches the v86 variant', () => {
+    const raw = validManifest();
+    raw.engine = { id: 'v86', wasm: { url: '/v86/v86.wasm', size: 1, sha256: HEX } };
+    expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+  });
+
+  it('rejects an unknown engine id', () => {
+    const raw = validManifest();
+    raw.engine = { id: 'qemu' };
+    expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+  });
+
+  it('rejects firmware vars outside /images/<ref>/', () => {
+    const raw = validV64Manifest();
+    ((raw.firmware as Record<string, unknown>).vars as Record<string, unknown>).url =
+      '/images/other/uefi-vars.fd';
+    expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+  });
+
+  it.each(['../uefi-vars.fd', 'nested/uefi-vars.fd', '/uefi-vars.fd'])(
+    'rejects an unsafe firmware file name: %s',
+    (fileName) => {
+      const raw = validV64Manifest();
+      ((raw.firmware as Record<string, unknown>).vars as Record<string, unknown>).fileName =
+        fileName;
+      expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+    },
+  );
 });
 
 describe('helpers', () => {
@@ -230,5 +307,12 @@ describe('public/private serialization', () => {
     expect(publicManifest.ref).toBe('windows-7-x86');
     expect(publicManifest).not.toHaveProperty('source');
     expect(publicManifest).not.toHaveProperty('provenance');
+  });
+
+  it('keeps the v64 firmware block through the public projection', () => {
+    const v64Manifest = parseLocalDiskManifest(validV64Manifest());
+    const publicManifest = toPublicLocalDiskManifest(v64Manifest);
+    expect(publicManifest.engine).toEqual({ id: 'v64' });
+    expect(publicManifest.firmware).toEqual(v64Manifest.firmware);
   });
 });

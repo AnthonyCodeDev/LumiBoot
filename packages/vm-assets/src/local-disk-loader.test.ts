@@ -45,6 +45,26 @@ function publicDiskManifest(ref = 'windows-7-x86') {
   return full;
 }
 
+/** v64 engine plus an OVMF NVRAM image, as served for a local Windows 11 disk. */
+function validV64DiskManifest(ref = 'windows-11-x64') {
+  const full = validDiskManifest(ref) as Record<string, unknown>;
+  delete full.source;
+  delete full.provenance;
+  full.architecture = 'x86_64';
+  full.engine = { id: 'v64' };
+  full.firmware = {
+    type: 'uefi',
+    vars: {
+      fileName: 'uefi-vars.fd',
+      url: `/images/${ref}/uefi-vars.fd`,
+      size: 540672,
+      mtimeMs: 1793399417613,
+      sha256: '3a938f1ab967451fd011b4ef55d28da6cf02dc456cede1eb8eee967696a4434f',
+    },
+  };
+  return full;
+}
+
 function fakeHeaders(record: Record<string, string>) {
   const lower: Record<string, string> = {};
   for (const [key, value] of Object.entries(record)) lower[key.toLowerCase()] = value;
@@ -147,6 +167,25 @@ describe('ensureLocalDiskManifest', () => {
     );
 
     await expect(ensureLocalDiskManifest('debian-12-i386')).rejects.toMatchObject({
+      code: 'ASSET_INVALID_MANIFEST',
+    });
+  });
+
+  it('loads a v64 disk manifest with its UEFI firmware vars', async () => {
+    vi.stubGlobal('fetch', mockFetch(validV64DiskManifest()));
+
+    const manifest = await ensureLocalDiskManifest('windows-11-x64');
+
+    expect(manifest.engine).toEqual({ id: 'v64' });
+    expect(manifest.firmware?.vars.url).toBe('/images/windows-11-x64/uefi-vars.fd');
+  });
+
+  it('rejects a firmware vars URL outside the manifest reference', async () => {
+    const invalid = validV64DiskManifest();
+    (invalid.firmware as { vars: Record<string, unknown> }).vars.url = '/images/other/uefi-vars.fd';
+    vi.stubGlobal('fetch', mockFetch(invalid));
+
+    await expect(ensureLocalDiskManifest('windows-11-x64')).rejects.toMatchObject({
       code: 'ASSET_INVALID_MANIFEST',
     });
   });

@@ -1,7 +1,7 @@
 // Dev middleware serving local RAW disk manifests and disks over HTTP Range.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { createJsonHandler, createRangeHandler } from './range-server.mjs';
 
 const REF_PATTERN = /^[a-z0-9-]+$/;
@@ -38,8 +38,67 @@ export function toPublicDiskManifest(manifest) {
     boot: manifest.boot,
   };
   if (manifest.vgaMemoryMiB !== undefined) publicManifest.vgaMemoryMiB = manifest.vgaMemoryMiB;
+  if (manifest.firmware !== undefined) publicManifest.firmware = manifest.firmware;
   if (manifest.notes !== undefined) publicManifest.notes = manifest.notes;
   return publicManifest;
+}
+
+/** URL pathname only: the middleware routes on the path, never on the query. */
+function assetPathname(url) {
+  if (typeof url !== 'string') return null;
+  try {
+    return new URL(url, 'http://localhost').pathname;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Optional OVMF NVRAM image: a missing or inconsistent file only disables
+ * firmware persistence, it never takes the whole disk down.
+ */
+function discoverFirmwareVars(manifest, ref, imagesDir, skipped) {
+  const firmware = manifest?.firmware;
+  if (firmware === undefined) return null;
+
+  const vars = firmware?.vars;
+  if (
+    firmware?.type !== 'uefi' ||
+    typeof vars?.fileName !== 'string' ||
+    typeof vars?.size !== 'number'
+  ) {
+    skipped.push(`${ref} (invalid firmware block)`);
+    return null;
+  }
+
+  const baseDir = resolve(imagesDir, ref);
+  const varsPath = resolve(baseDir, vars.fileName);
+  if (!varsPath.startsWith(`${baseDir}${sep}`)) {
+    skipped.push(`${ref} (firmware path escapes images/${ref}/: ${vars.fileName})`);
+    return null;
+  }
+
+  const route = assetPathname(vars.url);
+  if (route === null || !route.startsWith(`/images/${ref}/`)) {
+    skipped.push(`${ref} (firmware URL outside /images/${ref}/: ${vars.url})`);
+    return null;
+  }
+
+  if (!existsSync(varsPath) || !statSync(varsPath).isFile()) {
+    skipped.push(`${ref} (firmware vars not found: ${varsPath})`);
+    return null;
+  }
+
+  const info = statSync(varsPath);
+  if (vars.size !== info.size) {
+    skipped.push(
+      `${ref} (inconsistent firmware size: ${info.size} bytes on disk, ` +
+        `${vars.size} in the manifest)`,
+    );
+    return null;
+  }
+
+  return { varsPath, route, size: info.size };
 }
 
 function hasDiskManifest(dir) {
@@ -132,6 +191,7 @@ function discoverLocalDisks(imagesDir) {
 
     const diskRoute = `/images/${ref}/${servedName}`;
     const manifestRoute = `/images/${ref}/manifest.json`;
+    const firmware = discoverFirmwareVars(manifest, ref, imagesDir, skipped);
     routes.set(
       diskRoute,
       createRangeHandler({
@@ -143,17 +203,39 @@ function discoverLocalDisks(imagesDir) {
         token: null,
       }),
     );
+    if (firmware !== null) {
+      routes.set(
+        firmware.route,
+        createRangeHandler({
+          filePath: firmware.varsPath,
+          size: firmware.size,
+          contentType: 'application/octet-stream',
+          corsOrigin: null,
+          extraHeaders: { 'Cross-Origin-Resource-Policy': 'same-origin' },
+          token: null,
+        }),
+      );
+    }
+    const publicManifest = toPublicDiskManifest(manifest);
+    // Never advertise a firmware image this server does not actually serve.
+    if (firmware === null) delete publicManifest.firmware;
     routes.set(
       manifestRoute,
       createJsonHandler({
-        body: `${JSON.stringify(toPublicDiskManifest(manifest), null, 2)}\n`,
+        body: `${JSON.stringify(publicManifest, null, 2)}\n`,
         contentType: 'application/json; charset=utf-8',
         corsOrigin: null,
         extraHeaders: { 'Cross-Origin-Resource-Policy': 'same-origin' },
         token: null,
       }),
     );
-    served.push({ ref, diskPath, size: info.size, diskRoute });
+    served.push({
+      ref,
+      diskPath,
+      size: info.size,
+      diskRoute,
+      firmwareRoute: firmware?.route ?? null,
+    });
   }
 
   return { routes, served, skipped };
@@ -176,8 +258,18 @@ export function createDiskAssetMiddleware(options = {}) {
   const { routes, served, skipped } = discoverLocalDisks(imagesDir);
 
   if (served.length > 0) {
-    const list = served.map((disk) => `${disk.ref} ${formatGiB(disk.size)}`).join(' · ');
+    const list = served
+      .map(
+        (disk) =>
+          `${disk.ref} ${formatGiB(disk.size)}${disk.firmwareRoute === null ? '' : ' (+ UEFI vars)'}`,
+      )
+      .join(' · ');
     logger(`[lumiboot] local disks ready (HTTP Range): ${list}`);
+    for (const disk of served) {
+      if (disk.firmwareRoute !== null) {
+        logger(`[lumiboot] UEFI vars ready (HTTP Range): ${disk.firmwareRoute}`);
+      }
+    }
   } else {
     logger('[lumiboot] no local disk served (Windows unavailable).');
   }

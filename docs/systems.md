@@ -16,11 +16,12 @@
 | `windows-7-x86`          | Windows 7 Lite x86             | 1024 MiB  | operator RAW disk   | `disk-boot`              |
 | `windows-8-1-x86`        | Windows 8.1 Pro x86 32-bit     | 2048 MiB  | operator RAW disk   | `disk-boot`              |
 | `windows-10-x86`         | Windows 10 x86 32-bit          | 2048 MiB  | operator RAW disk   | `disk-boot`              |
+| `windows-11-x64`         | Windows 11 24H2 x64 (UEFI)     | 4096 MiB  | operator RAW disk   | `disk-boot`              |
 | `custom-image`           | Custom image (ISO / IMG / RAW) | 512 MiB   | user-imported media | `LUMIBOOT_GUEST_READY`   |
 
 No disk, ISO or license key is shipped by this repository. This page is the index and the commands; details live next to each image under `images/<ref>/`.
 
-Windows 11 and macOS are catalogued but not developed: their x86-64 or ARM engine is not integrated, so they stay `planned` ("Not ready") with nothing to import.
+Windows 11 x64 follows the local disk pipeline and boots through **UEFI/OVMF** on the integrated v64 engine (q35 + ICH9 AHCI), with the OVMF variable store supplied by the operator next to the disk. Its real boot is proven with the patched v64 build (ISA IRQ 0 → I/O APIC input 2, HPET 100 ns, extended CPUID — [`scripts/patches/v64-ioapic-irq0-gsi2.patch`](../scripts/patches/v64-ioapic-irq0-gsi2.patch), recorded in `scripts/v64-assets.lock.json`): the guest reaches the Windows 11 sign-in screen with `KiBugCheckData = 0`, so the card is `ready` ("Available"). The desktop login is still under validation. macOS is catalogued but not developed: its ARM engine is not integrated and no image exists, so it stays `planned` with nothing to import.
 
 Ubuntu 18.04 LTS follows the Debian pipeline — one script, three variants — and all three are built
 locally, published into the Git-ignored `apps/web/public/images/<ref>/` directories and validated by
@@ -251,6 +252,18 @@ pnpm assets:windows10:check
 ```
 
 2048 MiB of guest RAM minimum. The virtio-net driver must already be in the disk. QEMU install, VirtualBox conversion and validation: [`images/windows-10-x86/README.md`](../images/windows-10-x86/README.md).
+
+## Windows 11 x64
+
+Requires a 64-bit **UEFI/GPT** installation (unlike the BIOS/MBR Windows 7/8.1/10 disks) plus the OVMF variable store that carries its `Windows Boot Manager` entry:
+
+```powershell
+qemu-img convert -O raw source.qcow2 images/windows-11-x64/disk.img
+pnpm assets:windows11:prepare --source images/windows-11-x64/disk.img --firmware-vars images/windows-11-x64/uefi-vars.fd
+pnpm assets:windows11:check
+```
+
+4096 MiB of guest RAM, 32 MiB of VGA memory. The profile boots the disk by UEFI through OVMF on the integrated v64 engine (`engine.id: v64`), with `v64Machine: q35`, `v64Firmware: uefi`, `v64CpuFeatures: x86-64-v2` and an `e1000` NIC, matching a `-machine q35` installation on Q35/ICH9 AHCI. It is `validated: true`: with the patched v64 build (IRQ0 → GSI2, HPET 100 ns, extended CPUID) the guest reaches the Windows 11 sign-in screen with `KiBugCheckData = 0`, and the desktop login is still under validation. QEMU procedure, reference measurements, HTTP Range checks and limitations: [`images/windows-11-x64/README.md`](../images/windows-11-x64/README.md).
 
 ## Custom image
 

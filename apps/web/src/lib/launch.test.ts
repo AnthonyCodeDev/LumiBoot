@@ -129,12 +129,14 @@ describe('getLaunchReadiness', () => {
     expect(readiness.reason).toMatch(/x86_64/);
   });
 
-  it('blocks 64-bit Windows 11 while the wasm-x86_64 engine is not integrated', () => {
+  it('allows Windows 11 x64 straight from the local UEFI disk (v64 integrated, no user media)', () => {
     const windows = system('windows-11-x64');
-    expect(isEngineIntegrated(windows.launchProfiles[0]!.engineId)).toBe(false);
-    const readiness = getLaunchReadiness(windows);
-    expect(readiness.canLaunch).toBe(false);
-    expect(readiness.reason).toMatch(/not ready/i);
+    expect(isEngineIntegrated(windows.launchProfiles[0]!.engineId)).toBe(true);
+    expect(windows.mediaStrategy).toBe('bundled');
+    expect(windows.imageRef).toBe('windows-11-x64');
+    // `validated: true` now that the boot reaches the Windows 11 sign-in screen:
+    // the local UEFI disk stays launchable without any user media.
+    expect(getLaunchReadiness(windows)).toEqual({ canLaunch: true });
   });
 
   it('allows the generic custom image once a user media is imported', () => {

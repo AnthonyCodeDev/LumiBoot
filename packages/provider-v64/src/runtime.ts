@@ -5,6 +5,18 @@ export interface V64Image {
   readonly disk_option?: 'read_only' | 'read_write';
 }
 
+/** UEFI firmware: OVMF needs a code image and a persisted NVRAM image. */
+export interface V64Firmware {
+  readonly type: 'uefi';
+  readonly code: V64Image;
+  readonly vars?: V64Image;
+  readonly secure_boot?: boolean;
+  readonly debug_console?: boolean;
+}
+
+/** Named CPU baseline or an explicit feature list. */
+export type V64CpuFeatures = 'x86-64-v2' | 'x86-64-v3' | ReadonlyArray<string>;
+
 export interface V64NetworkDevice {
   readonly type?: 'virtio' | 'ne2k' | 'e1000' | 'none';
   readonly relay_url?: string;
@@ -23,20 +35,27 @@ export interface V64Options {
   readonly cpu_cores: number;
   readonly experimental_smp_jit: boolean;
   readonly machine_type: 'i440fx' | 'q35';
+  /** i440FX keeps legacy layouts: UEFI requires it there. */
+  readonly qemu_compatible?: boolean;
+  readonly cpu_features?: V64CpuFeatures;
   readonly graphics_adapter: 'bochs_vga' | 'vmware_svga' | 'virtio_gpu';
   readonly graphics_adapter_path: string;
   readonly graphics_proxy?: boolean;
   readonly memory_size: number;
   readonly extended_memory_size?: number;
   readonly vram_size: number;
-  readonly bios: V64Image;
-  readonly vga_bios: V64Image;
+  /** Omitted when `firmware` replaces the BIOS. */
+  readonly bios?: V64Image;
+  readonly vga_bios?: V64Image;
+  readonly firmware?: V64Firmware;
   readonly screen: { readonly container: HTMLElement };
   readonly serial_console: {
     readonly type: 'textarea';
     readonly container: HTMLTextAreaElement;
   };
   readonly acpi: boolean;
+  /** q35/ACPI HPET: Windows' HAL stalls in `HalpInitializeClock` without it. */
+  readonly hpet?: boolean;
   readonly audio_device: 'hd_audio' | 'none';
   readonly audio_device_path?: string;
   readonly net_device?: V64NetworkDevice;

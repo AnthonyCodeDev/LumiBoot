@@ -1,6 +1,12 @@
 import { DEFAULT_GUEST_READINESS, type OSDefinition, type VMMedia } from '@lumiboot/contracts';
 import { DomConsoleAdapter, V86Instance, toV86NetworkDevice } from '@lumiboot/provider-v86';
-import { ensureImageManifest, versionedMediaUrl, type ImageManifest } from '@lumiboot/vm-assets';
+import {
+  ensureImageManifest,
+  ensureLocalDiskManifest,
+  versionedMediaUrl,
+  type ImageManifest,
+  type LocalDiskManifest,
+} from '@lumiboot/vm-assets';
 import {
   VMError,
   type VMCapabilities,
@@ -32,6 +38,8 @@ export const V64_ASSET_PATHS = {
   vcpuWorker: '/v64/vcpu-worker.js',
   bios: '/v64/seabios.bin',
   vgaBios: '/v64/vgabios.bin',
+  ovmfCode: '/v64/ovmf-code.fd',
+  ovmfVars: '/v64/ovmf-vars.fd',
   bochsVga: '/v64/v86-bochs-vga.js',
   virtioGpu: '/v64/v86-virtio-gpu.js',
   vmwareSvga: '/v64/v86-vmware-svga.js',
@@ -53,6 +61,11 @@ const V64_CAPABILITIES: VMCapabilities = {
 export interface V64ProviderOptions {
   readonly createEngine?: (options: V64Options) => V64Runtime | Promise<V64Runtime>;
   readonly resolveManifest?: (ref: string, signal?: AbortSignal) => Promise<ImageManifest>;
+  /** `disk-boot` profiles load a whole-disk manifest instead of an image manifest. */
+  readonly resolveLocalDiskManifest?: (
+    ref: string,
+    signal?: AbortSignal,
+  ) => Promise<LocalDiskManifest>;
 }
 
 /** x86-64 JIT emulator running entirely in the visitor's browser. */
@@ -60,10 +73,16 @@ export class V64Provider implements VMEngine {
   readonly id = V64_PROVIDER_ID;
   readonly #createEngine: (options: V64Options) => V64Runtime | Promise<V64Runtime>;
   readonly #resolveManifest: (ref: string, signal?: AbortSignal) => Promise<ImageManifest>;
+  readonly #resolveLocalDiskManifest: (
+    ref: string,
+    signal?: AbortSignal,
+  ) => Promise<LocalDiskManifest>;
 
   constructor(options: V64ProviderOptions = {}) {
     this.#createEngine = options.createEngine ?? createV64;
     this.#resolveManifest = options.resolveManifest ?? ensureImageManifest;
+    this.#resolveLocalDiskManifest =
+      options.resolveLocalDiskManifest ?? ((ref, signal) => ensureLocalDiskManifest(ref, signal));
   }
 
   capabilities(): VMCapabilities {
@@ -102,6 +121,10 @@ export class V64Provider implements VMEngine {
     if (signal?.aborted)
       throw new VMError('START_FAILED', `Start canceled for "${os.id}".`, { systemId: os.id });
 
+    // A `disk-boot` profile boots an installed system from its disk: there is no
+    // kernel or ISO to inject, only a whole-disk manifest to mount as `hda`.
+    const isDiskBoot = profile.readiness?.mode === 'disk-boot';
+
     const media = configuration?.media;
     if (os.mediaStrategy === 'user-import' && !media) {
       throw new VMError(
@@ -111,16 +134,22 @@ export class V64Provider implements VMEngine {
       );
     }
     let manifest: ImageManifest | null = null;
+    let diskManifest: LocalDiskManifest | null = null;
     if (!media) {
       if (!os.imageRef)
         throw new VMError('IMAGE_MISSING', `No image is associated with "${os.id}".`, {
           systemId: os.id,
         });
-      manifest = await this.#resolveManifest(os.imageRef, signal);
+      if (isDiskBoot) diskManifest = await this.#resolveLocalDiskManifest(os.imageRef, signal);
+      else manifest = await this.#resolveManifest(os.imageRef, signal);
     }
 
     const memoryMiB =
-      configuration?.memoryMiB ?? profile.configuration?.memoryMiB ?? manifest?.memoryMiB ?? 1024;
+      configuration?.memoryMiB ??
+      profile.configuration?.memoryMiB ??
+      manifest?.memoryMiB ??
+      diskManifest?.memoryMiB ??
+      1024;
     if (!Number.isInteger(memoryMiB) || memoryMiB < 128 || memoryMiB > 65_408) {
       throw new VMError(
         'START_FAILED',
@@ -139,6 +168,7 @@ export class V64Provider implements VMEngine {
     // the media and the abort signal, so the profile stays the fallback.
     const profileConfiguration = profile.configuration;
     const cores = readInteger(configuration, profileConfiguration, 'v64CpuCores', 2, 1, 8);
+    const machineType = readMachine(configuration, profileConfiguration);
     const graphics = readGraphics(configuration, profileConfiguration);
     const wantsWebGpu =
       graphics !== 'bochs_vga' && typeof navigator !== 'undefined' && 'gpu' in navigator;
@@ -156,7 +186,7 @@ export class V64Provider implements VMEngine {
       'hda' | 'cdrom' | 'bzimage' | 'initrd' | 'cmdline' | 'boot_order'
     >;
     try {
-      bootMedia = await resolveBootMedia(os.id, media, manifest, signal);
+      bootMedia = await resolveBootMedia(os.id, media, manifest, diskManifest, signal);
     } catch (error) {
       consoleAdapter.detach();
       await network.dispose().catch(() => undefined);
@@ -166,6 +196,41 @@ export class V64Provider implements VMEngine {
         { systemId: os.id, cause: error },
       );
     }
+
+    // UEFI replaces SeaBIOS entirely: `bios`/`vga_bios` must not be sent, and
+    // OVMF needs the disk's own NVRAM when it carries a boot entry.
+    const uefi = extraOption(configuration, profileConfiguration, 'v64Firmware') === 'uefi';
+    const cpuFeatures = readCpuFeatures(configuration, profileConfiguration);
+    const qemuCompatible =
+      extraOption(configuration, profileConfiguration, 'v64QemuCompatible') === true;
+    // Windows' HAL fails in `HalpInitializeClock` on q35/ACPI when the HPET is
+    // absent: only profiles that ask for it get the device, so the Alpine and
+    // Fedora guests keep their existing layout.
+    const hpet = extraOption(configuration, profileConfiguration, 'v64Hpet') === true;
+    const firmwareOptions: Pick<
+      V64Options,
+      'bios' | 'vga_bios' | 'firmware' | 'qemu_compatible' | 'cpu_features'
+    > = uefi
+      ? {
+          firmware: {
+            type: 'uefi',
+            code: { url: V64_ASSET_PATHS.ovmfCode },
+            vars: { url: diskManifest?.firmware?.vars.url ?? V64_ASSET_PATHS.ovmfVars },
+          },
+          ...(machineType === 'i440fx' || qemuCompatible ? { qemu_compatible: true } : {}),
+          ...(cpuFeatures === undefined ? {} : { cpu_features: cpuFeatures }),
+        }
+      : {
+          bios: { url: V64_ASSET_PATHS.bios },
+          vga_bios: { url: V64_ASSET_PATHS.vgaBios },
+        };
+
+    const vgaMemoryMiB =
+      configuration?.vgaMemoryMiB ??
+      profile.configuration?.vgaMemoryMiB ??
+      manifest?.vgaMemoryMiB ??
+      diskManifest?.vgaMemoryMiB ??
+      32;
 
     const options: V64Options = {
       wasm_path: V64_ASSET_PATHS.wasm,
@@ -178,17 +243,17 @@ export class V64Provider implements VMEngine {
       cpu_type: 'x86_64',
       cpu_cores: cores,
       experimental_smp_jit: cores > 1,
-      machine_type: readMachine(configuration, profileConfiguration),
+      machine_type: machineType,
       graphics_adapter: graphics,
       graphics_adapter_path: graphicsPath(graphics),
       memory_size: primaryMemoryMiB * MiB,
       ...(extendedMemoryMiB > 0 ? { extended_memory_size: extendedMemoryMiB * MiB } : {}),
-      vram_size: (configuration?.vgaMemoryMiB ?? profile.configuration?.vgaMemoryMiB ?? 32) * MiB,
-      bios: { url: V64_ASSET_PATHS.bios },
-      vga_bios: { url: V64_ASSET_PATHS.vgaBios },
+      vram_size: vgaMemoryMiB * MiB,
+      ...firmwareOptions,
       screen: { container: mounted.screenContainer },
       serial_console: { type: 'textarea', container: mounted.serialTextarea },
       acpi: true,
+      ...(hpet ? { hpet: true } : {}),
       audio_device: profile.hardwareProfile?.audio ? 'hd_audio' : 'none',
       ...(profile.hardwareProfile?.audio ? { audio_device_path: V64_ASSET_PATHS.hdAudio } : {}),
       ...(netDevice ? { net_device: netDevice } : {}),
@@ -239,6 +304,7 @@ async function resolveBootMedia(
   systemId: string,
   media: VMMedia | undefined,
   manifest: ImageManifest | null,
+  diskManifest: LocalDiskManifest | null,
   signal: AbortSignal | undefined,
 ): Promise<Pick<V64Options, 'hda' | 'cdrom' | 'bzimage' | 'initrd' | 'cmdline' | 'boot_order'>> {
   if (media?.format === 'raw') {
@@ -249,6 +315,12 @@ async function resolveBootMedia(
     return {
       cdrom: { url: media.url, size: media.size, async: true },
       boot_order: BOOT_ORDER_CD_HARDDISK_FLOPPY,
+    };
+  }
+  if (diskManifest !== null) {
+    // Installed system: the whole disk is the boot device, read lazily over Range.
+    return {
+      hda: { url: diskManifest.boot.url, size: diskManifest.disk.size, async: true },
     };
   }
   const disk = manifest?.files.disk;
@@ -268,6 +340,10 @@ async function resolveBootMedia(
   }
   const bzimage = manifest?.files.bzimage;
   const initrd = manifest?.files.initrd;
+  if (disk && !bzimage && !initrd) {
+    // Disk-only image manifest: the firmware boots the disk, like a local disk.
+    return { hda: { url: versionedMediaUrl(disk.url, disk.sha256), size: disk.size, async: true } };
+  }
   if (!disk || !bzimage || !initrd)
     throw new Error('The manifest needs disk, bzimage and initrd files.');
   return {
@@ -324,6 +400,22 @@ function readMachine(
   return extraOption(configuration, profileConfiguration, 'v64Machine') === 'q35'
     ? 'q35'
     : 'i440fx';
+}
+
+/** Named baseline (`x86-64-v2`/`v3`) or an explicit feature list. */
+function readCpuFeatures(
+  configuration: VMConfiguration | undefined,
+  profileConfiguration: ExtraConfiguration | undefined,
+): V64Options['cpu_features'] {
+  const value = extraOption(configuration, profileConfiguration, 'v64CpuFeatures');
+  if (value === 'x86-64-v2' || value === 'x86-64-v3') return value;
+  if (Array.isArray(value)) {
+    const features = value as readonly unknown[];
+    if (features.length > 0 && features.every((feature) => typeof feature === 'string')) {
+      return features as ReadonlyArray<string>;
+    }
+  }
+  return undefined;
 }
 
 function graphicsPath(graphics: V64Options['graphics_adapter']): string {

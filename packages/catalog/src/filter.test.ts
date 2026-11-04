@@ -103,8 +103,10 @@ describe('filterSystems with the architecture and engine facets', () => {
       'fedora-44-x86-64-xfce',
       'alpine-3-24-x86-64',
       'alpine-3-24-x86-64-xfce',
+      'windows-11-x64',
     ]);
-    expect(filterSystems({ ...base, engines: ['wasm-x86_64', 'wasm-arm'] })).toHaveLength(2);
+    // No system runs on a placeholder engine any more: only macOS is left on `wasm-arm`.
+    expect(filterSystems({ ...base, engines: ['wasm-x86_64', 'wasm-arm'] })).toHaveLength(1);
   });
 
   it('ANDs the facets together', () => {

@@ -1,4 +1,10 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
+
+const REPO_ROOT = process.cwd();
+// The local disk is Git-ignored: CI has none, a developer machine may have one.
+const WINDOWS11_DISK = join(REPO_ROOT, 'images', 'windows-11-x64', 'disk.img');
 
 test.describe('Library', () => {
   test('shows the ten displayed catalog systems (mothers + standalone)', async ({ page }) => {
@@ -160,24 +166,35 @@ test.describe('Facet filters', () => {
   });
 });
 
-// Windows 11 is "Not ready"; the generic "Custom image" needs user media.
+// Windows 11 x64 is "Available" (real boot to the Windows 11 sign-in screen, patched
+// v64 build); the generic "Custom image" needs user media.
 test.describe('Windows 11 and the generic custom image', () => {
-  test('Windows 11 is "Not ready", without an import card', async ({ page }) => {
+  test('Windows 11 is "Available", without an import card', async ({ page }) => {
     await page.goto('/');
 
     const card = page.locator('.os-card[data-id="windows-11-x64"]');
     await expect(card).toHaveCount(1);
-    // `planned` renders as "Not ready": no media is expected from the visitor.
-    await expect(card.locator('.card-status')).toHaveAttribute('data-state', 'planned');
-    await expect(card.locator('.card-status')).toHaveText('Not ready');
-    // Pending systems stay greyed out, under the separator.
-    await expect(card).toHaveClass(/is-muted/);
+    // `ready` renders as "Available": the local disk is the operator's, not user media.
+    await expect(card.locator('.card-status')).toHaveAttribute('data-state', 'ready');
+    await expect(card.locator('.card-status')).toHaveText('Available');
+    // Playable: first group, full opacity, not greyed out.
+    await expect(card).not.toHaveClass(/is-muted/);
+    // macOS is still `planned`, so the separator between the two groups remains.
     await expect(page.locator('.cards-separator')).toHaveCount(1);
 
     await card.click();
     await expect(page).toHaveURL(/\/systems\/windows-11-x64$/);
     await expect(page.getByText('Required media (provided by you)')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Start session' })).toBeDisabled();
+
+    // A local-disk system is launchable as soon as its engine is integrated and its
+    // disk is referenced; the runtime check (manifest + HTTP Range) then decides.
+    const start = page.getByRole('button', { name: 'Start session' });
+    if (existsSync(WINDOWS11_DISK)) {
+      await expect(start).toBeEnabled();
+    } else {
+      // Deterministic in CI: no disk served, so the button stays disabled.
+      await expect(start).toBeDisabled();
+    }
   });
 
   test('the custom image is "Resource required" and exposes the import card', async ({ page }) => {

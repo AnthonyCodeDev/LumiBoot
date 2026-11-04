@@ -61,6 +61,23 @@ function privateDiskManifest(ref: string, diskPath: string, size: number) {
   };
 }
 
+/** v64 manifest with an OVMF NVRAM image served next to the disk. */
+function privateV64DiskManifest(ref: string, diskPath: string, firmwareFileName: string) {
+  const manifest = privateDiskManifest(ref, diskPath, 100) as Record<string, unknown>;
+  manifest.architecture = 'x86_64';
+  manifest.engine = { id: 'v64' };
+  manifest.firmware = {
+    type: 'uefi',
+    vars: {
+      fileName: firmwareFileName,
+      url: `/images/${ref}/${firmwareFileName}`,
+      size: 32,
+      mtimeMs: 1,
+    },
+  };
+  return manifest;
+}
+
 interface HttpResponse {
   status: number;
   headers: Record<string, string | string[] | undefined>;
@@ -99,6 +116,15 @@ describe('toPublicDiskManifest (dev middleware)', () => {
     expect(publicManifest.ref).toBe('windows-7-x86');
     expect(publicManifest.disk).toEqual(manifest.disk);
     expect(publicManifest.boot).toEqual(manifest.boot);
+    expect(JSON.stringify(publicManifest)).not.toContain('C:/secret/disk.img');
+  });
+
+  it('keeps the UEFI firmware block when the manifest declares one', () => {
+    const manifest = privateV64DiskManifest('windows-11-x64', 'C:/secret/disk.img', 'uefi-vars.fd');
+    const publicManifest = toPublicDiskManifest(manifest) as Record<string, unknown>;
+
+    expect(publicManifest.firmware).toEqual(manifest.firmware);
+    expect(publicManifest.engine).toEqual({ id: 'v64' });
     expect(JSON.stringify(publicManifest)).not.toContain('C:/secret/disk.img');
   });
 });
@@ -196,6 +222,30 @@ describe('createDiskAssetMiddleware - public manifest over real HTTP', () => {
       'utf8',
     );
 
+    // A v64 disk with its OVMF NVRAM, plus one whose firmware file is missing.
+    const v64Ref = 'demo-v64';
+    const v64Dir = join(imagesDir, v64Ref);
+    mkdirSync(v64Dir, { recursive: true });
+    const v64Disk = join(v64Dir, 'disk.img');
+    writeFileSync(v64Disk, Buffer.alloc(100, 9));
+    writeFileSync(join(v64Dir, 'uefi-vars.fd'), Buffer.alloc(32, 3));
+    writeFileSync(
+      join(v64Dir, 'manifest.json'),
+      `${JSON.stringify(privateV64DiskManifest(v64Ref, v64Disk, 'uefi-vars.fd'), null, 2)}\n`,
+      'utf8',
+    );
+
+    const orphanRef = 'demo-v64-orphan';
+    const orphanDir = join(imagesDir, orphanRef);
+    mkdirSync(orphanDir, { recursive: true });
+    const orphanDisk = join(orphanDir, 'disk.img');
+    writeFileSync(orphanDisk, Buffer.alloc(100, 11));
+    writeFileSync(
+      join(orphanDir, 'manifest.json'),
+      `${JSON.stringify(privateV64DiskManifest(orphanRef, orphanDisk, 'absent.fd'), null, 2)}\n`,
+      'utf8',
+    );
+
     const middleware = createDiskAssetMiddleware({
       repoRoot: tempDir,
       imagesDir,
@@ -240,6 +290,36 @@ describe('createDiskAssetMiddleware - public manifest over real HTTP', () => {
     });
     expect(res.status).toBe(206);
     expect(res.headers['content-range']).toBe('bytes 0-0/100');
+  });
+
+  it('serves the UEFI vars image over HTTP Range for a v64 disk', async () => {
+    const res = await rawRequest(port, '/images/demo-v64/uefi-vars.fd', {
+      Range: 'bytes=0-15',
+    });
+    expect(res.status).toBe(206);
+    expect(res.headers['content-range']).toBe('bytes 0-15/32');
+    expect(res.body.byteLength).toBe(16);
+
+    const manifest = JSON.parse(
+      (await rawRequest(port, '/images/demo-v64/manifest.json')).body.toString('utf8'),
+    ) as { engine: { id: string }; firmware?: { type: string; vars: { url: string } } };
+    expect(manifest.engine).toEqual({ id: 'v64' });
+    expect(manifest.firmware?.type).toBe('uefi');
+    expect(manifest.firmware?.vars.url).toBe('/images/demo-v64/uefi-vars.fd');
+  });
+
+  it('still serves the disk when the firmware image is missing', async () => {
+    const manifest = JSON.parse(
+      (await rawRequest(port, '/images/demo-v64-orphan/manifest.json')).body.toString('utf8'),
+    ) as Record<string, unknown>;
+    // A missing NVRAM must not be advertised, and must not hide the disk.
+    expect(manifest).not.toHaveProperty('firmware');
+
+    const disk = await rawRequest(port, '/images/demo-v64-orphan/disk.img', {
+      Range: 'bytes=0-0',
+    });
+    expect(disk.status).toBe(206);
+    expect(disk.headers['content-range']).toBe('bytes 0-0/100');
   });
 
   it('restricts local disk access to the development origin', async () => {

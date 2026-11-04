@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "ref": "windows-11-x64",
+  "displayName": "Windows 11 x64",
+  "architecture": "x86_64",
+  "memoryMiB": 4096,
+  "vgaMemoryMiB": 32,
+  "license": "Local RAW disk from the codebase (not distributed)",
+  "provenance": "images/windows-11-x64/disk.img (local disk served in place)",
+  "source": {
+    "path": "images/windows-11-x64/disk.img",
+    "size": 68719476736,
+    "mtimeMs": 1793612687885
+  },
+  "disk": {
+    "fileName": "disk.img",
+    "format": "raw",
+    "url": "/images/windows-11-x64/disk.img",
+    "size": 68719476736,
+    "mtimeMs": 1793612687885
+  },
+  "engine": {
+    "id": "v64"
+  },
+  "firmware": {
+    "type": "uefi",
+    "vars": {
+      "fileName": "uefi-vars.fd",
+      "url": "/images/windows-11-x64/uefi-vars.fd",
+      "size": 540672,
+      "mtimeMs": 1793399417613,
+      "sha256": "3a938f1ab967451fd011b4ef55d28da6cf02dc456cede1eb8eee967696a4434f"
+    }
+  },
+  "boot": {
+    "mode": "disk-boot",
+    "url": "/images/windows-11-x64/disk.img",
+    "async": true,
+    "size": 68719476736
+  },
+  "notes": [
+    "Operator-provided x86-64 RAW disk (Windows 11, already installed), served in place (images/windows-11-x64/disk.img): never copied, git-ignored, never distributed.",
+    "UEFI/GPT disk (ESP + Windows Boot Manager) booted by v64 through OVMF on Q35/ICH9 AHCI over HTTP Range (hda.async = true). The OVMF variable store is images/windows-11-x64/uefi-vars.fd.",
+    "No SHA-256 for the 64 GiB disk: documented by size and mtime (the disk is git-ignored)."
+  ]
+}

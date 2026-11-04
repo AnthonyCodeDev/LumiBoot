@@ -162,10 +162,12 @@ describe('SystemPage — user media import', () => {
     );
   });
 
-  it('shows no import card for a system that is not developed (Windows 11)', () => {
+  it('shows no import card for Windows 11 (local UEFI disk, no user media)', () => {
     renderSystemPage('windows-11-x64');
 
     expect(screen.queryByText('Required media (provided by you)')).toBeNull();
+    // The local disk is checked at runtime (manifest + HTTP Range): with no disk
+    // served in jsdom the launch stays disabled.
     const launch = screen.getByRole('button', { name: 'Start session' });
     expect((launch as HTMLButtonElement).disabled).toBe(true);
   });

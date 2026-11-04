@@ -1,0 +1,92 @@
+diff --git a/src/acpi_tables.js b/src/acpi_tables.js
+index 80427c16..14f609ab 100644
+--- a/src/acpi_tables.js
++++ b/src/acpi_tables.js
+@@ -746,6 +746,10 @@ function build_madt(platform)
+         entries.push([0, 8, i, apic_id].concat(le(1, 4))); // processor local APIC, enabled
+     });
+     entries.push([1, 12, IOAPIC_ID, 0].concat(le(IOAPIC_ADDRESS, 4), le(0, 4)));
++    // ISA IRQ 0 (the PIT, or the HPET's legacy replacement route) reaches I/O
++    // APIC input 2, the 8259's cascade input; QEMU's MADT says the same
++    // (build_xrupt_override(0, 2, 0)). Flags 0: edge, active high, as the bus.
++    entries.push([2, 10, 0, 0].concat(le(2, 4), le(0, 2)));
+     // The SCI and the PCI interrupt links are level-triggered, active high.
+     // Other ISA IRQs keep the default (edge, active high, GSI = IRQ).
+     for(const irq of [ACPI_SCI_IRQ].concat(PCI_LINK_IRQS))
+diff --git a/src/hpet.js b/src/hpet.js
+index b520afa3..86d72edc 100644
+--- a/src/hpet.js
++++ b/src/hpet.js
+@@ -23,8 +23,8 @@ import { CPU } from "./cpu.js";
+ 
+ export const HPET_ADDRESS = 0xFED00000;
+ export const HPET_SIZE = 0x400;
+-/** The main counter's period in femtoseconds: 14.31818 MHz */
+-const PERIOD_FS = 69841279;
++/** The main counter's period in femtoseconds: 100 ns, as QEMU's q35 HPET reports in GCAP_ID */
++const PERIOD_FS = 100000000;
+ const TICKS_PER_MS = 1e12 / PERIOD_FS;
+ const TIMER_COUNT = 3;
+ 
+diff --git a/src/rust/cpu/instructions_0f.rs b/src/rust/cpu/instructions_0f.rs
+index 0d527e8b..94a2cd86 100644
+--- a/src/rust/cpu/instructions_0f.rs
++++ b/src/rust/cpu/instructions_0f.rs
+@@ -3554,10 +3554,27 @@ pub unsafe fn instr_0FA2() {
+ 
+         0x80000000 => {
+             // maximum supported extended level
+-            eax = 5;
++            eax = 0x80000008u32 as i32;
+             // other registers are reserved
+         },
+ 
++        0x80000001 => {
++            // LAHF/SAHF in long mode, and the long-mode features Windows'
++            // HAL requires (SYSCALL, NX, RDTSCP, LM)
++            ecx = 1;
++            edx = (1 << 11) | (1 << 20) | (1 << 27) | (1 << 29);
++        },
++
++        0x80000008 => {
++            // physical / linear address bits
++            eax = 36 | 48 << 8;
++        },
++
++        0x80000007 => {
++            // invariant TSC (EDX bit 8): the HAL's clock calibration asks
++            edx = 1 << 8;
++        },
++
+         0x40000000 => {
+             // hypervisor
+             if config::VMWARE_HYPERVISOR_PORT {
+diff --git a/src/rust/cpu/ioapic.rs b/src/rust/cpu/ioapic.rs
+index a5d99393..6cfc181c 100644
+--- a/src/rust/cpu/ioapic.rs
++++ b/src/rust/cpu/ioapic.rs
+@@ -200,7 +200,16 @@ fn check_irq(ioapic: &mut Ioapic, irq: u8) {
+ 
+ pub fn set_irq(i: u8) { set_irq_internal(&mut get_ioapic(), i) }
+ 
++/// The board merges ISA IRQ 0 into the 8259 cascade input: with a PIC present,
++/// I/O APIC input 0 carries the PIC's ExtINT output and the PIT's (or, with the
++/// HPET's legacy replacement route, the HPET's) IRQ 0 output arrives on input 2.
++/// QEMU's q35 does the same (hw/intc/ioapic.c, ioapic_set_irq: "ISA IRQs map to
++/// GSI 1-1 except for IRQ0 which maps to GSI 2"), which is what the MADT's
++/// IRQ 0 -> GSI 2 interrupt source override tells the guest.
++fn gsi_input(i: u8) -> u8 { if i == 0 { 2 } else { i } }
++
+ fn set_irq_internal(ioapic: &mut Ioapic, i: u8) {
++    let i = gsi_input(i);
+     if i as usize >= IOAPIC_IRQ_COUNT {
+         dbg_assert!(false, "Bad irq: {}", i);
+         return;
+@@ -232,6 +241,7 @@ fn set_irq_internal(ioapic: &mut Ioapic, i: u8) {
+ pub fn clear_irq(i: u8) { clear_irq_internal(&mut get_ioapic(), i) }
+ 
+ fn clear_irq_internal(ioapic: &mut Ioapic, i: u8) {
++    let i = gsi_input(i);
+     if i as usize >= IOAPIC_IRQ_COUNT {
+         dbg_assert!(false, "Bad irq: {}", i);
+         return;

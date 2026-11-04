@@ -1,37 +1,45 @@
 {
+  "$comment": "Lock file for the v64 engine binaries. The six core files (v86.wasm, v86-fallback.wasm, v86-parallel.wasm, libv86.mjs, cpu-worker.js, vcpu-worker.js) are NOT the upstream bytes served by `url`: they are the upstream 74d2bafc build with `scripts/patches/v64-ioapic-irq0-gsi2.patch` applied, rebuilt in a clean tree (glbridge/vx_naga.wasm is re-emitted by the same build). Their `url` stays the upstream provenance for the same path, so `prepare-v64-assets.mjs` fails loudly instead of silently installing an unpatched binary. Every other asset is byte-identical to upstream.",
   "revision": "74d2bafcc7d568e2ab4374804e176f1a8a350f61",
   "repository": "https://github.com/speedyHKjournalist/v64",
   "buildSource": "https://v64-2ys.pages.dev",
+  "patch": "IRQ0 -> GSI2 in the I/O APIC and in the MADT interrupt source override (Windows 11 24H2 HAL clock), HPET main-counter period 100 ns, extended CPUID leaves (0x80000001 / 0x80000007 / 0x80000008)",
+  "patchFile": "scripts/patches/v64-ioapic-irq0-gsi2.patch",
+  "build": {
+    "base": "74d2bafcc7d568e2ab4374804e176f1a8a350f61",
+    "patches": ["scripts/patches/v64-ioapic-irq0-gsi2.patch"],
+    "command": "make all build/v86-fallback.wasm"
+  },
   "assets": {
     "libv86.mjs": {
       "url": "https://v64-2ys.pages.dev/build/libv86.mjs",
-      "size": 761192,
-      "sha256": "672bc48b6128a842b57faaef5ede62db39032fef8bc965d9e63af6d4ca503a74"
+      "size": 761198,
+      "sha256": "413b2eb42bbf966ff24033978325d36ac6173d66ae3dd6a889258526dd31b9c1"
     },
     "v86.wasm": {
       "url": "https://v64-2ys.pages.dev/build/v86.wasm",
-      "size": 2918241,
-      "sha256": "37be9a835537e23a3ae38e28b22a768254b56bb975eceb96ed0b5e1d4989bcc1"
+      "size": 2918372,
+      "sha256": "066c69d1b07ba7002a203170c3f6babb97e7e3fdd3115efcaf0945d2cbe46350"
     },
     "v86-fallback.wasm": {
       "url": "https://v64-2ys.pages.dev/build/v86-fallback.wasm",
-      "size": 2941598,
-      "sha256": "fc013ffd34429ebbafd92430e1e92d83ead9fc61c7e9de2e11096363feae3668"
+      "size": 2941729,
+      "sha256": "c9b32667a5e64696f0d4d829f5cf3faaecc723b6a1f8a6f8fda1da7701887837"
     },
     "v86-parallel.wasm": {
       "url": "https://v64-2ys.pages.dev/build/v86-parallel.wasm",
-      "size": 2887532,
-      "sha256": "525b6096ce0dd4fe894b1df9a037fec4a34ec7e4049f510adc5edcc7bb3ad69c"
+      "size": 2887663,
+      "sha256": "07405a309f235ff4ef9b76e7ec9e8f43db4afb8d6a71a09be259907116372595"
     },
     "cpu-worker.js": {
       "url": "https://v64-2ys.pages.dev/build/cpu-worker.js",
-      "size": 770324,
-      "sha256": "583688be84ad585519f95c158031c394dfe16c703dd2e21f93e2d1a02149fb5c"
+      "size": 770330,
+      "sha256": "61b07a5ee14f83fa3d406b105a10031299570dbd52ee96e023e1ae1b8137e0ea"
     },
     "vcpu-worker.js": {
       "url": "https://v64-2ys.pages.dev/build/vcpu-worker.js",
-      "size": 771218,
-      "sha256": "55f957c177a132376155b22f451875a49782e9265791777452e294ac46d1960f"
+      "size": 771224,
+      "sha256": "463d233298a78165eab499c4c18b4ccf455ccbd41c5b6b93f226bc236e0bfba8"
     },
     "v86-bochs-vga.js": {
       "url": "https://v64-2ys.pages.dev/build/v86-bochs-vga.js",
@@ -73,6 +81,16 @@
       "size": 36352,
       "sha256": "a4bc0d80cc3ca028c73dafa8fee396b8d054ce87ebd8abfbd31b06b437607880"
     },
+    "ovmf-code.fd": {
+      "url": "https://raw.githubusercontent.com/speedyHKjournalist/v64/74d2bafcc7d568e2ab4374804e176f1a8a350f61/bios/ovmf-code.fd",
+      "size": 3653632,
+      "sha256": "33090cc07675baa5190d9f1e84bf5176b33bcbfa9bacac522961150cdb6dbb2a"
+    },
+    "ovmf-vars.fd": {
+      "url": "https://raw.githubusercontent.com/speedyHKjournalist/v64/74d2bafcc7d568e2ab4374804e176f1a8a350f61/bios/ovmf-vars.fd",
+      "size": 540672,
+      "sha256": "5d2ac383371b408398accee7ec27c8c09ea5b74a0de0ceea6513388b15be5d1e"
+    },
     "glbridge/libv86-webgpu.js": {
       "url": "https://v64-2ys.pages.dev/build/glbridge/libv86-webgpu.js",
       "size": 2669644,
@@ -80,8 +98,8 @@
     },
     "glbridge/vx_naga.wasm": {
       "url": "https://v64-2ys.pages.dev/build/glbridge/vx_naga.wasm",
-      "size": 1491737,
-      "sha256": "d96b6fa13625e92750a83d1b92838303b024e9e192a30f008ae47db9ab91c29e"
+      "size": 1491388,
+      "sha256": "8bdf03262e445d64e46ca2f902829fd9b4d620363402489eb338aa4f62615064"
     }
   }
 }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import type { OSDefinition } from '@lumiboot/contracts';
-import type { ImageManifest } from '@lumiboot/vm-assets';
+import type { ImageManifest, LocalDiskManifest } from '@lumiboot/vm-assets';
 import { V64Provider } from './V64Provider';
 import type { V64Options, V64Runtime } from './runtime';
 
@@ -54,6 +54,85 @@ const manifest: ImageManifest = {
     initrd: { url: '/images/alpine-test-x64/initrd', size: 2048, sha256: 'c'.repeat(64) },
   },
 };
+
+const DISK_SIZE = 68_719_476_736;
+
+/** Installed Windows 11 x64 disk with its OVMF NVRAM, as served locally. */
+function localDiskManifest(withFirmware = true): LocalDiskManifest {
+  return {
+    version: 1,
+    ref: 'windows-11-x64',
+    displayName: 'Windows 11 x64',
+    architecture: 'x86_64',
+    memoryMiB: 4096,
+    vgaMemoryMiB: 32,
+    license: 'test',
+    disk: {
+      fileName: 'disk.img',
+      format: 'raw',
+      url: '/images/windows-11-x64/disk.img',
+      size: DISK_SIZE,
+      mtimeMs: 1793400322475,
+    },
+    engine: { id: 'v64' },
+    boot: {
+      mode: 'disk-boot',
+      url: '/images/windows-11-x64/disk.img',
+      async: true,
+      size: DISK_SIZE,
+    },
+    ...(withFirmware
+      ? {
+          firmware: {
+            type: 'uefi' as const,
+            vars: {
+              fileName: 'uefi-vars.fd',
+              url: '/images/windows-11-x64/uefi-vars.fd',
+              size: 540672,
+              mtimeMs: 1793399417613,
+            },
+          },
+        }
+      : {}),
+  };
+}
+
+const windows11: OSDefinition = {
+  ...system,
+  id: 'windows-11-x64',
+  slug: 'windows-11-x64',
+  family: 'windows',
+  displayName: 'Windows 11',
+  versionLabel: '24H2',
+  imageRef: 'windows-11-x64',
+  launchProfiles: [
+    {
+      ...system.launchProfiles[0]!,
+      id: 'windows-11-x64-v64',
+      configuration: {
+        memoryMiB: 4096,
+        vgaMemoryMiB: 32,
+        extra: {
+          v64CpuCores: 4,
+          v64Machine: 'q35',
+          v64Firmware: 'uefi',
+          v64CpuFeatures: 'x86-64-v2',
+        },
+      },
+      hardwareProfile: {
+        network: 'e1000',
+        machine: 'q35',
+        video: 'vga',
+        input: 'ps2',
+        disk: 'ide',
+        audio: false,
+        acpi: true,
+      },
+      readiness: { marker: 'disk-boot', mode: 'disk-boot', channel: 'vga', timeoutMs: 60_000 },
+      displayMode: 'graphical',
+    },
+  ],
+} as OSDefinition;
 
 function runtime(): V64Runtime {
   return {
@@ -244,5 +323,127 @@ describe('V64Provider', () => {
     });
     // No orphaned emulator: a wiring failure must destroy the runtime.
     expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('boots a local disk under UEFI on q35 without any SeaBIOS', async () => {
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const resolveManifest = vi.fn(async () => manifest);
+    const resolveLocalDiskManifest = vi.fn(async () => localDiskManifest());
+    const provider = new V64Provider({
+      createEngine,
+      resolveManifest,
+      resolveLocalDiskManifest,
+    });
+    const instance = await provider.start(windows11, document.createElement('div'));
+    const options = createEngine.mock.calls[0]?.[0];
+
+    // A disk-boot profile never asks for an image manifest.
+    expect(resolveManifest).not.toHaveBeenCalled();
+    expect(resolveLocalDiskManifest).toHaveBeenCalledWith('windows-11-x64', undefined);
+    expect(options).toBeDefined();
+    expect(options?.firmware).toEqual({
+      type: 'uefi',
+      code: { url: '/v64/ovmf-code.fd' },
+      // The disk's own NVRAM keeps the Windows Boot Manager entry.
+      vars: { url: '/images/windows-11-x64/uefi-vars.fd' },
+    });
+    expect(options).not.toHaveProperty('bios');
+    expect(options).not.toHaveProperty('vga_bios');
+    expect(options?.acpi).toBe(true);
+    expect(options?.machine_type).toBe('q35');
+    // q35 keeps the modern layout: no QEMU-compatible legacy mode needed.
+    expect(options).not.toHaveProperty('qemu_compatible');
+    // HPET stays opt-in: this profile does not ask for it.
+    expect(options).not.toHaveProperty('hpet');
+    expect(options?.cpu_features).toBe('x86-64-v2');
+    expect(options?.hda).toEqual({
+      url: '/images/windows-11-x64/disk.img',
+      size: DISK_SIZE,
+      async: true,
+    });
+    // Memory and VRAM come from the disk manifest.
+    expect((options?.memory_size ?? 0) + (options?.extended_memory_size ?? 0)).toBe(
+      4096 * 1024 * 1024,
+    );
+    expect(options?.vram_size).toBe(32 * 1024 * 1024);
+    await instance.dispose();
+  });
+
+  it('enables the HPET only for a profile that asks for it', async () => {
+    // Windows' HAL stalls in `HalpInitializeClock` on q35/ACPI without an HPET;
+    // a QEMU comparison proved the device is what unblocks it.
+    const hpetProfile: OSDefinition = {
+      ...windows11,
+      launchProfiles: [
+        {
+          ...windows11.launchProfiles[0]!,
+          configuration: {
+            memoryMiB: 4096,
+            vgaMemoryMiB: 32,
+            extra: {
+              v64CpuCores: 4,
+              v64Machine: 'q35',
+              v64Firmware: 'uefi',
+              v64Hpet: true,
+            },
+          },
+        },
+      ],
+    };
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({
+      createEngine,
+      resolveManifest: async () => manifest,
+      resolveLocalDiskManifest: async () => localDiskManifest(),
+    });
+    const instance = await provider.start(hpetProfile, document.createElement('div'));
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options?.machine_type).toBe('q35');
+    expect(options?.acpi).toBe(true);
+    expect(options?.hpet).toBe(true);
+    await instance.dispose();
+  });
+
+  it('leaves the HPET out when neither the caller nor the profile asks for it', async () => {
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({ createEngine, resolveManifest: async () => manifest });
+    const instance = await provider.start(system, document.createElement('div'));
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options?.acpi).toBe(true);
+    expect(options).not.toHaveProperty('hpet');
+    await instance.dispose();
+  });
+
+  it('adds qemu_compatible on i440fx and falls back to the bundled OVMF vars', async () => {
+    const i440fx: OSDefinition = {
+      ...windows11,
+      launchProfiles: [
+        {
+          ...windows11.launchProfiles[0]!,
+          configuration: {
+            memoryMiB: 2048,
+            extra: { v64Firmware: 'uefi', v64Machine: 'i440fx' },
+          },
+        },
+      ],
+    };
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({
+      createEngine,
+      resolveManifest: async () => manifest,
+      resolveLocalDiskManifest: async () => localDiskManifest(false),
+    });
+    const instance = await provider.start(i440fx, document.createElement('div'));
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options?.machine_type).toBe('i440fx');
+    expect(options?.qemu_compatible).toBe(true);
+    expect(options?.cpu_features).toBeUndefined();
+    // Without a disk NVRAM the bundled OVMF vars are used.
+    expect(options?.firmware?.vars?.url).toBe('/v64/ovmf-vars.fd');
+    expect(options).not.toHaveProperty('bios');
+    await instance.dispose();
   });
 });

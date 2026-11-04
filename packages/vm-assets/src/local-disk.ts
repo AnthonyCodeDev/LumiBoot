@@ -27,7 +27,7 @@ export const localDiskEngineBinarySchema = z
   })
   .strict();
 
-export const localDiskEngineSchema = z
+export const localDiskV86EngineSchema = z
   .object({
     id: z.literal('v86'),
     wasm: localDiskEngineBinarySchema,
@@ -40,6 +40,17 @@ export const localDiskEngineSchema = z
   })
   .strict();
 
+/** v64 fetches its own build under `/v64/`; the manifest only selects it. */
+export const localDiskV64EngineSchema = z.object({ id: z.literal('v64') }).strict();
+
+export const localDiskEngineSchema = z.discriminatedUnion('id', [
+  localDiskV86EngineSchema,
+  localDiskV64EngineSchema,
+]);
+
+/** A boot asset is a plain file name: no directory, no traversal. */
+const SAFE_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
 /** `fileName` is the served name, which may differ from the source name. */
 export const localDiskFileSchema = z
   .object({
@@ -49,6 +60,24 @@ export const localDiskFileSchema = z
     size: z.number().int().positive(),
     mtimeMs: z.number().int().nonnegative(),
     sha256: z.string().regex(HEX64, '64-character hexadecimal SHA-256 expected').optional(),
+  })
+  .strict();
+
+/** OVMF NVRAM image served next to the disk (Windows Boot Manager entry). */
+export const localDiskFirmwareVarsSchema = z
+  .object({
+    fileName: z.string().regex(SAFE_FILE_NAME, 'plain file name expected'),
+    url: z.string().regex(IMAGE_FILE_URL, 'plain file URL expected under "/images/<ref>/"'),
+    size: z.number().int().positive(),
+    mtimeMs: z.number().int().nonnegative(),
+    sha256: z.string().regex(HEX64, '64-character hexadecimal SHA-256 expected').optional(),
+  })
+  .strict();
+
+export const localDiskFirmwareSchema = z
+  .object({
+    type: z.literal('uefi'),
+    vars: localDiskFirmwareVarsSchema,
   })
   .strict();
 
@@ -86,6 +115,7 @@ const localDiskCoreShape = {
   disk: localDiskFileSchema,
   engine: localDiskEngineSchema,
   boot: localDiskBootSchema,
+  firmware: localDiskFirmwareSchema.optional(),
   notes: z.array(z.string().min(1)).optional(),
 } as const;
 
@@ -110,6 +140,7 @@ function validateDiskPaths(
     ref: string;
     disk: { url: string; size: number };
     boot: { url: string; size: number };
+    firmware?: { vars: { url: string } } | undefined;
   },
   context: z.RefinementCtx,
 ): void {
@@ -134,10 +165,22 @@ function validateDiskPaths(
       message: 'boot size must match the disk size',
     });
   }
+  if (
+    manifest.firmware !== undefined &&
+    !manifest.firmware.vars.url.startsWith(`/images/${manifest.ref}/`)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['firmware', 'vars', 'url'],
+      message: 'firmware URL must belong to the manifest reference',
+    });
+  }
 }
 
 export type LocalDiskEngineBinary = z.infer<typeof localDiskEngineBinarySchema>;
+export type LocalDiskEngine = z.infer<typeof localDiskEngineSchema>;
 export type LocalDiskFile = z.infer<typeof localDiskFileSchema>;
+export type LocalDiskFirmware = z.infer<typeof localDiskFirmwareSchema>;
 export type LocalDiskPublicManifest = z.infer<typeof localDiskPublicManifestSchema>;
 export type LocalDiskManifest = z.infer<typeof localDiskManifestSchema>;
 
@@ -181,6 +224,7 @@ export function toPublicLocalDiskManifest(manifest: LocalDiskManifest): LocalDis
     disk: manifest.disk,
     engine: manifest.engine,
     boot: manifest.boot,
+    ...(manifest.firmware === undefined ? {} : { firmware: manifest.firmware }),
     ...(manifest.vgaMemoryMiB === undefined ? {} : { vgaMemoryMiB: manifest.vgaMemoryMiB }),
     ...(manifest.notes === undefined ? {} : { notes: manifest.notes }),
   };

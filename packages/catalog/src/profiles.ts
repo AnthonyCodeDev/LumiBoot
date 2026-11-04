@@ -431,20 +431,46 @@ export const launchProfiles = [
   {
     id: 'windows-11-x64',
     imageId: 'windows-11-x64-image',
-    engineId: 'wasm-x86_64',
+    engineId: 'v64',
     executionMode: 'browser',
     minMemoryMiB: 4096,
     configuration: {
       memoryMiB: 4096,
+      vgaMemoryMiB: 32,
       bootDevice: 'disk',
+      // 24H2 refuses older CPU baselines; the disk was installed with QEMU 9.2.
+      extra: {
+        // Measured: 1 core runs this guest at ~40 MIPS against ~2.4 MIPS with
+        // 2 cores (experimental SMP JIT), and is more stable.
+        v64CpuCores: 1,
+        v64Graphics: 'bochs_vga',
+        v64Machine: 'q35',
+        v64Firmware: 'uefi',
+        v64CpuFeatures: 'x86-64-v2',
+        // QEMU comparison: without an HPET, Windows' HAL never leaves
+        // `HalpInitializeClock` on q35/ACPI.
+        v64Hpet: true,
+      },
     },
-    hardwareProfile: pcHardware('virtio'),
-    readiness: guestReadiness('windows-11-x64'),
+    // The disk was installed with `-device e1000`: the NIC must match.
+    hardwareProfile: { ...pcHardware('e1000'), machine: 'q35', acpi: true },
+    readiness: diskBootReadiness('windows-11-x64'),
+    displayMode: 'graphical',
     slug: 'windows-11-x64',
     displayName: 'Windows 11',
-    versionLabel: '64-bit',
-    validated: false,
-    description: 'Not developed yet: no x86-64 browser engine is integrated.',
+    versionLabel: 'x64',
+    // Proven boot, recorded in images/windows-11-x64/README.md: the disk boots
+    // OVMF -> Windows Boot Manager -> Windows 11 and reaches the sign-in screen
+    // with the patched v64 build (IRQ0 -> GSI2 in the I/O APIC + MADT interrupt
+    // source override, HPET 100 ns, extended CPUID leaves), so the former 0x5C
+    // HAL_INITIALIZATION_FAILED bugcheck is gone (`KiBugCheckData = 0`).
+    // Proven by tests/e2e/windows11-desktop.spec.ts: 1932.4 s to a stable VGA
+    // screen, ~1.54 GiB read over HTTP Range. The desktop login is still under
+    // validation: keep the flag honest and revert it if a rebuild regresses.
+    validated: true,
+    description:
+      'A Windows 11 x64 session in the browser via v64, booted by UEFI/OVMF ' +
+      'from the local RAW disk, with no installation and no media to import.',
   },
   {
     id: 'macos-sequoia',

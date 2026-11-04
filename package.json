@@ -39,6 +39,8 @@
     "assets:windows8:check": "node scripts/prepare-windows8-asset.mjs --check",
     "assets:windows10:prepare": "node scripts/prepare-windows10-asset.mjs",
     "assets:windows10:check": "node scripts/prepare-windows10-asset.mjs --check",
+    "assets:windows11:prepare": "node scripts/prepare-windows11-asset.mjs",
+    "assets:windows11:check": "node scripts/prepare-windows11-asset.mjs --check",
     "config:nginx": "node scripts/render-nginx-config.mjs",
     "config:nginx:check": "node scripts/render-nginx-config.mjs --check",
     "proxy:dev": "node scripts/run-network-proxy.mjs",

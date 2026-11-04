@@ -28,6 +28,7 @@ LumiBoot is a browser-based operating system emulation platform designed to run 
 | Windows 7           | Professional SP1 / Lite  | 1536 / 1024 MiB         | installed 32-bit BIOS/MBR RAW disk       | `pnpm assets:windows7:prepare`     |
 | Windows 8.1 Pro x86 | 32-bit                   | 2048 MiB                | installed 32-bit BIOS/MBR RAW disk       | `pnpm assets:windows8:prepare`     |
 | Windows 10 x86      | 32-bit                   | 2048 MiB                | installed 32-bit BIOS/MBR RAW disk       | `pnpm assets:windows10:prepare`    |
+| Windows 11 x64      | 64-bit                   | 4096 MiB                | installed 64-bit UEFI/GPT RAW disk + OVMF store | `pnpm assets:windows11:prepare`    |
 | Custom image        | ISO / IMG / RAW          | 512 MiB                 | `.iso`, `.img` or `.raw` you own         | Import it in the app               |
 
 No disk, ISO or license key ships with the repository: prepare or import your own media before starting a session.
@@ -41,6 +42,7 @@ pnpm assets:v64:alpine:xfce
 pnpm assets:windows7:prepare --source images/windows-7-pro-sp1-x86/disk.img
 pnpm assets:windows8:prepare --source images/windows-8-1-x86/disk.img
 pnpm assets:windows10:prepare --source images/windows-10-x86/disk.img
+pnpm assets:windows11:prepare --source images/windows-11-x64/disk.img
 ```
 
 Disks are read-only: guest writes stay in memory and are lost on stop.
@@ -79,6 +81,7 @@ pnpm assets:check          # v86 binary integrity
 pnpm assets:windows7:prepare|check
 pnpm assets:windows8:prepare|check
 pnpm assets:windows10:prepare|check
+pnpm assets:windows11:prepare|check
 pnpm config:nginx          # render infra/nginx/*.conf from .env
 pnpm config:nginx:check    # exit 1 when the rendered nginx files drifted
 pnpm proxy:dev             # run the Go network proxy with .env applied
@@ -104,6 +107,27 @@ The real boot tests need several GiB of media and stay opt-in: `VM_E2E_ASSETS=1 
 | `infra`                 | nginx, Docker dev, WISP relay                                                   |
 
 UI → `VMRegistry` → dynamic import of the selected provider → manifest/media → emulator. Stop calls `stop()` then `dispose()`. Design notes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/v64.md`](docs/v64.md).
+
+## Emulation Showcase
+Experience real `operating systems` running seamlessly in your browser, powered by `LumiBoot`.
+
+<h3>Debian</h3>
+<img src="images/debian-12-i386/preview.png" alt="Debian Preview" width="100%" />
+<h3>Ubuntu</h3>
+<img src="images/ubuntu-18-i386/preview.png" alt="Ubuntu Preview" width="100%" />
+<h3>Fedora</h3>
+<img src="images/fedora-44-x86-64-xfce/preview.png" alt="Fedora Preview" width="100%" />
+<h3>Alpine</h3>
+<img src="images/alpine-3-24-x86-64/preview.png" alt="Alpine Preview" width="100%" />
+<h3>Windows 7</h3>
+<img src="images/windows-7-pro-sp1-x86/preview.png" alt="Windows 7 Preview" width="100%" />
+<h3>Windows 8.1</h3>
+<img src="images/windows-8-1-x86/preview.png" alt="Windows 8.1 Preview" width="100%" />
+<h3>Windows 10</h3>
+<img src="images/windows-10-x86/preview.png" alt="Windows 10 Preview" width="100%" />
+<h3>Windows 11</h3>
+<img src="images/windows-11-x64/preview.png" alt="Windows 11 Preview" width="100%" />
+
 
 ## Troubleshooting
 

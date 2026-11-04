@@ -261,10 +261,18 @@ export const images = [
     id: 'windows-11-x64-image',
     familyId: 'windows',
     architecture: 'x86_64',
-    requirements: ['x86-64 browser engine (not integrated yet)', 'Windows license'],
+    imageRef: 'windows-11-x64',
+    requirements: [
+      'Modern browser with WebAssembly (v64, x86-64)',
+      'Local 64 GiB RAW disk served over HTTP Range (images/windows-11-x64/disk.img)',
+      '4096 MiB guest memory',
+      'UEFI boot through OVMF (GPT disk, ESP)',
+    ],
     integrationNote:
-      'Not developed yet: no x86-64 browser engine is integrated and no image is ' +
-      'bundled or imported. Listed for information only, like macOS.',
+      'Local UEFI/GPT RAW disk served in place and booted by v64 through OVMF on ' +
+      'Q35/ICH9 AHCI, with the OVMF variable store supplied by the operator ' +
+      '(images/windows-11-x64/uefi-vars.fd). Guest writes stay in memory for the ' +
+      'duration of the session. No ISO, TPM or Secure Boot media is distributed.',
   },
   {
     id: 'macos-sequoia-image',

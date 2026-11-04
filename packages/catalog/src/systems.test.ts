@@ -29,13 +29,13 @@ describe('getDeclaredReadiness — declared / runtime separation', () => {
     expect(custom.imageRef).toBeUndefined();
   });
 
-  it('Windows 11 is not developed: "planned", with no user media to import', () => {
+  it('Windows 11 (local UEFI disk) is declared ready, media "local-disk"', () => {
     const windows = getSystemById('windows-11-x64')!;
     expect(windows.mediaStrategy).toBe('bundled');
-    expect(windows.imageRef).toBeUndefined();
+    expect(windows.imageRef).toBe('windows-11-x64');
     expect(getDeclaredReadiness(windows)).toEqual({
-      availability: 'planned',
-      mediaSource: 'bundled-image',
+      availability: 'ready',
+      mediaSource: 'local-disk',
     });
   });
 

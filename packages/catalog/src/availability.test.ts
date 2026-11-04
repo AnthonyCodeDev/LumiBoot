@@ -105,11 +105,15 @@ describe('catalog: consistent effective availability', () => {
     expect(getAggregatedAvailability([facts])).toBe('planned');
   });
 
-  it('does not make a system with a non-integrated engine available', () => {
+  it('makes Windows 11 x64 available: local UEFI disk + integrated v64 engine + proven boot', () => {
     const windows = getSystemById('windows-11-x64');
     const profile = windows?.launchProfiles[0];
-    expect(profile && isEngineIntegrated(profile.engineId)).toBe(false);
-    expect(windows?.availability).not.toBe('ready');
+    const definition = launchProfiles.find((candidate) => candidate.id === 'windows-11-x64');
+    // v64 is integrated, the local disk is referenced and the boot is proven.
+    expect(profile && isEngineIntegrated(profile.engineId)).toBe(true);
+    expect(windows?.imageRef).toBe('windows-11-x64');
+    expect(definition?.validated).toBe(true);
+    expect(windows?.availability).toBe('ready');
   });
 
   it('does not make a system without a referenced image available', () => {

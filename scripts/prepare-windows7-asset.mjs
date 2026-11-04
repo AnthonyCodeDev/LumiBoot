@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Builds the manifest of a local RAW disk so v86 can stream it over HTTP Range.
+// Builds the manifest of a local RAW disk so v86 (or v64) can stream it over HTTP Range.
 
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
@@ -7,7 +7,7 @@ import { access, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/pr
 import { constants as fsConstants } from 'node:fs';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -27,6 +27,8 @@ const DEFAULTS = {
   license: 'Local RAW disk from the codebase (not distributed)',
   provenance: 'images/windows-7-pro-sp1-x86/disk.img (local disk served in place)',
   servedName: 'disk.img',
+  // No engine option keeps the historical v86 manifest.
+  engine: 'v86',
   notes: [
     'Operator-provided 32 GiB RAW disk, served in place (images/windows-7-pro-sp1-x86/disk.img): never copied, git-ignored, never committed nor distributed.',
     'Booted by the BIOS under v86 over HTTP Range (hda.async = true), never as a cdrom.',
@@ -34,6 +36,7 @@ const DEFAULTS = {
 };
 
 const ARCHITECTURES = new Set(['i386', 'x86', 'x86_64', 'arm', 'arm64', 'powerpc', 'm68k']);
+const ENGINES = new Set(['v86', 'v64']);
 
 function parseArgs(argv) {
   const options = { ...DEFAULTS };
@@ -96,6 +99,12 @@ function parseArgs(argv) {
       case '--format':
         options.format = value();
         break;
+      case '--engine':
+        options.engine = value();
+        break;
+      case '--firmware-vars':
+        options.firmwareVars = value();
+        break;
       case '--note':
         (notes ??= []).push(value());
         break;
@@ -150,6 +159,14 @@ function usage() {
   --provenance <text>     Origin of the media
   --served-name <name>    Name served under /images/<ref>/ (default disk.img)
   --format <raw|iso>      Format (default: inferred from the extension)
+  --engine <v86|v64>      Browser engine recorded by the manifest (default v86).
+                          v64 is only valid for an x86_64 disk and writes
+                          "engine": { "id": "v64" } instead of the v86 lock block.
+  --firmware-vars <path>  UEFI variable store served next to the disk (OVMF NVRAM,
+                          e.g. images/<ref>/uefi-vars.fd). Records
+                          "firmware": { "type": "uefi", "vars": { … } } with the
+                          file name, URL, size, mtime and SHA-256. Requires
+                          --engine v64: v86 has no UEFI firmware.
   --note <text>           Manifest note (repeatable; replaces the default notes)
   --out <dir>             Output directory (default images/<ref>)
   --copy-to <path>        Optional verified copy (never the source, never public/)
@@ -157,7 +174,9 @@ function usage() {
   --resume                Reuse the SHA-256 of an existing manifest when size+mtime match
   --check                 Verify the existing manifest without writing anything
                           (follows "source.path", relative to the repository root;
-                          requires --source for an external disk)
+                          requires --source for an external disk; also verifies
+                          "firmware.vars" when the manifest carries one, looking the
+                          store up next to the manifest, then next to the disk)
   --json                  Print the manifest on stdout (logs on stderr)
   --force                 Allow overwriting the existing manifest
   -h, --help              Show this help
@@ -270,6 +289,31 @@ async function fileExists(path) {
   }
 }
 
+/**
+ * UEFI variable store (OVMF NVRAM) served next to the disk. It is a few hundred
+ * KiB, so its SHA-256 is always computed: it is the only integrity proof v64 can
+ * use for the boot entry.
+ */
+async function readFirmwareVars(varsPath, ref) {
+  if (!(await fileExists(varsPath))) {
+    throw new Error(`UEFI variable store not found or unreadable: ${varsPath}`);
+  }
+  const info = await stat(varsPath);
+  if (!info.isFile()) throw new Error(`The UEFI variable store is not a file: ${varsPath}`);
+  if (!Number.isInteger(info.size) || info.size <= 0) {
+    throw new Error(`Invalid UEFI variable store size: ${info.size}`);
+  }
+  const { sha256 } = await sha256File(varsPath);
+  const fileName = basename(varsPath);
+  return {
+    fileName,
+    url: `/images/${ref}/${fileName}`,
+    size: info.size,
+    mtimeMs: Math.trunc(info.mtimeMs),
+    sha256,
+  };
+}
+
 async function readExistingManifest(outDir) {
   const manifestPath = join(outDir, 'manifest.json');
   if (!(await fileExists(manifestPath))) return null;
@@ -289,6 +333,19 @@ async function main() {
 
   if (!ARCHITECTURES.has(options.architecture)) {
     throw new Error(`Invalid architecture "${options.architecture}".`);
+  }
+  if (!ENGINES.has(options.engine)) {
+    throw new Error(`Invalid engine "${options.engine}" (expected: v86 or v64).`);
+  }
+  if (options.engine === 'v64' && options.architecture !== 'x86_64') {
+    throw new Error(
+      `Refused: --engine v64 only serves x86_64 disks, got architecture "${options.architecture}".`,
+    );
+  }
+  if (options.firmwareVars !== undefined && options.engine !== 'v64') {
+    throw new Error(
+      'Refused: --firmware-vars requires --engine v64 (v86 boots through the BIOS, not OVMF).',
+    );
   }
   if (!Number.isInteger(options.memoryMiB) || options.memoryMiB <= 0) {
     throw new Error('--memory-mib must be a positive integer.');
@@ -356,6 +413,46 @@ async function main() {
       log(`  sha256=${result.sha256}`);
     } else if (existing.disk?.sha256 === undefined) {
       log('ℹ Manifest without SHA-256 (documented by size + mtime).');
+    }
+
+    // UEFI variable store: verified when the manifest declares one.
+    const recordedVars = existing.firmware?.vars;
+    if (recordedVars) {
+      const varsFileName = recordedVars.fileName ?? basename(String(recordedVars.url ?? ''));
+      // No path is recorded: the store is looked up next to the manifest, then
+      // next to the disk, unless the operator points at it explicitly.
+      const candidates =
+        options.firmwareVars !== undefined
+          ? [resolve(options.firmwareVars)]
+          : [join(outputDir, varsFileName), join(dirname(sourcePath), varsFileName)];
+      let varsPath;
+      for (const candidate of candidates) {
+        if (await fileExists(candidate)) {
+          varsPath = candidate;
+          break;
+        }
+      }
+      if (varsPath === undefined) {
+        problems.push(`firmware vars: missing file (looked in ${candidates.join(', ')})`);
+      } else {
+        const varsInfo = await stat(varsPath);
+        if (recordedVars.size !== varsInfo.size) {
+          problems.push(`firmware vars size: ${varsInfo.size} != manifest ${recordedVars.size}`);
+        }
+        if (Math.trunc(recordedVars.mtimeMs ?? -1) !== Math.trunc(varsInfo.mtimeMs)) {
+          problems.push(
+            `firmware vars mtime: ${Math.trunc(varsInfo.mtimeMs)} != manifest ${Math.trunc(recordedVars.mtimeMs ?? -1)}`,
+          );
+        }
+        if (recordedVars.sha256) {
+          const { sha256: varsSha256 } = await sha256File(varsPath);
+          if (varsSha256 !== recordedVars.sha256) {
+            problems.push(`firmware vars SHA-256: ${varsSha256} != manifest ${recordedVars.sha256}`);
+          } else {
+            log(`  firmware vars sha256=${varsSha256}`);
+          }
+        }
+      }
     }
     if (problems.length > 0) {
       for (const problem of problems) log(`✗ ${problem}`);
@@ -429,7 +526,16 @@ async function main() {
     hashSource = destination;
   }
 
-  const lock = JSON.parse(await readFile(lockPath, 'utf8'));
+  // v64 records a minimal engine and needs no v86 lock; v86 keeps its historical block.
+  const engine =
+    options.engine === 'v64'
+      ? { id: 'v64' }
+      : engineFromLock(JSON.parse(await readFile(lockPath, 'utf8')));
+  // UEFI is only meaningful with v64; the store is read once, hashed in full.
+  const firmware =
+    options.firmwareVars === undefined
+      ? undefined
+      : { type: 'uefi', vars: await readFirmwareVars(resolve(options.firmwareVars), options.ref) };
   const diskUrl = `/images/${options.ref}/${options.servedName}`;
   const diskMtimeMs = Math.trunc(sourceInfo.mtimeMs);
 
@@ -458,7 +564,8 @@ async function main() {
       mtimeMs: diskMtimeMs,
       ...(sha256 === undefined ? {} : { sha256 }),
     },
-    engine: engineFromLock(lock),
+    engine,
+    ...(firmware === undefined ? {} : { firmware }),
     boot: { mode: 'disk-boot', url: diskUrl, async: true, size: sourceInfo.size },
     notes: options.notes,
   };
@@ -487,6 +594,7 @@ async function main() {
   if (sha256) log(`  sha256=${sha256}`);
   log(`  size=${sourceInfo.size} bytes (${(sourceInfo.size / GIB).toFixed(3)} GiB)`);
   log(`  disk served under ${diskUrl}`);
+  if (firmware !== undefined) log(`  engine=${engine.id}, firmware vars under ${firmware.vars.url}`);
 
   if (flags.json) process.stdout.write(`${JSON.stringify(manifest, null, 2)}\n`);
   return 0;
