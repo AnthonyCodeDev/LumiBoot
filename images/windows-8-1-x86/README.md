@@ -84,7 +84,7 @@ The `--` separator is optional and tolerated: `pnpm assets:windows8:prepare -- -
 
 The generator opens the source read-only, streams the SHA-256 and writes only `images/windows-8-1-x86/manifest.json` + `provenance.txt`. `WINDOWS8_IMG` supplies the default source. Shared tooling: [`windows-7-pro-sp1-x86/README.md`](../windows-7-pro-sp1-x86/README.md).
 
-## Guest RAM: 2048 MiB minimum
+## Guest RAM: 2 GB minimum
 
 The `windows-8-1-x86` profile declares `minMemoryMiB: 2048` and `configuration.memoryMiB: 2048` in `packages/catalog/src/profiles.ts`. v86 rounds memory to a multiple of 128 KiB; 2048 MiB passes as is. Below that, the guest boots slower or refuses to boot.
 

@@ -1,13 +1,14 @@
 # Alpine XFCE smoke test
 
-Run after every rebuild of `images/alpine-3-24-x86-64/build.sh` (`FLAVOR=xfce`)
+Run after every rebuild via `sudo ./images/alpine-3-24-x86-64/build.sh` (the only
+flavor is `xfce`, so no `FLAVOR` is needed)
 and its publication with `pnpm assets:v64:alpine:xfce`. The profile is
 `validated: true` since the 2026-10-30 run recorded at the bottom; revert the
 flag as soon as a rebuild stops matching that run.
 
 ## Boot
 
-- [ ] The profile starts on the v64 engine with 2048 MiB and a `cdrom` boot
+- [ ] The profile starts on the v64 engine with 2 GB and a `cdrom` boot
       device, without a JavaScript timeout masquerading as a boot.
 - [ ] The serial console shows `lumiboot-init: ISO mounted from /dev/sr0`,
       `switching to the LumiBoot rootfs`, then OpenRC output.

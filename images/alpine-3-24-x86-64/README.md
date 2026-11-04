@@ -4,8 +4,8 @@ Two flavors, two pipelines:
 
 | Flavor | Reference | Session | RAM | Media | Marker |
 |---|---|---|---:|---|---|
-| CLI | `alpine-3-24-x86-64` | `lumiboot` autologin on tty1 and ttyS0, text console | 1024 MiB | official 3.24.0 `virt` ISO, unmodified | `lumiboot@lumiboot` |
-| XFCE (default card variant) | `alpine-3-24-x86-64-xfce` | Xorg + XFCE on tty1, text shell on ttyS0 | 2048 MiB | official 3.24.3 ISO rebuilt with a preinstalled squashfs rootfs | `LUMIBOOT_DESKTOP_READY` |
+| CLI | `alpine-3-24-x86-64` | `lumiboot` autologin on tty1 and ttyS0, text console | 1 GB | official 3.24.0 `virt` ISO, unmodified | `lumiboot@lumiboot` |
+| XFCE (default card variant) | `alpine-3-24-x86-64-xfce` | Xorg + XFCE on tty1, text shell on ttyS0 | 2 GB | official 3.24.3 ISO rebuilt with a preinstalled squashfs rootfs | `LUMIBOOT_DESKTOP_READY` |
 
 ## CLI: official ISO + apkovl overlay
 
@@ -25,7 +25,7 @@ Runtime revision: `speedyHKjournalist/v64@74d2bafcc7d568e2ab4374804e176f1a8a350f
 ## XFCE: `build.sh`, squashfs rootfs and a custom init
 
 ```bash
-FLAVOR=xfce ./images/alpine-3-24-x86-64/build.sh
+sudo ./images/alpine-3-24-x86-64/build.sh
 pnpm assets:v64:alpine:xfce
 ```
 
@@ -123,7 +123,7 @@ filesystem, then in Chromium on the Playwright port 5200:
 
 | Step | Result |
 |---|---|
-| Build (`FLAVOR=xfce ./images/alpine-3-24-x86-64/build.sh`) | 1 min 44.6 s, 373 packages |
+| Build (`sudo ./images/alpine-3-24-x86-64/build.sh`) | 1 min 44.6 s, 373 packages |
 | Rootfs squashfs | 249 782 272 bytes (238.2 MiB), from an 817 MB rootfs directory |
 | ISO | 305 135 616 bytes (291.0 MiB), sha256 `c2a6cba9968de2f9447569d69794310e93ac5b0e8dabf76a7c4d710aabf097ee` |
 | Kernel / initramfs | 12 641 280 B / 9 866 400 B |

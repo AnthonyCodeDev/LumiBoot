@@ -4,9 +4,9 @@ One script builds three Bookworm variants; all three carry `validated: true` in 
 
 | Flavor | Reference | RAM | Disk | Readiness |
 |---|---|---:|---:|---|
-| `minimal` | `debian-12-i386` | 512 MiB | 3 GiB | `LUMIBOOT_GUEST_READY` |
-| `desktop` | `debian-12-i386-desktop` | 1024 MiB | 3 GiB | `LUMIBOOT_DESKTOP_READY` |
-| `xfce` | `debian-12-i386-xfce` | 1024 MiB | 4 GiB | `LUMIBOOT_DESKTOP_READY` |
+| `minimal` | `debian-12-i386` | 512 MB | 3 GB | `LUMIBOOT_GUEST_READY` |
+| `desktop` | `debian-12-i386-desktop` | 1 GB | 3 GB | `LUMIBOOT_DESKTOP_READY` |
+| `xfce` | `debian-12-i386-xfce` | 1 GB | 4 GB | `LUMIBOOT_DESKTOP_READY` |
 
 ## Build
 
@@ -40,8 +40,8 @@ After a rebuild: check the manifest SHA-256 values, then rerun the E2E suite wit
 
 | Element | Value |
 |---|---|
-| RAM / VGA | 1024 MiB / 16 MiB |
-| Disk | ext4 RAW, 3 GiB |
+| RAM / VGA | 1 GB / 16 MB |
+| Disk | ext4 RAW, 3 GB |
 | Session | `lumiboot` autologin → `startx` → Openbox + xterm |
 | Video | `vga=0x318`, `fbdev` on `/dev/fb0`, with `modesetting` as fallback |
 | Readiness | `LUMIBOOT_DESKTOP_READY:debian-12-i386-desktop` |
@@ -75,8 +75,8 @@ VM_E2E_ASSETS=1 pnpm test:e2e --grep "Desktop"
 
 | Element | Value |
 |---|---|
-| RAM / VGA | 1024 MiB / 16 MiB |
-| Disk | ext4 RAW, 4 GiB |
+| RAM / VGA | 1 GB / 16 MB |
+| Disk | ext4 RAW, 4 GB |
 | Session | `lumiboot` autologin → `startx` → `startxfce4` |
 | Video | X configuration shared with Openbox, `vga=0x318` |
 | Readiness | `LUMIBOOT_DESKTOP_READY:debian-12-i386-xfce` |

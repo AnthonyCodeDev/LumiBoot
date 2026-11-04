@@ -1,23 +1,23 @@
 # Systems
 
-| Reference                | Variant                        | Guest RAM | Media               | Readiness                |
-| ------------------------ | ------------------------------ | --------- | ------------------- | ------------------------ |
-| `debian-12-i386`         | Debian 12 CLI                  | 512 MiB   | built rootfs        | `LUMIBOOT_GUEST_READY`   |
-| `debian-12-i386-desktop` | Debian 12 X11/Openbox          | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
-| `debian-12-i386-xfce`    | Debian 12 XFCE                 | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
-| `ubuntu-18-i386`         | Ubuntu 18.04 CLI               | 512 MiB   | built rootfs        | `LUMIBOOT_GUEST_READY`   |
-| `ubuntu-18-i386-desktop` | Ubuntu 18.04 X11/Openbox       | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
-| `ubuntu-18-i386-xfce`    | Ubuntu 18.04 XFCE              | 1024 MiB  | built rootfs        | `LUMIBOOT_DESKTOP_READY` |
-| `fedora-44-x86-64`       | Fedora 44 x86-64 CLI           | 1024 MiB  | built bootable ISO  | `LUMIBOOT_GUEST_READY`   |
-| `fedora-44-x86-64-xfce`  | Fedora 44 x86-64 XFCE          | 2048 MiB  | built bootable ISO  | `LUMIBOOT_DESKTOP_READY` |
-| `alpine-3-24-x86-64`     | Alpine 3.24 x86-64 CLI (v64 JIT) | 1024 MiB  | official virt ISO   | `lumiboot@lumiboot`      |
-| `alpine-3-24-x86-64-xfce` | Alpine 3.24 x86-64 XFCE | 2048 MiB  | rebuilt virt ISO + squashfs rootfs | `LUMIBOOT_DESKTOP_READY` |
-| `windows-7-pro-sp1-x86`  | Windows 7 Professional SP1 x86 | 1536 MiB  | operator RAW disk   | `disk-boot`              |
-| `windows-7-x86`          | Windows 7 Lite x86             | 1024 MiB  | operator RAW disk   | `disk-boot`              |
-| `windows-8-1-x86`        | Windows 8.1 Pro x86 32-bit     | 2048 MiB  | operator RAW disk   | `disk-boot`              |
-| `windows-10-x86`         | Windows 10 x86 32-bit          | 2048 MiB  | operator RAW disk   | `disk-boot`              |
-| `windows-11-x64`         | Windows 11 24H2 x64 (UEFI)     | 4096 MiB  | operator RAW disk   | `disk-boot`              |
-| `custom-image`           | Custom image (ISO / IMG / RAW) | 512 MiB   | user-imported media | `LUMIBOOT_GUEST_READY`   |
+| Reference                 | Variant                          | Guest RAM | Media                              | Readiness                |
+| ------------------------- | -------------------------------- | --------- | ---------------------------------- | ------------------------ |
+| `debian-12-i386`          | Debian 12 CLI                    | 512 MB    | built rootfs                       | `LUMIBOOT_GUEST_READY`   |
+| `debian-12-i386-desktop`  | Debian 12 X11/Openbox            | 1 GB      | built rootfs                       | `LUMIBOOT_DESKTOP_READY` |
+| `debian-12-i386-xfce`     | Debian 12 XFCE                   | 1 GB      | built rootfs                       | `LUMIBOOT_DESKTOP_READY` |
+| `ubuntu-18-i386`          | Ubuntu 18.04 CLI                 | 512 MB    | built rootfs                       | `LUMIBOOT_GUEST_READY`   |
+| `ubuntu-18-i386-desktop`  | Ubuntu 18.04 X11/Openbox         | 1 GB      | built rootfs                       | `LUMIBOOT_DESKTOP_READY` |
+| `ubuntu-18-i386-xfce`     | Ubuntu 18.04 XFCE                | 1 GB      | built rootfs                       | `LUMIBOOT_DESKTOP_READY` |
+| `fedora-44-x86-64`        | Fedora 44 x86-64 CLI             | 1 GB      | built bootable ISO                 | `LUMIBOOT_GUEST_READY`   |
+| `fedora-44-x86-64-xfce`   | Fedora 44 x86-64 XFCE            | 2 GB      | built bootable ISO                 | `LUMIBOOT_DESKTOP_READY` |
+| `alpine-3-24-x86-64`      | Alpine 3.24 x86-64 CLI (v64 JIT) | 1 GB      | official virt ISO                  | `lumiboot@lumiboot`      |
+| `alpine-3-24-x86-64-xfce` | Alpine 3.24 x86-64 XFCE          | 2 GB      | rebuilt virt ISO + squashfs rootfs | `LUMIBOOT_DESKTOP_READY` |
+| `windows-7-pro-sp1-x86`   | Windows 7 Professional SP1 x86   | 1.5 GB    | operator RAW disk                  | `disk-boot`              |
+| `windows-7-x86`           | Windows 7 Lite x86               | 1 GB      | operator RAW disk                  | `disk-boot`              |
+| `windows-8-1-x86`         | Windows 8.1 Pro x86 32-bit       | 2 GB      | operator RAW disk                  | `disk-boot`              |
+| `windows-10-x86`          | Windows 10 x86 32-bit            | 2 GB      | operator RAW disk                  | `disk-boot`              |
+| `windows-11-x64`          | Windows 11 24H2 x64 (UEFI)       | 4 GB      | operator RAW disk                  | `disk-boot`              |
+| `custom-image`            | Custom image (ISO / IMG / RAW)   | 512 MB    | user-imported media                | `LUMIBOOT_GUEST_READY`   |
 
 No disk, ISO or license key is shipped by this repository. This page is the index and the commands; details live next to each image under `images/<ref>/`.
 
@@ -56,9 +56,9 @@ sudo FLAVOR=xfce ./images/ubuntu-18-i386/build.sh     # XFCE
 
 | Flavor | Reference | RAM | Disk |
 |---|---|---:|---:|
-| CLI | `ubuntu-18-i386` | 512 MiB | 3 GiB |
-| X11 + Openbox | `ubuntu-18-i386-desktop` | 1024 MiB | 3 GiB |
-| XFCE | `ubuntu-18-i386-xfce` | 1024 MiB | 4 GiB |
+| CLI | `ubuntu-18-i386` | 512 MB | 3 GB |
+| X11 + Openbox | `ubuntu-18-i386-desktop` | 1 GB | 3 GB |
+| XFCE | `ubuntu-18-i386-xfce` | 1 GB | 4 GB |
 
 Outputs land in `build/`, `build-desktop/` and `build-xfce/`: `rootfs.img`, `vmlinuz-686`, `initrd.img`, `manifest.json`, `packages.tsv` and `provenance.txt`. Copy the first four into `apps/web/public/images/<ref>/`, a Git-ignored directory. v86 boots `bzimage + initrd + hda`, with no installer; the cmdline is `console=tty0 console=ttyS0,115200 root=/dev/sda rw rootwait rootdelay=5`, plus `vga=0x318` on the graphical variants, and all three manifests carry it as `boot.cmdline`.
 
@@ -90,8 +90,8 @@ sudo FLAVOR=xfce ./images/fedora-44-x86-64/build.sh     # Xorg + XFCE
 
 | Flavor | Reference | RAM | Disk | Marker |
 |---|---|---:|---:|---|
-| CLI | `fedora-44-x86-64` | 1024 MiB | 2 GiB | `LUMIBOOT_GUEST_READY` |
-| XFCE | `fedora-44-x86-64-xfce` | 2048 MiB | 4 GiB | `LUMIBOOT_DESKTOP_READY` |
+| CLI | `fedora-44-x86-64` | 1 GB | 2 GB | `LUMIBOOT_GUEST_READY` |
+| XFCE | `fedora-44-x86-64-xfce` | 2 GB | 4 GB | `LUMIBOOT_DESKTOP_READY` |
 
 Outputs land in `build/` and `build-xfce/`: `vmlinuz`, `initrd.img`, `<ref>.iso`,
 `manifest.json`, `packages.tsv`, `provenance.txt`. Copy the first four into
@@ -159,8 +159,8 @@ Two flavors with two different pipelines:
 
 | Flavor | Reference | RAM | Media | Marker |
 |---|---|---:|---|---|
-| CLI | `alpine-3-24-x86-64` | 1024 MiB | official 3.24.0 `virt` ISO, kernel + initramfs | `lumiboot@lumiboot` |
-| XFCE | `alpine-3-24-x86-64-xfce` | 2048 MiB | official 3.24.3 ISO rebuilt with a preinstalled squashfs rootfs | `LUMIBOOT_DESKTOP_READY` |
+| CLI | `alpine-3-24-x86-64` | 1 GB | official 3.24.0 `virt` ISO, kernel + initramfs | `lumiboot@lumiboot` |
+| XFCE | `alpine-3-24-x86-64-xfce` | 2 GB | official 3.24.3 ISO rebuilt with a preinstalled squashfs rootfs | `LUMIBOOT_DESKTOP_READY` |
 
 The CLI flavor is only published: `pnpm assets:v64:alpine` downloads the
 official unmodified ISO, verifies its pinned SHA-256, extracts the kernel and the
@@ -177,7 +177,8 @@ squashfs, loads overlayfs from the modules already inside that rootfs, mounts a
 tmpfs for the overlay, moves `/proc /sys /dev` and `switch_root`s to OpenRC.
 Guest writes stay in RAM and are lost on stop, like every other LumiBoot image.
 
-Prerequisites: Linux or WSL2 on an x86_64 host, **no root at all**, `curl`,
+Prerequisites: Linux or WSL2 on an x86_64 host, **no root needed** (`sudo` is
+accepted and dropped), `curl`,
 `xorriso`, `squashfs-tools` (`mksquashfs`, `unsquashfs`), `cpio`, `gzip`, `tar`
 and `sha256sum`. The work directory (default
 `${XDG_CACHE_HOME:-$HOME/.cache}/lumiboot/alpine-3-24-x86-64`, overridable with
@@ -185,7 +186,7 @@ and `sha256sum`. The work directory (default
 drops file modes and the setuid bit of `usr/libexec/Xorg.wrap`.
 
 ```bash
-FLAVOR=xfce ./images/alpine-3-24-x86-64/build.sh
+sudo ./images/alpine-3-24-x86-64/build.sh
 pnpm assets:v64:alpine:xfce
 ```
 
@@ -223,7 +224,7 @@ pnpm assets:windows7:prepare --source images/windows-7-pro-sp1-x86/disk.img --re
 pnpm assets:windows7:check
 ```
 
-The Lite variant reads `images/windows-7-x86/disk.img` with 1024 MiB of guest RAM. Register it with `--ref windows-7-x86 --memory-mib 1024`.
+The Lite variant reads `images/windows-7-x86/disk.img` with 1 GB of guest RAM. Register it with `--ref windows-7-x86 --memory-mib 1024`.
 
 Guest networking needs an NE2000 driver installed inside the disk, offline under QEMU. Disk preparation, driver install, readiness, HTTP Range transport and network modes: [`images/windows-7-pro-sp1-x86/README.md`](../images/windows-7-pro-sp1-x86/README.md). The Lite variant has its own page: [`images/windows-7-x86/README.md`](../images/windows-7-x86/README.md).
 
@@ -237,7 +238,7 @@ pnpm assets:windows8:prepare --source images/windows-8-1-x86/disk.img
 pnpm assets:windows8:check
 ```
 
-2048 MiB of guest RAM minimum. The profile declares `e1000` + ACPI, matching a disk installed with `-nic user,model=e1000`. QEMU install, RAW conversion, HTTP Range and limitations: [`images/windows-8-1-x86/README.md`](../images/windows-8-1-x86/README.md).
+2 GB of guest RAM minimum. The profile declares `e1000` + ACPI, matching a disk installed with `-nic user,model=e1000`. QEMU install, RAW conversion, HTTP Range and limitations: [`images/windows-8-1-x86/README.md`](../images/windows-8-1-x86/README.md).
 
 The profile declares `validated: true` because the session boots from the operator's installed RAW disk: availability is `ready` and the card is launchable. No Windows 8.1 E2E spec is versioned under `tests/e2e`, so this is an explicit operator decision rather than a recorded test proof. See [`images/windows-8-1-x86/README.md`](../images/windows-8-1-x86/README.md#validation-status) for the honest validation checklist.
 
@@ -251,7 +252,7 @@ pnpm assets:windows10:prepare --source images/windows-10-x86/disk.img
 pnpm assets:windows10:check
 ```
 
-2048 MiB of guest RAM minimum. The virtio-net driver must already be in the disk. QEMU install, VirtualBox conversion and validation: [`images/windows-10-x86/README.md`](../images/windows-10-x86/README.md).
+2 GB of guest RAM minimum. The virtio-net driver must already be in the disk. QEMU install, VirtualBox conversion and validation: [`images/windows-10-x86/README.md`](../images/windows-10-x86/README.md).
 
 ## Windows 11 x64
 
@@ -263,7 +264,7 @@ pnpm assets:windows11:prepare --source images/windows-11-x64/disk.img --firmware
 pnpm assets:windows11:check
 ```
 
-4096 MiB of guest RAM, 32 MiB of VGA memory. The profile boots the disk by UEFI through OVMF on the integrated v64 engine (`engine.id: v64`), with `v64Machine: q35`, `v64Firmware: uefi`, `v64CpuFeatures: x86-64-v2` and an `e1000` NIC, matching a `-machine q35` installation on Q35/ICH9 AHCI. It is `validated: true`: with the patched v64 build (IRQ0 → GSI2, HPET 100 ns, extended CPUID) the guest reaches the Windows 11 sign-in screen with `KiBugCheckData = 0`, and the desktop login is still under validation. QEMU procedure, reference measurements, HTTP Range checks and limitations: [`images/windows-11-x64/README.md`](../images/windows-11-x64/README.md).
+4 GB of guest RAM, 32 MB of VGA memory. The profile boots the disk by UEFI through OVMF on the integrated v64 engine (`engine.id: v64`), with `v64Machine: q35`, `v64Firmware: uefi`, `v64CpuFeatures: x86-64-v2` and an `e1000` NIC, matching a `-machine q35` installation on Q35/ICH9 AHCI. It is `validated: true`: with the patched v64 build (IRQ0 → GSI2, HPET 100 ns, extended CPUID) the guest reaches the Windows 11 sign-in screen with `KiBugCheckData = 0`, and the desktop login is still under validation. QEMU procedure, reference measurements, HTTP Range checks and limitations: [`images/windows-11-x64/README.md`](../images/windows-11-x64/README.md).
 
 ## Custom image
 
@@ -271,7 +272,7 @@ Generic entry point: boot any 32-bit disk media you own with the integrated v86 
 
 - Accepted formats: `.iso`, `.img`, `.raw`. A `.img`/`.raw` boots as a hard disk (`hda`); a bootable (live) `.iso` is mounted as a CD-ROM and boots from it (CD-first boot order). Installation ISOs are not supported: v86 persists no write, so run a media that is already bootable.
 - The media is imported through the page's import card and stored as a local blob in the browser; it is never uploaded, and LumiBoot distributes no image.
-- 512 MiB of guest RAM, no fixed boot device (the media format decides the mount), `LUMIBOOT_GUEST_READY:custom-image` marker.
+- 512 MB of guest RAM, no fixed boot device (the media format decides the mount), `LUMIBOOT_GUEST_READY:custom-image` marker.
 - Availability stays `resource-required` ("Resource required") until a media is imported.
 - You must hold a licence for the software contained in the media; the security of that disk is yours.
 

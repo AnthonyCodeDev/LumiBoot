@@ -1,6 +1,6 @@
 # Windows 7 Lite x86
 
-`windows-7-x86`, the Lite variant of the Windows 7 family: 16 GiB RAW disk, 1024 MiB of guest RAM, BIOS boot, `disk-boot` readiness. Parent of the group, not the default.
+`windows-7-x86`, the Lite variant of the Windows 7 family: 16 GiB RAW disk, 1 GB of guest RAM, BIOS boot, `disk-boot` readiness. Parent of the group, not the default.
 
 ## What you must provide
 

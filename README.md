@@ -7,7 +7,7 @@
 LumiBoot is a browser-based operating system emulation platform designed to run a wide range of real operating systems, from legacy 32-bit environments to modern 64-bit systems. Powered by WebAssembly, it emulates hardware directly on the user's device, allowing operating systems to boot and run entirely inside a browser tab, without installation, server-side virtualization, or dedicated software.
 
 <p>
-  <img alt="Debian, Ubuntu and Windows systems" src="https://img.shields.io/badge/systems-Debian%20%7C%20Ubuntu%20%7C%20Windows-8b7cf6?style=flat-square" />
+  <img alt="Linux, Windows, macOS (soon) systems" src="https://img.shields.io/badge/systems-Linux%20%7C%20Windows%20%20%7C%20macOS%20(soon)-8b7cf6?style=flat-square" />
   <a href="LICENSE"><img alt="LumiBoot Source-Available License 1.0" src="https://img.shields.io/badge/license-Source--Available%201.0-b39dff?style=flat-square" /></a>
 </p>
 
@@ -19,17 +19,17 @@ LumiBoot is a browser-based operating system emulation platform designed to run 
 
 ## Systems
 
-| System              | Variants                 | Guest RAM               | Media                                    | Register with                      |
-| ------------------- | ------------------------ | ----------------------- | ---------------------------------------- | ---------------------------------- |
-| Debian 12           | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | built ext4 rootfs, kernel and initrd     | `images/debian-12-i386/build.sh`   |
-| Ubuntu 18.04        | XFCE / X11-Openbox / CLI | 1 GiB / 1 GiB / 512 MiB | built ext4 rootfs, kernel and initrd     | `images/ubuntu-18-i386/build.sh`   |
-| Fedora 44           | XFCE / CLI               | 2 GiB / 1 GiB           | built live ISO (squashfs), kernel/initrd | `images/fedora-44-x86-64/build.sh` |
-| Alpine Linux 3.24   | XFCE / CLI               | 2 GiB / 1 GiB           | rebuilt virt ISO, preinstalled squashfs  | `images/alpine-3-24-x86-64/build.sh` |
-| Windows 7           | Professional SP1 / Lite  | 1536 / 1024 MiB         | installed 32-bit BIOS/MBR RAW disk       | `pnpm assets:windows7:prepare`     |
-| Windows 8.1 Pro x86 | 32-bit                   | 2048 MiB                | installed 32-bit BIOS/MBR RAW disk       | `pnpm assets:windows8:prepare`     |
-| Windows 10 x86      | 32-bit                   | 2048 MiB                | installed 32-bit BIOS/MBR RAW disk       | `pnpm assets:windows10:prepare`    |
-| Windows 11 x64      | 64-bit                   | 4096 MiB                | installed 64-bit UEFI/GPT RAW disk + OVMF store | `pnpm assets:windows11:prepare`    |
-| Custom image        | ISO / IMG / RAW          | 512 MiB                 | `.iso`, `.img` or `.raw` you own         | Import it in the app               |
+| System              | Variants                 | Guest RAM            | Media                                           |
+| ------------------- | ------------------------ | -------------------- | ----------------------------------------------- |
+| Debian 12           | XFCE / X11-Openbox / CLI | 1 GB / 1 GB / 512 MB | built ext4 rootfs, kernel and initrd            |
+| Ubuntu 18.04        | XFCE / X11-Openbox / CLI | 1 GB / 1 GB / 512 MB | built ext4 rootfs, kernel and initrd            |
+| Fedora 44           | XFCE / CLI               | 2 GB / 1 GB          | built live ISO (squashfs), kernel/initrd        |
+| Alpine Linux 3.24   | XFCE / CLI               | 2 GB / 1 GB          | rebuilt virt ISO, preinstalled squashfs         |
+| Windows 7           | Professional SP1 / Lite  | 1.5 GB / 1 GB        | installed 32-bit BIOS/MBR RAW disk              |
+| Windows 8.1 Pro x86 | 32-bit                   | 2 GB                 | installed 32-bit BIOS/MBR RAW disk              |
+| Windows 10 x86      | 32-bit                   | 2 GB                 | installed 32-bit BIOS/MBR RAW disk              |
+| Windows 11 x64      | 64-bit                   | 4 GB                 | installed 64-bit UEFI/GPT RAW disk + OVMF store |
+| Custom image        | ISO / IMG / RAW          | 512 MB               | `.iso`, `.img` or `.raw` you own                |
 
 No disk, ISO or license key ships with the repository: prepare or import your own media before starting a session.
 
@@ -37,7 +37,7 @@ No disk, ISO or license key ships with the repository: prepare or import your ow
 sudo ./images/debian-12-i386/build.sh
 sudo ./images/ubuntu-18-i386/build.sh
 sudo ./images/fedora-44-x86-64/build.sh
-FLAVOR=xfce ./images/alpine-3-24-x86-64/build.sh
+sudo ./images/alpine-3-24-x86-64/build.sh
 pnpm assets:v64:alpine:xfce
 pnpm assets:windows7:prepare --source images/windows-7-pro-sp1-x86/disk.img
 pnpm assets:windows8:prepare --source images/windows-8-1-x86/disk.img

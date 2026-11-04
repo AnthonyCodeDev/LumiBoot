@@ -2,10 +2,10 @@
 #
 # Reproducible build of an Alpine Linux 3.24.3 x86-64 XFCE image for v64.
 #
-#   FLAVOR=xfce ./images/alpine-3-24-x86-64/build.sh
-#   ./images/alpine-3-24-x86-64/build.sh xfce
+#   sudo ./images/alpine-3-24-x86-64/build.sh
 #
-# One flavor only, `xfce`:
+# One flavor only, `xfce` (so no FLAVOR is needed): the script is rootless and
+# drops sudo privileges back to the invoking user.
 #   xfce -> alpine-3-24-x86-64-xfce  Xorg + XFCE session on tty1
 #
 # Rootless on purpose: no sudo, no chroot, no mount of the guest filesystem on
@@ -34,6 +34,22 @@
 # records are kept so the disc stays bootable, although LumiBoot boots it through
 # v64's bzimage + initrd path like the Alpine CLI image.
 set -euo pipefail
+
+# Rootless by design: apk installs with --root, so the build never needs root.
+# `sudo` is accepted like the Debian/Ubuntu/Fedora scripts, but dropped at once:
+# running as root would leave root-owned artifacts that the next
+# `pnpm assets:v64:alpine:xfce` (run as the invoking user) could not publish.
+if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+  target_home=""
+  if command -v getent >/dev/null 2>&1; then
+    target_home="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+  fi
+  : "${target_home:=$HOME}"
+  echo "note: running rootless as '$SUDO_USER' (sudo accepted, root never needed)." >&2
+  exec sudo -u "$SUDO_USER" \
+    --preserve-env=FLAVOR,LUMIBOOT_BUILD_DIR \
+    env HOME="$target_home" "$0" "$@"
+fi
 
 ALPINE_VERSION="3.24.3"
 ISO_NAME="alpine-virt-$ALPINE_VERSION-x86_64.iso"

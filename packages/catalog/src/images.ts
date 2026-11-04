@@ -180,7 +180,7 @@ export const images = [
     ],
     integrationNote:
       'Graphical XFCE variant of Alpine Linux 3.24.3 x86-64, built locally by ' +
-      'images/alpine-3-24-x86-64/build.sh with FLAVOR=xfce. The official `virt` ISO ' +
+      'images/alpine-3-24-x86-64/build.sh with its default `xfce` flavor. The official `virt` ISO ' +
       'carries no rootfs: its initramfs installs one with apk at every boot, which ' +
       'cannot carry XFCE. This image ships a preinstalled squashfs rootfs, mounted ' +
       'read-only with an overlayfs RAM upper layer by a custom initramfs init, on a ' +

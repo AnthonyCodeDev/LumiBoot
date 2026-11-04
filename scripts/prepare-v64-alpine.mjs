@@ -83,7 +83,7 @@ async function publishXfce() {
     throw new Error(
       `Alpine XFCE build outputs are missing:\n  ${missing.join('\n  ')}\n` +
         'Build them first on Linux or WSL2, on a native filesystem:\n' +
-        '  FLAVOR=xfce ./images/alpine-3-24-x86-64/build.sh',
+        '  sudo ./images/alpine-3-24-x86-64/build.sh',
     );
   }
 

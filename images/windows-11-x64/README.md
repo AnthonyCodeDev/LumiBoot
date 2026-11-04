@@ -53,9 +53,9 @@ v64 loads the whole-disk manifest (`readiness.mode: "disk-boot"`), mounts the di
 | Machine | Q35 (`v64Machine: q35`) |
 | Disk controller | ICH9 AHCI, disk on SATA port 0 (`8086:2922`, `storahci`, boot-critical) |
 | NIC | Intel `e1000` (`8086:100E`), matching the disk's driver |
-| Video | stdvga/bochs VGA (`v64Graphics: bochs_vga`), 32 MiB VRAM |
+| Video | stdvga/bochs VGA (`v64Graphics: bochs_vga`), 32 MB VRAM |
 | CPU | x86-64-v2 baseline (`v64CpuFeatures: x86-64-v2`), 1 core |
-| RAM | 4096 MiB |
+| RAM | 4 GB |
 
 The profile in `packages/catalog/src/profiles.ts` carries those values as `configuration.extra` (`v64CpuCores`, `v64Graphics`, `v64Machine`, `v64Firmware`, `v64CpuFeatures`) plus `hardwareProfile: { ...pcHardware('e1000'), machine: 'q35', acpi: true }`. `V64Provider` reads them as defaults; a caller can still override them.
 
@@ -129,7 +129,7 @@ qemu-img convert -f vhdx -O raw "<path>\Windows11-64bit.vhdx" "<path>\Windows11-
 
 The RAW must hold a complete **GPT** system disk with an ESP, not a data volume. A VirtualBox UEFI installation also produces a GPT disk and boots, as long as its ESP carries `bootmgfw.efi`.
 
-## Guest RAM: 4096 MiB
+## Guest RAM: 4 GB
 
 The `windows-11-x64` profile declares `minMemoryMiB: 4096` and `configuration.memoryMiB: 4096`. Windows 11 needs more headroom than Windows 10 x86, and v64 has to hold the disk cache of a 64 GiB image. Below that the guest boots slower, swaps and may refuse the upgrade path.
 

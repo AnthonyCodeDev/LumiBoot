@@ -4,8 +4,8 @@ One script, two variants — like Debian and Ubuntu:
 
 | Variant | Reference | Session | RAM | ext4 disk | Marker |
 |---|---|---|---|---|---|
-| CLI | `fedora-44-x86-64` | `lumiboot` autologin on tty1 and ttyS0, text console | 1024 MiB | 2048 MiB | `LUMIBOOT_GUEST_READY` |
-| XFCE (default card variant) | `fedora-44-x86-64-xfce` | Xorg + XFCE on tty1, text shell on ttyS0 | 2048 MiB | 4096 MiB | `LUMIBOOT_DESKTOP_READY` |
+| CLI | `fedora-44-x86-64` | `lumiboot` autologin on tty1 and ttyS0, text console | 1 GB | 2 GB | `LUMIBOOT_GUEST_READY` |
+| XFCE (default card variant) | `fedora-44-x86-64-xfce` | Xorg + XFCE on tty1, text shell on ttyS0 | 2 GB | 4 GB | `LUMIBOOT_DESKTOP_READY` |
 
 Both are a `dnf --installroot` rootfs packed as an ext4 image inside a
 squashfs, plus a bootable ISO (GRUB El-Torito). XFCE is the default variant of
@@ -40,7 +40,7 @@ An unknown flavor stops the script (`Unknown flavor: "…" (expected: cli | xfce
 Nothing else changes: `cli` keeps the reference, the ISO label, the RAM, the
 disk size and the package list it always had.
 
-| Flavor | `REF` | `BUILD_DIR` | `ISO_LABEL` | RAM | `DISK_MIB` |
+| Flavor | `REF` | `BUILD_DIR` | `ISO_LABEL` | `MEMORY_MIB` | `DISK_MIB` |
 |---|---|---|---|---|---|
 | `cli` | `fedora-44-x86-64` | `build/` | `LUMIBOOT-FEDORA` | 1024 | 2048 |
 | `xfce` | `fedora-44-x86-64-xfce` | `build-xfce/` | `LUMIBOOT-FEDORA-XFCE` | 2048 | 4096 |
@@ -121,7 +121,7 @@ flavor's reference, so no marker can name the other variant. The CLI installs
 
 The profile keeps `v64Graphics: 'bochs_vga'`, which XFCE draws on through
 `bochs-drm` + Xorg `modesetting`. Measured on the published ISO (Playwright port
-5200, 2 guest cores, 2048 MiB):
+5200, 2 guest cores, 2 GB):
 
 | Adapter | `DESKTOP_READY` | Canvas | Desktop |
 |---|---:|---|---|
@@ -230,7 +230,7 @@ successful boot.
   2026-10-30 under WSL2 (Ubuntu) with `LUMIBOOT_BUILD_DIR` on the WSL
   filesystem (never under `/mnt/c`) and `FLAVOR=xfce`, in ~4 min 06 for
   403 packages: ISO 774 070 272 bytes (738.2 MiB), squashfs 707 444 736 bytes,
-  4096 MiB ext4 rootfs, `vmlinuz` 19 024 232 bytes, `initrd.img`
+  4 GB ext4 rootfs, `vmlinuz` 19 024 232 bytes, `initrd.img`
   42 475 004 bytes, volume label `LUMIBOOT-FEDORA-XFCE` verified with
   `xorriso -pvd_info` and `blkid`, disk sha256
   `e8c9b14c293b0e15606b7e169a538a96b959ec23ced30b1288ba4bfbb9e8c0c1`. The four

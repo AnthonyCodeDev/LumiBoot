@@ -88,7 +88,7 @@ The `--` separator is optional and tolerated: `pnpm assets:windows10:prepare -- 
 
 The generator opens the source read-only, streams the SHA-256 and writes only `images/windows-10-x86/manifest.json` + `provenance.txt`. `WINDOWS10_IMG` supplies the default source. Shared tooling: [`windows-7-pro-sp1-x86/README.md`](../windows-7-pro-sp1-x86/README.md).
 
-## Guest RAM: 2048 MiB minimum
+## Guest RAM: 2 GB minimum
 
 The `windows-10-x86` profile declares `minMemoryMiB: 2048` and `configuration.memoryMiB: 2048` in `packages/catalog/src/profiles.ts`. v86 rounds memory to a multiple of 128 KiB; 2048 MiB passes as is. Below that, the guest boots slower or refuses to boot.
 
@@ -144,8 +144,8 @@ Manifest generated with `pnpm assets:windows10:prepare --skip-hash`: no SHA-256 
 
 | Network adapter | State | VGA screen, 1024×768 | Disk served over HTTP Range | Guest RAM | Boot click → screen |
 |---|---|---|---|---|---|
-| `ne2k` | `running` after a real `ide-read-end` | `nonBlackRatio=0.499`, `distinctColors=50`, `stablePolls=4` | **481.01 MiB over 13 944 requests** | 2048 MiB | **337.3 s** |
-| `virtio`, current configuration | `running`, same proof | same | **503.34 MiB over 14 814 requests** | 2048 MiB | **373.3 s** |
+| `ne2k` | `running` after a real `ide-read-end` | `nonBlackRatio=0.499`, `distinctColors=50`, `stablePolls=4` | **481.01 MiB over 13 944 requests** | 2 GB | **337.3 s** |
+| `virtio`, current configuration | `running`, same proof | same | **503.34 MiB over 14 814 requests** | 2 GB | **373.3 s** |
 
 Clean shutdown (`data-state=stopped`) validated in both cases. Test thresholds: `nonBlackRatio > 0.3`, `distinctColors > 32`, 4 stable polls; the coloured screen completes the machine proof.
 
@@ -168,7 +168,7 @@ Clean shutdown (`data-state=stopped`) validated in both cases. Test thresholds: 
 - [x] HTTP Range probe: `206` + `Content-Range` + `Accept-Ranges: bytes`.
 - [x] Real boot E2E passed on 2026-10-18 with `VM_E2E_ASSETS=1`.
 - [x] VGA canvas coloured and stable (`nonBlackRatio=0.499`, `distinctColors=50`, `stablePolls=4`).
-- [x] 337.3 s on `ne2k` and 373.3 s on `virtio`, 481.01 / 503.34 MiB served, 2048 MiB of RAM.
+- [x] 337.3 s on `ne2k` and 373.3 s on `virtio`, 481.01 / 503.34 MiB served, 2 GB of RAM.
 
 Unproven: no VGA screenshot of the desktop is attached; `pnpm assets:windows10:check` is not run against the reference manifest, which carries no SHA-256, and only checks source readability, size and `mtime`. Guest network stays untested.
 

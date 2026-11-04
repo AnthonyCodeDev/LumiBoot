@@ -4,8 +4,8 @@ Two validated variants, BIOS-booted from local RAW disks. No disk, ISO or licens
 
 | Variant | Reference | Disk | RAM | Order |
 |---|---|---:|---:|---:|
-| Professional SP1 x86 | `windows-7-pro-sp1-x86` | 32 GiB | 1536 MiB | 1, default |
-| Lite x86 | `windows-7-x86` | 16 GiB | 1024 MiB | 2, parent |
+| Professional SP1 x86 | `windows-7-pro-sp1-x86` | 32 GiB | 1.5 GB | 1, default |
+| Lite x86 | `windows-7-x86` | 16 GiB | 1 GB | 2, parent |
 
 The Lite variant has its own short page: [`windows-7-x86/README.md`](../windows-7-x86/README.md).
 
