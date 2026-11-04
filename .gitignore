@@ -1,77 +1,39 @@
 # Dependencies
 node_modules/
 .pnpm-store/
-.npm/
-.yarn/cache/
-.yarn/unplugged/
-.yarn/build-state.yml
-.yarn/install-state.gz
+
 # Build output
 dist/
-build/
-out/
-.output/
-.next/
-.nuxt/
-.svelte-kit/
-.angular/
-storybook-static/
 *.tsbuildinfo
+
 # Caches
 .cache/
-.turbo/
-.vite/
-.parcel-cache/
 .eslintcache
-.stylelintcache
-.rspack-cache/
-.temp/
 .tmp/
 tmp/
-temp/
-# Python
-__pycache__/
-*.py[cod]
-.venv/
+
 # Tests and coverage
-coverage/
-.nyc_output/
-.vitest/
 playwright-report/
 test-results/
-blob-report/
-junit.xml
+
 # Logs
 *.log
 *.log.*
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
+
 # VM disks and images
 *.img
 *.iso
-*.qcow
 *.qcow2
 *.vhd
 *.vhdx
 *.vmdk
 *.vdi
-*.ext2
-*.ext3
-*.ext4
-# Binary artifacts
-*.dump
-*.core
-*.pid
-*.part
-# Images: manifests and scripts are tracked, binaries are not
-/images/*/disk.img
-*/images/*/disk.img
-/images/*/build*/
+
+# Images: manifests and scripts are tracked, provenance stays local
 /images/*/provenance.txt
-/media/
+
 # Network client release binaries (published as GitHub Release assets, never committed)
 /apps/web/public/downloads/*.exe
 /apps/web/public/downloads/*.tar.gz
@@ -80,33 +42,20 @@ lerna-debug.log*
 /apps/web/public/downloads/*.pkg
 !/apps/web/public/downloads/manifest.json
 !/apps/web/public/downloads/SHA256SUMS
+
 # IDE
-.idea/
 .vscode/*
 !.vscode/extensions.json
-*.iml
-*.swp
-*.swo
-*~
+
 # System
 .DS_Store
 Thumbs.db
-desktop.ini
-ehthumbs.db
-$RECYCLE.BIN/
-# Deployment
-.vercel/
-.netlify/
-# Generated reports and local archives
-architecture.txt
-architecture-clean.txt
-LumiBoot-source.zip
+
+# Local archives
 *.bak
-*.backup
 *.old
 *.orig
-# Keep files
-!*.keep
+
 # Secrets: only examples are tracked, including nested ones
 .env
 .env.*
@@ -116,6 +65,7 @@ LumiBoot-source.zip
 !**/.env.example
 !.env.*.example
 !**/.env.*.example
+
 # v86 binaries and disks prepared outside the repo
 /apps/web/public/v86/
 /apps/web/public/v64/
