@@ -134,8 +134,8 @@ describe('getLaunchReadiness', () => {
     expect(isEngineIntegrated(windows.launchProfiles[0]!.engineId)).toBe(true);
     expect(windows.mediaStrategy).toBe('bundled');
     expect(windows.imageRef).toBe('windows-11-x64');
-    // `validated: true` now that the boot reaches the Windows 11 sign-in screen:
-    // the local UEFI disk stays launchable without any user media.
+    // `validated: true` now that the boot reaches the logged-in Windows 11
+    // desktop: the local UEFI disk stays launchable without any user media.
     expect(getLaunchReadiness(windows)).toEqual({ canLaunch: true });
   });
 

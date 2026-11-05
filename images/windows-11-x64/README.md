@@ -2,7 +2,7 @@
 
 Windows 11 **64-bit** follows the Windows 7/8.1/10 local RAW disk pipeline — operator-installed disk, prepared manifest, HTTP Range transport, reads only — with one material difference: the disk is **UEFI/GPT** and boots through **OVMF** on the **v64** engine, on a Q35/ICH9 AHCI machine.
 
-The catalogue profile `windows-11-x64` now carries `validated: true`: the real boot is proven. With the patched v64 build (see [Validation status](#validation-status)) the guest boots OVMF → `Windows Boot Manager` → Windows 11 and reaches the **Windows 11 sign-in screen**, so the card is "Available" and the availability is `ready`. The desktop login itself is still under validation — see the honest scope of the proof below.
+The catalogue profile `windows-11-x64` carries `validated: true`: the real boot is proven. With the patched v64 build (see [Validation status](#validation-status)) the guest boots OVMF → `Windows Boot Manager` → Windows 11, the sign-in screen is passed and the **logged-in desktop** is reached, so the card is "Available" and the availability is `ready`.
 
 ## What you must provide
 
@@ -162,7 +162,7 @@ A `200` response to a `Range` request is incompatible with the v64 async disk re
 
 ## Validation status
 
-`validated: true` — a real boot is proven, up to the Windows 11 sign-in screen. The **desktop login is still under validation**: the proof below stops at the sign-in screen, so the card is "Available" for a boot that a visitor can watch, not for a guaranteed logged-in desktop yet.
+`validated: true` — a real boot is proven, from OVMF through `Windows Boot Manager` to the **logged-in Windows 11 desktop**: the sign-in screen is passed and a desktop session is reached. The card is "Available" for a boot a visitor can watch and use, and the flag stays honest: revert it if a rebuild regresses.
 
 ### What was broken, and the fix
 
@@ -181,7 +181,8 @@ The patch is recorded in `scripts/v64-assets.lock.json` (`patch`, `patchFile`, `
 
 | Measurement | Value |
 |---|---|
-| Guest state at the end of the probe | Windows 11 **sign-in screen** ("LumiBoot / Welcome"), cursor follows the injected mouse |
+| Guest state at the end of the 720 s probe | Windows 11 **sign-in screen** ("LumiBoot / Welcome"), cursor follows the injected mouse |
+| Guest state after sign-in | Windows 11 **desktop** session (taskbar and Start menu, capture `preview.png`) |
 | `KiBugCheckData` | `0x0, 0x0, …` (all eight qwords) |
 | HPET timer 0 | 289 494 firings in 720 s (the HAL keeps re-arming it) |
 | Disk read high-water (probe) | **1138.6 MiB** (was 108.7 MiB when it bugchecked) |
@@ -189,7 +190,7 @@ The patch is recorded in `scripts/v64-assets.lock.json` (`patch`, `patchFile`, `
 | E2E VGA proof | 1280x800, `nonBlackRatio=0.974`, `distinctColors=134`, 4 stable polls |
 | E2E served disk (HTTP Range) | 1 577.47 MiB over 44 586 requests |
 
-Captures: `halclock-signin-clean.png` (sign-in screen, clean release build) and the persistent E2E screenshots `test-results/windows11-vga*.png`. Logs: `.tmp/e2e-win11.log`, `.tmp/probe/V64-RELEASE-REPORT.md` (untracked diagnostics).
+Captures: `halclock-signin-clean.png` (sign-in screen, clean release build), `preview.png` (logged-in desktop) and the persistent E2E screenshots `test-results/windows11-vga*.png`. Logs: `.tmp/e2e-win11.log`, `.tmp/probe/V64-RELEASE-REPORT.md` (untracked diagnostics).
 
 Measured facts about the registered assets:
 
@@ -209,11 +210,11 @@ Validation checklist:
 - [x] OVMF variable store `images/windows-11-x64/uefi-vars.fd` (540 672 bytes) served next to the disk, SHA-256 recorded in the manifest.
 - [x] `manifest.json` consistent with the profile: `ref` / `architecture: x86_64` / `memoryMiB: 4096` / `engine.id: v64` / `firmware.type: uefi`.
 - [x] HTTP Range probe on `disk.img`: `206` + `Content-Range` + `Accept-Ranges: bytes` (the E2E run served 44 586 ranges).
-- [x] Real boot: OVMF loads `Windows Boot Manager` and Windows 11 reaches the **sign-in screen** on the VGA canvas, with `KiBugCheckData = 0`.
+- [x] Real boot: OVMF loads `Windows Boot Manager`, Windows 11 reaches the **sign-in screen**, the sign-in is passed and the **desktop** is reached on the VGA canvas, with `KiBugCheckData = 0`.
 - [x] `validated: true`, flipped after the boot above was recorded here and in [`docs/v64.md`](../../docs/v64.md).
-- [ ] Desktop login: reaching a logged-in desktop (independent of the sign-in screen) is still under validation.
+- [x] Desktop login: the sign-in screen is passed and the Windows 11 desktop is reached.
 
-`tests/e2e/windows11-desktop.spec.ts` holds the boot probe: it stays opt-in behind `VM_E2E_ASSETS=1` and a present local disk. Its colored-and-stable-screen check is what recorded the 1932.4 s run; it is a **visual** proof, which is why the desktop login is listed separately.
+`tests/e2e/windows11-desktop.spec.ts` holds the boot probe: it stays opt-in behind `VM_E2E_ASSETS=1` and a present local disk. Its colored-and-stable-screen check is what recorded the 1932.4 s run; it is a **visual** proof of a desktop a visitor can watch and use, not a proof of application-level behaviour inside the session.
 
 `validated` lives on the catalogue profile and availability derives from it; see `packages/catalog/src/availability.ts`. `ready` requires a present image, a compatible profile, an integrated engine and `validated: true`.
 
@@ -226,7 +227,7 @@ Validation checklist:
 
 ## Limitations
 
-- UEFI boot through OVMF over an HTTP Range disk is proven up to the Windows 11 **sign-in screen**; the desktop login is still under validation;
+- UEFI boot through OVMF over an HTTP Range disk is proven up to the Windows 11 **desktop** (sign-in passed, logged-in session reached);
 - no TPM 2.0 and no Secure Boot database: 24H2 installs and boots only with BitLocker disabled, and some features stay unavailable;
 - stdvga/bochs VGA with no GPU acceleration: the desktop is software-rendered and slow;
 - ephemeral guest storage: read-only source, guest writes lost on stop (a Windows update or activation may therefore be lost between sessions);

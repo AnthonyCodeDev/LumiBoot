@@ -166,8 +166,8 @@ test.describe('Facet filters', () => {
   });
 });
 
-// Windows 11 x64 is "Available" (real boot to the Windows 11 sign-in screen, patched
-// v64 build); the generic "Custom image" needs user media.
+// Windows 11 x64 is "Available" (real boot to the logged-in Windows 11 desktop,
+// patched v64 build); the generic "Custom image" needs user media.
 test.describe('Windows 11 and the generic custom image', () => {
   test('Windows 11 is "Available", without an import card', async ({ page }) => {
     await page.goto('/');

@@ -460,13 +460,14 @@ export const launchProfiles = [
     displayName: 'Windows 11',
     versionLabel: 'x64',
     // Proven boot, recorded in images/windows-11-x64/README.md: the disk boots
-    // OVMF -> Windows Boot Manager -> Windows 11 and reaches the sign-in screen
-    // with the patched v64 build (IRQ0 -> GSI2 in the I/O APIC + MADT interrupt
-    // source override, HPET 100 ns, extended CPUID leaves), so the former 0x5C
-    // HAL_INITIALIZATION_FAILED bugcheck is gone (`KiBugCheckData = 0`).
-    // Proven by tests/e2e/windows11-desktop.spec.ts: 1932.4 s to a stable VGA
-    // screen, ~1.54 GiB read over HTTP Range. The desktop login is still under
-    // validation: keep the flag honest and revert it if a rebuild regresses.
+    // OVMF -> Windows Boot Manager -> Windows 11, the sign-in screen is passed
+    // and the logged-in desktop is reached, with the patched v64 build (IRQ0 ->
+    // GSI2 in the I/O APIC + MADT interrupt source override, HPET 100 ns,
+    // extended CPUID leaves), so the former 0x5C HAL_INITIALIZATION_FAILED
+    // bugcheck is gone (`KiBugCheckData = 0`). Proven by
+    // tests/e2e/windows11-desktop.spec.ts: 1932.4 s to a stable VGA screen,
+    // ~1.54 GiB read over HTTP Range. Keep the flag honest and revert it if a
+    // rebuild regresses.
     validated: true,
     description:
       'A Windows 11 x64 session in the browser via v64, booted by UEFI/OVMF ' +

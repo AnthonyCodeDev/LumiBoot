@@ -432,8 +432,8 @@ test.describe('Windows 11 x64: real boot (v64 + OVMF)', () => {
           `  served disk (Range)        : ${disk.bytes} bytes ` +
           `(${(disk.bytes / 1048576).toFixed(2)} MiB) over ${disk.requests} requests\n` +
           `  guest RAM (manifest)       : ${String(manifestBody.memoryMiB ?? 'unknown')} MiB\n` +
-          `  NOTE: colored/stable screen != guaranteed desktop login; ` +
-          `the profile is validated for the boot to the sign-in screen.\n` +
+          `  NOTE: colored/stable screen != in-session application proof; ` +
+          `the profile is validated for the boot to the logged-in desktop.\n` +
           `=== end measurements ===\n`,
       );
 
