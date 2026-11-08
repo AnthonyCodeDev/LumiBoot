@@ -16,7 +16,7 @@ import { copyFile, open, mkdir, readdir, stat } from 'node:fs/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { createGunzip } from 'node:zlib';
-import { delimiter, extname, join, resolve, basename } from 'node:path';
+import { basename, extname, join, posix, resolve, win32 } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { pathToFileURL } from 'node:url';
 
@@ -139,10 +139,14 @@ export function assertDmgSource(sourcePath) {
  */
 export function sevenZipCandidates({ pathValue = '', env = {}, platform = process.platform } = {}) {
   const executable = platform === 'win32' ? '7z.exe' : '7z';
+  // The default `delimiter` and `join` from `node:path` follow the HOST OS, which made
+  // this result host-dependent: on Linux, `;`-separated Windows PATH entries were split
+  // on `:` and joined with `/`. win32/posix are pure and decide from `platform` only.
+  const pathImpl = platform === 'win32' ? win32 : posix;
   const candidates = [];
 
-  for (const entry of String(pathValue ?? '').split(delimiter)) {
-    if (entry.length > 0) candidates.push(join(entry, executable));
+  for (const entry of String(pathValue ?? '').split(pathImpl.delimiter)) {
+    if (entry.length > 0) candidates.push(pathImpl.join(entry, executable));
   }
 
   if (platform === 'win32') {
@@ -161,13 +165,15 @@ export function sevenZipCandidates({ pathValue = '', env = {}, platform = proces
 
 /**
  * First candidate that exists, de-duplicated. `exists` is injectable so the
- * resolution order is testable without installing 7-Zip.
+ * resolution order is testable without installing 7-Zip. `platform` defaults to the
+ * host but can be forced, so the case-insensitive Windows de-duplication is testable
+ * deterministically; runtime callers are unaffected.
  */
-export function resolveSevenZip(candidates, exists = existsSync) {
+export function resolveSevenZip(candidates, exists = existsSync, platform = process.platform) {
   const seen = new Set();
   for (const candidate of candidates ?? []) {
     if (typeof candidate !== 'string' || candidate.length === 0) continue;
-    const key = process.platform === 'win32' ? candidate.toLowerCase() : candidate;
+    const key = platform === 'win32' ? candidate.toLowerCase() : candidate;
     if (seen.has(key)) continue;
     seen.add(key);
     try {

@@ -34,9 +34,6 @@ pnpm-debug.log*
 # Images: manifests and scripts are tracked, provenance stays local
 /images/*/provenance.txt
 
-# Apple media: operator-supplied installers and their extraction output are never
-# committed. No rule below is negated by these patterns (the negations target
-# manifest.json, SHA256SUMS and .env examples, not Apple artefacts).
 *.dmg
 *.pkg
 *.pkg/

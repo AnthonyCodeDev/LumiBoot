@@ -33,8 +33,6 @@ LumiBoot is a browser-based operating system emulation platform designed to run 
 
 No disk, ISO or license key ships with the repository: prepare or import your own media before starting a session.
 
-Windows 11 x64 is `validated: true`: the operator's UEFI disk boots through OVMF to the logged-in Windows 11 desktop. macOS is catalogued but not developed yet (`planned`, unsupported by LumiBoot).
-
 ```bash
 sudo ./images/debian-12-i386/build.sh
 sudo ./images/ubuntu-18-i386/build.sh

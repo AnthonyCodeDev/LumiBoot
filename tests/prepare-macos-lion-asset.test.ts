@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, win32 } from 'node:path';
 import {
   DEFAULT_OUT,
   assertDmgSource,
@@ -139,6 +139,21 @@ describe('sevenZipCandidates', () => {
     expect(candidates.some((candidate) => candidate.includes('Program Files'))).toBe(false);
   });
 
+  it('is independent of the host OS: a win32 target always splits on ";" and joins with "\\"', () => {
+    // Regression: `delimiter` and `join` from `node:path` follow the HOST. On Linux the
+    // input below was split on ':' and joined with '/', yielding 'C/7z.exe'.
+    const candidates = sevenZipCandidates({
+      pathValue: 'C:\\Tools;C:\\Windows\\System32',
+      env: {},
+      platform: 'win32',
+    });
+    expect(candidates.slice(0, 2)).toEqual(['C:\\Tools\\7z.exe', 'C:\\Windows\\System32\\7z.exe']);
+    expect(candidates).not.toContain('C/7z.exe');
+    // The invariant itself: win32 is pure and never follows the host.
+    expect(win32.delimiter).toBe(';');
+    expect(win32.join('C:\\Tools', '7z.exe')).toBe('C:\\Tools\\7z.exe');
+  });
+
   it('adds no $SEVEN_ZIP candidate when the variable is empty or absent', () => {
     expect(
       sevenZipCandidates({ pathValue: '', env: { SEVEN_ZIP: '' }, platform: 'win32' }),
@@ -158,6 +173,26 @@ describe('resolveSevenZip', () => {
     const candidates = ['C:\\missing\\7z.exe', 'D:\\7z\\7z.exe'];
     const resolved = resolveSevenZip(candidates, (candidate) => candidate === 'D:\\7z\\7z.exe');
     expect(resolved).toBe('D:\\7z\\7z.exe');
+  });
+
+  it('de-duplicates case-insensitively only for a win32 target', () => {
+    const seen: string[] = [];
+    const exists = (candidate: string) => {
+      seen.push(candidate);
+      return false;
+    };
+
+    resolveSevenZip(['C:\\Tools\\7z.exe', 'c:\\tools\\7Z.EXE'], exists, 'win32');
+    expect(seen).toEqual(['C:\\Tools\\7z.exe']);
+
+    seen.length = 0;
+    resolveSevenZip(['/usr/bin/7z', '/USR/BIN/7z'], exists, 'linux');
+    expect(seen).toHaveLength(2);
+
+    // Existing two-argument calls keep following the host.
+    seen.length = 0;
+    resolveSevenZip(['C:\\Tools\\7z.exe', 'c:\\tools\\7Z.EXE'], exists);
+    expect(seen).toHaveLength(process.platform === 'win32' ? 1 : 2);
   });
 
   it('returns undefined when nothing exists, and tolerates a throwing predicate', () => {
