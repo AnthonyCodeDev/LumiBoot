@@ -22,7 +22,9 @@ import {
   type V64NetworkDevice,
   type V64Options,
   type V64Runtime,
+  type V64UsbDevice,
 } from './runtime';
+import { attachUsbKeyboard } from './usb-keyboard-adapter';
 
 export const V64_PROVIDER_ID = 'v64';
 const MiB = 1024 * 1024;
@@ -46,6 +48,7 @@ export const V64_ASSET_PATHS = {
   hdAudio: '/v64/v86-hd-audio.js',
   ne2k: '/v64/v86-ne2k.js',
   e1000: '/v64/v86-e1000.js',
+  usb: '/v64/v86-usb.js',
 } as const;
 
 const V64_CAPABILITIES: VMCapabilities = {
@@ -122,7 +125,8 @@ export class V64Provider implements VMEngine {
       throw new VMError('START_FAILED', `Start canceled for "${os.id}".`, { systemId: os.id });
 
     // A `disk-boot` profile boots an installed system from its disk: there is no
-    // kernel or ISO to inject, only a whole-disk manifest to mount as `hda`.
+    // kernel or ISO to inject, only a whole-disk manifest to mount as `hda` —
+    // or, when it declares an ESP, as `hda` (ESP) + `hdb` (system disk).
     const isDiskBoot = profile.readiness?.mode === 'disk-boot';
 
     const media = configuration?.media;
@@ -168,7 +172,13 @@ export class V64Provider implements VMEngine {
     // the media and the abort signal, so the profile stays the fallback.
     const profileConfiguration = profile.configuration;
     const cores = readInteger(configuration, profileConfiguration, 'v64CpuCores', 2, 1, 8);
-    const machineType = readMachine(configuration, profileConfiguration);
+    // The emulated Apple SMC (macOS `DSMOS`) only exists on q35: a profile that
+    // asks for it in writing against i440FX is refused here, before the engine
+    // starts, rather than left to the engine's own `create_platform` check.
+    const smc = extraOption(configuration, profileConfiguration, 'v64Smc') === true;
+    if (smc)
+      assertSmcCompatible(os.id, configuration, profileConfiguration, profile.hardwareProfile);
+    const machineType = smc ? ('q35' as const) : readMachine(configuration, profileConfiguration);
     const graphics = readGraphics(configuration, profileConfiguration);
     const wantsWebGpu =
       graphics !== 'bochs_vga' && typeof navigator !== 'undefined' && 'gpu' in navigator;
@@ -183,7 +193,7 @@ export class V64Provider implements VMEngine {
     const mounted = consoleAdapter.attach(mountTarget);
     let bootMedia: Pick<
       V64Options,
-      'hda' | 'cdrom' | 'bzimage' | 'initrd' | 'cmdline' | 'boot_order'
+      'hda' | 'hdb' | 'cdrom' | 'bzimage' | 'initrd' | 'cmdline' | 'boot_order'
     >;
     try {
       bootMedia = await resolveBootMedia(os.id, media, manifest, diskManifest, signal);
@@ -207,6 +217,9 @@ export class V64Provider implements VMEngine {
     // absent: only profiles that ask for it get the device, so the Alpine and
     // Fedora guests keep their existing layout.
     const hpet = extraOption(configuration, profileConfiguration, 'v64Hpet') === true;
+    // USB input is opt-in as well: a profile that does not ask for it keeps the
+    // exact engine configuration it had (no controller, no plugin).
+    const usb = readUsb(configuration, profileConfiguration);
     const firmwareOptions: Pick<
       V64Options,
       'bios' | 'vga_bios' | 'firmware' | 'qemu_compatible' | 'cpu_features'
@@ -256,7 +269,11 @@ export class V64Provider implements VMEngine {
       ...(hpet ? { hpet: true } : {}),
       audio_device: profile.hardwareProfile?.audio ? 'hd_audio' : 'none',
       ...(profile.hardwareProfile?.audio ? { audio_device_path: V64_ASSET_PATHS.hdAudio } : {}),
-      ...(netDevice ? { net_device: netDevice } : {}),
+      // The SMC owns 0x300-0x31F, so an SMC profile is always offline: the
+      // macOS guest has no network device at all, whatever the profile says.
+      ...(smc ? { net_device: { type: 'none' as const }, smc: true } : {}),
+      ...(smc ? {} : netDevice ? { net_device: netDevice } : {}),
+      ...(usb ? { usb } : {}),
       ...bootMedia,
       autostart: false,
     };
@@ -282,6 +299,10 @@ export class V64Provider implements VMEngine {
         network,
       });
       instance.wire();
+      // The guest's USB HID keyboard takes the page's keys; libv86's own PS/2
+      // path is left as it is. The adapter detaches itself when the emulator
+      // stops, so a disposed session leaves no `window` listener behind.
+      if (usb?.keyboard === true) attachUsbKeyboard(emulator);
     } catch (error) {
       // A wiring failure must leave no orphaned emulator, network or console.
       try {
@@ -306,7 +327,9 @@ async function resolveBootMedia(
   manifest: ImageManifest | null,
   diskManifest: LocalDiskManifest | null,
   signal: AbortSignal | undefined,
-): Promise<Pick<V64Options, 'hda' | 'cdrom' | 'bzimage' | 'initrd' | 'cmdline' | 'boot_order'>> {
+): Promise<
+  Pick<V64Options, 'hda' | 'hdb' | 'cdrom' | 'bzimage' | 'initrd' | 'cmdline' | 'boot_order'>
+> {
   if (media?.format === 'raw') {
     const disk = await ensurePersistentV64Disk(systemId, media, signal);
     return { hda: { url: disk.url, size: disk.size, disk_option: 'read_write' } };
@@ -319,8 +342,15 @@ async function resolveBootMedia(
   }
   if (diskManifest !== null) {
     // Installed system: the whole disk is the boot device, read lazily over Range.
+    const disk = { url: diskManifest.boot.url, size: diskManifest.disk.size, async: true };
+    if (diskManifest.esp === undefined) return { hda: disk };
+    // Two-media layout: OVMF's persisted `Boot0001` entry targets SATA port 0,
+    // so the ESP takes `hda` and the installed system moves to `hdb`. The order
+    // is not negotiable: swapping the two makes the firmware read the wrong
+    // volume and the guest falls back to "no bootable device".
     return {
-      hda: { url: diskManifest.boot.url, size: diskManifest.disk.size, async: true },
+      hda: { url: diskManifest.esp.url, size: diskManifest.esp.size, async: true },
+      hdb: disk,
     };
   }
   const disk = manifest?.files.disk;
@@ -402,6 +432,36 @@ function readMachine(
     : 'i440fx';
 }
 
+/**
+ * `v64Smc`: the emulated Apple SMC (`APP0001`, `0x300-0x31F`, IRQ 6). libv86
+ * refuses two combinations at engine start, so the provider stops them with a
+ * readable message first: i440FX keeps the floppy controller's IRQ 6, and the
+ * NE2000 puts its data port on the SMC's own `0x300`.
+ */
+function assertSmcCompatible(
+  systemId: string,
+  configuration: VMConfiguration | undefined,
+  profileConfiguration: ExtraConfiguration | undefined,
+  hardware:
+    { readonly network?: string | undefined; readonly machine?: string | undefined } | undefined,
+): void {
+  const machine = extraOption(configuration, profileConfiguration, 'v64Machine');
+  if (machine === 'i440fx' || hardware?.machine === 'i440fx') {
+    throw new VMError(
+      'START_FAILED',
+      `The emulated Apple SMC (v64Smc) needs machine_type "q35": on i440FX the floppy controller keeps IRQ 6, which AppleSMC.kext needs. Drop v64Machine: "i440fx" (or machine "i440fx") from "${systemId}", or drop v64Smc.`,
+      { systemId },
+    );
+  }
+  if (hardware?.network === 'ne2k') {
+    throw new VMError(
+      'START_FAILED',
+      `The emulated Apple SMC (v64Smc) and the NE2000 both use the I/O ports 0x300-0x31F: the NE2000's data port is 0x300, the Apple SMC's too. An SMC profile is offline, so declare hardwareProfile.network "none" (or "e1000", which is on MMIO) or drop the explicit "ne2k".`,
+      { systemId },
+    );
+  }
+}
+
 /** Named baseline (`x86-64-v2`/`v3`) or an explicit feature list. */
 function readCpuFeatures(
   configuration: VMConfiguration | undefined,
@@ -416,6 +476,30 @@ function readCpuFeatures(
     }
   }
   return undefined;
+}
+
+/**
+ * `v64UsbTablet` / `v64UsbKeyboard` / `v64UsbController`: the USB host
+ * controller and its HID devices. The catalogue's `extra` bag only carries
+ * scalars, so each device is its own flag, like `v64Hpet`. Absent (or asking
+ * for neither device) keeps the engine config free of `usb`, exactly as before
+ * this option existed.
+ */
+function readUsb(
+  configuration: VMConfiguration | undefined,
+  profileConfiguration: ExtraConfiguration | undefined,
+): V64UsbDevice | undefined {
+  const tablet = extraOption(configuration, profileConfiguration, 'v64UsbTablet') === true;
+  const keyboard = extraOption(configuration, profileConfiguration, 'v64UsbKeyboard') === true;
+  if (!tablet && !keyboard) return undefined;
+  const controller = extraOption(configuration, profileConfiguration, 'v64UsbController');
+  return {
+    // UHCI is what the Lion campaign's harness proved: two ports, tablet then keyboard.
+    controller: controller === 'ehci' || controller === 'xhci' ? controller : 'uhci',
+    tablet,
+    keyboard,
+    plugin_path: V64_ASSET_PATHS.usb,
+  };
 }
 
 function graphicsPath(graphics: V64Options['graphics_adapter']): string {

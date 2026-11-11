@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "ref": "macos-lion-x64",
+  "displayName": "macOS Lion",
+  "architecture": "x86_64",
+  "memoryMiB": 2048,
+  "vgaMemoryMiB": 32,
+  "license": "Operator-supplied macOS Lion 10.7.5 image; Apple licensing restricts use to Apple-branded hardware; not distributed.",
+  "provenance": "images/macos-lion-x64/disk.img (installed Lion 10.7.5 volume, decontaminated, auto-login lumi) + images/macos-lion-x64/esp.img (OpenCore 1.0.8, no Apple kext)",
+  "source": {
+    "path": "images/macos-lion-x64/disk.img",
+    "size": 8589934592,
+    "mtimeMs": 1794401106255
+  },
+  "disk": {
+    "fileName": "disk.img",
+    "format": "raw",
+    "url": "/images/macos-lion-x64/disk.img",
+    "size": 8589934592,
+    "mtimeMs": 1794401106255,
+    "sha256": "7243420d9559727b4ca2da7e314d00f626d7d20bbb0f1371d430eb6f9b4398e0"
+  },
+  "engine": {
+    "id": "v64"
+  },
+  "boot": {
+    "mode": "disk-boot",
+    "url": "/images/macos-lion-x64/disk.img",
+    "async": true,
+    "size": 8589934592
+  },
+  "esp": {
+    "fileName": "esp.img",
+    "url": "/images/macos-lion-x64/esp.img",
+    "size": 67108864
+  },
+  "notes": [
+    "Operator-provided 8 GiB RAW disk holding an installed macOS Lion 10.7.5 volume (decontaminated, auto-login lumi), served in place: git-ignored, never committed nor distributed.",
+    "Two-media v64 layout: the OpenCore 1.0.8 ESP is mounted on hda (SATA port 0) and the system disk on hdb, both read lazily over HTTP Range (async = true). The ESP contains no Apple kext."
+  ]
+}

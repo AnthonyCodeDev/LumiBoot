@@ -105,6 +105,9 @@ function parseArgs(argv) {
       case '--firmware-vars':
         options.firmwareVars = value();
         break;
+      case '--esp':
+        options.esp = value();
+        break;
       case '--note':
         (notes ??= []).push(value());
         break;
@@ -167,6 +170,13 @@ function usage() {
                           "firmware": { "type": "uefi", "vars": { … } } with the
                           file name, URL, size, mtime and SHA-256. Requires
                           --engine v64: v86 has no UEFI firmware.
+  --esp <path>            Optional EFI System Partition of a two-media boot (the
+                          second media of a v64 layout). The file is copied next
+                          to the manifest under its own name, hashed in full and
+                          recorded as "esp": { "fileName", "url", "size" }, so the
+                          dev middleware serves it and V64Provider mounts it on
+                          hda (the system disk moves to hdb). Requires --engine
+                          v64, and is omitted entirely by default.
   --note <text>           Manifest note (repeatable; replaces the default notes)
   --out <dir>             Output directory (default images/<ref>)
   --copy-to <path>        Optional verified copy (never the source, never public/)
@@ -314,6 +324,48 @@ async function readFirmwareVars(varsPath, ref) {
   };
 }
 
+/**
+ * EFI System Partition of a two-media boot: it is copied next to the manifest
+ * under the name it is served with, so the dev middleware can locate it even
+ * when the operator keeps the source elsewhere.
+ */
+async function readEsp(espPath, ref, outputDir) {
+  if (!(await fileExists(espPath))) {
+    throw new Error(`ESP image not found or unreadable: ${espPath}`);
+  }
+  const info = await stat(espPath);
+  if (!info.isFile()) throw new Error(`The ESP image is not a file: ${espPath}`);
+  if (!Number.isInteger(info.size) || info.size <= 0) {
+    throw new Error(`Invalid ESP size: ${info.size}`);
+  }
+
+  const fileName = basename(espPath);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(fileName)) {
+    throw new Error(`Invalid ESP file name "${fileName}" (plain name expected).`);
+  }
+  const destination = join(outputDir, fileName);
+  const sameFile = resolve(espPath).toLowerCase() === resolve(destination).toLowerCase();
+
+  let size;
+  let sha256;
+  if (sameFile) {
+    // Already in place: hashed in full, like the NVRAM store.
+    ({ size, sha256 } = await sha256File(espPath));
+  } else {
+    assertNotPublic(destination, 'the ESP copy');
+    log(`→ Copying the ESP next to the manifest: ${destination}…`);
+    // The ESP is small (typically 64 MiB): copied and hashed in a single pass.
+    ({ size, sha256 } = await copyAndHash(espPath, destination));
+    if (size !== info.size) {
+      await rm(destination, { force: true });
+      throw new Error(`Invalid ESP copy: ${size} bytes read, ${info.size} expected.`);
+    }
+    log(`✓ ESP copied (${size} bytes, sha256=${sha256}).`);
+  }
+
+  return { fileName, url: `/images/${ref}/${fileName}`, size, sha256 };
+}
+
 async function readExistingManifest(outDir) {
   const manifestPath = join(outDir, 'manifest.json');
   if (!(await fileExists(manifestPath))) return null;
@@ -345,6 +397,11 @@ async function main() {
   if (options.firmwareVars !== undefined && options.engine !== 'v64') {
     throw new Error(
       'Refused: --firmware-vars requires --engine v64 (v86 boots through the BIOS, not OVMF).',
+    );
+  }
+  if (options.esp !== undefined && options.engine !== 'v64') {
+    throw new Error(
+      'Refused: --esp requires --engine v64 (v86 has no UEFI firmware, so it cannot use an ESP).',
     );
   }
   if (!Number.isInteger(options.memoryMiB) || options.memoryMiB <= 0) {
@@ -454,6 +511,38 @@ async function main() {
         }
       }
     }
+
+    // EFI System Partition of a two-media boot: verified when declared.
+    const recordedEsp = existing.esp;
+    if (recordedEsp) {
+      const espFileName =
+        typeof recordedEsp.fileName === 'string' && recordedEsp.fileName.length > 0
+          ? recordedEsp.fileName
+          : basename(String(recordedEsp.url ?? '').split('?')[0]);
+      // No path is recorded either: next to the manifest, then next to the disk.
+      const candidates =
+        options.esp !== undefined
+          ? [resolve(options.esp)]
+          : [join(outputDir, espFileName), join(dirname(sourcePath), espFileName)];
+      let espPath;
+      for (const candidate of candidates) {
+        if (await fileExists(candidate)) {
+          espPath = candidate;
+          break;
+        }
+      }
+      if (espPath === undefined) {
+        problems.push(`ESP: missing file (looked in ${candidates.join(', ')})`);
+      } else {
+        const espInfo = await stat(espPath);
+        if (recordedEsp.size !== espInfo.size) {
+          problems.push(`ESP size: ${espInfo.size} != manifest ${recordedEsp.size}`);
+        } else {
+          const { sha256: espSha256 } = await sha256File(espPath);
+          log(`  ESP sha256=${espSha256} (recorded by size only)`);
+        }
+      }
+    }
     if (problems.length > 0) {
       for (const problem of problems) log(`✗ ${problem}`);
       return 1;
@@ -536,6 +625,9 @@ async function main() {
     options.firmwareVars === undefined
       ? undefined
       : { type: 'uefi', vars: await readFirmwareVars(resolve(options.firmwareVars), options.ref) };
+  // Second media: copied next to the manifest, hashed in full, size recorded.
+  const esp =
+    options.esp === undefined ? undefined : await readEsp(resolve(options.esp), options.ref, outputDir);
   const diskUrl = `/images/${options.ref}/${options.servedName}`;
   const diskMtimeMs = Math.trunc(sourceInfo.mtimeMs);
 
@@ -567,6 +659,10 @@ async function main() {
     engine,
     ...(firmware === undefined ? {} : { firmware }),
     boot: { mode: 'disk-boot', url: diskUrl, async: true, size: sourceInfo.size },
+    // Optional, additive two-media layout: `disk`/`boot` keep the system disk.
+    ...(esp === undefined
+      ? {}
+      : { esp: { fileName: esp.fileName, url: esp.url, size: esp.size } }),
     notes: options.notes,
   };
 
@@ -581,6 +677,12 @@ async function main() {
       `mtime (ms)     : ${diskMtimeMs}`,
       `format         : ${format}`,
       `sha256         : ${sha256 ?? '(not computed — see method)'}`,
+      ...(esp === undefined
+        ? []
+        : [
+            `ESP            : ${esp.fileName} ${esp.size} bytes (sha256=${esp.sha256})`,
+            'drive layout   : ESP = hda (SATA 0), system disk = hdb',
+          ]),
       `generated at   : ${new Date().toISOString()}`,
       `tool           : scripts/prepare-windows7-asset.mjs`,
       '',
@@ -595,6 +697,10 @@ async function main() {
   log(`  size=${sourceInfo.size} bytes (${(sourceInfo.size / GIB).toFixed(3)} GiB)`);
   log(`  disk served under ${diskUrl}`);
   if (firmware !== undefined) log(`  engine=${engine.id}, firmware vars under ${firmware.vars.url}`);
+  if (esp !== undefined) {
+    log(`  ESP served under ${esp.url} (${esp.size} bytes, sha256=${esp.sha256})`);
+    log('  Drive layout: ESP on hda (SATA 0), system disk on hdb.');
+  }
 
   if (flags.json) process.stdout.write(`${JSON.stringify(manifest, null, 2)}\n`);
   return 0;

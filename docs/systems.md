@@ -17,11 +17,12 @@
 | `windows-8-1-x86`         | Windows 8.1 Pro x86 32-bit       | 2 GB      | operator RAW disk                  | `disk-boot`              |
 | `windows-10-x86`          | Windows 10 x86 32-bit            | 2 GB      | operator RAW disk                  | `disk-boot`              |
 | `windows-11-x64`          | Windows 11 24H2 x64 (UEFI)       | 4 GB      | operator RAW disk                  | `disk-boot`              |
+| `macos-lion-x64`          | macOS Lion 10.7.5 x64 (UEFI)     | 2 GB      | operator RAW disk + OpenCore ESP   | `disk-boot`              |
 | `custom-image`            | Custom image (ISO / IMG / RAW)   | 512 MB    | user-imported media                | `LUMIBOOT_GUEST_READY`   |
 
 No disk, ISO or license key is shipped by this repository. This page is the index and the commands; details live next to each image under `images/<ref>/`.
 
-Windows 11 x64 follows the local disk pipeline and boots through **UEFI/OVMF** on the integrated v64 engine (q35 + ICH9 AHCI), with the OVMF variable store supplied by the operator next to the disk. Its real boot is proven with the patched v64 build (ISA IRQ 0 → I/O APIC input 2, HPET 100 ns, extended CPUID — [`scripts/patches/v64-ioapic-irq0-gsi2.patch`](../scripts/patches/v64-ioapic-irq0-gsi2.patch), recorded in `scripts/v64-assets.lock.json`): the guest boots to the Windows 11 sign-in screen with `KiBugCheckData = 0`, the sign-in is passed and the **desktop session** opens, so the card is `ready` ("Available"). macOS is catalogued but not developed: its ARM engine is not integrated and no image exists, so it stays `planned` with nothing to import and nothing published. Measured on 2026-11-04, **outside LumiBoot**, with the operator's own Apple installer and the experimental `macos-lion-x64` pipeline documented in [`images/macos-lion-x64/README.md`](../images/macos-lion-x64/README.md): under QEMU 9.2 + OVMF + OpenCore 1.0.8 the Lion x64 installer reaches its « Mac OS X Utilities » GUI and a full installation completes (`Install Succeeded`, 7.52 GiB written) — that is bare QEMU, not the browser engine. macOS is therefore `unsupported by LumiBoot`: no profile, no image, no manifest and no compatibility claim.
+Windows 11 x64 follows the local disk pipeline and boots through **UEFI/OVMF** on the integrated v64 engine (q35 + ICH9 AHCI), with the OVMF variable store supplied by the operator next to the disk. Its real boot is proven with the patched v64 build (ISA IRQ 0 → I/O APIC input 2, HPET 100 ns, extended CPUID — [`scripts/patches/v64-ioapic-irq0-gsi2.patch`](../scripts/patches/v64-ioapic-irq0-gsi2.patch), recorded in `scripts/v64-assets.lock.json`): the guest boots to the Windows 11 sign-in screen with `KiBugCheckData = 0`, the sign-in is passed and the **logged-in desktop session** opens, so the card is `ready` ("Available"). macOS is served by two catalogue entries. **macOS Lion 10.7.5 x64** (`macos-lion-x64`, `validated: true`) is an operator-side, local-media profile that boots to a painted Lion desktop **inside LumiBoot** in 245.0 s — see [macOS Lion x64](#macos-lion-x64); no Apple media is distributed and the licence question is unchanged. **macOS Sequoia** (`macos-sequoia`, Apple Silicon) is a **roadmap entry**: it needs the separate ARM64 WebAssembly engine, which is not integrated, so its card stays `planned` with nothing to import and nothing published — that is a missing engine on the LumiBoot side, not a macOS limitation. The earlier bare-QEMU and outside-the-product measurements are kept as the installation record in [`images/macos-lion-x64/README.md`](../images/macos-lion-x64/README.md).
 
 Ubuntu 18.04 LTS follows the Debian pipeline — one script, three variants — and all three are built
 locally, published into the Git-ignored `apps/web/public/images/<ref>/` directories and validated by
@@ -265,6 +266,50 @@ pnpm assets:windows11:check
 ```
 
 4 GB of guest RAM, 32 MB of VGA memory. The profile boots the disk by UEFI through OVMF on the integrated v64 engine (`engine.id: v64`), with `v64Machine: q35`, `v64Firmware: uefi`, `v64CpuFeatures: x86-64-v2` and an `e1000` NIC, matching a `-machine q35` installation on Q35/ICH9 AHCI. It is `validated: true`: with the patched v64 build (IRQ0 → GSI2, HPET 100 ns, extended CPUID) the guest boots to the Windows 11 sign-in screen with `KiBugCheckData = 0` and, once signed in, to the **logged-in desktop**. QEMU procedure, reference measurements, HTTP Range checks and limitations: [`images/windows-11-x64/README.md`](../images/windows-11-x64/README.md).
+
+## macOS Lion x64
+
+Requires an **operator-supplied** installed macOS Lion 10.7.5 x86-64 volume (8 GiB RAW, HFS+) and a
+**64 MiB FAT ESP holding OpenCore 1.0.8**. Neither is distributed: both are Git-ignored local files
+under `images/macos-lion-x64/` (`disk.img`, `esp.img`) and the Apple licence restricts macOS to
+Apple-branded hardware.
+
+```powershell
+# Build the manifest of the two-media layout (ESP on hda, system disk on hdb).
+pnpm assets:macoslion:prepare --source images/macos-lion-x64/disk.img
+pnpm assets:macoslion:check
+```
+
+The wrapper supplies the macOS values (`ref: macos-lion-x64`, x86-64, 2048 MiB, 32 MiB VGA,
+`engine: v64`, both media under `images/macos-lion-x64/`) and forwards `--esp`, `--check`, `--force`,
+`--skip-hash`, `--resume`, `--json` and `--copy-to`; the ESP defaults to
+`images/macos-lion-x64/esp.img` (`--esp` overrides it).
+
+The profile boots by **UEFI through OVMF on q35** (`v64Firmware: uefi`, `v64Machine: q35`), with
+**one core**, **2048 MB** of guest RAM, `v64Smc: true` and USB input (`v64UsbTablet`,
+`v64UsbKeyboard`). OpenCore hides auxiliary entries, so its menu lists `Lion` alone and boots it on
+its own timeout: **no keystroke is needed**, which matters because OpenCore's key support is
+unavailable under this firmware (`AmiEfiKeycodeProtocol is unavailable on gST->ConsoleHandle`).
+
+The SMC is **emulated by the v64 engine** (Device `APP0001`, ports `0x300`/`0x304`, IRQ 6) and the ESP
+injects **no kext at all** — no FakeSMC, no AppleSMC — so the boot ESP carries no Apple binary. The
+profile is `validated: true` on a measured real boot: `tests/e2e/macos-lion-desktop.spec.ts` reaches a
+painted, stable **Lion desktop 245.0 s** after the Start click (1024x768, mean luminance 205.9/255,
+97.8 % non-white, 215 colours, three stable samples), with the capture
+`images/macos-lion-x64/bureau-lumiboot-245s.png`. Details and limits:
+[`images/macos-lion-x64/README.md`](../images/macos-lion-x64/README.md#booted-inside-lumiboot-measured-on-2026-11-11).
+
+Limits, as measured:
+
+- **slow** — several minutes to the desktop under software emulation, no graphics acceleration, no
+  QE/CI; the menu bar can paint a few minutes after the session opens;
+- **US keyboard only** — the HID keyboard reports US positions (AZERTY is typed as QWERTY);
+- **offline by construction** — `hardwareProfile.network: "none"`; the emulated SMC owns the I/O ports
+  `0x300-0x31F` and the NE2000 cannot share them;
+- **stability** — 2 starts in 5 froze on a grey screen in the harness campaign; the E2E fails rather
+  than pretending, and `validated` must be reverted as soon as a rebuild stops reaching the desktop;
+- the installed volume is a **manual hybrid** (not produced by `OSInstall`), and it stays an
+  operator-side artifact.
 
 ## Custom image
 

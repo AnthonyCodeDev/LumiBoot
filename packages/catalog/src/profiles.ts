@@ -474,6 +474,44 @@ export const launchProfiles = [
       'from the local RAW disk, with no installation and no media to import.',
   },
   {
+    id: 'macos-lion-x64',
+    imageId: 'macos-lion-x64-image',
+    engineId: 'v64',
+    executionMode: 'browser',
+    minMemoryMiB: 2048,
+    configuration: {
+      memoryMiB: 2048,
+      vgaMemoryMiB: 32,
+      bootDevice: 'disk',
+      extra: {
+        v64Firmware: 'uefi',
+        v64Machine: 'q35',
+        // The engine emulates the Apple SMC (APP0001, IRQ 6): the guest needs no
+        // FakeSMC/AppleSMC kext, so the published ESP carries no Apple binary.
+        v64Smc: true,
+        // Lion 10.7.5 ships no PS/2 driver: input has to be USB HID.
+        v64UsbTablet: true,
+        v64UsbKeyboard: true,
+        v64CpuCores: 1,
+      },
+    },
+    // The SMC owns 0x300-0x31F, so an SMC profile is offline by construction.
+    hardwareProfile: { ...pcHardware('none'), machine: 'q35', acpi: true },
+    readiness: diskBootReadiness('macos-lion-x64'),
+    displayMode: 'graphical',
+    slug: 'macos-lion-x64',
+    displayName: 'macOS',
+    versionLabel: 'Lion 10.7.5 · x86',
+    // Proven boot recorded in images/macos-lion-x64/README.md and
+    // tests/e2e/macos-lion-desktop.spec.ts: the two local media (OpenCore ESP on
+    // hda, installed Lion disk on hdb) boot in LumiBoot to the Finder desktop.
+    // Keep the flag honest and revert it as soon as a rebuild stops reaching it.
+    validated: true,
+    description:
+      'A macOS Lion 10.7.5 session in the browser via v64: OpenCore on a local ESP ' +
+      'chain-loads the installed disk, with an Apple SMC emulated by the engine.',
+  },
+  {
     id: 'macos-sequoia',
     imageId: 'macos-sequoia-image',
     engineId: 'wasm-arm',
@@ -489,7 +527,9 @@ export const launchProfiles = [
     displayName: 'macOS',
     versionLabel: 'Sequoia · Apple Silicon',
     validated: false,
-    description: 'A macOS session built for an ARM-capable browser engine.',
+    description:
+      'Roadmap: an Apple Silicon macOS session needs the separate ARM64 engine, which is not ' +
+      'integrated. x86-64 macOS Lion is available today (macos-lion-x64).',
   },
   {
     id: 'custom-image',

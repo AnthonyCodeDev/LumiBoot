@@ -38,6 +38,8 @@ pnpm-debug.log*
 *.pkg
 *.pkg/
 /images/macos-lion-x64/build/
+# macOS Lion: proof captures of an operator-side Apple session stay local
+/images/macos-lion-x64/bureau-lumiboot-*.png
 
 # Network client release binaries (published as GitHub Release assets, never committed)
 /apps/web/public/downloads/*.exe

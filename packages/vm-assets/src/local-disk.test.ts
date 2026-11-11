@@ -12,6 +12,7 @@ import {
 
 const HEX = 'a'.repeat(64);
 const SIZE = 17179869184;
+const ESP_SIZE = 64 * 1024 * 1024;
 
 function validManifest(): Record<string, unknown> {
   return {
@@ -80,6 +81,16 @@ function validV64Manifest(): Record<string, unknown> {
       },
     },
   };
+}
+
+/** v64 manifest that also declares an EFI System Partition (two-media layout). */
+function validV64EspManifest(): Record<string, unknown> {
+  const raw = validV64Manifest();
+  raw.esp = {
+    url: '/images/windows-11-x64/esp.img',
+    size: ESP_SIZE,
+  };
+  return raw;
 }
 
 describe('parseLocalDiskManifest', () => {
@@ -226,6 +237,87 @@ describe('parseLocalDiskManifest', () => {
       expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
     },
   );
+
+  it('accepts an ESP without touching the existing boot/disk pair', () => {
+    // Additive contract: declaring an ESP must not reinterpret `disk`/`boot`,
+    // so an unchanged manifest only gains the new field.
+    const raw = validV64EspManifest();
+    const manifest = parseLocalDiskManifest(raw);
+    expect(manifest.esp).toEqual({ url: '/images/windows-11-x64/esp.img', size: ESP_SIZE });
+    expect(manifest.boot.url).toBe(manifest.disk.url);
+    expect(manifest.boot.size).toBe(manifest.disk.size);
+  });
+
+  it('keeps a manifest without an ESP valid and free of the field', () => {
+    const manifest = parseLocalDiskManifest(validV64Manifest());
+    expect(manifest.esp).toBeUndefined();
+    expect(manifest).not.toHaveProperty('esp');
+  });
+
+  it.each([0, -1, 1.5])('rejects an ESP with a non-positive integer size: %s', (size) => {
+    const raw = validV64EspManifest();
+    (raw.esp as Record<string, unknown>).size = size;
+    expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+  });
+
+  it('rejects an ESP without a URL', () => {
+    const raw = validV64EspManifest();
+    delete (raw.esp as Record<string, unknown>).url;
+    expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+  });
+
+  it.each([
+    '/images/other/esp.img',
+    '/images/windows-11-x64/../other/esp.img',
+    'https://exemple.test/esp.img',
+  ])('rejects an ESP URL outside /images/<ref>/: %s', (url) => {
+    const raw = validV64EspManifest();
+    (raw.esp as Record<string, unknown>).url = url;
+    expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+  });
+
+  it('rejects an unknown key inside the ESP block (.strict)', () => {
+    const raw = validV64EspManifest();
+    (raw.esp as Record<string, unknown>).mtimeMs = 1;
+    expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+  });
+
+  it('accepts an ESP that names its local file (served name)', () => {
+    // `fileName` is optional: `{ url, size }` stays valid, and a dev server
+    // needs the name to locate the file next to the manifest.
+    const raw = validV64EspManifest();
+    (raw.esp as Record<string, unknown>).fileName = 'esp.img';
+    const manifest = parseLocalDiskManifest(raw);
+    expect(manifest.esp).toEqual({
+      fileName: 'esp.img',
+      url: '/images/windows-11-x64/esp.img',
+      size: ESP_SIZE,
+    });
+    expect(manifest.boot.url).toBe(manifest.disk.url);
+  });
+
+  it('accepts a token query on an ESP that names its local file', () => {
+    const raw = validV64EspManifest();
+    const esp = raw.esp as Record<string, unknown>;
+    esp.fileName = 'esp.img';
+    esp.url = '/images/windows-11-x64/esp.img?token=abc';
+    expect(parseLocalDiskManifest(raw).esp?.fileName).toBe('esp.img');
+  });
+
+  it.each(['../esp.img', 'nested/esp.img', '/esp.img', '..', '.', 'esp image.img', ''])(
+    'rejects an unsafe ESP file name: %s',
+    (fileName) => {
+      const raw = validV64EspManifest();
+      (raw.esp as Record<string, unknown>).fileName = fileName;
+      expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+    },
+  );
+
+  it('rejects an ESP file name that does not match the ESP URL', () => {
+    const raw = validV64EspManifest();
+    (raw.esp as Record<string, unknown>).fileName = 'other.img';
+    expect(() => parseLocalDiskManifest(raw)).toThrow(AssetError);
+  });
 });
 
 describe('helpers', () => {
@@ -254,6 +346,17 @@ describe('helpers', () => {
     delete (raw.disk as Record<string, unknown>).sha256;
     const withoutHash = parseLocalDiskManifest(raw);
     expect(toLocalDiskMedia(withoutHash)).not.toHaveProperty('sha256');
+  });
+
+  it('toV86AsyncDrive keeps the system disk on hda even when an ESP is declared', () => {
+    // v86 has no UEFI firmware: the ESP is a v64-only device and must not
+    // silently replace the disk it cannot boot without.
+    const twoMedia = parseLocalDiskManifest(validV64EspManifest());
+    expect(toV86AsyncDrive(twoMedia)).toEqual({
+      url: '/images/windows-11-x64/disk.img',
+      async: true,
+      size: SIZE,
+    });
   });
 });
 
@@ -314,5 +417,31 @@ describe('public/private serialization', () => {
     const publicManifest = toPublicLocalDiskManifest(v64Manifest);
     expect(publicManifest.engine).toEqual({ id: 'v64' });
     expect(publicManifest.firmware).toEqual(v64Manifest.firmware);
+  });
+
+  it('keeps the ESP through the public projection', () => {
+    const twoMedia = parseLocalDiskManifest(validV64EspManifest());
+    const publicManifest = toPublicLocalDiskManifest(twoMedia);
+    expect(publicManifest.esp).toEqual({ url: '/images/windows-11-x64/esp.img', size: ESP_SIZE });
+    expect(parseLocalDiskPublicManifest(publicManifest).esp).toEqual(publicManifest.esp);
+  });
+
+  it('keeps the ESP file name through the public projection', () => {
+    // The served name is not a machine path (it mirrors `disk.fileName`), so it
+    // survives: the dev middleware needs it to answer the ESP route.
+    const raw = validV64EspManifest();
+    (raw.esp as Record<string, unknown>).fileName = 'esp.img';
+    const publicManifest = toPublicLocalDiskManifest(parseLocalDiskManifest(raw));
+    expect(publicManifest.esp).toEqual({
+      fileName: 'esp.img',
+      url: '/images/windows-11-x64/esp.img',
+      size: ESP_SIZE,
+    });
+  });
+
+  it('omits the ESP key entirely when the manifest has none', () => {
+    const publicManifest = toPublicLocalDiskManifest(parseLocalDiskManifest(validManifest()));
+    expect(publicManifest).not.toHaveProperty('esp');
+    expect('esp' in publicManifest).toBe(false);
   });
 });

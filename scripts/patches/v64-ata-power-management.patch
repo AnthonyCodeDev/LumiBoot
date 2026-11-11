@@ -1,0 +1,29 @@
+diff --git a/src/ide.js b/src/ide.js
+index 48a62125..7ef632a8 100644
+--- a/src/ide.js
++++ b/src/ide.js
+@@ -126,6 +126,9 @@ const ATA_CMD_SECURITY_FREEZE_LOCK = 0xF5;            // see [ATA8-ACS] 7.40
+ const ATA_CMD_SET_FEATURES = 0xEF;                    // see [ATA8-ACS] 7.45
+ const ATA_CMD_SET_MAX = 0xF9;                         // see [ATA-6] 8.47
+ const ATA_CMD_SET_MULTIPLE_MODE = 0xC6;               // see [ATA8-ACS] 7.46
++const ATA_CMD_STANDBY = 0xE2;                         // see [ATA8-ACS] 7.49
++const ATA_CMD_IDLE = 0xE3;                            // see [ATA8-ACS] 7.14
++const ATA_CMD_SLEEP = 0xE6;                           // see [ATA8-ACS] 7.42
+ const ATA_CMD_STANDBY_IMMEDIATE = 0xE0;               // see [ATA8-ACS] 7.50
+ const ATA_CMD_WRITE_DMA = 0xCA;                       // see [ATA8-ACS] 7.58
+ const ATA_CMD_WRITE_DMA_EXT = 0x35;                   // see [ATA8-ACS] 7.59
+@@ -1496,11 +1499,10 @@ IDEInterface.prototype.ata_command = function(cmd)
+             this.push_irq();
+             break;
+ 
++        case ATA_CMD_STANDBY:
++        case ATA_CMD_IDLE:
++        case ATA_CMD_SLEEP:
+         case ATA_CMD_STANDBY_IMMEDIATE:
+-            this.status_reg = ATA_SR_DRDY|ATA_SR_DSC;
+-            this.push_irq();
+-            break;
+-
+         case ATA_CMD_IDLE_IMMEDIATE:
+             this.status_reg = ATA_SR_DRDY|ATA_SR_DSC;
+             this.push_irq();

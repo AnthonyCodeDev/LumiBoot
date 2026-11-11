@@ -1,20 +1,30 @@
 {
-  "$comment": "Lock file for the v64 engine binaries. The six core files (v86.wasm, v86-fallback.wasm, v86-parallel.wasm, libv86.mjs, cpu-worker.js, vcpu-worker.js) are NOT the upstream bytes served by `url`: they are the upstream 74d2bafc build with `scripts/patches/v64-ioapic-irq0-gsi2.patch` applied, rebuilt in a clean tree (glbridge/vx_naga.wasm is re-emitted by the same build). Their `url` stays the upstream provenance for the same path, so `prepare-v64-assets.mjs` fails loudly instead of silently installing an unpatched binary. Every other asset is byte-identical to upstream.",
+  "$comment": "Lock file for the v64 engine binaries. The seven rebuilt files (v86.wasm, v86-fallback.wasm, v86-parallel.wasm, libv86.mjs, cpu-worker.js, vcpu-worker.js and the USB plugin v86-usb.js) are NOT the upstream bytes served by `url`: they are the upstream 74d2bafc build with `scripts/patches/v64-ioapic-irq0-gsi2.patch`, then `scripts/patches/v64-ata-power-management.patch`, then `scripts/patches/v64-usb-keyboard.patch`, then `scripts/patches/v64-smc-device.patch` applied by `scripts/build-v64-assets.sh`, rebuilt in a clean tree (glbridge/vx_naga.wasm is re-emitted by the same build). Their `url` stays the upstream provenance for the same path, so `prepare-v64-assets.mjs` fails loudly instead of silently installing an unpatched binary. Every other asset is byte-identical to upstream.",
   "revision": "74d2bafcc7d568e2ab4374804e176f1a8a350f61",
   "repository": "https://github.com/speedyHKjournalist/v64",
   "buildSource": "https://v64-2ys.pages.dev",
-  "patch": "IRQ0 -> GSI2 in the I/O APIC and in the MADT interrupt source override (Windows 11 24H2 HAL clock), HPET main-counter period 100 ns, extended CPUID leaves (0x80000001 / 0x80000007 / 0x80000008)",
-  "patchFile": "scripts/patches/v64-ioapic-irq0-gsi2.patch",
+  "patch": "IRQ0 -> GSI2 in the I/O APIC and in the MADT interrupt source override (Windows 11 24H2 HAL clock), HPET main-counter period 100 ns, extended CPUID leaves (0x80000001 / 0x80000007 / 0x80000008); ATA STANDBY (0xE2), IDLE (0xE3) and SLEEP (0xE6) complete with DRDY like STANDBY/IDLE IMMEDIATE instead of aborting, so the AHCI port no longer latches `halted` on the macOS driver's power-management commands; a USB HID boot keyboard on the USB plugin (src/usb/hid_keyboard.js, `usb.keyboard`), typed into with the bus's `keyboard-usage` [usage, down] (HID usages 0x04-0x65, modifiers 0xE0-0xE7) and announcing `usb-keyboard-active`, because macOS Lion has no PS/2 driver; an Apple SMC (`smc: true`, src/smc.js) as QEMU's isa-applesmc: READ (0x10) on ports 0x300/0x304/0x31E, the REV/OSK0/OSK1/NATJ/MSSP/MSSD keys and its error codes, a Device(SMC) _HID \"APP0001\" with I/O 0x300-0x31F and IRQ 6 in the q35 ACPI tables (whose FDC0 then gives up IRQ 6), and the snapshot slots for its registers; it is refused with the NE2000 (net_device type \"ne2k\", the default), which owns 0x300 too",
+  "patchFile": [
+    "scripts/patches/v64-ioapic-irq0-gsi2.patch",
+    "scripts/patches/v64-ata-power-management.patch",
+    "scripts/patches/v64-usb-keyboard.patch",
+    "scripts/patches/v64-smc-device.patch"
+  ],
   "build": {
     "base": "74d2bafcc7d568e2ab4374804e176f1a8a350f61",
-    "patches": ["scripts/patches/v64-ioapic-irq0-gsi2.patch"],
-    "command": "make all build/v86-fallback.wasm"
+    "patches": [
+      "scripts/patches/v64-ioapic-irq0-gsi2.patch",
+      "scripts/patches/v64-ata-power-management.patch",
+      "scripts/patches/v64-usb-keyboard.patch",
+      "scripts/patches/v64-smc-device.patch"
+    ],
+    "command": "make build/v86.wasm build/v86-fallback.wasm build/v86-parallel.wasm build/libv86.mjs build/cpu-worker.js build/vcpu-worker.js build/v86-usb.js"
   },
   "assets": {
     "libv86.mjs": {
       "url": "https://v64-2ys.pages.dev/build/libv86.mjs",
-      "size": 761198,
-      "sha256": "413b2eb42bbf966ff24033978325d36ac6173d66ae3dd6a889258526dd31b9c1"
+      "size": 766108,
+      "sha256": "ae0794a2e90db3a2624e88c135069a7e0afdb597204c8a7aa29a04b7e094ae9a"
     },
     "v86.wasm": {
       "url": "https://v64-2ys.pages.dev/build/v86.wasm",
@@ -33,13 +43,18 @@
     },
     "cpu-worker.js": {
       "url": "https://v64-2ys.pages.dev/build/cpu-worker.js",
-      "size": 770330,
-      "sha256": "61b07a5ee14f83fa3d406b105a10031299570dbd52ee96e023e1ae1b8137e0ea"
+      "size": 775242,
+      "sha256": "7c87c1696208afbd6763efba349749ddb0c3232546bcc7efd53d7f3cfbcb8e28"
     },
     "vcpu-worker.js": {
       "url": "https://v64-2ys.pages.dev/build/vcpu-worker.js",
-      "size": 771224,
-      "sha256": "463d233298a78165eab499c4c18b4ccf455ccbd41c5b6b93f226bc236e0bfba8"
+      "size": 776136,
+      "sha256": "aa06a0b616ed48e1ef30d362c0787eb4e09cee74893742347082efdfb9f180af"
+    },
+    "v86-usb.js": {
+      "url": "https://v64-2ys.pages.dev/build/v86-usb.js",
+      "size": 69249,
+      "sha256": "9a6b440b09bf7a957df8c4f6b281522295ee819e687cc1124069416d112c5c8b"
     },
     "v86-bochs-vga.js": {
       "url": "https://v64-2ys.pages.dev/build/v86-bochs-vga.js",

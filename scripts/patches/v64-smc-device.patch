@@ -1,0 +1,629 @@
+diff --git a/Makefile b/Makefile
+index 717203bd..1d874efb 100644
+--- a/Makefile
++++ b/Makefile
+@@ -149,7 +149,7 @@ CARGO_FLAGS_PARALLEL=$(CARGO_FLAGS) -C target-feature=+atomics \
+ 		-C link-args="--import-memory --export-memory --emit-relocs --no-check-features --max-memory=4294967296 --global-base=32768 --export=__heap_base --export=__data_end"
+ 
+ CORE_FILES=cjs.js const.js io.js machine_clock.js machine_options.js main.js lib.js buffer.js ide.js pci.js floppy.js \
+-	   dma.js pit.js display.js device_plugin.js graphics_adapter.js ps2.js rtc.js uart.js parallel.js vmware.js \
++	   dma.js pit.js display.js device_plugin.js graphics_adapter.js ps2.js rtc.js smc.js uart.js parallel.js vmware.js \
+ 	   acpi.js acpi_tables.js smbios.js pflash.js tpm/store.js platform.js q35.js ahci.js pcie_root_port.js hpet.js smbus.js ich9_tco.js state_layout.js cpu_features.js jit_switches.js iso9660.js \
+ 	   state.js state_io.js block_backend.js disk_options.js disk_writeback.js disk_service.js opfs_disk.js mac_address.js virtio.js virtio_console.js virtio_net.js virtio_balloon.js \
+ 	   virtio_mmio.js virtio_blk.js virtio_rng.js virtio_input.js virtio_vsock.js virtio_snd.js \
+diff --git a/src/acpi_tables.js b/src/acpi_tables.js
+index 14f609ab..e56e8012 100644
+--- a/src/acpi_tables.js
++++ b/src/acpi_tables.js
+@@ -320,7 +320,20 @@ function isa_devices_of(platform)
+         // SeaBIOS looks for PNP0303 to enable its PS/2 support
+         isa_device("KBD", "PNP0303", aml_resources(res_io(0x60, 1), res_io(0x64, 1), res_irq_noflags([1]))),
+         isa_device("MOU", "PNP0F13", aml_resources(res_irq_noflags([12]))),
+-        isa_device("FDC0", "PNP0700", aml_resources(res_io(0x3F2, 4), res_io(0x3F7, 1), res_irq_noflags([6]), res_dma([2]))),
++        // (QEMU's q35 has no floppy controller at all (pc_q35.c, no_floppy = 1)
++        // and IRQ 6 belongs to the SMC below: the ports and the DMA channel
++        // stay, a guest that drives the emulated floppy just has no IRQ)
++        isa_device("FDC0", "PNP0700", aml_resources(res_io(0x3F2, 4), res_io(0x3F7, 1),
++            platform.machine === "q35" ? [] : res_irq_noflags([6]), res_dma([2]))),
++        // The emulated Apple SMC (smc: true, src/smc.js), as QEMU's
++        // isa-applesmc has it: Lion's AppleSMC.kext matches IONameMatch
++        // "APP0001" on an IOACPIPlatformDevice and uses its I/O range in the
++        // "old SMC mode". It keeps IRQ 6: AppleSMC.kext registers an interrupt
++        // source and fails to start ("failed to create fInterruptSource")
++        // when another device already owns that interrupt.
++        ...platform.smc ? [
++            isa_device("SMC", "APP0001", aml_resources(res_io(0x300, 0x20), res_irq_noflags([6]))),
++        ] : [],
+         // (QEMU's PC does not describe these: with platform.qemu_compatible
+         // a guest installed there sees no new devices)
+         ...platform.qemu_compatible ? [] : [
+diff --git a/src/browser/cpu_worker.js b/src/browser/cpu_worker.js
+index 61cf67f5..96a0cf16 100644
+--- a/src/browser/cpu_worker.js
++++ b/src/browser/cpu_worker.js
+@@ -66,7 +66,7 @@ export function encode_worker_options(o, plugins = [], adapter_renderer = false)
+             new URL(o["graphics_adapter_path"] || default_graphics_adapter_path(o["graphics_adapter"]), location.href).href,
+         "extended_memory_size": o.extended_memory_size, "extended_memory_cache": o.extended_memory_cache,
+         "high_memory_size": o.high_memory_size,
+-        "boot_order": o.boot_order, "acpi": o.acpi, "machine_type": o.machine_type, "pcie_root_ports": o.pcie_root_ports, "hpet": o.hpet, "smbus": o.smbus, "cpu_cores": o.cpu_cores,
++        "boot_order": o.boot_order, "acpi": o.acpi, "machine_type": o.machine_type, "pcie_root_ports": o.pcie_root_ports, "hpet": o.hpet, "smbus": o.smbus, "smc": o.smc, "cpu_cores": o.cpu_cores,
+         "cpu_clock": o.cpu_clock, "cpu_quantum": o.cpu_quantum, "cpu_schedule_seed": o.cpu_schedule_seed,
+         "experimental_smp_jit": o.experimental_smp_jit, "disable_jit": o.disable_jit,
+         "cpu_type": o["cpu_type"], "cpu_features": o["cpu_features"], "cpu_features_unreleased": o["cpu_features_unreleased"],
+diff --git a/src/browser/starter.js b/src/browser/starter.js
+index cc333125..0e139214 100644
+--- a/src/browser/starter.js
++++ b/src/browser/starter.js
+@@ -550,6 +550,8 @@ V86.prototype.continue_init = async function(emulator, options)
+     settings.pcie_root_ports = options.pcie_root_ports;
+     settings.hpet = options.hpet;
+     settings.smbus = options.smbus;
++    // (the Apple SMC: src/smc.js and its APP0001 device in the ACPI tables)
++    settings.smc = options.smc;
+     settings["ahci_test_drives"] = options["ahci_test_drives"]; // (tests only, see cpu.js)
+     settings["ahci_test_pci_id"] = options["ahci_test_pci_id"];
+     settings.cpu_cores = options.cpu_cores;
+diff --git a/src/cpu.js b/src/cpu.js
+index 49ccf2d0..3f8838eb 100644
+--- a/src/cpu.js
++++ b/src/cpu.js
+@@ -38,6 +38,7 @@ import { VirtioConsole } from "./virtio_console.js";
+ import { PCI } from "./pci.js";
+ import { Q35 } from "./q35.js";
+ import { PS2 } from "./ps2.js";
++import { SMC } from "./smc.js";
+ import { VMwareMouse } from "./vmware.js";
+ import { read_elf, elf_unsupported_reason } from "./elf.js";
+ 
+@@ -999,6 +1000,9 @@ CPU.prototype.get_state = function(skip_memory = false)
+     state[105] = (this.devices.pcie_root_ports || []).map(port => port.get_state());
+     // the CPU features (settings cpu_features, CPU_FEATURES)
+     state[106] = this.cpu_features;
++    // the Apple SMC's transfer registers and keys (smc; the keys are the
++    // chip's ROM, kept in the snapshot so that a restore needs no replay)
++    state[112] = this.devices.smc;
+     return state;
+ };
+ 
+@@ -1331,6 +1335,15 @@ CPU.prototype.validate_state = function(state)
+     {
+         throw new Error("The snapshot is from a machine with usb, this one has none");
+     }
++    // the Apple SMC likewise (its ACPI device changes the machine's tables)
++    if(this.devices.smc)
++    {
++        if(!state[112]) throw new Error("The snapshot is from a machine without smc (the APP0001 SMC), this one has it");
++    }
++    else if(state[112])
++    {
++        throw new Error("The snapshot is from a machine with smc (the APP0001 SMC), this one has none");
++    }
+     // the TPM: both or neither; its store as a disk's
+     if(this.devices.tpm)
+     {
+@@ -1550,6 +1563,7 @@ CPU.prototype.set_state = function(state, skip_memory = false)
+     this.set_state_pic(state[60]);
+     this.devices.audio && this.devices.audio.set_state(state[61]);
+     this.devices.usb && this.devices.usb.set_state(state[107]);
++    this.devices.smc && state[112] && this.devices.smc.set_state(state[112]);
+     // (the TPM's store first: the TPM powers on from it)
+     if(this.devices.tpm)
+     {
+@@ -2505,6 +2519,10 @@ CPU.prototype.reboot_internal = function(reason, keep_memory)
+     {
+         this.devices.tpm.reset();
+     }
++    if(this.devices.smc)
++    {
++        this.devices.smc.reset();
++    }
+ 
+     if(keep_memory)
+     {
+@@ -3309,6 +3327,13 @@ CPU.prototype.init = function(settings, device_bus)
+ 
+         this.devices.rtc = new RTC(this);
+         this.fill_cmos(this.devices.rtc, settings);
++        // (the Apple SMC on 0x300-0x31F and IRQ 6: only when the machine's
++        // ACPI tables describe it, which is also what keeps 0x300 free for
++        // the NE2000)
++        if(this.platform.smc)
++        {
++            this.devices.smc = new SMC(this);
++        }
+         if(this.firmware)
+         {
+             this.add_uefi_fw_cfg_files();
+diff --git a/src/machine_options.js b/src/machine_options.js
+index bba404ee..db092abd 100644
+--- a/src/machine_options.js
++++ b/src/machine_options.js
+@@ -85,7 +85,7 @@ export const VIRT_GRAPHICS_ADAPTERS = ["none", "virtio_gpu"];
+ export const VIRT_NET_DEVICE_TYPES = ["virtio", "none"];
+ 
+ /** Options that only the Q35 machine has */
+-export const Q35_ONLY = ["hpet", "smbus", "pcie_root_ports"];
++export const Q35_ONLY = ["hpet", "smbus", "smc", "pcie_root_ports"];
+ 
+ const given = value => value !== undefined && value !== null && value !== false;
+ 
+@@ -137,6 +137,10 @@ export function check_machine_options(options)
+         {
+             throw new Error("acpi: true is an option of the PC machines; the virt machine describes itself with a device tree");
+         }
++        if(given(options["smc"]))
++        {
++            throw new Error("smc is an option of the PC machine_type \"q35\", not of machine_type \"" + machine_type + "\"");
++        }
+         const adapter = options["graphics_adapter"];
+         if(adapter !== undefined && typeof adapter === "string" && !VIRT_GRAPHICS_ADAPTERS.includes(adapter))
+         {
+@@ -201,6 +205,32 @@ export function check_machine_options(options)
+         {
+             throw new Error("net_device.plugin_path must be the path or URL of the plugin file");
+         }
++        // The Apple SMC (smc, src/smc.js): its data port is 0x300, which is
++        // the NE2000's own base port (src/net_adapters/ne2k/ne2k.js sets
++        // this.port = 0x300, as the ISA card QEMU puts there by default), so
++        // the two devices would answer on the same port and the later one
++        // would mask the other. net_device defaults to the NE2000
++        // (src/browser/starter.js): the combination is an error, not a
++        // silent conflict.
++        if(options["smc"] !== undefined && typeof options["smc"] !== "boolean")
++        {
++            throw new Error("smc must be true or false");
++        }
++        if(given(options["smc"]))
++        {
++            if(machine_type !== "q35")
++            {
++                throw new Error("smc requires machine_type \"q35\" (the Apple SMC keeps IRQ 6, which the " +
++                    "i440FX machine's floppy controller owns)");
++            }
++            const net_type = net && net["type"] !== undefined ? net["type"] : "ne2k";
++            if(net_type === "ne2k")
++            {
++                throw new Error("smc: true and the NE2000 (net_device type \"ne2k\", the default) both use the I/O " +
++                    "ports 0x300-0x31F: the NE2000's data port is 0x300, the Apple SMC's too. Give " +
++                    "net_device: { type: \"none\" } (or \"e1000\", which is on MMIO) with smc, or leave smc off");
++            }
++        }
+         const audio = options["audio_device"];
+         if(audio !== undefined && !AUDIO_DEVICES.includes(audio))
+         {
+@@ -357,6 +387,7 @@ export function allowed_options(cpu_type, machine_type)
+         unavailable["bios"] = unavailable["vga_bios"] = "the virt machine has no PC firmware (it boots its kernel directly)";
+         unavailable["fda"] = unavailable["fdb"] = "the virt machine has no floppy controller";
+         unavailable["acpi"] = "the virt machine describes itself with a device tree, not ACPI";
++        unavailable["smc"] = "the virt machine has no Apple SMC (smc is an option of machine_type \"q35\")";
+         if(cpu_type === "arm32")
+         {
+             unavailable["a64_profile"] = "a64_profile is an option of cpu_type \"arm64\"; cpu_type \"arm32\" has its own profile";
+@@ -376,6 +407,7 @@ export function allowed_options(cpu_type, machine_type)
+         {
+             unavailable["hpet"] = "only the Q35 machine has an HPET";
+             unavailable["smbus"] = "only the Q35 machine has an SMBus controller";
++            unavailable["smc"] = "only the Q35 machine has an Apple SMC (it needs IRQ 6, which the i440FX floppy controller owns)";
+             unavailable["pcie_root_ports"] = "only the Q35 machine has PCI Express root ports";
+         }
+     }
+diff --git a/src/platform.js b/src/platform.js
+index e7def382..d3c1a34b 100644
+--- a/src/platform.js
++++ b/src/platform.js
+@@ -219,6 +219,7 @@ const PARALLEL_PORTS = [
+  *     root_port_devices: !Object<string, number>,
+  *     hpet: boolean,
+  *     smbus: boolean,
++ *     smc: boolean,
+  * }}
+  */
+ export var Platform;
+@@ -347,6 +348,13 @@ export function create_platform(settings, memory_size)
+     {
+         throw new Error("smbus requires machine_type \"q35\"");
+     }
++    // the Apple SMC (settings.smc, src/smc.js): it owns IRQ 6, which the Q35
++    // machine's ACPI tables leave to it (no_floppy there, src/acpi_tables.js)
++    const smc = !!settings.smc;
++    if(smc && !q35)
++    {
++        throw new Error("smc requires machine_type \"q35\" (the i440FX machine's floppy controller keeps IRQ 6)");
++    }
+ 
+     // i440FX: the PCI memory window starts at the first 256 MiB boundary above
+     // RAM (OVMF allocates at or above it too). Q35: above the ECAM window,
+@@ -399,6 +407,8 @@ export function create_platform(settings, memory_size)
+         root_port_devices,
+         hpet,
+         smbus,
++        // the Apple SMC's device in the ACPI namespace (src/acpi_tables.js)
++        smc,
+     };
+ 
+     check_platform(platform);
+@@ -465,6 +475,12 @@ export function platform_io_ranges(platform, pm_base)
+     {
+         ranges.push({ name: "acpi-pm", start: pm_base, length: platform.pm.length });
+     }
++    if(platform.smc)
++    {
++        // (src/acpi_tables.js describes it: 0x300-0x31F; the NE2000's ports
++        // are the same, which check_machine_options refuses)
++        ranges.push({ name: "smc", start: 0x300, length: 0x20 });
++    }
+ 
+     return ranges;
+ }
+diff --git a/src/smc.js b/src/smc.js
+new file mode 100644
+index 00000000..1816ce3f
+--- /dev/null
++++ b/src/smc.js
+@@ -0,0 +1,334 @@
++// For Types Only
++import { CPU } from "./cpu.js";
++
++/**
++ * The Apple SMC: the ISA chip QEMU emulates as isa-applesmc
++ * (hw/misc/applesmc.c), on the three single-byte ports macOS' AppleSMC.kext
++ * talks to. Lion's Dont_Steal_Mac_OS_X reads the OSK key from here, checks it
++ * against the one it carries, and publishes the DSMOS service once it matches;
++ * without an SMC the boot stops at "Waiting for DSMOS...".
++ *
++ * Protocol (QEMU's state machine, kept bit for bit):
++ *   - port 0x304 (cmd): a command byte, then read back = the status byte
++ *   - port 0x300 (data): the four key characters, then the data bytes, and
++ *     on read the data bytes
++ *   - port 0x31E (err): the error code of the last command (read only)
++ * Only READ (0x10) is implemented, as in QEMU 8.2: everything else answers
++ * status 0x08 with error 0x82, and macOS tolerates it (it then reads the
++ * values it needs by key, which is the "old SMC mode").
++ *
++ * The machine describes it in its ACPI tables as QEMU's q35 does not
++ * (src/acpi_tables.js, Device(SMC) _HID "APP0001", I/O 0x300-0x31F and IRQ 6):
++ * AppleSMC.kext matches that device, so kextd loads it from /S/L/E.
++ */
++
++/** The key Dont_Steal_Mac_OS_X expects, 64 characters: OSK0 then OSK1 (QEMU's -osk default) */
++export const APPLESMC_DEFAULT_OSK =
++    "ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc";
++
++/** Where the ACPI tables put it (src/acpi_tables.js): 0x20 bytes, IRQ 6 */
++export const SMC_DATA_PORT = 0x300;
++export const SMC_CMD_PORT = 0x304;
++export const SMC_ERR_PORT = 0x31E;
++
++const APPLESMC_READ_CMD = 0x10;
++
++const ST_CMD_DONE = 0x00;
++const ST_DATA_READY = 0x01;
++const ST_BUSY = 0x02;
++const ST_ACK = 0x04;
++const ST_NEW_CMD = 0x08;
++
++const ST_1E_CMD_INTRUPTED = 0x80;
++const ST_1E_STILL_BAD_CMD = 0x81;
++const ST_1E_BAD_CMD = 0x82;
++const ST_1E_NOEXIST = 0x84;
++const ST_1E_WRITEONLY = 0x85;
++const ST_1E_READONLY = 0x86;
++const ST_1E_BAD_INDEX = 0xB8;
++
++/**
++ * @constructor
++ * @param {CPU} cpu
++ * @param {string=} osk 64 characters, OSK0 then OSK1 (tests; macOS needs the default)
++ */
++export function SMC(cpu, osk)
++{
++    /** @const @type {CPU} */
++    this.cpu = cpu;
++
++    this.osk = osk && osk.length === 64 ? osk : APPLESMC_DEFAULT_OSK;
++
++    /** @type {!Object<string, !Uint8Array>} */
++    this.keys = Object.create(null);
++    // (QEMU's applesmc_add_ioport keys: REV, the 64 OSK characters, NATJ's
++    // number of available messages, and the machine's serial numbers, which
++    // macOS only reads when it finds them; empty values are enough)
++    this.add_key("REV ", [0x01, 0x13, 0x0F, 0x00, 0x00, 0x03]);
++    this.add_key("OSK0", this.osk.slice(0, 32));
++    this.add_key("OSK1", this.osk.slice(32, 64));
++    this.add_key("NATJ", [0x00]);
++    this.add_key("MSSP", [0x00]);
++    this.add_key("MSSD", [0x00]);
++
++    this.cmd = 0;
++    this.status = 0;
++    this.status_1e = 0;
++    this.last_ret = 0;
++
++    // the four characters of the key of the READ command in progress
++    this.key = new Uint8Array(4);
++    this.read_pos = 0;
++
++    this.data = new Uint8Array(255);
++    this.data_len = 0;
++    this.data_pos = 0;
++
++    cpu.io.register_read(SMC_DATA_PORT, this, this.data_read, this.data_read16, this.data_read32);
++    cpu.io.register_write(SMC_DATA_PORT, this, this.data_write, this.data_write16, this.data_write32);
++    cpu.io.register_read(SMC_CMD_PORT, this, this.cmd_read, this.cmd_read16, this.cmd_read32);
++    cpu.io.register_write(SMC_CMD_PORT, this, this.cmd_write, this.cmd_write16);
++    cpu.io.register_read(SMC_ERR_PORT, this, this.err_read);
++    cpu.io.register_write(SMC_ERR_PORT, this, this.err_write);
++}
++
++/**
++ * @param {string} key four characters
++ * @param {!Array<number>|string} data
++ */
++SMC.prototype.add_key = function(key, data)
++{
++    this.keys[key] = typeof data === "string" ?
++        Uint8Array.from(data, c => c.charCodeAt(0) & 0xFF) :
++        Uint8Array.from(data);
++};
++
++/** @return {string} the four characters of the key being read */
++SMC.prototype.key_name = function()
++{
++    return String.fromCharCode(this.key[0], this.key[1], this.key[2], this.key[3]);
++};
++
++/**
++ * The command register: 0x304 written, 0x304 read for the status.
++ * @param {number} value
++ */
++SMC.prototype.cmd_write = function(value)
++{
++    const status = this.status & 0x0F;
++
++    if(value === APPLESMC_READ_CMD)
++    {
++        if(status === ST_CMD_DONE || status === ST_NEW_CMD)
++        {
++            this.cmd = value;
++            this.status = ST_NEW_CMD | ST_ACK;
++        }
++        else
++        {
++            // (a command the guest left half-done: QEMU reports it, macOS retries)
++            this.status = ST_NEW_CMD;
++            this.status_1e = ST_1E_CMD_INTRUPTED;
++        }
++    }
++    else
++    {
++        // WRITE (0x11), GET_KEY_BY_INDEX (0x12) and GET_KEY_TYPE (0x13) are
++        // not QEMU's either: the SMC says so, and macOS falls back to READ
++        this.status = ST_NEW_CMD;
++        this.status_1e = ST_1E_BAD_CMD;
++    }
++
++    this.read_pos = 0;
++    this.data_pos = 0;
++};
++
++/**
++ * The data register, written: the four key characters, then the DATA_READY
++ * byte whose value is the length of the answer.
++ * @param {number} value
++ */
++SMC.prototype.data_write = function(value)
++{
++    if(this.cmd !== APPLESMC_READ_CMD)
++    {
++        this.status = ST_CMD_DONE;
++        this.status_1e = ST_1E_STILL_BAD_CMD;
++        return;
++    }
++
++    if((this.status & 0x0F) === ST_CMD_DONE)
++    {
++        // (a stray write after the transfer ended: ignored, as in QEMU)
++        return;
++    }
++
++    if(this.read_pos < 4)
++    {
++        this.key[this.read_pos] = value;
++        this.status = ST_ACK;
++    }
++    else if(this.read_pos === 4)
++    {
++        const name = this.key_name();
++        const data = this.keys[name];
++
++        if(data)
++        {
++            this.data.set(data);
++            this.data_len = data.length;
++            this.data_pos = 0;
++            this.status = ST_ACK | ST_DATA_READY;
++            this.status_1e = ST_CMD_DONE;
++        }
++        else
++        {
++            this.status = ST_CMD_DONE;
++            this.status_1e = ST_1E_NOEXIST;
++        }
++    }
++
++    this.read_pos++;
++};
++
++/** @return {number} the next data byte, and the last one given once the answer is out */
++SMC.prototype.data_read = function()
++{
++    if(this.cmd !== APPLESMC_READ_CMD)
++    {
++        this.status = ST_CMD_DONE;
++        this.status_1e = ST_1E_STILL_BAD_CMD;
++        return this.last_ret;
++    }
++
++    if(!(this.status & ST_DATA_READY))
++    {
++        // (before DATA_READY, QEMU returns the last byte read: ports are not latched)
++        return this.last_ret;
++    }
++
++    if(this.data_pos < this.data_len)
++    {
++        this.last_ret = this.data[this.data_pos];
++        this.data_pos++;
++
++        if(this.data_pos === this.data_len)
++        {
++            this.status = ST_CMD_DONE;
++        }
++        else
++        {
++            this.status = ST_ACK | ST_DATA_READY;
++        }
++    }
++
++    return this.last_ret;
++};
++
++/**
++ * Wide accesses: QEMU's SMC memory region is 8-bit only (min/max access size
++ * 1), so a 16- or 32-bit access is a sequence of byte accesses. v86 hands the
++ * whole word to the port's read16/read32 instead, so the device splits it.
++ * @return {number}
++ */
++SMC.prototype.data_read16 = function()
++{
++    const lo = this.data_read();
++    const hi = this.data_read();
++    return lo | hi << 8;
++};
++
++/** @return {number} */
++SMC.prototype.data_read32 = function()
++{
++    return (this.data_read() | this.data_read() << 8 | this.data_read() << 16 | this.data_read() << 24) >>> 0;
++};
++
++/** @param {number} value */
++SMC.prototype.data_write16 = function(value)
++{
++    this.data_write(value & 0xFF);
++    this.data_write(value >> 8 & 0xFF);
++};
++
++/** @param {number} value */
++SMC.prototype.data_write32 = function(value)
++{
++    this.data_write(value & 0xFF);
++    this.data_write(value >> 8 & 0xFF);
++    this.data_write(value >> 16 & 0xFF);
++    this.data_write(value >>> 24);
++};
++
++/** @return {number} the status byte, the only thing the command port answers */
++SMC.prototype.cmd_read = function()
++{
++    return this.status;
++};
++
++/** @return {number} */
++SMC.prototype.cmd_read16 = function()
++{
++    return this.status | this.status << 8;
++};
++
++/** @return {number} */
++SMC.prototype.cmd_read32 = function()
++{
++    return (this.status | this.status << 8 | this.status << 16 | this.status << 24) >>> 0;
++};
++
++/** @param {number} value */
++SMC.prototype.cmd_write16 = function(value)
++{
++    this.cmd_write(value & 0xFF);
++};
++
++/** @return {number} the error code of the last command */
++SMC.prototype.err_read = function()
++{
++    return this.status_1e;
++};
++
++/** @param {number} value (QEMU: writing the error register is not supported) */
++SMC.prototype.err_write = function(value)
++{
++};
++
++/**
++ * Back to the state a machine reset leaves the chip in: no command in
++ * progress, the keys kept (they are the chip's ROM, not its registers).
++ */
++SMC.prototype.reset = function()
++{
++    this.cmd = 0;
++    this.status = 0;
++    this.status_1e = 0;
++    this.last_ret = 0;
++    this.key.fill(0);
++    this.read_pos = 0;
++    this.data.fill(0);
++    this.data_len = 0;
++    this.data_pos = 0;
++};
++
++SMC.prototype.get_state = function()
++{
++    return [
++        this.cmd, this.status, this.status_1e, this.last_ret,
++        this.key, this.read_pos, this.data, this.data_len, this.data_pos,
++    ];
++};
++
++SMC.prototype.set_state = function(state)
++{
++    this.cmd = state[0];
++    this.status = state[1];
++    this.status_1e = state[2];
++    this.last_ret = state[3];
++    this.key.set(state[4]);
++    this.read_pos = state[5];
++    this.data.set(state[6]);
++    this.data_len = state[7];
++    this.data_pos = state[8];
++};
+diff --git a/v86.d.ts b/v86.d.ts
+index ba6a505d..3ee5d31d 100644
+--- a/v86.d.ts
++++ b/v86.d.ts
+@@ -965,7 +965,7 @@ export interface V86Options {
+      * "virt" is the machine of cpu_type "arm64" and "arm32" (and their default; see
+      * docs/virt.md): no PC firmware, chipset or VGA. The PC machines' options
+      * (bios, vga_bios, fda, fdb, cdrom, bzimage, multiboot, acpi: true, hpet,
+-     * smbus, pcie_root_ports, qemu_compatible, uart1-3, parallel1, modem,
++     * smbus, smc, pcie_root_ports, qemu_compatible, uart1-3, parallel1, modem,
+      * cpuid_level, cpu_features, x87_*, high_memory_size) are errors there,
+      * as are kernel, dtb, virtio_disks, virtio_rng, virtio_input and
+      * virtio_transport on the PC machines, and every
+@@ -1027,6 +1027,18 @@ export interface V86Options {
+      */
+     smbus?: boolean;
+ 
++    /**
++     * machine_type "q35" only: the Apple SMC that macOS' AppleSMC.kext talks
++     * to, as QEMU's isa-applesmc (src/smc.js): 0x300-0x31F and IRQ 6, and a
++     * Device(SMC) with _HID "APP0001" in the ACPI tables. It carries the OSK
++     * key Apple's Dont_Steal_Mac_OS_X checks, so macOS gets past
++     * "Waiting for DSMOS...". Off by default; it cannot be combined with the
++     * NE2000 (net_device type "ne2k", the default), whose data port is 0x300
++     * too: give net_device: { type: "none" }.
++     * @default false
++     */
++    smc?: boolean;
++
+     /**
+      * Number of CPU cores available to the guest operating system, from 1 to 8.
+      * Execution is managed by the emulator; no additional CPU mode is required.

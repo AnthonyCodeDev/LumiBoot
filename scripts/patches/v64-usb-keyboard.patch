@@ -1,0 +1,510 @@
+diff --git a/Makefile b/Makefile
+index 4c1a19bd..717203bd 100644
+--- a/Makefile
++++ b/Makefile
+@@ -285,7 +285,7 @@ build/v86-usb.js: $(CLOSURE) src/*.js src/usb/*.js
+ 	java -jar $(CLOSURE) --js_output_file $@ --define=DEBUG=false $(CLOSURE_FLAGS) \
+ 		--compilation_level SIMPLE --jscomp_off=missingProperties \
+ 		--output_wrapper ';(function(){%output%}).call(this);' \
+-		--js $(USB_COMMON) --js src/usb/usb.js --js src/usb/usb_device.js --js src/usb/hid_tablet.js --js src/usb/mass_storage.js --js src/usb/uhci.js --js src/usb/ehci.js --js src/usb/xhci.js \
++		--js $(USB_COMMON) --js src/usb/usb.js --js src/usb/usb_device.js --js src/usb/hid_tablet.js --js src/usb/hid_keyboard.js --js src/usb/mass_storage.js --js src/usb/uhci.js --js src/usb/ehci.js --js src/usb/xhci.js \
+ 		--js src/usb/machine.js --js src/usb/plugin.js
+ 
+ build/v86-tpm.js: $(CLOSURE) src/*.js src/tpm/*.js
+diff --git a/docs/usb.md b/docs/usb.md
+index 03acaa45..5c1ebe28 100644
+--- a/docs/usb.md
++++ b/docs/usb.md
+@@ -1,8 +1,8 @@
+ # USB
+ 
+-`usb: { controller: "uhci" | "ehci" | "xhci", tablet: true, mass_storage: [...] }`
+-gives a PC machine a USB host controller and its devices: the tablet, USB
+-disks. It is
++`usb: { controller: "uhci" | "ehci" | "xhci", tablet: true, keyboard: true, mass_storage: [...] }`
++gives a PC machine a USB host controller and its devices: the tablet, the
++keyboard, USB disks. It is
+ a plugin, `build/v86-usb.js` (loaded beside the bundle, or from
+ `usb.plugin_path`); the source is in [`src/usb/`](../src/usb/). The virt
+ machine has no USB: its input devices are virtio-input.
+@@ -12,6 +12,7 @@ machine has no USB: its input devices are virtio-input.
+ | Transactions | `usb.js` | speeds, PIDs, outcomes (data, NAK, STALL), the standard requests and descriptors |
+ | Device | `usb_device.js` | address, configuration, endpoint 0's control transfers and the standard requests, halted endpoints |
+ | HID tablet | `hid_tablet.js` | the absolute pointer |
++| HID keyboard | `hid_keyboard.js` | the boot keyboard (six keys, the modifiers) |
+ | USB disk | `mass_storage.js` | a disk image as a USB stick: Bulk-Only Transport, SCSI |
+ | UHCI | `uhci.js` | the USB 1.1 controller, alone or one of EHCI's companions |
+ | EHCI | `ehci.js` | the USB 2.0 controller: the high-speed devices; the others to its companions |
+@@ -187,6 +188,32 @@ mouse keeps the pointer.
+ port, `true` puts it back: the guest sees it leave and arrive, and
+ enumerates it again.
+ 
++## HID keyboard
++
++`usb: { controller: "uhci", keyboard: true }` adds a full-speed HID boot
++keyboard (QEMU's keyboard's IDs, `0627:0001`, "v86 USB Keyboard") on the
++port after the tablet's: class 3, subclass 1 (boot interface), protocol 1,
++one interrupt IN endpoint (8 bytes, every 10 ms), a report of eight
++modifiers, a reserved byte and six key usages (HID 1.11, appendix B.1).
++Reports go out when something changed, or after SET_IDLE's time; otherwise
++NAK. HID requests: GET/SET_IDLE, GET/SET_PROTOCOL, GET_REPORT, SET_REPORT
++(the LEDs), the HID and report descriptors.
++
++**The page's keys.** The bus's `keyboard-usage` message,
++`[usage, whether it went down]`, holds or releases one key: usages 0x04 to
++0x65 (HID's keyboard page: 0x04 "a", 0x28 Return, 0x29 Escape, 0x2C Space,
++0x3A to 0x45 the function keys, 0x4F to 0x52 the arrows…) and 0xE0 to 0xE7
++the modifiers (0xE0 left Control, 0xE1 left Shift, 0xE2 left Alt, 0xE3 left
++GUI — Command on a Mac). One transition per report: a down and its up never
++coalesce, so a keystroke is not lost when the guest polls slowly. A bus
++reset releases everything. The keyboard announces its use
++(`usb-keyboard-active`), as the tablet does.
++
++**Why.** macOS on a Mac has no PS/2 controller and no PS/2 driver; Lion
++10.7.5 ships `AppleHIDKeyboard` and `IOUSBFamily` but no `ApplePS2*`, so a
++PS/2 keyboard reaches nothing while this one binds. It is opt-in: a guest
++that has PS/2 keeps it.
++
+ ## USB disks
+ 
+ ```js
+diff --git a/src/browser/cpu_worker.js b/src/browser/cpu_worker.js
+index 394ebdd5..61cf67f5 100644
+--- a/src/browser/cpu_worker.js
++++ b/src/browser/cpu_worker.js
+@@ -93,7 +93,7 @@ export function encode_worker_options(o, plugins = [], adapter_renderer = false)
+         "audio_device_path": AUDIO_DEVICE_PLUGINS.includes(audio_device) ?
+             new URL(o["audio_device_path"] || default_plugin_path(audio_device), location.href).href : undefined,
+         // (USB's plugin, likewise)
+-        "usb": o["usb"] ? { "controller": o["usb"]["controller"], "tablet": o["usb"]["tablet"],
++        "usb": o["usb"] ? { "controller": o["usb"]["controller"], "tablet": o["usb"]["tablet"], "keyboard": o["usb"]["keyboard"],
+             "plugin_path": new URL(o["usb"]["plugin_path"] || default_plugin_path("usb"), location.href).href,
+             "mass_storage": o["usb"]["mass_storage"] && o["usb"]["mass_storage"].map(disk =>
+                 ({ "id": disk["id"], "image": file(disk["image"]), "read_only": disk["read_only"] })) } : undefined,
+diff --git a/src/cpu.js b/src/cpu.js
+index 9d1b3447..49ccf2d0 100644
+--- a/src/cpu.js
++++ b/src/cpu.js
+@@ -2718,6 +2718,7 @@ CPU.prototype.create_usb_plugin = function(settings, bus)
+     }, {
+         "controller": settings.usb["controller"],
+         "tablet": !!settings.usb["tablet"],
++        "keyboard": !!settings.usb["keyboard"],
+         "mass_storage": (settings.usb_disks || []).map(disk => ({ "id": disk.id, "buffer": disk.buffer, "read_only": disk.read_only })),
+     });
+ };
+diff --git a/src/machine_options.js b/src/machine_options.js
+index f5000281..bba404ee 100644
+--- a/src/machine_options.js
++++ b/src/machine_options.js
+@@ -60,7 +60,7 @@ export const AUDIO_DEVICE_PLUGINS = ["sb16", "hd_audio"];
+ /** The USB host controllers (usb.controller) of the PC machines: UHCI, EHCI with its UHCI companions, xHCI */
+ export const USB_CONTROLLERS = ["uhci", "ehci", "xhci"];
+ 
+-/** Their ports: the tablet and USB disks each take one (there is no hub; xHCI's are each a USB 3 and a USB 2 root port) */
++/** Their ports: the tablet, the keyboard and USB disks each take one (there is no hub; xHCI's are each a USB 3 and a USB 2 root port) */
+ export const USB_PORTS = { "uhci": 2, "ehci": 6, "xhci": 4 };
+ 
+ /** The firmware of the PC machines (firmware.type): SeaBIOS (bios, vga_bios), the default, or UEFI (OVMF, docs/uefi.md) */
+@@ -220,6 +220,7 @@ export function check_machine_options(options)
+                 throw new Error("usb.controller must be one of " + USB_CONTROLLERS.map(name => "\"" + name + "\"").join(", "));
+             }
+             if(usb["tablet"] !== undefined && typeof usb["tablet"] !== "boolean") throw new Error("usb.tablet must be true or false");
++            if(usb["keyboard"] !== undefined && typeof usb["keyboard"] !== "boolean") throw new Error("usb.keyboard must be true or false");
+             if(usb["plugin_path"] !== undefined && (typeof usb["plugin_path"] !== "string" || !usb["plugin_path"]))
+             {
+                 throw new Error("usb.plugin_path must be the path or URL of the plugin file");
+@@ -229,7 +230,7 @@ export function check_machine_options(options)
+             if(disks !== undefined)
+             {
+                 if(!Array.isArray(disks)) throw new Error("usb.mass_storage must be a list of USB disks ({ id, image, read_only })");
+-                const ids = new Set(["tablet"]);
++                const ids = new Set(["tablet", "keyboard"]);
+                 for(const disk of disks)
+                 {
+                     const id = disk && disk["id"];
+@@ -243,10 +244,12 @@ export function check_machine_options(options)
+                     }
+                 }
+                 const ports = USB_PORTS[usb["controller"]];
+-                if(disks.length + (usb["tablet"] ? 1 : 0) > ports)
++                const taken = (usb["tablet"] ? 1 : 0) + (usb["keyboard"] ? 1 : 0);
++                if(disks.length + taken > ports)
+                 {
+                     throw new Error("usb: the " + usb["controller"].toUpperCase() + " controller has " + ports + " ports, for " +
+-                        (usb["tablet"] ? "the tablet and " : "") + disks.length + " USB disk" + (disks.length === 1 ? "" : "s"));
++                        (usb["tablet"] ? "the tablet, " : "") + (usb["keyboard"] ? "the keyboard and " : "") +
++                        disks.length + " USB disk" + (disks.length === 1 ? "" : "s"));
+                 }
+             }
+         }
+diff --git a/src/usb/hid_keyboard.js b/src/usb/hid_keyboard.js
+new file mode 100644
+index 00000000..0aa19c55
+--- /dev/null
++++ b/src/usb/hid_keyboard.js
+@@ -0,0 +1,257 @@
++// A USB HID boot keyboard: six keys held plus the eight modifiers, a
++// full-speed device with one interrupt IN endpoint (as QEMU's usb-kbd; HID
++// 1.11, appendix B.1). A guest with no PS/2 controller or driver (macOS on a
++// Mac) takes this one: IOUSBHIDDriver and AppleHIDKeyboard bind to the boot
++// interface. Reports go out when something changed, or after the idle time
++// SET_IDLE asks for; otherwise the endpoint NAKs.
++//
++// Added for the Lion campaign (v64): Lion 10.7.5 ships no PS/2 driver at
++// all, so the keyboard has to be a USB one.
++
++import { USBDevice } from "./usb_device.js";
++import {
++    DESCRIPTOR_HID, DESCRIPTOR_REPORT, ENDPOINT_INTERRUPT, SPEED_FULL, USB_NAK, USB_STALL,
++    configuration_descriptor, device_descriptor, endpoint_descriptor, interface_descriptor,
++} from "./usb.js";
++
++/** The report: modifiers, a reserved byte, six key usages (boot keyboard) */
++const REPORT_DESCRIPTOR = [
++    0x05, 0x01, // Usage Page (Generic Desktop)
++    0x09, 0x06, // Usage (Keyboard)
++    0xA1, 0x01, // Collection (Application)
++    0x05, 0x07, //   Usage Page (Keyboard)
++    0x19, 0xE0, //   Usage Minimum (Left Control)
++    0x29, 0xE7, //   Usage Maximum (Right GUI)
++    0x15, 0x00, //   Logical Minimum (0)
++    0x25, 0x01, //   Logical Maximum (1)
++    0x75, 0x01, //   Report Size (1)
++    0x95, 0x08, //   Report Count (8)
++    0x81, 0x02, //   Input (Data, Variable, Absolute): the modifiers
++    0x95, 0x01, //   Report Count (1)
++    0x75, 0x08, //   Report Size (8)
++    0x81, 0x01, //   Input (Constant): the reserved byte
++    0x95, 0x05, //   Report Count (5)
++    0x75, 0x01, //   Report Size (1)
++    0x05, 0x08, //   Usage Page (LEDs)
++    0x19, 0x01, //   Usage Minimum (Num Lock)
++    0x29, 0x05, //   Usage Maximum (Kana)
++    0x91, 0x02, //   Output (Data, Variable, Absolute): the LEDs
++    0x95, 0x01, //   Report Count (1)
++    0x75, 0x03, //   Report Size (3)
++    0x91, 0x01, //   Output (Constant): the LEDs' padding
++    0x95, 0x06, //   Report Count (6)
++    0x75, 0x08, //   Report Size (8)
++    0x15, 0x00, //   Logical Minimum (0)
++    0x25, 0x65, //   Logical Maximum (101)
++    0x05, 0x07, //   Usage Page (Keyboard)
++    0x19, 0x00, //   Usage Minimum (0)
++    0x29, 0x65, //   Usage Maximum (101)
++    0x81, 0x00, //   Input (Data, Array): the key usages
++    0xC0,       // End Collection
++];
++const REPORT_SIZE = 8;
++const MAX_KEYS = 6;
++const MAX_PENDING = 64;
++
++const HID_DESCRIPTOR = [9, DESCRIPTOR_HID, 0x11, 0x01, 0x00, 0x01, DESCRIPTOR_REPORT, REPORT_DESCRIPTOR.length & 0xFF, REPORT_DESCRIPTOR.length >> 8];
++
++// HID class requests
++const HID_GET_REPORT = 0x01, HID_GET_IDLE = 0x02, HID_GET_PROTOCOL = 0x03, HID_SET_REPORT = 0x09, HID_SET_IDLE = 0x0A,
++    HID_SET_PROTOCOL = 0x0B;
++
++/**
++ * @constructor
++ * @extends {USBDevice}
++ * @param {function():number} now the machine clock (milliseconds), for the idle rate
++ */
++export function HIDKeyboard(now)
++{
++    this.now = now;
++    /** @type {?function(boolean)} whether the guest has the keyboard configured, when that changes */
++    this.on_use = null;
++    this.in_use = false;
++    USBDevice.call(this, {
++        name: "keyboard",
++        speeds: [SPEED_FULL],
++        device: device_descriptor({ usb: 0x0110, class: 0, subclass: 0, protocol: 0, max_packet0: 8,
++            // (QEMU's keyboard's IDs, which drivers know)
++            vendor: 0x0627, product: 0x0001, release: 0x0000, manufacturer: 1, product_string: 2, serial: 3, configurations: 1 }),
++        configurations: [configuration_descriptor({ value: 1, attributes: 0x80, max_power: 50, interfaces: 1 }, [
++            // (the boot interface: subclass 1, protocol 1, as QEMU's)
++            interface_descriptor({ number: 0, alternate: 0, endpoints: 1, class: 3, subclass: 1, protocol: 1 }),
++            HID_DESCRIPTOR,
++            endpoint_descriptor({ address: 0x81, type: ENDPOINT_INTERRUPT, max_packet: 8, interval: 10 }),
++        ])],
++        strings: ["v86", "v86 USB Keyboard", "1"],
++        endpoints: [0x81],
++    });
++    /** the modifiers the guest has been told are held: bits 0 to 7 for usages 0xE0 to 0xE7 */
++    this.modifiers = 0;
++    /** the keys the guest has been told are held, as HID usages (0x04 to 0x65), in the order they went down */
++    this.keys = [];
++    /** the LEDs the guest asked for (the output report) */
++    this.leds = 0;
++    /**
++     * The key transitions not delivered yet, oldest first: a report carries
++     * one transition, so a keystroke is never lost to a guest that polls
++     * slower than the page types (a down and its up coalesced into nothing)
++     * @type {!Array<{usage: number, down: boolean}>}
++     */
++    this.pending = [];
++    /** something to report */
++    this.changed = false;
++    this.last_report = 0;
++}
++
++HIDKeyboard.prototype = Object.create(USBDevice.prototype);
++
++HIDKeyboard.prototype.reset = function()
++{
++    USBDevice.prototype.reset.call(this);
++    /** SET_IDLE: in 4 ms units, 0 only on change */
++    this.idle = 0;
++    this.protocol = 1;
++    // (a bus reset lets the guest's view go: no key stays down)
++    this.modifiers = 0;
++    this.keys = [];
++    this.leds = 0;
++    this.pending = [];
++    this.changed = true;
++    this.update_use();
++};
++
++/** Tell on_use whether the guest has the keyboard configured */
++HIDKeyboard.prototype.update_use = function()
++{
++    const in_use = this.configuration !== 0;
++    if(in_use === this.in_use) return;
++    this.in_use = in_use;
++    if(this.on_use) this.on_use(in_use);
++};
++
++/**
++ * A key went down or up
++ * @param {number} usage the HID usage (0x04 to 0x65, 0xE0 to 0xE7 the modifiers)
++ * @param {boolean} down
++ */
++HIDKeyboard.prototype.key = function(usage, down)
++{
++    usage = usage | 0;
++    const modifier = usage >= 0xE0 && usage <= 0xE7;
++    if(!modifier && (usage < 0x04 || usage > 0x65)) return;
++    // (a page that got ahead of a dead guest cannot make it grow without end)
++    if(this.pending.length >= MAX_PENDING) return;
++    this.pending.push({ "usage": usage, "down": !!down });
++    this.changed = true;
++};
++
++/**
++ * The oldest transition not delivered yet, applied to the guest's view
++ * @return {boolean} whether there was one
++ */
++HIDKeyboard.prototype.apply_pending = function()
++{
++    const transition = this.pending.shift();
++    if(!transition) return false;
++    const usage = transition.usage, down = transition.down;
++    if(usage >= 0xE0 && usage <= 0xE7)
++    {
++        const bit = 1 << (usage - 0xE0);
++        this.modifiers = down ? this.modifiers | bit : this.modifiers & ~bit;
++        return true;
++    }
++    const at = this.keys.indexOf(usage);
++    if(down)
++    {
++        // (already held, or dropped: the report has room for six)
++        if(at === -1 && this.keys.length < MAX_KEYS) this.keys.push(usage);
++    }
++    else if(at !== -1)
++    {
++        this.keys.splice(at, 1);
++    }
++    return true;
++};
++
++/** @return {!Uint8Array} the report of what the guest has been told */
++HIDKeyboard.prototype.report = function()
++{
++    const report = new Uint8Array(REPORT_SIZE);
++    report[0] = this.modifiers;
++    for(let i = 0; i < this.keys.length; i++) report[2 + i] = this.keys[i];
++    return report;
++};
++
++HIDKeyboard.prototype.data_in = function(endpoint, max_length)
++{
++    const now = this.now();
++    // (one transition per report: down, then up, even if the guest lags)
++    if(this.pending.length || this.changed) this.apply_pending();
++    else if(!(this.idle && now - this.last_report >= this.idle * 4)) return USB_NAK;
++    const report = this.report();
++    this.changed = this.pending.length !== 0;
++    this.last_report = now;
++    return report.subarray(0, Math.min(max_length, REPORT_SIZE));
++};
++
++HIDKeyboard.prototype.interface_descriptor = function(type, index, interface_number)
++{
++    if(interface_number !== 0) return null;
++    if(type === DESCRIPTOR_HID) return HID_DESCRIPTOR;
++    if(type === DESCRIPTOR_REPORT) return REPORT_DESCRIPTOR;
++    return null;
++};
++
++HIDKeyboard.prototype.class_request = function(setup, data)
++{
++    // (requests to the interface)
++    if((setup.type & 0x1F) !== 1 || (setup.index & 0xFF) !== 0) return USB_STALL;
++    switch(setup.request)
++    {
++        case HID_GET_REPORT:
++            return (setup.value >> 8) === 1 ? this.report() : new Uint8Array(REPORT_SIZE);
++        case HID_SET_REPORT:
++            // (the LEDs: the guest's output report, accepted and kept)
++            if(data && data.length) this.leds = data[0];
++            return new Uint8Array(0);
++        case HID_GET_IDLE:
++            return Uint8Array.of(this.idle);
++        case HID_SET_IDLE:
++            this.idle = setup.value >> 8;
++            return new Uint8Array(0);
++        case HID_GET_PROTOCOL:
++            return Uint8Array.of(this.protocol);
++        case HID_SET_PROTOCOL:
++            this.protocol = setup.value & 1;
++            return new Uint8Array(0);
++    }
++    return USB_STALL;
++};
++
++HIDKeyboard.prototype.configured = function(value)
++{
++    // (the guest's driver takes a fresh report)
++    this.changed = true;
++    this.update_use();
++};
++
++HIDKeyboard.prototype.get_state = function()
++{
++    return [USBDevice.prototype.get_state.call(this), this.modifiers, this.keys.slice(), this.leds, +this.changed,
++        this.idle, this.protocol, this.pending.map(transition => [transition.usage, +transition.down])];
++};
++
++HIDKeyboard.prototype.set_state = function(state)
++{
++    USBDevice.prototype.set_state.call(this, state[0]);
++    this.modifiers = state[1];
++    this.keys = state[2].slice();
++    this.leds = state[3];
++    this.changed = !!state[4];
++    this.idle = state[5];
++    this.protocol = state[6];
++    this.pending = (state[7] || []).map(transition => ({ "usage": transition[0], "down": !!transition[1] }));
++    this.last_report = this.now();
++    this.in_use = !this.configuration;
++    this.update_use();
++};
+diff --git a/src/usb/plugin.js b/src/usb/plugin.js
+index c914a166..d884a5f5 100644
+--- a/src/usb/plugin.js
++++ b/src/usb/plugin.js
+@@ -1,10 +1,11 @@
+-// usb: { controller: "uhci" | "ehci" | "xhci", tablet: true, mass_storage } --
+-// a USB host controller and its devices (docs/usb.md,
++// usb: { controller: "uhci" | "ehci" | "xhci", tablet: true, keyboard: true,
++// mass_storage } -- a USB host controller and its devices (docs/usb.md,
+ // docs/modern-pc-devices-plan.md U1 to U4): UHCI (PIIX3's on i440FX, ICH9's
+ // on Q35), ICH9's EHCI with its three UHCI companions (the plugin's PCI
+ // function is the EHCI's, 7; the companions are functions 0 to 2), or xHCI
+-// (QEMU's qemu-xhci); the HID tablet on the first port,
+-// USB disks (disk images, src/usb/mass_storage.js) on the ports after it.
++// (QEMU's qemu-xhci); the HID tablet on the first port, the HID keyboard on
++// the one after it, USB disks (disk images, src/usb/mass_storage.js) on the
++// ports after them.
+ // Built into build/v86-usb.js; from the source tree, src/device_plugin.js
+ // imports this file directly.
+ 
+@@ -13,6 +14,7 @@ import { COMPANION_IDENTITY, PORTS as UHCI_PORTS, UHCIController } from "./uhci.
+ import { EHCI_PORTS, EHCIController } from "./ehci.js";
+ import { XHCI_PORTS, XHCIController } from "./xhci.js";
+ import { HIDTablet } from "./hid_tablet.js";
++import { HIDKeyboard } from "./hid_keyboard.js";
+ import { MassStorage } from "./mass_storage.js";
+ 
+ register_usb_plugin({
+@@ -27,6 +29,9 @@ register_usb_plugin({
+         const PORTS = ehci ? EHCI_PORTS : xhci ? XHCI_PORTS : UHCI_PORTS;
+         const NAME = ehci ? "EHCI" : xhci ? "xHCI" : "UHCI";
+         const tablet = options["tablet"] ? new HIDTablet(() => machine.now()) : null;
++        // (a guest with no PS/2 controller or driver — macOS on a Mac — needs
++        // a USB keyboard: the page types into it with "keyboard-usage")
++        const keyboard = options["keyboard"] ? new HIDKeyboard(() => machine.now()) : null;
+         /**
+          * The devices by their IDs: the device, its port (kept while it is
+          * out of it), a disk's block backend
+@@ -39,6 +44,16 @@ register_usb_plugin({
+             controller.attach(0, tablet);
+             connect_pointer(machine, tablet);
+         }
++        // The keyboard sits on the port after the tablet's. The page types
++        // into it with "keyboard-usage" ([usage, whether it went down]).
++        if(keyboard)
++        {
++            const keyboard_port = tablet ? 1 : 0;
++            devices.set("keyboard", { device: keyboard, port: keyboard_port, backend: null });
++            controller.attach(keyboard_port, keyboard);
++            keyboard.on_use = in_use => machine.send("usb-keyboard-active", in_use);
++            machine.on("keyboard-usage", data => keyboard.key(data[0], !!data[1]));
++        }
+ 
+         const free_port = () =>
+         {
+@@ -106,7 +121,8 @@ register_usb_plugin({
+             "reset": () => ehci || xhci ? controller.reset_all() : controller.reset(),
+             "get_state": () => [controller.get_state(), tablet ? tablet.get_state() : null,
+                 Array.from(devices, ([id, { port }]) => controller.devices[port] ? id : null).filter(Boolean),
+-                Array.from(devices, ([id, { device, port, backend }]) => backend ? [id, port, device.get_state()] : null).filter(Boolean)],
++                Array.from(devices, ([id, { device, port, backend }]) => backend ? [id, port, device.get_state()] : null).filter(Boolean),
++                keyboard ? keyboard.get_state() : null],
+             "set_state": state =>
+             {
+                 controller.set_state(state[0]);
+@@ -127,6 +143,7 @@ register_usb_plugin({
+                     }
+                 }
+                 if(tablet && state[1]) tablet.set_state(state[1]);
++                if(keyboard && state[4]) keyboard.set_state(state[4]);
+                 // (EHCI: each device on the side its port's owner had)
+                 if(ehci) controller.restore_routing();
+                 // a disk the snapshot does not have (there): it arrives now
+diff --git a/v86.d.ts b/v86.d.ts
+index 586442ee..ba6a505d 100644
+--- a/v86.d.ts
++++ b/v86.d.ts
+@@ -386,6 +386,8 @@ export interface Event {
+     "parallel1-status-input": number;
+     /** The guest configured the USB tablet (true) or let it go (false): while it uses it, the tablet has the page's pointer */
+     "usb-tablet-active": boolean;
++    /** The guest configured the USB keyboard (true) or let it go (false) */
++    "usb-keyboard-active": boolean;
+     /** a byte of the UEFI firmware's debug log (firmware.debug_console) */
+     "debug-console-output-byte": number;
+     /** The guest ejected a USB disk's medium (its id): it can be detached now */
+@@ -1208,14 +1210,18 @@ export interface V86Options {
+      * UHCI companions (00:1d.0-2 and .7 on Q35, 00:06 on i440FX; high-speed devices on the EHCI, the
+      * others on the companions); with `tablet`, a HID tablet on the first port, an absolute pointer
+      * that has the page's pointer while the guest uses it (unless the pointer is locked: then the PS/2
+-     * mouse has it); `mass_storage`: USB disks (disk images as USB sticks: Bulk-Only Transport, SCSI;
+-     * high speed on EHCI, SuperSpeed on xHCI) on the ports after it. UHCI has 2 ports, EHCI 6, xHCI 4 (QEMU's
++     * mouse has it); with `keyboard`, a HID boot keyboard on the port after it (the page types with the
++     * bus's "keyboard-usage", [usage, down], usages 0x04 to 0x65 and 0xE0 to 0xE7 for the modifiers: a
++     * guest with no PS/2 controller, macOS on a Mac, takes this one); `mass_storage`: USB disks (disk
++     * images as USB sticks: Bulk-Only Transport, SCSI; high speed on EHCI, SuperSpeed on xHCI) on the
++     * ports after them. UHCI has 2 ports, EHCI 6, xHCI 4 (QEMU's
+      * qemu-xhci at 00:14.0; each port a USB 3 and a USB 2 root port). See {@link V86.usb_plug},
+      * {@link V86.usb_attach_disk}.
+      */
+     usb?: {
+         controller: "uhci" | "ehci" | "xhci";
+         tablet?: boolean;
++        keyboard?: boolean;
+         mass_storage?: {
+             /** its name for usb_plug and usb_detach_disk ("usb:" + id for disk_buffer and export_disk_image) */
+             id: string;

@@ -78,6 +78,25 @@ function privateV64DiskManifest(ref: string, diskPath: string, firmwareFileName:
   return manifest;
 }
 
+/**
+ * v64 two-media manifest: an ESP (`fileName` included) next to the system disk.
+ * `espSize` is what the manifest claims, which may disagree with the file on disk.
+ */
+function privateV64EspDiskManifest(
+  ref: string,
+  diskPath: string,
+  espFileName: string,
+  espSize = 64,
+) {
+  const manifest = privateV64DiskManifest(ref, diskPath, 'uefi-vars.fd') as Record<string, unknown>;
+  manifest.esp = {
+    fileName: espFileName,
+    url: `/images/${ref}/${espFileName}`,
+    size: espSize,
+  };
+  return manifest;
+}
+
 interface HttpResponse {
   status: number;
   headers: Record<string, string | string[] | undefined>;
@@ -126,6 +145,24 @@ describe('toPublicDiskManifest (dev middleware)', () => {
     expect(publicManifest.firmware).toEqual(manifest.firmware);
     expect(publicManifest.engine).toEqual({ id: 'v64' });
     expect(JSON.stringify(publicManifest)).not.toContain('C:/secret/disk.img');
+  });
+
+  it('keeps the ESP block (two-media layout) when the manifest declares one', () => {
+    const manifest = privateV64EspDiskManifest('windows-11-x64', 'C:/secret/disk.img', 'esp.img');
+    const publicManifest = toPublicDiskManifest(manifest) as Record<string, unknown>;
+
+    expect(publicManifest.esp).toEqual({
+      fileName: 'esp.img',
+      url: '/images/windows-11-x64/esp.img',
+      size: 64,
+    });
+    expect(publicManifest.boot).toEqual(manifest.boot);
+    expect(JSON.stringify(publicManifest)).not.toContain('C:/secret/disk.img');
+  });
+
+  it('omits the ESP key when the manifest declares none', () => {
+    const manifest = privateV64DiskManifest('windows-11-x64', 'C:/secret/disk.img', 'uefi-vars.fd');
+    expect(toPublicDiskManifest(manifest)).not.toHaveProperty('esp');
   });
 });
 
@@ -246,6 +283,45 @@ describe('createDiskAssetMiddleware - public manifest over real HTTP', () => {
       'utf8',
     );
 
+    // Two-media layout: an ESP (64 B stand-in) served next to the system disk.
+    const espRef = 'demo-v64-esp';
+    const espDir = join(imagesDir, espRef);
+    mkdirSync(espDir, { recursive: true });
+    const espDisk = join(espDir, 'disk.img');
+    writeFileSync(espDisk, Buffer.alloc(100, 13));
+    writeFileSync(join(espDir, 'uefi-vars.fd'), Buffer.alloc(32, 5));
+    writeFileSync(join(espDir, 'esp.img'), Buffer.alloc(64, 17));
+    writeFileSync(
+      join(espDir, 'manifest.json'),
+      `${JSON.stringify(privateV64EspDiskManifest(espRef, espDisk, 'esp.img'), null, 2)}\n`,
+      'utf8',
+    );
+
+    // Same layout, but the declared ESP file is absent from the image directory.
+    const espOrphanRef = 'demo-v64-esp-orphan';
+    const espOrphanDir = join(imagesDir, espOrphanRef);
+    mkdirSync(espOrphanDir, { recursive: true });
+    const espOrphanDisk = join(espOrphanDir, 'disk.img');
+    writeFileSync(espOrphanDisk, Buffer.alloc(100, 19));
+    writeFileSync(
+      join(espOrphanDir, 'manifest.json'),
+      `${JSON.stringify(privateV64EspDiskManifest(espOrphanRef, espOrphanDisk, 'absent.img'), null, 2)}\n`,
+      'utf8',
+    );
+
+    // Same layout, but the ESP name tries to escape the image directory.
+    const espEscapeRef = 'demo-v64-esp-escape';
+    const espEscapeDir = join(imagesDir, espEscapeRef);
+    mkdirSync(espEscapeDir, { recursive: true });
+    const espEscapeDisk = join(espEscapeDir, 'disk.img');
+    writeFileSync(espEscapeDisk, Buffer.alloc(100, 23));
+    writeFileSync(join(imagesDir, 'outside.img'), Buffer.alloc(64, 29));
+    writeFileSync(
+      join(espEscapeDir, 'manifest.json'),
+      `${JSON.stringify(privateV64EspDiskManifest(espEscapeRef, espEscapeDisk, '../outside.img'), null, 2)}\n`,
+      'utf8',
+    );
+
     const middleware = createDiskAssetMiddleware({
       repoRoot: tempDir,
       imagesDir,
@@ -306,6 +382,62 @@ describe('createDiskAssetMiddleware - public manifest over real HTTP', () => {
     expect(manifest.engine).toEqual({ id: 'v64' });
     expect(manifest.firmware?.type).toBe('uefi');
     expect(manifest.firmware?.vars.url).toBe('/images/demo-v64/uefi-vars.fd');
+  });
+
+  it('serves the ESP of a two-media disk over HTTP Range (206)', async () => {
+    const ranged = await rawRequest(port, '/images/demo-v64-esp/esp.img', {
+      Range: 'bytes=0-15',
+    });
+    expect(ranged.status).toBe(206);
+    expect(ranged.headers['content-range']).toBe('bytes 0-15/64');
+    expect(ranged.body.byteLength).toBe(16);
+
+    // A full GET without Range also works: the ESP is a plain file.
+    const whole = await rawRequest(port, '/images/demo-v64-esp/esp.img');
+    expect(whole.status).toBe(200);
+    expect(whole.body.byteLength).toBe(64);
+
+    const manifest = JSON.parse(
+      (await rawRequest(port, '/images/demo-v64-esp/manifest.json')).body.toString('utf8'),
+    ) as { esp?: unknown; disk: { url: string }; boot: { url: string } };
+    expect(manifest.esp).toEqual({
+      fileName: 'esp.img',
+      url: '/images/demo-v64-esp/esp.img',
+      size: 64,
+    });
+    // Additive contract: the system disk keeps describing `disk`/`boot`.
+    expect(manifest.boot.url).toBe(manifest.disk.url);
+  });
+
+  it('answers a clear 404 when the declared ESP file is missing', async () => {
+    const manifest = JSON.parse(
+      (await rawRequest(port, '/images/demo-v64-esp-orphan/manifest.json')).body.toString('utf8'),
+    ) as Record<string, unknown>;
+    // Nothing is advertised that this server cannot serve.
+    expect(manifest).not.toHaveProperty('esp');
+
+    const esp = await rawRequest(port, '/images/demo-v64-esp-orphan/absent.img', {
+      Range: 'bytes=0-0',
+    });
+    expect(esp.status).toBe(404);
+
+    // The system disk is still served: a broken ESP never hides the disk.
+    const disk = await rawRequest(port, '/images/demo-v64-esp-orphan/disk.img', {
+      Range: 'bytes=0-0',
+    });
+    expect(disk.status).toBe(206);
+    expect(disk.headers['content-range']).toBe('bytes 0-0/100');
+  });
+
+  it('refuses an ESP file name that escapes the image directory', async () => {
+    const manifest = JSON.parse(
+      (await rawRequest(port, '/images/demo-v64-esp-escape/manifest.json')).body.toString('utf8'),
+    ) as Record<string, unknown>;
+    expect(manifest).not.toHaveProperty('esp');
+
+    const escape = await rawRequest(port, '/images/demo-v64-esp-escape/outside.img');
+    expect(escape.status).toBe(404);
+    expect(escape.body.toString('utf8')).not.toContain('outside');
   });
 
   it('still serves the disk when the firmware image is missing', async () => {

@@ -24,6 +24,7 @@ const fedoraXfce = getSystemById('fedora-44-x86-64-xfce')!;
 const alpineMother = getSystemById('alpine-3-24-x86-64')!;
 const alpineXfce = getSystemById('alpine-3-24-x86-64-xfce')!;
 const macosSequoia = getSystemById('macos-sequoia')!;
+const macosLion = getSystemById('macos-lion-x64')!;
 
 describe('Debian variant group', () => {
   it('sorts the best variant first (XFCE → X11 → CLI)', () => {
@@ -319,6 +320,7 @@ describe('getDisplaySystems', () => {
     expect(ids).toContain('alpine-3-24-x86-64');
     expect(ids).not.toContain('alpine-3-24-x86-64-xfce');
     expect(ids).toContain('macos-sequoia');
+    expect(ids).toContain('macos-lion-x64');
     // Seven child variants are folded away: Debian X11/XFCE, Ubuntu X11/XFCE,
     // Windows 7 Professional, Fedora XFCE and Alpine XFCE.
     expect(getDisplaySystems()).toHaveLength(systems.length - 7);
@@ -348,5 +350,6 @@ describe('hasVariants', () => {
 
   it('is false for a standalone system', () => {
     expect(hasVariants(macosSequoia)).toBe(false);
+    expect(hasVariants(macosLion)).toBe(false);
   });
 });

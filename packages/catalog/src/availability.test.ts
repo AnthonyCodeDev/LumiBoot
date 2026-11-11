@@ -83,6 +83,16 @@ describe('catalog: consistent effective availability', () => {
     expect(getSystemById('macos-sequoia')?.availability).toBe('planned');
   });
 
+  it('marks macOS Lion ready: local disk + ESP + integrated v64 engine + validated boot', () => {
+    const lion = getSystemById('macos-lion-x64');
+    const profile = lion?.launchProfiles[0];
+    const definition = launchProfiles.find((candidate) => candidate.id === 'macos-lion-x64');
+    expect(lion?.imageRef).toBe('macos-lion-x64');
+    expect(profile ? isEngineIntegrated(profile.engineId) : false).toBe(true);
+    expect(definition?.validated).toBe(true);
+    expect(lion?.availability).toBe('ready');
+  });
+
   it('marks Fedora ready (self-booting ISO + integrated v64 engine + validated boot)', () => {
     const fedora = getSystemById('fedora-44-x86-64');
     const profile = fedora?.launchProfiles[0];

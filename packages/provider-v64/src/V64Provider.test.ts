@@ -56,6 +56,7 @@ const manifest: ImageManifest = {
 };
 
 const DISK_SIZE = 68_719_476_736;
+const ESP_SIZE = 64 * 1024 * 1024;
 
 /** Installed Windows 11 x64 disk with its OVMF NVRAM, as served locally. */
 function localDiskManifest(withFirmware = true): LocalDiskManifest {
@@ -94,6 +95,14 @@ function localDiskManifest(withFirmware = true): LocalDiskManifest {
           },
         }
       : {}),
+  };
+}
+
+/** Same disk with an EFI System Partition declared (two-media layout). */
+function localDiskManifestWithEsp(): LocalDiskManifest {
+  return {
+    ...localDiskManifest(),
+    esp: { url: '/images/windows-11-x64/esp.img', size: ESP_SIZE },
   };
 }
 
@@ -142,6 +151,35 @@ function runtime(): V64Runtime {
     stop: async () => undefined,
     destroy: async () => undefined,
     keyboard_send_scancodes: async () => undefined,
+  };
+}
+
+/** A runtime whose bus records `keyboard-usage` and whose stop emits `emulator-stopped`. */
+function runtimeWithBus(): { runtime: V64Runtime; send: ReturnType<typeof vi.fn> } {
+  const send = vi.fn();
+  const listeners = new Map<string, Set<(argument: never) => void>>();
+  return {
+    send,
+    runtime: {
+      bus: { send },
+      add_listener: (event, listener) => {
+        const set = listeners.get(event) ?? new Set();
+        set.add(listener);
+        listeners.set(event, set);
+      },
+      remove_listener: (event, listener) => {
+        listeners.get(event)?.delete(listener);
+      },
+      run: async () => undefined,
+      // libv86 announces its stop: the USB keyboard adapter detaches on that.
+      stop: async () => {
+        const set = listeners.get('emulator-stopped');
+        if (set === undefined) return;
+        for (const listener of set) listener(undefined as never);
+      },
+      destroy: async () => undefined,
+      keyboard_send_scancodes: async () => undefined,
+    },
   };
 }
 
@@ -445,5 +483,316 @@ describe('V64Provider', () => {
     expect(options?.firmware?.vars?.url).toBe('/v64/ovmf-vars.fd');
     expect(options).not.toHaveProperty('bios');
     await instance.dispose();
+  });
+
+  it('keeps the single-hda layout for Windows 11 without an ESP', async () => {
+    // Non-regression: the shipped Windows 11 disk declares no ESP, so the engine
+    // configuration must stay byte-identical to the one before two-media support.
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({
+      createEngine,
+      resolveManifest: async () => manifest,
+      resolveLocalDiskManifest: async () => localDiskManifest(),
+    });
+    const instance = await provider.start(windows11, document.createElement('div'));
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options).not.toHaveProperty('hdb');
+    expect(options?.hda).toEqual({
+      url: '/images/windows-11-x64/disk.img',
+      size: DISK_SIZE,
+      async: true,
+    });
+    // Single-media layout still uses the disk's own NVRAM (Boot0001 -> SATA 0).
+    expect(options?.firmware?.vars?.url).toBe('/images/windows-11-x64/uefi-vars.fd');
+    expect(options).not.toHaveProperty('boot_order');
+    await instance.dispose();
+  });
+
+  it('mounts a declared ESP on hda and the system disk on hdb', async () => {
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({
+      createEngine,
+      resolveManifest: async () => manifest,
+      resolveLocalDiskManifest: async () => localDiskManifestWithEsp(),
+    });
+    const instance = await provider.start(windows11, document.createElement('div'));
+    const options = createEngine.mock.calls[0]?.[0];
+
+    // OVMF's Boot0001 entry targets SATA port 0: the ESP keeps hda, never hdb.
+    expect(options?.hda).toEqual({
+      url: '/images/windows-11-x64/esp.img',
+      size: ESP_SIZE,
+      async: true,
+    });
+    expect(options?.hdb).toEqual({
+      url: '/images/windows-11-x64/disk.img',
+      size: DISK_SIZE,
+      async: true,
+    });
+    expect(options?.hda?.size).toBe(64 * 1024 * 1024);
+    expect(options?.hdb?.size).toBe(DISK_SIZE);
+    // Both drives stay lazily ranged: the disk is never fully downloaded.
+    expect(options?.hda?.async).toBe(true);
+    expect(options?.hdb?.async).toBe(true);
+    // The declared NVRAM is still the one carrying Boot0001 -> SATA 0.
+    expect(options?.firmware?.vars?.url).toBe('/images/windows-11-x64/uefi-vars.fd');
+    expect(options).not.toHaveProperty('boot_order');
+    // A two-media layout is still a whole-disk boot: no ISO, kernel or initrd.
+    expect(options).not.toHaveProperty('cdrom');
+    expect(options).not.toHaveProperty('bzimage');
+    expect(options).not.toHaveProperty('initrd');
+    await instance.dispose();
+  });
+
+  it('adds no USB controller unless a profile asks for one', async () => {
+    // Non-regression: the USB plugin is opt-in, so an existing profile's engine
+    // configuration carries no `usb` key at all (no controller, no plugin).
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({
+      createEngine,
+      resolveManifest: async () => manifest,
+      resolveLocalDiskManifest: async () => localDiskManifest(),
+    });
+    const alpine = await provider.start(system, document.createElement('div'));
+    const alpineOptions = createEngine.mock.calls[0]?.[0];
+    expect(alpineOptions).not.toHaveProperty('usb');
+    await alpine.dispose();
+
+    const windows = await provider.start(windows11, document.createElement('div'));
+    const windowsOptions = createEngine.mock.calls[1]?.[0];
+    expect(windowsOptions).not.toHaveProperty('usb');
+    // Everything else about the Windows 11 configuration is untouched.
+    expect(windowsOptions?.machine_type).toBe('q35');
+    expect(windowsOptions?.firmware?.type).toBe('uefi');
+    await windows.dispose();
+  });
+
+  it('maps a profile USB input request onto the engine USB device list', async () => {
+    const usbProfile: OSDefinition = {
+      ...system,
+      launchProfiles: [
+        {
+          ...system.launchProfiles[0]!,
+          configuration: {
+            memoryMiB: 1024,
+            extra: { v64UsbTablet: true, v64UsbKeyboard: true, v64UsbController: 'uhci' },
+          },
+        },
+      ],
+    };
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({ createEngine, resolveManifest: async () => manifest });
+    const instance = await provider.start(usbProfile, document.createElement('div'));
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options?.usb).toEqual({
+      controller: 'uhci',
+      tablet: true,
+      keyboard: true,
+      plugin_path: '/v64/v86-usb.js',
+    });
+    await instance.dispose();
+  });
+
+  it('lets the caller enable only the USB keyboard and defaults to UHCI', async () => {
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({ createEngine, resolveManifest: async () => manifest });
+    const instance = await provider.start(system, document.createElement('div'), {
+      extra: { v64UsbKeyboard: true },
+    });
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options?.usb).toEqual({
+      controller: 'uhci',
+      tablet: false,
+      keyboard: true,
+      plugin_path: '/v64/v86-usb.js',
+    });
+    await instance.dispose();
+  });
+
+  it('keeps the USB controller off when no device is asked for', async () => {
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({ createEngine, resolveManifest: async () => manifest });
+    const instance = await provider.start(system, document.createElement('div'), {
+      extra: { v64UsbTablet: false, v64UsbKeyboard: false },
+    });
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options).not.toHaveProperty('usb');
+    await instance.dispose();
+  });
+
+  it('types the page keys into the guest USB keyboard when it is enabled', async () => {
+    const { runtime: engine, send } = runtimeWithBus();
+    const createEngine = vi.fn(async (_options: V64Options) => engine);
+    const provider = new V64Provider({ createEngine, resolveManifest: async () => manifest });
+    const instance = await provider.start(system, document.createElement('div'), {
+      extra: { v64UsbKeyboard: true },
+    });
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA', key: 'a' }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyA', key: 'a' }));
+    expect(send.mock.calls).toEqual([
+      ['keyboard-usage', [0x04, true]],
+      ['keyboard-usage', [0x04, false]],
+    ]);
+
+    // Stopping the engine detaches the adapter: no listener outlives the session.
+    await instance.dispose();
+    send.mockClear();
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA', key: 'a' }));
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('keeps the page keys away from an engine that has no USB keyboard', async () => {
+    const { runtime: engine, send } = runtimeWithBus();
+    const createEngine = vi.fn(async (_options: V64Options) => engine);
+    const provider = new V64Provider({ createEngine, resolveManifest: async () => manifest });
+    const instance = await provider.start(system, document.createElement('div'));
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA', key: 'a' }));
+    expect(send).not.toHaveBeenCalled();
+    await instance.dispose();
+  });
+
+  it('enables the emulated SMC on q35 and puts the guest offline', async () => {
+    // macOS never leaves `Waiting for DSMOS...` without APP0001, and the SMC's
+    // I/O ports are the NE2000's: an SMC profile has no network device at all.
+    const smcProfile: OSDefinition = {
+      ...windows11,
+      launchProfiles: [
+        {
+          ...windows11.launchProfiles[0]!,
+          configuration: {
+            memoryMiB: 4096,
+            vgaMemoryMiB: 32,
+            extra: {
+              v64CpuCores: 4,
+              v64Machine: 'q35',
+              v64Firmware: 'uefi',
+              v64Smc: true,
+            },
+          },
+          hardwareProfile: {
+            ...windows11.launchProfiles[0]!.hardwareProfile!,
+            network: 'virtio',
+          },
+        },
+      ],
+    };
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({
+      createEngine,
+      resolveManifest: async () => manifest,
+      resolveLocalDiskManifest: async () => localDiskManifest(),
+    });
+    const instance = await provider.start(smcProfile, document.createElement('div'));
+    const options = createEngine.mock.calls[0]?.[0];
+
+    expect(options?.smc).toBe(true);
+    // Forced offline, whatever the profile's transport is: the relay stays unused.
+    expect(options?.net_device).toEqual({ type: 'none' });
+    expect(options?.machine_type).toBe('q35');
+    expect(options?.acpi).toBe(true);
+    expect(options?.firmware?.type).toBe('uefi');
+    await instance.dispose();
+  });
+
+  it('adds no smc key and no network change when no profile asks for the SMC', async () => {
+    // Non-regression: Windows 11 and Alpine keep the exact engine configuration
+    // they had before `v64Smc` existed, `v64Smc: false` included.
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({
+      createEngine,
+      resolveManifest: async () => manifest,
+      resolveLocalDiskManifest: async () => localDiskManifest(),
+    });
+    const stripMount = (options: V64Options | undefined): Record<string, unknown> => {
+      const rest = { ...(options as V64Options) } as Record<string, unknown>;
+      delete rest.screen;
+      delete rest.serial_console;
+      return rest;
+    };
+
+    const alpine = await provider.start(system, document.createElement('div'));
+    const alpineOptions = createEngine.mock.calls[0]?.[0];
+    expect(alpineOptions).not.toHaveProperty('smc');
+    expect(alpineOptions).not.toHaveProperty('net_device');
+    expect(alpineOptions?.machine_type).toBe('i440fx');
+    await alpine.dispose();
+
+    const windows = await provider.start(windows11, document.createElement('div'));
+    const windowsOptions = createEngine.mock.calls[1]?.[0];
+    expect(windowsOptions).not.toHaveProperty('smc');
+    expect(windowsOptions).not.toHaveProperty('net_device');
+    expect(windowsOptions?.machine_type).toBe('q35');
+    await windows.dispose();
+
+    const explicitOff = await provider.start(system, document.createElement('div'), {
+      extra: { v64Smc: false },
+    });
+    expect(stripMount(createEngine.mock.calls[2]?.[0])).toEqual(stripMount(alpineOptions));
+    await explicitOff.dispose();
+  });
+
+  it('refuses the SMC on i440FX instead of letting the engine reject the platform', async () => {
+    const i440fxSmc: OSDefinition = {
+      ...windows11,
+      launchProfiles: [
+        {
+          ...windows11.launchProfiles[0]!,
+          configuration: {
+            memoryMiB: 2048,
+            extra: { v64Machine: 'i440fx', v64Firmware: 'uefi', v64Smc: true },
+          },
+        },
+      ],
+    };
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({
+      createEngine,
+      resolveManifest: async () => manifest,
+      resolveLocalDiskManifest: async () => localDiskManifest(),
+    });
+
+    await expect(provider.start(i440fxSmc, document.createElement('div'))).rejects.toMatchObject({
+      code: 'START_FAILED',
+      message: expect.stringContaining('needs machine_type "q35"'),
+    });
+    // Refused before the engine exists: nothing to clean up.
+    expect(createEngine).not.toHaveBeenCalled();
+  });
+
+  it('refuses the SMC with an explicit NE2000 on the same I/O ports', async () => {
+    const ne2kSmc: OSDefinition = {
+      ...windows11,
+      launchProfiles: [
+        {
+          ...windows11.launchProfiles[0]!,
+          configuration: {
+            memoryMiB: 4096,
+            extra: { v64Machine: 'q35', v64Firmware: 'uefi', v64Smc: true },
+          },
+          hardwareProfile: {
+            ...windows11.launchProfiles[0]!.hardwareProfile!,
+            network: 'ne2k',
+          },
+        },
+      ],
+    };
+    const createEngine = vi.fn(async (_options: V64Options) => runtime());
+    const provider = new V64Provider({
+      createEngine,
+      resolveManifest: async () => manifest,
+      resolveLocalDiskManifest: async () => localDiskManifest(),
+    });
+
+    await expect(provider.start(ne2kSmc, document.createElement('div'))).rejects.toMatchObject({
+      code: 'START_FAILED',
+      message: expect.stringContaining('NE2000 both use the I/O ports 0x300-0x31F'),
+    });
+    expect(createEngine).not.toHaveBeenCalled();
   });
 });

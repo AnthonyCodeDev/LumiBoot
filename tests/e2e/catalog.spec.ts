@@ -7,11 +7,11 @@ const REPO_ROOT = process.cwd();
 const WINDOWS11_DISK = join(REPO_ROOT, 'images', 'windows-11-x64', 'disk.img');
 
 test.describe('Library', () => {
-  test('shows the ten displayed catalog systems (mothers + standalone)', async ({ page }) => {
+  test('shows the eleven displayed catalog systems (mothers + standalone)', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible();
-    // Child variants fold onto their mother card: 10 mother/standalone cards.
-    await expect(page.locator('.os-card')).toHaveCount(10);
+    // Child variants fold onto their mother card: 11 mother/standalone cards.
+    await expect(page.locator('.os-card')).toHaveCount(11);
   });
 
   test('searches for a system and filters by family', async ({ page }) => {
@@ -32,7 +32,7 @@ test.describe('Library', () => {
     await expect(page.locator('[data-filter="custom"]')).toHaveCount(0);
     await expect(page.locator('.filter-chips [data-filter]')).toHaveCount(4);
     await page.getByRole('button', { name: 'All' }).click();
-    await expect(page.locator('.os-card')).toHaveCount(10);
+    await expect(page.locator('.os-card')).toHaveCount(11);
     await expect(page.locator('.os-card[data-id="custom-image"]')).toHaveCount(1);
   });
 
@@ -55,8 +55,9 @@ test.describe('Library', () => {
   });
 });
 
-// Facet counts come from the catalog (10 displayed cards): 6 x 32 bits (i386),
-// 3 x 64 bits (x86_64: Fedora, Alpine, Windows 11) and 1 ARM 64 bits (macOS).
+// Facet counts come from the catalog (11 displayed cards): 6 x 32 bits (i386),
+// 4 x 64 bits (x86_64: Fedora, Alpine, Windows 11, macOS Lion) and 1 ARM 64 bits
+// (macOS Sequoia).
 test.describe('Facet filters', () => {
   test('facet filters narrow the library', async ({ page }) => {
     await page.goto('/');
@@ -72,13 +73,13 @@ test.describe('Facet filters', () => {
       '6',
     );
     await expect(architectureMenu.locator('[data-value="x86_64"] .facet-option-count')).toHaveText(
-      '3',
+      '4',
     );
     await expect(architectureMenu.locator('[data-value="arm64"] .facet-option-count')).toHaveText(
       '1',
     );
 
-    // 64 bits: Fedora, Alpine and Windows 11 only.
+    // 64 bits: Fedora, Alpine, Windows 11 and macOS Lion only.
     await architectureMenu.locator('[data-value="x86_64"]').click();
     await expect(architectureMenu.locator('[data-value="x86_64"]')).toHaveAttribute(
       'aria-checked',
@@ -90,9 +91,14 @@ test.describe('Facet filters', () => {
       'Architecture filter, 1 selected',
     );
     await expect(page.locator('.facet-count')).toHaveCount(0);
-    await expect(page.locator('.os-card')).toHaveCount(3);
+    await expect(page.locator('.os-card')).toHaveCount(4);
     await expect(page.locator('.os-card[data-id="debian-12-i386"]')).toHaveCount(0);
-    for (const id of ['fedora-44-x86-64', 'alpine-3-24-x86-64', 'windows-11-x64']) {
+    for (const id of [
+      'fedora-44-x86-64',
+      'alpine-3-24-x86-64',
+      'windows-11-x64',
+      'macos-lion-x64',
+    ]) {
       await expect(page.locator(`.os-card[data-id="${id}"]`)).toHaveCount(1);
     }
 
@@ -179,7 +185,7 @@ test.describe('Windows 11 and the generic custom image', () => {
     await expect(card.locator('.card-status')).toHaveText('Available');
     // Playable: first group, full opacity, not greyed out.
     await expect(card).not.toHaveClass(/is-muted/);
-    // macOS is still `planned`, so the separator between the two groups remains.
+    // macOS Sequoia is still `planned`, so the separator between the two groups remains.
     await expect(page.locator('.cards-separator')).toHaveCount(1);
 
     await card.click();
@@ -235,5 +241,30 @@ test.describe('Windows 10 x86 (standalone system)', () => {
 
     await card.click();
     await expect(page).toHaveURL(/\/systems\/windows-10-x86$/);
+  });
+});
+
+// macOS Lion x64 is standalone and validated (v64 + OVMF + local OpenCore ESP);
+// macOS Sequoia is still planned and stays in the pending group.
+test.describe('macOS entries (Lion x64 available, Sequoia planned)', () => {
+  test('exposes a ready Lion card and a planned Sequoia card', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'macOS' }).click();
+
+    const lion = page.locator('.os-card[data-id="macos-lion-x64"]');
+    await expect(lion).toHaveCount(1);
+    await expect(lion.locator('.card-status')).toHaveAttribute('data-state', 'ready');
+    await expect(lion.locator('.card-status')).toHaveText('Available');
+    await expect(lion).not.toHaveClass(/is-muted/);
+
+    const sequoia = page.locator('.os-card[data-id="macos-sequoia"]');
+    await expect(sequoia).toHaveCount(1);
+    await expect(sequoia.locator('.card-status')).toHaveAttribute('data-state', 'planned');
+    await expect(sequoia).toHaveClass(/is-muted/);
+    // The pending group is why the separator stays between the two groups.
+    await expect(page.locator('.cards-separator')).toHaveCount(1);
+
+    await lion.click();
+    await expect(page).toHaveURL(/\/systems\/macos-lion-x64$/);
   });
 });

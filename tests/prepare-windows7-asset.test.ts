@@ -24,6 +24,9 @@ let source = '';
 let outDir = '';
 let sourceBytes: Buffer;
 let sourceHash = '';
+let espSource = '';
+let espBytes: Buffer;
+let espHash = '';
 
 function run(args: string[]) {
   return spawnSync('node', [SCRIPT, ...args], { cwd: repoRoot, encoding: 'utf8' });
@@ -37,6 +40,14 @@ beforeAll(() => {
   for (let i = 0; i < sourceBytes.length; i += 1) sourceBytes[i] = (i * 7) % 251;
   writeFileSync(source, sourceBytes);
   sourceHash = createHash('sha256').update(sourceBytes).digest('hex');
+
+  // Stand-in EFI System Partition of a two-media boot (outside the output dir,
+  // so `--esp` has to copy it next to the manifest).
+  espSource = join(tempDir, 'esp.img');
+  espBytes = Buffer.alloc(64 * 1024);
+  for (let i = 0; i < espBytes.length; i += 1) espBytes[i] = (i * 13) % 247;
+  writeFileSync(espSource, espBytes);
+  espHash = createHash('sha256').update(espBytes).digest('hex');
 });
 
 afterAll(() => {
@@ -66,6 +77,9 @@ describe('prepare-windows7-asset.mjs', () => {
       size: sourceBytes.length,
     });
     expect(manifest.engine.wasm.sha256).toHaveLength(64);
+    // Default behaviour: no ESP field at all, so the manifest is unchanged.
+    expect(manifest).not.toHaveProperty('esp');
+    expect('esp' in manifest).toBe(false);
   });
 
   it('neither overwrites nor modifies the source file', () => {
@@ -181,5 +195,117 @@ describe('prepare-windows7-asset.mjs', () => {
     const output = execFileSync('node', [SCRIPT, '--help'], { cwd: repoRoot, encoding: 'utf8' });
     expect(output).toContain('--source');
     expect(output).toContain('--copy-to');
+  });
+});
+
+// Two-media boot: `--esp` adds the second media without touching anything else.
+describe('prepare-windows7-asset.mjs --esp', () => {
+  const ref = 'windows-11-x64';
+
+  function espRun(extra: string[], outName = 'out-esp') {
+    return run([
+      '--source',
+      source,
+      '--ref',
+      ref,
+      '--architecture',
+      'x86_64',
+      '--engine',
+      'v64',
+      '--out',
+      join(tempDir, outName),
+      ...extra,
+    ]);
+  }
+
+  it('records the ESP, copies it next to the manifest and keeps disk/boot intact', () => {
+    const out = join(tempDir, 'out-esp');
+    const result = espRun(['--esp', espSource, '--skip-hash', '--json']);
+    expect(result.status).toBe(0);
+
+    const manifest = parseLocalDiskManifest(JSON.parse(result.stdout));
+    expect(manifest.esp).toEqual({
+      fileName: 'esp.img',
+      url: `/images/${ref}/esp.img`,
+      size: espBytes.length,
+    });
+    // Additive contract: `disk`/`boot` still describe the system disk.
+    expect(manifest.boot.url).toBe(manifest.disk.url);
+    expect(manifest.boot.size).toBe(manifest.disk.size);
+    expect(manifest.boot.size).toBe(sourceBytes.length);
+    expect(manifest.engine).toEqual({ id: 'v64' });
+
+    // The copy is byte-identical and lives next to the manifest, so the dev
+    // middleware can serve `/images/<ref>/esp.img`.
+    const copied = join(out, 'esp.img');
+    expect(existsSync(copied)).toBe(true);
+    expect(createHash('sha256').update(readFileSync(copied)).digest('hex')).toBe(espHash);
+    expect(statSync(copied).size).toBe(espBytes.length);
+    // No absolute path leaks into the manifest.
+    expect(readFileSync(join(out, 'manifest.json'), 'utf8')).not.toContain(tempDir);
+    expect(readFileSync(join(out, 'provenance.txt'), 'utf8')).toContain('sha256=' + espHash);
+  });
+
+  it('omits the ESP entirely without --esp (byte-identical default manifest)', () => {
+    const out = join(tempDir, 'out-no-esp');
+    const plain = run([
+      '--source',
+      source,
+      '--ref',
+      ref,
+      '--architecture',
+      'x86_64',
+      '--engine',
+      'v64',
+      '--out',
+      out,
+      '--skip-hash',
+      '--json',
+    ]);
+    expect(plain.status).toBe(0);
+    const manifest = parseLocalDiskManifest(JSON.parse(plain.stdout));
+    expect(manifest).not.toHaveProperty('esp');
+    expect(existsSync(join(out, 'esp.img'))).toBe(false);
+    // Only the ESP key differs between the two manifests.
+    const withEsp = parseLocalDiskManifest(
+      JSON.parse(espRun(['--esp', espSource, '--skip-hash', '--json', '--force']).stdout),
+    );
+    expect(withEsp).toEqual({ ...manifest, esp: withEsp.esp });
+  });
+
+  it('refuses --esp without the v64 engine', () => {
+    const result = run([
+      '--source',
+      source,
+      '--out',
+      join(tempDir, 'out-esp-v86'),
+      '--esp',
+      espSource,
+    ]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('--esp requires --engine v64');
+  });
+
+  it('rejects a missing ESP file', () => {
+    const result = espRun(
+      ['--esp', join(tempDir, 'absent-esp.img'), '--skip-hash'],
+      'out-esp-missing',
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('ESP image not found');
+  });
+
+  it('verifies the ESP size with --check', () => {
+    expect(espRun(['--check']).status).toBe(0);
+
+    // Tampering with the ESP copy is caught by size, which is all the manifest
+    // records for it (unlike the hashed NVRAM store).
+    const copied = join(tempDir, 'out-esp', 'esp.img');
+    const tampered = Buffer.concat([espBytes, Buffer.from('x')]);
+    writeFileSync(copied, tampered);
+    const result = espRun(['--check']);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('ESP size');
+    writeFileSync(copied, espBytes);
   });
 });

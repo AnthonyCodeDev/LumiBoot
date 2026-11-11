@@ -81,6 +81,30 @@ export const localDiskFirmwareSchema = z
   })
   .strict();
 
+/**
+ * Optional EFI System Partition served next to the system disk.
+ *
+ * Two-media layouts are purely additive: `disk`/`boot` keep describing the
+ * system disk, so the existing `boot.url === disk.url` and
+ * `boot.size === disk.size` invariants stay true whether or not an `esp` is
+ * declared, and a manifest without `esp` is exactly what it was before.
+ * A provider that honours the field mounts the ESP first: `hda` (SATA port 0,
+ * the device the OVMF `Boot0001` entry points at) carries the ESP, `hdb`
+ * carries the system disk. Only `v64` acts on it; `v86` has no UEFI firmware
+ * and keeps mounting `boot` alone.
+ *
+ * `fileName` is optional and purely local: it is the served name, so a dev
+ * server can locate the file next to the manifest without guessing from the
+ * URL (the same doctrine as `disk.fileName`). It never reaches the browser.
+ */
+export const localDiskEspSchema = z
+  .object({
+    fileName: z.string().regex(SAFE_FILE_NAME, 'plain file name expected').optional(),
+    url: z.string().regex(IMAGE_FILE_URL, 'plain file URL expected under "/images/<ref>/"'),
+    size: z.number().int().positive(),
+  })
+  .strict();
+
 /** Exactly one of repository-relative `path` or `external` is expected. */
 export const localDiskSourceSchema = z
   .object({
@@ -116,6 +140,8 @@ const localDiskCoreShape = {
   engine: localDiskEngineSchema,
   boot: localDiskBootSchema,
   firmware: localDiskFirmwareSchema.optional(),
+  /** Additive two-media layout: never reinterprets `disk`/`boot`. */
+  esp: localDiskEspSchema.optional(),
   notes: z.array(z.string().min(1)).optional(),
 } as const;
 
@@ -141,6 +167,7 @@ function validateDiskPaths(
     disk: { url: string; size: number };
     boot: { url: string; size: number };
     firmware?: { vars: { url: string } } | undefined;
+    esp?: { fileName?: string | undefined; url: string; size: number } | undefined;
   },
   context: z.RefinementCtx,
 ): void {
@@ -175,12 +202,36 @@ function validateDiskPaths(
       message: 'firmware URL must belong to the manifest reference',
     });
   }
+  // The ESP is a second, independent file: `boot` keeps naming the system
+  // disk, so the checks above are unchanged and only the ESP's own path is
+  // validated here (size and URL presence are the schema's job).
+  if (manifest.esp !== undefined && !manifest.esp.url.startsWith(`/images/${manifest.ref}/`)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['esp', 'url'],
+      message: 'ESP URL must belong to the manifest reference',
+    });
+  }
+  // The optional local `fileName` names the served file: it must be the last
+  // segment of the ESP URL, otherwise a dev server would serve one file while
+  // the provider requests another.
+  if (
+    manifest.esp?.fileName !== undefined &&
+    manifest.esp.url.split('?')[0] !== `/images/${manifest.ref}/${manifest.esp.fileName}`
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['esp', 'fileName'],
+      message: 'ESP file name must match the ESP URL',
+    });
+  }
 }
 
 export type LocalDiskEngineBinary = z.infer<typeof localDiskEngineBinarySchema>;
 export type LocalDiskEngine = z.infer<typeof localDiskEngineSchema>;
 export type LocalDiskFile = z.infer<typeof localDiskFileSchema>;
 export type LocalDiskFirmware = z.infer<typeof localDiskFirmwareSchema>;
+export type LocalDiskEsp = z.infer<typeof localDiskEspSchema>;
 export type LocalDiskPublicManifest = z.infer<typeof localDiskPublicManifestSchema>;
 export type LocalDiskManifest = z.infer<typeof localDiskManifestSchema>;
 
@@ -225,6 +276,7 @@ export function toPublicLocalDiskManifest(manifest: LocalDiskManifest): LocalDis
     engine: manifest.engine,
     boot: manifest.boot,
     ...(manifest.firmware === undefined ? {} : { firmware: manifest.firmware }),
+    ...(manifest.esp === undefined ? {} : { esp: manifest.esp }),
     ...(manifest.vgaMemoryMiB === undefined ? {} : { vgaMemoryMiB: manifest.vgaMemoryMiB }),
     ...(manifest.notes === undefined ? {} : { notes: manifest.notes }),
   };
@@ -245,6 +297,11 @@ export interface V86AsyncDrive {
   readonly size: number;
 }
 
+/**
+ * v86's `hda`: always the `boot` device. A manifest that also declares an
+ * `esp` still returns the system disk here, because v86 has no UEFI firmware:
+ * only `V64Provider` promotes the ESP to `hda` and moves the disk to `hdb`.
+ */
 export function toV86AsyncDrive(manifest: LocalDiskManifest): V86AsyncDrive {
   return { url: manifest.boot.url, async: true, size: manifest.disk.size };
 }

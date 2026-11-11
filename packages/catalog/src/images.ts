@@ -275,11 +275,44 @@ export const images = [
       'duration of the session. No ISO, TPM or Secure Boot media is distributed.',
   },
   {
+    id: 'macos-lion-x64-image',
+    familyId: 'macos',
+    architecture: 'x86_64',
+    imageRef: 'macos-lion-x64',
+    requirements: [
+      'Modern browser with WebAssembly (v64, x86-64)',
+      'Local 8 GiB RAW disk served over HTTP Range (images/macos-lion-x64/disk.img)',
+      '64 MiB FAT ESP with OpenCore 1.0.8 (images/macos-lion-x64/esp.img)',
+      '2048 MiB guest memory',
+      'Emulated Apple SMC inside v64 (v64Smc); no network device',
+    ],
+    integrationNote:
+      'Operator-installed macOS Lion 10.7.5 x86-64 volume, booted by UEFI on the v64 ' +
+      'engine: OVMF starts OpenCore 1.0.8 from a local FAT ESP (hda), which chain-loads ' +
+      "Apple's boot.efi from the HFS+ system disk (hdb); both media are read lazily over " +
+      'HTTP Range. The Apple SMC is emulated by the engine (v64Smc), so the ESP injects no ' +
+      'kext at all — neither FakeSMC nor AppleSMC — and carries no Apple binary. Guest ' +
+      'input is a USB HID boot keyboard and a USB tablet (Lion ships no PS/2 driver). ' +
+      'Verified boot: the Finder desktop is reached 245.0 s after the start click ' +
+      '(tests/e2e/macos-lion-desktop.spec.ts). Known limits: US key mapping only, several ' +
+      'minutes to the desktop under software emulation, no graphics acceleration and no ' +
+      'network. Apple does not support this configuration: no Apple media is distributed and ' +
+      'the licence restricts macOS to Apple-branded hardware.',
+  },
+  {
     id: 'macos-sequoia-image',
     familyId: 'macos',
     architecture: 'arm64',
-    requirements: ['WebAssembly', 'Enough memory', 'macOS license compliance'],
-    integrationNote: 'Base image to pair with an ARM browser engine.',
+    requirements: [
+      'WebAssembly',
+      'Enough memory',
+      'macOS license compliance',
+      'An integrated ARM64 engine (roadmap)',
+    ],
+    integrationNote:
+      'Roadmap: an Apple Silicon (Sequoia) session needs the separate ARM64 WebAssembly ' +
+      'engine, which is not integrated, so no media or launch profile exists for it yet. ' +
+      'x86-64 macOS is served today by macos-lion-x64 on the v64 engine.',
   },
   {
     id: 'custom-image-i386',

@@ -93,9 +93,9 @@ describe('filterSystems with the architecture and engine facets', () => {
     expect(i386).toHaveLength(11);
     expect(i386.every((os) => os.architecture === 'i386')).toBe(true);
 
-    // Three architectures: 5 x86-64 systems (Fedora CLI/XFCE, Alpine CLI/XFCE,
-    // Windows 11) + macOS (arm64).
-    expect(filterSystems({ ...base, architectures: ['x86_64', 'arm64'] })).toHaveLength(6);
+    // Three architectures: 6 x86-64 systems (Fedora CLI/XFCE, Alpine CLI/XFCE,
+    // Windows 11, macOS Lion) + macOS Sequoia (arm64).
+    expect(filterSystems({ ...base, architectures: ['x86_64', 'arm64'] })).toHaveLength(7);
 
     const v64 = filterSystems({ ...base, engines: ['v64'] });
     expect(v64.map((os) => os.id)).toEqual([
@@ -104,6 +104,7 @@ describe('filterSystems with the architecture and engine facets', () => {
       'alpine-3-24-x86-64',
       'alpine-3-24-x86-64-xfce',
       'windows-11-x64',
+      'macos-lion-x64',
     ]);
     // No system runs on a placeholder engine any more: only macOS is left on `wasm-arm`.
     expect(filterSystems({ ...base, engines: ['wasm-x86_64', 'wasm-arm'] })).toHaveLength(1);
@@ -130,6 +131,16 @@ describe('filterSystems with the architecture and engine facets', () => {
 
     // Same query, contradicted by the architecture facet.
     expect(filterSystems({ ...base, query: 'debian', architectures: ['x86_64'] })).toHaveLength(0);
+
+    // The `macos` family now holds two systems: Lion (x86-64, v64) and Sequoia
+    // (arm64, non-integrated wasm-arm).
+    expect(filterSystems({ ...base, family: 'macos' }).map((os) => os.id)).toEqual([
+      'macos-lion-x64',
+      'macos-sequoia',
+    ]);
+    expect(
+      filterSystems({ ...base, family: 'macos', architectures: ['x86_64'] }).map((os) => os.id),
+    ).toEqual(['macos-lion-x64']);
   });
 
   it('drops the systems without any of the selected engines', () => {

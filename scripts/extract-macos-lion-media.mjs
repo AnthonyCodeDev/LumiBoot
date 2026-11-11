@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Experimental macOS Lion x64 media extractor:
+// macOS Lion x64 media extractor:
 // InstallMacOSX.dmg -> InstallMacOSX.pkg (xar) -> InstallESD.dmg.
 // Measured on the real Apple installer (7-Zip 26.03, 2026-11-04): InstallESD.dmg is a
 // DIRECT member of the xar, not a file inside the Payload cpio. The Payload extracted by

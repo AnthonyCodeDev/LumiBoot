@@ -7,7 +7,7 @@
 LumiBoot is a browser-based operating system emulation platform designed to run a wide range of real operating systems, from legacy 32-bit environments to modern 64-bit systems. Powered by WebAssembly, it emulates hardware directly on the user's device, allowing operating systems to boot and run entirely inside a browser tab, without installation, server-side virtualization, or dedicated software.
 
 <p>
-  <img alt="Linux, Windows, macOS (soon) systems" src="https://img.shields.io/badge/systems-Linux%20%7C%20Windows%20%20%7C%20macOS%20(soon)-8b7cf6?style=flat-square" />
+  <img alt="Linux, Windows and macOS" src="https://img.shields.io/badge/systems-Linux%20%7C%20Windows%20%7C%20macOS-8b7cf6?style=flat-square" />
   <a href="LICENSE"><img alt="LumiBoot Source-Available License 1.0" src="https://img.shields.io/badge/license-Source--Available%201.0-b39dff?style=flat-square" /></a>
 </p>
 
@@ -19,19 +19,20 @@ LumiBoot is a browser-based operating system emulation platform designed to run 
 
 ## Systems
 
-| System              | Variants                 | Guest RAM            | Media                                           |
-| ------------------- | ------------------------ | -------------------- | ----------------------------------------------- |
-| Debian 12           | XFCE / X11-Openbox / CLI | 1 GB / 1 GB / 512 MB | built ext4 rootfs, kernel and initrd            |
-| Ubuntu 18.04        | XFCE / X11-Openbox / CLI | 1 GB / 1 GB / 512 MB | built ext4 rootfs, kernel and initrd            |
-| Fedora 44           | XFCE / CLI               | 2 GB / 1 GB          | built live ISO (squashfs), kernel/initrd        |
-| Alpine Linux 3.24   | XFCE / CLI               | 2 GB / 1 GB          | rebuilt virt ISO, preinstalled squashfs         |
-| Windows 7           | Professional SP1 / Lite  | 1.5 GB / 1 GB        | installed 32-bit BIOS/MBR RAW disk              |
-| Windows 8.1 Pro x86 | 32-bit                   | 2 GB                 | installed 32-bit BIOS/MBR RAW disk              |
-| Windows 10 x86      | 32-bit                   | 2 GB                 | installed 32-bit BIOS/MBR RAW disk              |
-| Windows 11 x64      | 64-bit                   | 4 GB                 | installed 64-bit UEFI/GPT RAW disk + OVMF store |
-| Custom image        | ISO / IMG / RAW          | 512 MB               | `.iso`, `.img` or `.raw` you own                |
+| System                   | Variants                 | Guest RAM            | Media                                           |
+| ------------------------ | ------------------------ | -------------------- | ----------------------------------------------- |
+| Debian 12                | XFCE / X11-Openbox / CLI | 1 GB / 1 GB / 512 MB | built ext4 rootfs, kernel and initrd            |
+| Ubuntu 18.04             | XFCE / X11-Openbox / CLI | 1 GB / 1 GB / 512 MB | built ext4 rootfs, kernel and initrd            |
+| Fedora 44                | XFCE / CLI               | 2 GB / 1 GB          | built live ISO (squashfs), kernel/initrd        |
+| Alpine Linux 3.24        | XFCE / CLI               | 2 GB / 1 GB          | rebuilt virt ISO, preinstalled squashfs         |
+| Mac OS X Lion 10.7.5 x64 | 64-bit                   | 2 GB                 | installed 64-bit UEFI RAW disk                  |
+| Windows 7                | Professional SP1 / Lite  | 1.5 GB / 1 GB        | installed 32-bit BIOS/MBR RAW disk              |
+| Windows 8.1 Pro x86      | 32-bit                   | 2 GB                 | installed 32-bit BIOS/MBR RAW disk              |
+| Windows 10 x86           | 32-bit                   | 2 GB                 | installed 32-bit BIOS/MBR RAW disk              |
+| Windows 11 x64           | 64-bit                   | 4 GB                 | installed 64-bit UEFI/GPT RAW disk + OVMF store |
+| Custom image             | ISO / IMG / RAW          | 512 MB               | `.iso`, `.img` or `.raw` you own                |
 
-No disk, ISO or license key ships with the repository: prepare or import your own media before starting a session.
+No disk, ISO or license key ships with the repository: prepare or import your own media before starting a session. macOS follows the same rule — it boots an installed volume you own plus a kext-free OpenCore ESP, and the Apple licence restricts macOS to Apple-branded hardware ([`docs/LICENSES.md`](docs/LICENSES.md)).
 
 ```bash
 sudo ./images/debian-12-i386/build.sh
@@ -39,6 +40,7 @@ sudo ./images/ubuntu-18-i386/build.sh
 sudo ./images/fedora-44-x86-64/build.sh
 sudo ./images/alpine-3-24-x86-64/build.sh
 pnpm assets:v64:alpine:xfce
+pnpm assets:macoslion:prepare --source images/macos-lion-x64/disk.img
 pnpm assets:windows7:prepare --source images/windows-7-pro-sp1-x86/disk.img
 pnpm assets:windows8:prepare --source images/windows-8-1-x86/disk.img
 pnpm assets:windows10:prepare --source images/windows-10-x86/disk.img
@@ -52,6 +54,8 @@ Per-system instructions, graphical variants and their FLAVOR values: [`docs/syst
 ## Emulation Showcase
 Experience real `operating systems` running seamlessly in your browser, powered by `LumiBoot`.
 
+<h3>macOS</h3>
+<img src="images/macos-lion-x64/preview.png" alt="macOS Lion Preview" width="100%" />
 <h3>Windows 11</h3>
 <img src="images/windows-11-x64/preview.png" alt="Windows 11 Preview" width="100%" />
 <h3>Windows 10</h3>
@@ -88,6 +92,8 @@ pnpm dev
 
 Open `http://127.0.0.1:5173`. `assets:prepare` fetches `v86.wasm` and the pinned BIOS files, verified by size and SHA-256 against `scripts/v86-assets.lock.json`.
 
+<img src="apps/web/preview.png" alt="Website Preview" width="100%" />
+
 ## Commands
 
 ```bash
@@ -102,6 +108,7 @@ pnpm assets:windows7:prepare|check
 pnpm assets:windows8:prepare|check
 pnpm assets:windows10:prepare|check
 pnpm assets:windows11:prepare|check
+pnpm assets:macoslion:prepare|check
 pnpm config:nginx          # render infra/nginx/*.conf from .env
 pnpm config:nginx:check    # exit 1 when the rendered nginx files drifted
 pnpm proxy:dev             # run the Go network proxy with .env applied

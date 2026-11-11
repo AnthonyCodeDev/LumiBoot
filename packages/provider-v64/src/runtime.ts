@@ -23,6 +23,18 @@ export interface V64NetworkDevice {
   readonly plugin_path?: string;
 }
 
+/**
+ * The USB host controller and its input devices (`v86-usb.js`). `tablet` is the
+ * absolute pointer, `keyboard` the HID boot keyboard a guest without a PS/2
+ * driver binds to. Omitting `usb` leaves the machine without any USB device.
+ */
+export interface V64UsbDevice {
+  readonly controller: 'uhci' | 'ehci' | 'xhci';
+  readonly tablet?: boolean;
+  readonly keyboard?: boolean;
+  readonly plugin_path: string;
+}
+
 export interface V64Options {
   readonly wasm_path: string;
   readonly wasm_fallback_path: string;
@@ -59,13 +71,27 @@ export interface V64Options {
   readonly audio_device: 'hd_audio' | 'none';
   readonly audio_device_path?: string;
   readonly net_device?: V64NetworkDevice;
+  /**
+   * Emulated Apple SMC (`APP0001`, ports `0x300-0x31F`, IRQ 6). q35 only: on
+   * i440FX the floppy controller keeps IRQ 6, and the NE2000 would mask the
+   * ports, so the engine refuses both combinations at start-up.
+   */
+  readonly smc?: boolean;
+  readonly usb?: V64UsbDevice;
   readonly hda?: V64Image;
+  /** Second IDE disk: a two-media layout puts the ESP on `hda` and the system disk here. */
+  readonly hdb?: V64Image;
   readonly cdrom?: V64Image;
   readonly bzimage?: V64Image;
   readonly initrd?: V64Image;
   readonly cmdline?: string;
   readonly boot_order?: number;
   readonly autostart: false;
+}
+
+/** The v64 bus: `send` posts a message a device plugin listens to. */
+export interface V64Bus {
+  send(channel: string, payload: unknown): void;
 }
 
 export interface V64Runtime {
@@ -75,6 +101,8 @@ export interface V64Runtime {
   stop(): Promise<void>;
   destroy(): Promise<void>;
   keyboard_send_scancodes(scancodes: readonly number[]): Promise<void>;
+  /** Optional only so that a test double need not provide it: a real runtime has one. */
+  readonly bus?: V64Bus;
 }
 
 type V64Constructor = new (options: V64Options) => V64Runtime;

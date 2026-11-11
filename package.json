@@ -43,6 +43,8 @@
     "assets:windows11:check": "node scripts/prepare-windows11-asset.mjs --check",
     "assets:macos:extract": "node scripts/extract-macos-lion-media.mjs",
     "assets:macos:check": "node scripts/extract-macos-lion-media.mjs --check",
+    "assets:macoslion:prepare": "node scripts/prepare-macos-lion-asset.mjs",
+    "assets:macoslion:check": "node scripts/prepare-macos-lion-asset.mjs --check",
     "config:nginx": "node scripts/render-nginx-config.mjs",
     "config:nginx:check": "node scripts/render-nginx-config.mjs --check",
     "proxy:dev": "node scripts/run-network-proxy.mjs",

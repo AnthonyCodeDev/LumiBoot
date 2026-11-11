@@ -46,7 +46,7 @@ describe('Filters', () => {
     expect(screen.queryByRole('button', { name: 'Custom' })).toBeNull();
     // The custom image keeps its card: it stays visible under All.
     expect(cardIds()).toContain('custom-image');
-    expect(cardIds()).toHaveLength(10);
+    expect(cardIds()).toHaveLength(11);
   });
 
   it('narrows the grid to 64-bit systems, then widens it back when the option is unchecked', async () => {
@@ -56,7 +56,12 @@ describe('Filters', () => {
     await user.click(architectureTrigger());
     await user.click(screen.getByRole('checkbox', { name: /^64 bits/ }));
 
-    expect(cardIds()).toEqual(['fedora-44-x86-64', 'alpine-3-24-x86-64', 'windows-11-x64']);
+    expect(cardIds()).toEqual([
+      'fedora-44-x86-64',
+      'alpine-3-24-x86-64',
+      'windows-11-x64',
+      'macos-lion-x64',
+    ]);
     expect(useCatalogStore.getState().architectures).toEqual(['x86_64']);
 
     // No tag in the trigger: the selection is only visible through the count badge.
@@ -68,7 +73,7 @@ describe('Filters', () => {
     // Unchecking the option from the still-open panel restores the whole library.
     await user.click(screen.getByRole('checkbox', { name: /^64 bits/ }));
 
-    expect(cardIds()).toHaveLength(10);
+    expect(cardIds()).toHaveLength(11);
     expect(useCatalogStore.getState().architectures).toEqual([]);
   });
 
@@ -110,7 +115,7 @@ describe('Filters', () => {
     expect(screen.queryAllByRole('article')).toHaveLength(0);
     await user.click(screen.getByRole('button', { name: 'Reset filters' }));
 
-    expect(cardIds()).toHaveLength(10);
+    expect(cardIds()).toHaveLength(11);
     const state = useCatalogStore.getState();
     expect(state.family).toBe('all');
     expect(state.query).toBe('');

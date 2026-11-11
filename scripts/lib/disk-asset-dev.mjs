@@ -39,6 +39,9 @@ export function toPublicDiskManifest(manifest) {
   };
   if (manifest.vgaMemoryMiB !== undefined) publicManifest.vgaMemoryMiB = manifest.vgaMemoryMiB;
   if (manifest.firmware !== undefined) publicManifest.firmware = manifest.firmware;
+  // Two-media layout: the ESP is a public field, `fileName` included (it is the
+  // served name, not a machine path, exactly like `disk.fileName`).
+  if (manifest.esp !== undefined) publicManifest.esp = manifest.esp;
   if (manifest.notes !== undefined) publicManifest.notes = manifest.notes;
   return publicManifest;
 }
@@ -99,6 +102,53 @@ function discoverFirmwareVars(manifest, ref, imagesDir, skipped) {
   }
 
   return { varsPath, route, size: info.size };
+}
+
+/**
+ * Optional EFI System Partition (second media of a `v64` layout).
+ *
+ * Like the NVRAM image, a missing or inconsistent file only disables the ESP:
+ * it never takes the whole disk down. The file is located by its `fileName`
+ * (the served name), never by a path taken from the URL, and a name that
+ * escapes `images/<ref>/` is refused outright.
+ */
+function discoverEsp(manifest, ref, imagesDir, skipped) {
+  const esp = manifest?.esp;
+  if (esp === undefined) return null;
+
+  if (typeof esp?.fileName !== 'string' || typeof esp?.size !== 'number') {
+    skipped.push(`${ref} (ESP not served: "esp.fileName" is required to locate the file)`);
+    return null;
+  }
+
+  const baseDir = resolve(imagesDir, ref);
+  const espPath = resolve(baseDir, esp.fileName);
+  if (!espPath.startsWith(`${baseDir}${sep}`)) {
+    skipped.push(`${ref} (ESP path escapes images/${ref}/: ${esp.fileName})`);
+    return null;
+  }
+
+  const route = assetPathname(esp.url);
+  if (route === null || !route.startsWith(`/images/${ref}/`)) {
+    skipped.push(`${ref} (ESP URL outside /images/${ref}/: ${esp.url})`);
+    return null;
+  }
+
+  if (!existsSync(espPath) || !statSync(espPath).isFile()) {
+    skipped.push(`${ref} (ESP image not found: ${espPath})`);
+    return null;
+  }
+
+  const info = statSync(espPath);
+  if (esp.size !== info.size) {
+    skipped.push(
+      `${ref} (inconsistent ESP size: ${info.size} bytes on disk, ` +
+        `${esp.size} in the manifest)`,
+    );
+    return null;
+  }
+
+  return { espPath, route, size: info.size };
 }
 
 function hasDiskManifest(dir) {
@@ -192,6 +242,7 @@ function discoverLocalDisks(imagesDir) {
     const diskRoute = `/images/${ref}/${servedName}`;
     const manifestRoute = `/images/${ref}/manifest.json`;
     const firmware = discoverFirmwareVars(manifest, ref, imagesDir, skipped);
+    const esp = discoverEsp(manifest, ref, imagesDir, skipped);
     routes.set(
       diskRoute,
       createRangeHandler({
@@ -216,9 +267,23 @@ function discoverLocalDisks(imagesDir) {
         }),
       );
     }
+    if (esp !== null) {
+      routes.set(
+        esp.route,
+        createRangeHandler({
+          filePath: esp.espPath,
+          size: esp.size,
+          contentType: 'application/octet-stream',
+          corsOrigin: null,
+          extraHeaders: { 'Cross-Origin-Resource-Policy': 'same-origin' },
+          token: null,
+        }),
+      );
+    }
     const publicManifest = toPublicDiskManifest(manifest);
-    // Never advertise a firmware image this server does not actually serve.
+    // Never advertise a firmware image or an ESP this server does not serve.
     if (firmware === null) delete publicManifest.firmware;
+    if (esp === null) delete publicManifest.esp;
     routes.set(
       manifestRoute,
       createJsonHandler({
@@ -235,6 +300,7 @@ function discoverLocalDisks(imagesDir) {
       size: info.size,
       diskRoute,
       firmwareRoute: firmware?.route ?? null,
+      espRoute: esp?.route ?? null,
     });
   }
 
@@ -261,13 +327,17 @@ export function createDiskAssetMiddleware(options = {}) {
     const list = served
       .map(
         (disk) =>
-          `${disk.ref} ${formatGiB(disk.size)}${disk.firmwareRoute === null ? '' : ' (+ UEFI vars)'}`,
+          `${disk.ref} ${formatGiB(disk.size)}${disk.firmwareRoute === null ? '' : ' (+ UEFI vars)'}` +
+          `${disk.espRoute === null ? '' : ' (+ ESP)'}`,
       )
       .join(' · ');
     logger(`[lumiboot] local disks ready (HTTP Range): ${list}`);
     for (const disk of served) {
       if (disk.firmwareRoute !== null) {
         logger(`[lumiboot] UEFI vars ready (HTTP Range): ${disk.firmwareRoute}`);
+      }
+      if (disk.espRoute !== null) {
+        logger(`[lumiboot] ESP ready (HTTP Range): ${disk.espRoute}`);
       }
     }
   } else {
